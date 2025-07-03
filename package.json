@@ -1,0 +1,17 @@
+{
+  "name": "agora-token-generator",
+  "version": "1.0.0",
+  "description": "Agora RTC token generator for Arena Debate App",
+  "main": "src/main.js",
+  "type": "module",
+  "dependencies": {
+    "agora-access-token": "^2.0.4",
+    "archiver": "^7.0.1",
+    "node-appwrite": "^17.0.0"
+  },
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "author": "Arena Debate App",
+  "license": "MIT"
+}

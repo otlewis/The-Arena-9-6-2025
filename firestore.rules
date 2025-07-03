@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Arena timers collection - allow all authenticated users to read/write
+    // This is critical for real-time timer synchronization
+    match /arena_timers/{arenaId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Gift transactions collection - allow all authenticated users to read/write
+    match /gift_transactions/{transactionId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // User coins collection - allow authenticated users to read/write
+    match /user_coins/{userId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Coin transactions collection (for logging)
+    match /coin_transactions/{transactionId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Default rule for other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+} 

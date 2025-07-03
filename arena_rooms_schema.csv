@@ -1,0 +1,2 @@
+challengeId,challengerId,challengedId,topic,description,status,startedAt,endedAt,winner,judgingComplete,totalJudges,judgesSubmitted,judgingEnabled
+test-challenge-1,user123,user456,"Sample Debate Topic","This is a test debate description",waiting,,,false,false,0,0,false

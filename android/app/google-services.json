@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "18237618385",
+    "project_id": "arena-flutter",
+    "storage_bucket": "arena-flutter.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:18237618385:android:010406bf45cc714852edf0",
+        "android_client_info": {
+          "package_name": "com.example.arena"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD6AzG8B7mEzuz26wImGp4HLrLEGkPcViQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

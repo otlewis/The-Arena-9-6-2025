@@ -1,0 +1,1248 @@
+Analyzing arena2...                                             
+
+   info • Don't invoke 'print' in production code • cleanup_discussion_rooms.dart:5:3 • avoid_print
+   info • Don't invoke 'print' in production code • cleanup_discussion_rooms.dart:21:5 • avoid_print
+   info • Don't invoke 'print' in production code • cleanup_discussion_rooms.dart:31:7 • avoid_print
+   info • Don't invoke 'print' in production code • cleanup_discussion_rooms.dart:44:7 • avoid_print
+   info • Don't invoke 'print' in production code • cleanup_discussion_rooms.dart:65:9 • avoid_print
+   info • Don't invoke 'print' in production code • cleanup_discussion_rooms.dart:92:9 • avoid_print
+   info • Don't invoke 'print' in production code • cleanup_discussion_rooms.dart:94:9 • avoid_print
+   info • Don't invoke 'print' in production code • cleanup_discussion_rooms.dart:97:7 • avoid_print
+   info • Don't invoke 'print' in production code • cleanup_discussion_rooms.dart:100:5 • avoid_print
+   info • Don't invoke 'print' in production code • cleanup_discussion_rooms.dart:101:5 • avoid_print
+   info • Don't invoke 'print' in production code • cleanup_discussion_rooms.dart:102:5 • avoid_print
+   info • Don't invoke 'print' in production code • cleanup_discussion_rooms.dart:103:5 • avoid_print
+   info • Don't invoke 'print' in production code • cleanup_discussion_rooms.dart:106:5 • avoid_print
+warning • Unused import: 'package:appwrite/appwrite.dart' • force_close_rooms.dart:1:8 • unused_import
+   info • Don't invoke 'print' in production code • force_close_rooms.dart:5:3 • avoid_print
+   info • Don't invoke 'print' in production code • force_close_rooms.dart:13:5 • avoid_print
+   info • Don't invoke 'print' in production code • force_close_rooms.dart:20:7 • avoid_print
+   info • Don't invoke 'print' in production code • force_close_rooms.dart:24:9 • avoid_print
+   info • Don't invoke 'print' in production code • force_close_rooms.dart:26:9 • avoid_print
+   info • Don't invoke 'print' in production code • force_close_rooms.dart:28:9 • avoid_print
+   info • Don't invoke 'print' in production code • force_close_rooms.dart:32:5 • avoid_print
+   info • Don't invoke 'print' in production code • force_close_rooms.dart:33:5 • avoid_print
+   info • Don't invoke 'print' in production code • force_close_rooms.dart:36:5 • avoid_print
+warning • The value of the local variable 'now' isn't used • lib/core/cache/smart_cache_manager.dart:159:11 • unused_local_variable
+warning • Unused import: '../../screens/home_screen.dart' • lib/core/navigation/optimized_navigation.dart:4:8 • unused_import
+warning • The value of the field '_persistentScreens' isn't used • lib/core/navigation/optimized_navigation.dart:31:27 • unused_field
+   info • The 'child' argument should be last in widget constructor invocations • lib/core/navigation/optimized_navigation.dart:99:9 • sort_child_properties_last
+   info • The 'child' argument should be last in widget constructor invocations • lib/core/navigation/optimized_navigation.dart:103:9 • sort_child_properties_last
+   info • The 'child' argument should be last in widget constructor invocations • lib/core/navigation/optimized_navigation.dart:114:9 • sort_child_properties_last
+   info • The 'child' argument should be last in widget constructor invocations • lib/core/navigation/optimized_navigation.dart:118:9 • sort_child_properties_last
+warning • Unused import: 'dart:convert' • lib/core/notifications/notification_analytics.dart:1:8 • unused_import
+warning • The value of the field '_preferencesService' isn't used • lib/core/notifications/notification_analytics.dart:68:40 • unused_field
+   info • Unnecessary braces in a string interpolation • lib/core/notifications/notification_analytics.dart:257:71 • unnecessary_brace_in_string_interps
+   info • The null check operator shouldn't be used on a variable whose type is a potentially nullable type parameter • lib/core/notifications/notification_preferences.dart:241:45 • null_check_on_nullable_type_parameter
+   info • The null check operator shouldn't be used on a variable whose type is a potentially nullable type parameter • lib/core/notifications/notification_preferences.dart:244:43 • null_check_on_nullable_type_parameter
+warning • Unused import: 'notification_templates.dart' • lib/core/notifications/notification_scheduler.dart:6:8 • unused_import
+warning • Unused import: 'package:flutter/material.dart' • lib/core/notifications/notification_service.dart:2:8 • unused_import
+   info • Use 'const' with the constructor to improve performance • lib/core/notifications/notification_templates.dart:36:9 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/notifications/notification_templates.dart:41:9 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/notifications/notification_templates.dart:46:9 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/notifications/notification_templates.dart:296:9 • prefer_const_constructors
+warning • Unused import: 'dart:convert' • lib/core/notifications/push_notification_service.dart:2:8 • unused_import
+   info • Unnecessary braces in a string interpolation • lib/core/notifications/push_notification_service.dart:205:31 • unnecessary_brace_in_string_interps
+   info • Unnecessary braces in a string interpolation • lib/core/notifications/push_notification_service.dart:215:33 • unnecessary_brace_in_string_interps
+warning • The value of the local variable 'androidConfig' isn't used • lib/core/notifications/push_notification_service.dart:347:13 • unused_local_variable
+warning • The value of the local variable 'apnsConfig' isn't used • lib/core/notifications/push_notification_service.dart:359:13 • unused_local_variable
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/core/notifications/widgets/notification_banner.dart:155:73 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/core/notifications/widgets/notification_banner.dart:235:22 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/core/notifications/widgets/notification_banner.dart:279:32 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/core/notifications/widgets/notification_bell.dart:108:35 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/core/notifications/widgets/notification_center.dart:44:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/core/notifications/widgets/notification_center.dart:80:47 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/core/notifications/widgets/notification_center.dart:211:50 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/core/notifications/widgets/notification_center.dart:264:40 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/core/notifications/widgets/notification_center.dart:341:22 • deprecated_member_use
+warning • The value of the local variable 'cache' isn't used • lib/core/performance/instant_navigation_system.dart:46:11 • unused_local_variable
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:14:13 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/core/widgets/skeleton_widgets.dart:15:25 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:16:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:18:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:19:26 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/core/widgets/skeleton_widgets.dart:21:31 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:22:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:24:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:26:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:49:12 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:51:14 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:53:16 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/core/widgets/skeleton_widgets.dart:55:21 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:56:13 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/core/widgets/skeleton_widgets.dart:57:25 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:58:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:60:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:64:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:66:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:68:13 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/core/widgets/skeleton_widgets.dart:69:25 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:70:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:72:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:74:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:76:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:87:12 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:89:14 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:91:16 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/core/widgets/skeleton_widgets.dart:92:21 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:93:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:95:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:96:22 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/core/widgets/skeleton_widgets.dart:98:27 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:99:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:101:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:103:19 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/core/widgets/skeleton_widgets.dart:104:31 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:105:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:107:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:113:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:122:12 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:124:14 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:126:16 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/core/widgets/skeleton_widgets.dart:128:21 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:129:13 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/core/widgets/skeleton_widgets.dart:130:25 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:131:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:133:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:134:26 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/core/widgets/skeleton_widgets.dart:136:31 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:137:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:139:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:143:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:147:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:149:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:151:13 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/core/widgets/skeleton_widgets.dart:152:25 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:153:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:155:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:157:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:196:12 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/core/widgets/skeleton_widgets.dart:197:17 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:198:9 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/core/widgets/skeleton_widgets.dart:200:9 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/examples/lucide_icons_demo.dart:21:18 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/examples/lucide_icons_demo.dart:23:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/examples/lucide_icons_demo.dart:26:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/examples/lucide_icons_demo.dart:158:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/examples/lucide_icons_demo.dart:179:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/examples/lucide_icons_demo.dart:195:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/examples/lucide_icons_demo.dart:217:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/examples/lucide_icons_demo.dart:221:25 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/examples/lucide_icons_demo.dart:233:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/examples/lucide_icons_demo.dart:237:25 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/examples/lucide_icons_demo.dart:256:22 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/examples/lucide_icons_demo.dart:261:22 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/examples/lucide_icons_demo.dart:266:22 • prefer_const_constructors
+   info • Use 'const' for final variables initialized to a constant value • lib/features/arena/models/arena_state.dart:57:5 • prefer_const_declarations
+warning • The receiver can't be null, so the null-aware operator '?.' is unnecessary • lib/features/arena/providers/arena_lobby_provider.dart:144:26 • invalid_null_aware_operator
+warning • The receiver can't be null, so the null-aware operator '?.' is unnecessary • lib/features/arena/providers/arena_lobby_provider.dart:146:23 • invalid_null_aware_operator
+warning • Unused import: '../../../services/challenge_messaging_service.dart' • lib/features/arena/providers/arena_provider.dart:10:8 • unused_import
+warning • Unused import: '../../../models/user_profile.dart' • lib/features/arena/providers/arena_provider.dart:11:8 • unused_import
+   info • The import of 'package:flutter/services.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/features/arena/screens/arena_screen_new.dart:3:8 • unnecessary_import
+   info • The private field _userProfiles could be 'final' • lib/features/arena/widgets/arena_debate_controls.dart:28:28 • prefer_final_fields
+warning • The value of the field '_userProfiles' isn't used • lib/features/arena/widgets/arena_debate_controls.dart:28:28 • unused_field
+  error • The method 'getAvailableGifts' isn't defined for the type 'FirebaseGiftService' • lib/features/arena/widgets/arena_debate_controls.dart:55:40 • undefined_method
+   info • Use 'const' with the constructor to improve performance • lib/features/arena/widgets/arena_debate_controls.dart:126:9 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/features/arena/widgets/arena_debate_controls.dart:234:11 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/features/arena/widgets/arena_debate_controls.dart:235:23 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/features/arena/widgets/arena_debate_controls.dart:331:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/features/arena/widgets/arena_debate_controls.dart:333:22 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/features/arena/widgets/arena_debate_controls.dart:334:27 • prefer_const_literals_to_create_immutables
+  error • The method 'pauseTimer' isn't defined for the type 'ArenaNotifier' • lib/features/arena/widgets/arena_debate_controls.dart:413:67 • undefined_method
+  error • The method 'resumeTimer' isn't defined for the type 'ArenaNotifier' • lib/features/arena/widgets/arena_debate_controls.dart:415:67 • undefined_method
+  error • The method 'addTime' isn't defined for the type 'ArenaNotifier' • lib/features/arena/widgets/arena_debate_controls.dart:432:65 • undefined_method
+  error • The method 'assignSpeaker' isn't defined for the type 'ArenaNotifier' • lib/features/arena/widgets/arena_debate_controls.dart:496:22 • undefined_method
+   info • Use 'const' with the constructor to improve performance • lib/features/arena/widgets/arena_debate_controls.dart:518:13 • prefer_const_constructors
+  error • Undefined name 'roomId' • lib/features/arena/widgets/arena_debate_controls.dart:540:28 • undefined_identifier
+  error • Undefined name 'roomId' • lib/features/arena/widgets/arena_debate_controls.dart:544:28 • undefined_identifier
+warning • The declaration '_startDebate' isn't referenced • lib/features/arena/widgets/arena_debate_controls.dart:547:8 • unused_element
+  error • Undefined name 'roomId' • lib/features/arena/widgets/arena_debate_controls.dart:548:28 • undefined_identifier
+  error • The getter 'isPremium' isn't defined for the type 'UserProfile' • lib/features/arena/widgets/arena_debate_controls.dart:660:38 • undefined_getter
+   info • Don't use 'BuildContext's across async gaps • lib/features/arena/widgets/arena_debate_controls.dart:680:28 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/features/arena/widgets/arena_debate_controls.dart:690:7 • use_build_context_synchronously
+   info • Use 'const' with the constructor to improve performance • lib/features/arena/widgets/arena_debate_controls.dart:701:16 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/features/arena/widgets/arena_debate_controls.dart:702:21 • prefer_const_literals_to_create_immutables
+   info • The type of the right operand ('String') isn't a subtype or a supertype of the left operand ('GiftCategory') • lib/features/arena/widgets/arena_debate_controls.dart:912:100 • unrelated_type_equality_checks
+   info • The type of the right operand ('String') isn't a subtype or a supertype of the left operand ('GiftCategory') • lib/features/arena/widgets/arena_debate_controls.dart:913:100 • unrelated_type_equality_checks
+  error • The named parameter 'cost' is required, but there's no corresponding argument • lib/features/arena/widgets/arena_debate_controls.dart:1077:28 • missing_required_argument
+  error • The named parameter 'giftId' is required, but there's no corresponding argument • lib/features/arena/widgets/arena_debate_controls.dart:1077:28 • missing_required_argument
+  error • The named parameter 'recipientId' is required, but there's no corresponding argument • lib/features/arena/widgets/arena_debate_controls.dart:1077:28 • missing_required_argument
+  error • The named parameter 'senderId' is required, but there's no corresponding argument • lib/features/arena/widgets/arena_debate_controls.dart:1077:28 • missing_required_argument
+  error • The named parameter 'fromUserId' isn't defined • lib/features/arena/widgets/arena_debate_controls.dart:1078:11 • undefined_named_parameter
+  error • The named parameter 'toUserId' isn't defined • lib/features/arena/widgets/arena_debate_controls.dart:1079:11 • undefined_named_parameter
+  error • The named parameter 'gift' isn't defined • lib/features/arena/widgets/arena_debate_controls.dart:1080:11 • undefined_named_parameter
+  error • The method 'pauseTimer' isn't defined for the type 'ArenaNotifier' • lib/features/arena/widgets/arena_debate_controls.dart:1166:65 • undefined_method
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/features/arena/widgets/arena_debate_controls.dart:1206:22 • use_build_context_synchronously
+  error • The method 'endDebate' isn't defined for the type 'ArenaNotifier' • lib/features/arena/widgets/arena_debate_controls.dart:1232:55 • undefined_method
+  error • There's no constant named 'preparation' in 'DebatePhase' • lib/features/arena/widgets/arena_debate_controls.dart:1238:24 • undefined_enum_constant
+  error • There's no constant named 'opening' in 'DebatePhase' • lib/features/arena/widgets/arena_debate_controls.dart:1240:24 • undefined_enum_constant
+  error • There's no constant named 'rebuttal' in 'DebatePhase' • lib/features/arena/widgets/arena_debate_controls.dart:1242:24 • undefined_enum_constant
+  error • There's no constant named 'closing' in 'DebatePhase' • lib/features/arena/widgets/arena_debate_controls.dart:1244:24 • undefined_enum_constant
+  error • There's no constant named 'voting' in 'DebatePhase' • lib/features/arena/widgets/arena_debate_controls.dart:1246:24 • undefined_enum_constant
+  error • There's no constant named 'completed' in 'DebatePhase' • lib/features/arena/widgets/arena_debate_controls.dart:1248:24 • undefined_enum_constant
+  error • There's no constant named 'preparation' in 'DebatePhase' • lib/features/arena/widgets/arena_debate_controls.dart:1255:24 • undefined_enum_constant
+  error • There's no constant named 'opening' in 'DebatePhase' • lib/features/arena/widgets/arena_debate_controls.dart:1257:24 • undefined_enum_constant
+  error • There's no constant named 'rebuttal' in 'DebatePhase' • lib/features/arena/widgets/arena_debate_controls.dart:1259:24 • undefined_enum_constant
+  error • There's no constant named 'closing' in 'DebatePhase' • lib/features/arena/widgets/arena_debate_controls.dart:1261:24 • undefined_enum_constant
+  error • There's no constant named 'voting' in 'DebatePhase' • lib/features/arena/widgets/arena_debate_controls.dart:1263:24 • undefined_enum_constant
+  error • There's no constant named 'completed' in 'DebatePhase' • lib/features/arena/widgets/arena_debate_controls.dart:1265:24 • undefined_enum_constant
+warning • The left operand can't be null, so the right operand is never executed • lib/features/arena/widgets/arena_waiting_room.dart:101:36 • dead_null_aware_expression
+  error • Undefined name 'currentUserIdProvider' • lib/features/arena/widgets/arena_waiting_room.dart:352:36 • undefined_identifier
+  error • Undefined name 'currentUserIdProvider' • lib/features/arena/widgets/arena_waiting_room.dart:398:36 • undefined_identifier
+  error • The method 'toggleReady' isn't defined for the type 'ArenaNotifier' • lib/features/arena/widgets/arena_waiting_room.dart:471:46 • undefined_method
+  error • There's no constant named 'affirmativeDebater' in 'ArenaRole' • lib/features/arena/widgets/participants_list.dart:43:63 • undefined_enum_constant
+  error • There's no constant named 'negativeDebater' in 'ArenaRole' • lib/features/arena/widgets/participants_list.dart:44:60 • undefined_enum_constant
+   info • Use 'const' with the constructor to improve performance • lib/features/arena/widgets/participants_list.dart:51:13 • prefer_const_constructors
+  error • There's no constant named 'judge' in 'ArenaRole' • lib/features/arena/widgets/participants_list.dart:146:58 • undefined_enum_constant
+   info • Use 'const' with the constructor to improve performance • lib/features/arena/widgets/participants_list.dart:266:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/features/arena/widgets/participants_list.dart:272:13 • prefer_const_constructors
+warning • The value of the field '_pushNotificationService' isn't used • lib/main.dart:218:38 • unused_field
+warning • The value of the local variable 'navigationResult' isn't used • lib/screens/arena_lobby_screen.dart:87:13 • unused_local_variable
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_lobby_screen.dart:88:9 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_lobby_screen.dart:103:28 • use_build_context_synchronously
+warning • The value of the local variable 'navigationResult' isn't used • lib/screens/arena_lobby_screen.dart:166:15 • unused_local_variable
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_lobby_screen.dart:167:11 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_lobby_screen.dart:192:30 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_lobby_screen.dart:202:30 • use_build_context_synchronously
+warning • The value of the local variable 'navigationResult' isn't used • lib/screens/arena_lobby_screen.dart:235:13 • unused_local_variable
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_lobby_screen.dart:236:9 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_lobby_screen.dart:251:28 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_lobby_screen.dart:258:28 • use_build_context_synchronously
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:295:22 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:296:24 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:299:26 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:301:33 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:340:19 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_lobby_screen.dart:341:19 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:347:14 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_lobby_screen.dart:349:19 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:350:11 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_lobby_screen.dart:351:23 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:352:15 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:386:13 • prefer_const_constructors
+   info • Use 'const' for final variables initialized to a constant value • lib/screens/arena_lobby_screen.dart:421:5 • prefer_const_declarations
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:519:28 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:538:9 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_lobby_screen.dart:539:21 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:540:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:575:28 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:601:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:631:28 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:657:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:671:9 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_lobby_screen.dart:672:21 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:673:13 • prefer_const_constructors
+warning • The value of the field 'scarletRed' isn't used • lib/screens/arena_lobby_screen.dart:807:22 • unused_field
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:862:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:863:19 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_lobby_screen.dart:864:19 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:923:31 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:957:31 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:969:22 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_lobby_screen.dart:971:27 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:972:19 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_lobby_screen.dart:973:31 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_lobby_screen.dart:974:23 • prefer_const_constructors
+warning • The name kDebugMode is shown, but isn't used • lib/screens/arena_screen.dart:2:47 • unused_shown_name
+warning • Unused import: 'package:flutter_riverpod/flutter_riverpod.dart' • lib/screens/arena_screen.dart:3:8 • unused_import
+   info • Use 'const' for final variables initialized to a constant value • lib/screens/arena_screen.dart:60:5 • prefer_const_declarations
+   info • The private field _audience could be 'final' • lib/screens/arena_screen.dart:149:21 • prefer_final_fields
+warning • The value of the field '_chatMessages' isn't used • lib/screens/arena_screen.dart:162:17 • unused_field
+warning • The value of the field 'lightGray' isn't used • lib/screens/arena_screen.dart:170:22 • unused_field
+warning • The operand can't be 'null', so the condition is always 'false' • lib/screens/arena_screen.dart:393:34 • unnecessary_null_comparison
+warning • Unnecessary type check; the result is always 'true' • lib/screens/arena_screen.dart:401:19 • unnecessary_type_check
+warning • Unnecessary cast • lib/screens/arena_screen.dart:402:27 • unnecessary_cast
+warning • Unnecessary type check; the result is always 'true' • lib/screens/arena_screen.dart:403:26 • unnecessary_type_check
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:562:15 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:563:26 • prefer_const_constructors
+warning • The value of the local variable 'previousJudgingComplete' isn't used • lib/screens/arena_screen.dart:609:15 • unused_local_variable
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:995:9 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:996:20 • prefer_const_constructors
+warning • The declaration '_safeSetState' isn't referenced • lib/screens/arena_screen.dart:1100:8 • unused_element
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen.dart:1230:28 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen.dart:1243:28 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen.dart:1267:30 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen.dart:1329:28 • use_build_context_synchronously
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:1906:16 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen.dart:1908:21 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:1909:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:1915:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:1917:22 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:1936:15 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:1944:24 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:1957:25 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:1979:26 • prefer_const_constructors
+warning • The declaration '_buildSimpleAudienceDisplay' isn't referenced • lib/screens/arena_screen.dart:2113:10 • unused_element
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:2118:16 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen.dart:2120:21 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:2121:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:2127:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:2129:22 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:2152:15 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:2160:24 • prefer_const_constructors
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/screens/arena_screen.dart:2170:11 • sized_box_for_whitespace
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:2175:29 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:2197:30 • prefer_const_constructors
+warning • The declaration '_buildTimerDisplay' isn't referenced • lib/screens/arena_screen.dart:2447:10 • unused_element
+warning • The declaration '_showJudgingPanel' isn't referenced • lib/screens/arena_screen.dart:2643:8 • unused_element
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:2740:21 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:2752:19 • prefer_const_constructors
+warning • The declaration '_assignJudgeFromAudience' isn't referenced • lib/screens/arena_screen.dart:2947:16 • unused_element
+warning • The declaration '_buildChatMessage' isn't referenced • lib/screens/arena_screen.dart:3021:10 • unused_element
+warning • The declaration '_buildRealChatMessage' isn't referenced • lib/screens/arena_screen.dart:3124:10 • unused_element
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:3249:21 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:3261:19 • prefer_const_constructors
+   info • Use 'const' for final variables initialized to a constant value • lib/screens/arena_screen.dart:3483:7 • prefer_const_declarations
+   info • Unnecessary braces in a string interpolation • lib/screens/arena_screen.dart:3510:49 • unnecessary_brace_in_string_interps
+warning • The declaration '_forceNavigationHome' isn't referenced • lib/screens/arena_screen.dart:3619:8 • unused_element
+warning • The declaration '_forceNavigation' isn't referenced • lib/screens/arena_screen.dart:3624:8 • unused_element
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen.dart:3865:30 • use_build_context_synchronously
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:3969:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:3976:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:3983:20 • prefer_const_constructors
+warning • The declaration '_showApprovalModalToOtherDebater' isn't referenced • lib/screens/arena_screen.dart:3998:8 • unused_element
+   info • Unnecessary braces in a string interpolation • lib/screens/arena_screen.dart:4036:44 • unnecessary_brace_in_string_interps
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:4074:17 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen.dart:4075:29 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:4076:21 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:4082:21 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:4083:30 • prefer_const_constructors
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen.dart:4873:28 • use_build_context_synchronously
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:4874:9 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:4875:20 • prefer_const_constructors
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen.dart:4881:28 • use_build_context_synchronously
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:5697:14 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen.dart:5698:19 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:5699:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:5701:11 • prefer_const_constructors
+warning • The value of the local variable 'winnerDebater' isn't used • lib/screens/arena_screen.dart:5998:11 • unused_local_variable
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:6045:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:6046:19 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen.dart:6047:19 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:6247:27 • prefer_const_constructors
+   info • The private field _selectedJudges could be 'final' • lib/screens/arena_screen.dart:6632:15 • prefer_final_fields
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:6816:25 • prefer_const_constructors
+warning • The value of the field '_selectedTabIndex' isn't used • lib/screens/arena_screen.dart:6987:7 • unused_field
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:7012:19 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen.dart:7052:21 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:7053:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:7054:26 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen.dart:7056:31 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:7057:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:7063:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:7064:26 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen.dart:7066:31 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:7067:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:7187:33 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:7189:42 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen.dart:7190:47 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:7191:39 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:7198:33 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:7200:42 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen.dart:7201:47 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:7202:39 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:7399:26 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen.dart:7555:19 • prefer_const_constructors
+   info • Use 'const' for final variables initialized to a constant value • lib/screens/arena_screen_backup.dart:56:5 • prefer_const_declarations
+   info • The private field _audience could be 'final' • lib/screens/arena_screen_backup.dart:144:21 • prefer_final_fields
+warning • The value of the field 'lightGray' isn't used • lib/screens/arena_screen_backup.dart:160:22 • unused_field
+warning • The operand can't be 'null', so the condition is always 'false' • lib/screens/arena_screen_backup.dart:351:34 • unnecessary_null_comparison
+warning • Unnecessary type check; the result is always 'true' • lib/screens/arena_screen_backup.dart:359:19 • unnecessary_type_check
+warning • Unnecessary cast • lib/screens/arena_screen_backup.dart:360:27 • unnecessary_cast
+warning • Unnecessary type check; the result is always 'true' • lib/screens/arena_screen_backup.dart:361:26 • unnecessary_type_check
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:520:15 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:521:26 • prefer_const_constructors
+warning • The value of the local variable 'previousJudgingComplete' isn't used • lib/screens/arena_screen_backup.dart:567:15 • unused_local_variable
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:953:9 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:954:20 • prefer_const_constructors
+warning • The declaration '_safeSetState' isn't referenced • lib/screens/arena_screen_backup.dart:1058:8 • unused_element
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen_backup.dart:1188:28 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen_backup.dart:1201:28 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen_backup.dart:1225:30 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen_backup.dart:1287:28 • use_build_context_synchronously
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:1874:16 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen_backup.dart:1876:21 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:1877:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:1883:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:1885:22 • prefer_const_constructors
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/screens/arena_screen_backup.dart:1896:12 • sized_box_for_whitespace
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:1900:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:1908:20 • prefer_const_constructors
+warning • The declaration '_buildSimpleAudienceDisplay' isn't referenced • lib/screens/arena_screen_backup.dart:2057:10 • unused_element
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:2061:16 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen_backup.dart:2063:21 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:2064:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:2070:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:2072:22 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:2087:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:2095:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:2115:35 • prefer_const_constructors
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen_backup.dart:2309:44 • use_build_context_synchronously
+warning • The declaration '_buildTimerDisplay' isn't referenced • lib/screens/arena_screen_backup.dart:2383:10 • unused_element
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:2586:21 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:2598:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:2706:21 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:2739:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:2862:21 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:2874:19 • prefer_const_constructors
+   info • Use 'const' for final variables initialized to a constant value • lib/screens/arena_screen_backup.dart:3090:7 • prefer_const_declarations
+   info • Unnecessary braces in a string interpolation • lib/screens/arena_screen_backup.dart:3117:49 • unnecessary_brace_in_string_interps
+warning • The declaration '_forceNavigationHome' isn't referenced • lib/screens/arena_screen_backup.dart:3226:8 • unused_element
+warning • The declaration '_forceNavigation' isn't referenced • lib/screens/arena_screen_backup.dart:3231:8 • unused_element
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen_backup.dart:3472:30 • use_build_context_synchronously
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:3576:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:3583:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:3590:20 • prefer_const_constructors
+warning • The declaration '_showApprovalModalToOtherDebater' isn't referenced • lib/screens/arena_screen_backup.dart:3605:8 • unused_element
+   info • Unnecessary braces in a string interpolation • lib/screens/arena_screen_backup.dart:3643:44 • unnecessary_brace_in_string_interps
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:3681:17 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen_backup.dart:3682:29 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:3683:21 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:3689:21 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:3690:30 • prefer_const_constructors
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen_backup.dart:4480:28 • use_build_context_synchronously
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:4481:9 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:4482:20 • prefer_const_constructors
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen_backup.dart:4488:28 • use_build_context_synchronously
+   info • Unnecessary braces in a string interpolation • lib/screens/arena_screen_backup.dart:5039:41 • unnecessary_brace_in_string_interps
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:5265:14 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen_backup.dart:5266:19 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:5267:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:5269:11 • prefer_const_constructors
+warning • The value of the local variable 'winnerDebater' isn't used • lib/screens/arena_screen_backup.dart:5566:11 • unused_local_variable
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:5613:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:5614:19 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen_backup.dart:5615:19 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:5815:27 • prefer_const_constructors
+   info • The private field _selectedJudges could be 'final' • lib/screens/arena_screen_backup.dart:6200:15 • prefer_final_fields
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_backup.dart:6384:25 • prefer_const_constructors
+warning • Unused import: 'package:flutter_riverpod/flutter_riverpod.dart' • lib/screens/arena_screen_legacy.dart:3:8 • unused_import
+warning • Unused import: '../features/arena/providers/arena_comprehensive_provider.dart' • lib/screens/arena_screen_legacy.dart:15:8 • unused_import
+warning • Unused import: '../features/arena/models/arena_state.dart' • lib/screens/arena_screen_legacy.dart:16:8 • unused_import
+   info • Use 'const' for final variables initialized to a constant value • lib/screens/arena_screen_legacy.dart:59:5 • prefer_const_declarations
+   info • The private field _audience could be 'final' • lib/screens/arena_screen_legacy.dart:147:21 • prefer_final_fields
+warning • The value of the field 'lightGray' isn't used • lib/screens/arena_screen_legacy.dart:163:22 • unused_field
+warning • The operand can't be 'null', so the condition is always 'false' • lib/screens/arena_screen_legacy.dart:354:34 • unnecessary_null_comparison
+warning • Unnecessary type check; the result is always 'true' • lib/screens/arena_screen_legacy.dart:362:19 • unnecessary_type_check
+warning • Unnecessary cast • lib/screens/arena_screen_legacy.dart:363:27 • unnecessary_cast
+warning • Unnecessary type check; the result is always 'true' • lib/screens/arena_screen_legacy.dart:364:26 • unnecessary_type_check
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:523:15 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:524:26 • prefer_const_constructors
+warning • The value of the local variable 'previousJudgingComplete' isn't used • lib/screens/arena_screen_legacy.dart:570:15 • unused_local_variable
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:956:9 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:957:20 • prefer_const_constructors
+warning • The declaration '_safeSetState' isn't referenced • lib/screens/arena_screen_legacy.dart:1061:8 • unused_element
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen_legacy.dart:1191:28 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen_legacy.dart:1204:28 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen_legacy.dart:1228:30 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen_legacy.dart:1290:28 • use_build_context_synchronously
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:1877:16 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen_legacy.dart:1879:21 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:1880:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:1886:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:1888:22 • prefer_const_constructors
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/screens/arena_screen_legacy.dart:1899:12 • sized_box_for_whitespace
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:1903:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:1911:20 • prefer_const_constructors
+warning • The declaration '_buildSimpleAudienceDisplay' isn't referenced • lib/screens/arena_screen_legacy.dart:2060:10 • unused_element
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:2064:16 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen_legacy.dart:2066:21 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:2067:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:2073:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:2075:22 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:2090:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:2098:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:2118:35 • prefer_const_constructors
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen_legacy.dart:2312:44 • use_build_context_synchronously
+warning • The declaration '_buildTimerDisplay' isn't referenced • lib/screens/arena_screen_legacy.dart:2386:10 • unused_element
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:2589:21 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:2601:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:2709:21 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:2742:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:2865:21 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:2877:19 • prefer_const_constructors
+   info • Use 'const' for final variables initialized to a constant value • lib/screens/arena_screen_legacy.dart:3093:7 • prefer_const_declarations
+   info • Unnecessary braces in a string interpolation • lib/screens/arena_screen_legacy.dart:3120:49 • unnecessary_brace_in_string_interps
+warning • The declaration '_forceNavigationHome' isn't referenced • lib/screens/arena_screen_legacy.dart:3229:8 • unused_element
+warning • The declaration '_forceNavigation' isn't referenced • lib/screens/arena_screen_legacy.dart:3234:8 • unused_element
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen_legacy.dart:3475:30 • use_build_context_synchronously
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:3579:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:3586:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:3593:20 • prefer_const_constructors
+warning • The declaration '_showApprovalModalToOtherDebater' isn't referenced • lib/screens/arena_screen_legacy.dart:3608:8 • unused_element
+   info • Unnecessary braces in a string interpolation • lib/screens/arena_screen_legacy.dart:3646:44 • unnecessary_brace_in_string_interps
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:3684:17 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen_legacy.dart:3685:29 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:3686:21 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:3692:21 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:3693:30 • prefer_const_constructors
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen_legacy.dart:4483:28 • use_build_context_synchronously
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:4484:9 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:4485:20 • prefer_const_constructors
+   info • Don't use 'BuildContext's across async gaps • lib/screens/arena_screen_legacy.dart:4491:28 • use_build_context_synchronously
+   info • Unnecessary braces in a string interpolation • lib/screens/arena_screen_legacy.dart:5042:41 • unnecessary_brace_in_string_interps
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:5268:14 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen_legacy.dart:5269:19 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:5270:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:5272:11 • prefer_const_constructors
+warning • The value of the local variable 'winnerDebater' isn't used • lib/screens/arena_screen_legacy.dart:5569:11 • unused_local_variable
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:5616:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:5617:19 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen_legacy.dart:5618:19 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:5818:27 • prefer_const_constructors
+   info • The private field _selectedJudges could be 'final' • lib/screens/arena_screen_legacy.dart:6203:15 • prefer_final_fields
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_legacy.dart:6387:25 • prefer_const_constructors
+warning • Unused import: 'package:flutter/foundation.dart' • lib/screens/arena_screen_riverpod.dart:2:8 • unused_import
+warning • Unused import: 'package:appwrite/appwrite.dart' • lib/screens/arena_screen_riverpod.dart:4:8 • unused_import
+warning • Unused import: '../services/appwrite_service.dart' • lib/screens/arena_screen_riverpod.dart:5:8 • unused_import
+warning • Unused import: '../services/challenge_messaging_service.dart' • lib/screens/arena_screen_riverpod.dart:6:8 • unused_import
+warning • Unused import: '../services/sound_service.dart' • lib/screens/arena_screen_riverpod.dart:7:8 • unused_import
+warning • Unused import: '../widgets/debater_invite_choice_modal.dart' • lib/screens/arena_screen_riverpod.dart:9:8 • unused_import
+warning • Unused import: '../models/user_profile.dart' • lib/screens/arena_screen_riverpod.dart:10:8 • unused_import
+warning • Unused import: 'dart:async' • lib/screens/arena_screen_riverpod.dart:11:8 • unused_import
+warning • Unused import: 'dart:io' • lib/screens/arena_screen_riverpod.dart:12:8 • unused_import
+warning • Unused import: '../main.dart' • lib/screens/arena_screen_riverpod.dart:13:8 • unused_import
+warning • Unused import: '../core/logging/app_logger.dart' • lib/screens/arena_screen_riverpod.dart:14:8 • unused_import
+  error • The argument type 'String' can't be assigned to the parameter type 'ArenaInitParams'.  • lib/screens/arena_screen_riverpod.dart:56:62 • argument_type_not_assignable
+  error • The argument type 'String' can't be assigned to the parameter type 'ArenaInitParams'.  • lib/screens/arena_screen_riverpod.dart:57:54 • argument_type_not_assignable
+  error • The argument type 'String' can't be assigned to the parameter type 'ArenaInitParams'.  • lib/screens/arena_screen_riverpod.dart:58:57 • argument_type_not_assignable
+warning • The value of the local variable 'uiState' isn't used • lib/screens/arena_screen_riverpod.dart:59:11 • unused_local_variable
+  error • The argument type 'String' can't be assigned to the parameter type 'ArenaInitParams'.  • lib/screens/arena_screen_riverpod.dart:60:65 • argument_type_not_assignable
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:77:54 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_riverpod.dart:93:15 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:175:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:176:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:217:45 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:231:35 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:255:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:256:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:264:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:276:35 • deprecated_member_use
+  error • The named parameter 'imageUrl' isn't defined • lib/screens/arena_screen_riverpod.dart:393:21 • undefined_named_parameter
+  error • The named parameter 'name' isn't defined • lib/screens/arena_screen_riverpod.dart:394:21 • undefined_named_parameter
+  error • The named parameter 'size' isn't defined • lib/screens/arena_screen_riverpod.dart:395:21 • undefined_named_parameter
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:415:22 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:417:41 • deprecated_member_use
+  error • The named parameter 'imageUrl' isn't defined • lib/screens/arena_screen_riverpod.dart:441:15 • undefined_named_parameter
+  error • The named parameter 'name' isn't defined • lib/screens/arena_screen_riverpod.dart:442:15 • undefined_named_parameter
+  error • The named parameter 'size' isn't defined • lib/screens/arena_screen_riverpod.dart:443:15 • undefined_named_parameter
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:479:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:481:56 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:504:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:711:35 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/arena_screen_riverpod.dart:714:20 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/arena_screen_riverpod.dart:715:25 • prefer_const_literals_to_create_immutables
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:729:34 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/arena_screen_riverpod.dart:794:29 • deprecated_member_use
+   info • The private field _isCreatingRoom could be 'final' • lib/screens/create_open_screen.dart:21:8 • prefer_final_fields
+warning • The value of the field '_isCreatingRoom' isn't used • lib/screens/create_open_screen.dart:21:8 • unused_field
+warning • The value of the field '_formKey' isn't used • lib/screens/create_open_screen.dart:28:30 • unused_field
+warning • The operand can't be 'null', so the condition is always 'true' • lib/screens/create_open_screen.dart:102:17 • unnecessary_null_comparison
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:228:9 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:241:9 • prefer_const_constructors
+   info • Don't use 'BuildContext's across async gaps • lib/screens/create_open_screen.dart:290:9 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/screens/create_open_screen.dart:297:28 • use_build_context_synchronously
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:397:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:440:26 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:442:28 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:475:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:507:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:509:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:578:15 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:580:24 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:606:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:607:22 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:609:24 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:712:36 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:734:28 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:774:26 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:776:28 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:798:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:812:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:839:30 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:860:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:862:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:871:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:873:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:885:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:887:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:918:29 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:929:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:931:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:963:29 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:996:19 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/create_open_screen.dart:998:31 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:999:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:1002:32 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:1004:39 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/create_open_screen.dart:1070:17 • prefer_const_constructors
+warning • Unused import: 'package:flutter/foundation.dart' • lib/screens/debate_clubs_screen.dart:2:8 • unused_import
+warning • Unused import: '../widgets/custom_icon.dart' • lib/screens/debate_clubs_screen.dart:4:8 • unused_import
+   info • The constant name 'CLUB_STRUCTURE' isn't a lowerCamelCase identifier • lib/screens/debate_clubs_screen.dart:27:14 • constant_identifier_names
+warning • The value of the field 'lightScarlet' isn't used • lib/screens/debate_clubs_screen.dart:60:22 • unused_field
+   info • Don't use 'BuildContext's across async gaps • lib/screens/debate_clubs_screen.dart:284:21 • use_build_context_synchronously
+   info • Use 'const' with the constructor to improve performance • lib/screens/debate_clubs_screen.dart:446:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/debate_clubs_screen.dart:448:13 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/debate_clubs_screen.dart:450:13 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/debate_clubs_screen.dart:521:44 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/debate_clubs_screen.dart:621:63 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/debate_clubs_screen.dart:621:93 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/debate_clubs_screen.dart:651:56 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/debate_clubs_screen.dart:700:43 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/debate_clubs_screen.dart:717:45 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/debate_clubs_screen.dart:780:44 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/debate_clubs_screen.dart:783:18 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/debate_clubs_screen.dart:833:25 • prefer_const_constructors
+warning • The value of the field 'accentPurple' isn't used • lib/screens/edit_profile_screen.dart:42:22 • unused_field
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/edit_profile_screen.dart:342:44 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/edit_profile_screen.dart:362:29 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/edit_profile_screen.dart:385:29 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/edit_profile_screen.dart:401:29 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/edit_profile_screen.dart:422:44 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/edit_profile_screen.dart:442:29 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/edit_profile_screen.dart:463:29 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/edit_profile_screen.dart:479:29 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/edit_profile_screen.dart:495:29 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/edit_profile_screen.dart:511:29 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/edit_profile_screen.dart:527:29 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/edit_profile_screen.dart:549:44 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/edit_profile_screen.dart:606:44 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/find_users_screen.dart:103:29 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/find_users_screen.dart:106:62 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/find_users_screen.dart:110:31 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/find_users_screen.dart:114:61 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/find_users_screen.dart:183:45 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/find_users_screen.dart:196:47 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/find_users_screen.dart:217:27 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/find_users_screen.dart:261:41 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/find_users_screen.dart:266:30 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_find_users_screen.dart:103:29 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_find_users_screen.dart:106:62 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_find_users_screen.dart:110:31 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_find_users_screen.dart:114:61 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_find_users_screen.dart:183:45 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_find_users_screen.dart:196:47 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_find_users_screen.dart:217:27 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_find_users_screen.dart:261:41 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_find_users_screen.dart:266:30 • prefer_const_constructors
+   info • The import of 'package:flutter/foundation.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/screens/glassmorphism_home_screen.dart:2:8 • unnecessary_import
+warning • Unused import: '../services/sound_service.dart' • lib/screens/glassmorphism_home_screen.dart:9:8 • unused_import
+warning • Unused import: '../widgets/glassmorphism_challenge_modal.dart' • lib/screens/glassmorphism_home_screen.dart:11:8 • unused_import
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:273:101 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:335:101 • deprecated_member_use
+warning • The declaration '_buildHeroWelcome' isn't referenced • lib/screens/glassmorphism_home_screen.dart:364:10 • unused_element
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:373:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:374:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:379:42 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:395:50 • deprecated_member_use
+warning • The declaration '_buildFloatingStats' isn't referenced • lib/screens/glassmorphism_home_screen.dart:435:10 • unused_element
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:470:26 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:482:28 • deprecated_member_use
+warning • The declaration '_buildMinimalActions' isn't referenced • lib/screens/glassmorphism_home_screen.dart:514:10 • unused_element
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:559:28 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:573:41 • deprecated_member_use
+warning • The declaration '_buildGlassmorphismHeader' isn't referenced • lib/screens/glassmorphism_home_screen.dart:606:10 • unused_element
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:632:49 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:650:49 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:708:35 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:713:35 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:726:36 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:727:36 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:729:39 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:734:34 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:765:51 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:807:35 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:812:35 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:825:36 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:826:36 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:828:39 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:833:34 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_home_screen.dart:879:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_home_screen.dart:881:20 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:908:46 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:965:44 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1107:101 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1112:101 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1158:56 • deprecated_member_use
+warning • The declaration '_buildCompactFeatureCard' isn't referenced • lib/screens/glassmorphism_home_screen.dart:1177:10 • unused_element
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1223:101 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1229:99 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1240:103 • deprecated_member_use
+warning • The declaration '_buildGlassmorphismFeatureCard' isn't referenced • lib/screens/glassmorphism_home_screen.dart:1265:10 • unused_element
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1317:35 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1322:35 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1335:36 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1336:36 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1339:39 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1347:34 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1349:34 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1367:53 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1391:65 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1425:64 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1428:53 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1455:46 • deprecated_member_use
+warning • The declaration '_buildRecentActivity' isn't referenced • lib/screens/glassmorphism_home_screen.dart:1478:10 • unused_element
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1530:26 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1589:44 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_home_screen.dart:1594:44 • deprecated_member_use
+   info • The import of 'package:flutter/foundation.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/screens/glassmorphism_profile_screen.dart:8:8 • unnecessary_import
+   info • Don't invoke 'print' in production code • lib/screens/glassmorphism_profile_screen.dart:67:11 • avoid_print
+   info • Don't invoke 'print' in production code • lib/screens/glassmorphism_profile_screen.dart:80:11 • avoid_print
+   info • Don't invoke 'print' in production code • lib/screens/glassmorphism_profile_screen.dart:92:9 • avoid_print
+   info • Don't invoke 'print' in production code • lib/screens/glassmorphism_profile_screen.dart:122:11 • avoid_print
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:288:30 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:303:38 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:303:60 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:367:20 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/glassmorphism_profile_screen.dart:369:25 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:370:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:372:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:374:30 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:386:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:388:20 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_profile_screen.dart:402:44 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_profile_screen.dart:513:44 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_profile_screen.dart:544:44 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:567:31 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_profile_screen.dart:594:44 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_profile_screen.dart:668:60 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_profile_screen.dart:683:60 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_profile_screen.dart:741:46 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_profile_screen.dart:741:78 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_profile_screen.dart:744:48 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_profile_screen.dart:744:80 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:751:15 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:780:22 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:795:30 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:795:52 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:809:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:818:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:827:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:836:20 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_profile_screen.dart:853:44 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:860:13 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/glassmorphism_profile_screen.dart:861:25 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:862:17 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_profile_screen.dart:888:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_profile_screen.dart:890:56 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_profile_screen.dart:894:19 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_profile_screen.dart:932:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_profile_screen.dart:934:56 • deprecated_member_use
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/screens/glassmorphism_user_profile_screen.dart:3:8 • unnecessary_import
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:184:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:189:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:217:42 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:218:42 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:220:45 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:262:43 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:357:40 • deprecated_member_use
+warning • The left operand can't be null, so the right operand is never executed • lib/screens/glassmorphism_user_profile_screen.dart:382:44 • dead_null_aware_expression
+warning • The left operand can't be null, so the right operand is never executed • lib/screens/glassmorphism_user_profile_screen.dart:390:46 • dead_null_aware_expression
+warning • The left operand can't be null, so the right operand is never executed • lib/screens/glassmorphism_user_profile_screen.dart:398:43 • dead_null_aware_expression
+warning • The left operand can't be null, so the right operand is never executed • lib/screens/glassmorphism_user_profile_screen.dart:410:45 • dead_null_aware_expression
+warning • The left operand can't be null, so the right operand is never executed • lib/screens/glassmorphism_user_profile_screen.dart:410:75 • dead_null_aware_expression
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:446:28 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:480:22 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:483:24 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:523:30 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:524:30 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:527:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:532:35 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:578:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:597:35 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/glassmorphism_user_profile_screen.dart:600:22 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/glassmorphism_user_profile_screen.dart:639:36 • deprecated_member_use
+   info • The import of 'package:flutter/foundation.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/screens/home_screen.dart:2:8 • unnecessary_import
+warning • Unused import: '../widgets/custom_icon.dart' • lib/screens/home_screen.dart:5:8 • unused_import
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:234:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:239:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:253:34 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:254:34 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:257:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:265:32 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:267:32 • deprecated_member_use
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/home_screen.dart:269:24 • prefer_const_literals_to_create_immutables
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:299:47 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:314:34 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:315:34 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:317:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:362:30 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:363:30 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:365:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:387:30 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:388:30 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:390:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:444:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:449:47 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:475:36 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:477:36 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:478:36 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:498:40 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:518:39 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:542:34 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:543:34 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:546:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:691:35 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:696:35 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:709:36 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:710:36 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:713:39 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:721:34 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:723:34 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:741:53 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:765:65 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:799:64 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:802:53 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/home_screen.dart:806:36 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/home_screen.dart:829:46 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/login_screen.dart:166:45 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/login_screen.dart:174:25 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/login_screen.dart:212:37 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/login_screen.dart:218:39 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/login_screen.dart:241:35 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/login_screen.dart:247:37 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/login_screen.dart:270:35 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/login_screen.dart:287:37 • prefer_const_constructors
+warning • Unused import: '../services/appwrite_service.dart' • lib/screens/messages_screen.dart:3:8 • unused_import
+warning • Unused import: 'package:flutter/foundation.dart' • lib/screens/messages_screen.dart:6:8 • unused_import
+warning • The value of the field '_isInitialized' isn't used • lib/screens/messages_screen.dart:25:8 • unused_field
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/messages_screen.dart:307:32 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/messages_screen.dart:411:73 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/messages_screen.dart:456:72 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/messages_screen.dart:457:70 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/messages_screen.dart:556:48 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/messages_screen.dart:617:41 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/messages_screen.dart:619:60 • deprecated_member_use
+warning • The receiver can't be null, so the null-aware operator '?.' is unnecessary • lib/screens/messages_screen.dart:633:48 • invalid_null_aware_operator
+   info • Use 'const' with the constructor to improve performance • lib/screens/messages_screen.dart:676:33 • prefer_const_constructors
+warning • The receiver can't be null, so the null-aware operator '?.' is unnecessary • lib/screens/messages_screen.dart:710:43 • invalid_null_aware_operator
+warning • Unused import: 'package:appwrite/appwrite.dart' • lib/screens/open_discussion_room_screen.dart:13:8 • unused_import
+   info • The private field _showModerationPanel could be 'final' • lib/screens/open_discussion_room_screen.dart:46:8 • prefer_final_fields
+warning • The value of the field '_showModerationPanel' isn't used • lib/screens/open_discussion_room_screen.dart:46:8 • unused_field
+   info • The private field _speakingTimeLimit could be 'final' • lib/screens/open_discussion_room_screen.dart:56:7 • prefer_final_fields
+warning • The value of the field '_speakingTimeLimit' isn't used • lib/screens/open_discussion_room_screen.dart:56:7 • unused_field
+warning • The operand can't be 'null', so the condition is always 'false' • lib/screens/open_discussion_room_screen.dart:272:26 • unnecessary_null_comparison
+warning • The operand can't be 'null', so the condition is always 'false' • lib/screens/open_discussion_room_screen.dart:279:25 • unnecessary_null_comparison
+warning • Unnecessary type check; the result is always 'false' • lib/screens/open_discussion_room_screen.dart:279:36 • unnecessary_type_check
+   info • Unnecessary braces in a string interpolation • lib/screens/open_discussion_room_screen.dart:714:29 • unnecessary_brace_in_string_interps
+   info • Unnecessary braces in a string interpolation • lib/screens/open_discussion_room_screen.dart:715:31 • unnecessary_brace_in_string_interps
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:1143:22 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:1192:34 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:1293:21 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:1301:30 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:1319:29 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:1373:9 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:1375:18 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:1401:18 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:1466:18 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:1606:31 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:1946:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:1952:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:1954:28 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:1977:27 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:1988:27 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2012:21 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2181:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2183:19 • prefer_const_constructors
+warning • The value of the local variable 'isCurrentUserModerator' isn't used • lib/screens/open_discussion_room_screen.dart:2248:15 • unused_local_variable
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2271:28 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2376:16 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2387:15 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2389:24 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2391:26 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2399:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2409:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2424:9 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2425:20 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/open_discussion_room_screen.dart:2426:23 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2427:15 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2430:24 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2433:15 • prefer_const_constructors
+   info • Don't use 'BuildContext's across async gaps • lib/screens/open_discussion_room_screen.dart:2469:28 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/screens/open_discussion_room_screen.dart:2484:28 • use_build_context_synchronously
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2534:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2540:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2542:28 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2636:15 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2690:26 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2707:26 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2760:9 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2762:18 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2844:9 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2846:18 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2858:15 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2862:24 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2884:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2904:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2959:26 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:2988:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:3105:33 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:3114:25 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:3157:33 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:3159:42 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:3187:35 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:3189:44 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:3203:27 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:3205:36 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:3318:27 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/open_discussion_room_screen.dart:3320:36 • prefer_const_constructors
+warning • Unused import: '../core/providers/app_providers.dart' • lib/screens/optimized_home_screen.dart:6:8 • unused_import
+  error • The getter 'avatarUrl' isn't defined for the type 'UserProfile' • lib/screens/optimized_home_screen.dart:152:41 • undefined_getter
+  error • The getter 'rank' isn't defined for the type 'UserProfile' • lib/screens/optimized_home_screen.dart:193:36 • undefined_getter
+  error • The getter 'debatesCount' isn't defined for the type 'UserProfile' • lib/screens/optimized_home_screen.dart:210:52 • undefined_getter
+  error • The getter 'winsCount' isn't defined for the type 'UserProfile' • lib/screens/optimized_home_screen.dart:211:49 • undefined_getter
+  error • The getter 'rating' isn't defined for the type 'UserProfile' • lib/screens/optimized_home_screen.dart:212:51 • undefined_getter
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/premium_screen.dart:162:38 • deprecated_member_use
+   info • The import of 'package:flutter/foundation.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/screens/profile_screen.dart:8:8 • unnecessary_import
+   info • Don't invoke 'print' in production code • lib/screens/profile_screen.dart:67:11 • avoid_print
+   info • Don't invoke 'print' in production code • lib/screens/profile_screen.dart:80:11 • avoid_print
+   info • Don't invoke 'print' in production code • lib/screens/profile_screen.dart:92:9 • avoid_print
+   info • Don't invoke 'print' in production code • lib/screens/profile_screen.dart:122:11 • avoid_print
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:288:30 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:303:38 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:303:60 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:367:20 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/profile_screen.dart:369:25 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:370:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:372:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:374:30 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:386:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:388:20 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/profile_screen.dart:402:44 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/profile_screen.dart:513:44 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/profile_screen.dart:544:44 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:567:31 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/profile_screen.dart:594:44 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/profile_screen.dart:668:60 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/profile_screen.dart:683:60 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/profile_screen.dart:741:46 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/profile_screen.dart:741:78 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/profile_screen.dart:744:48 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/profile_screen.dart:744:80 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:751:15 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:780:22 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:795:30 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:795:52 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:809:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:818:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:827:20 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:836:20 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/profile_screen.dart:853:44 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:860:13 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/screens/profile_screen.dart:861:25 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:862:17 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/profile_screen.dart:888:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/profile_screen.dart:890:56 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/profile_screen.dart:894:19 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/profile_screen.dart:932:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/profile_screen.dart:934:56 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/screens/user_profile_screen.dart:91:21 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/user_profile_screen.dart:397:44 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/user_profile_screen.dart:463:44 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/user_profile_screen.dart:495:44 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/user_profile_screen.dart:519:47 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/screens/user_profile_screen.dart:535:44 • deprecated_member_use
+warning • Unused import: 'package:flutter/foundation.dart' • lib/services/agora_service_mobile.dart:2:8 • unused_import
+   info • Use 'const' with the constructor to improve performance • lib/services/agora_service_mobile.dart:44:33 • prefer_const_constructors
+warning • Unused import: 'package:flutter/foundation.dart' • lib/services/agora_service_stub.dart:1:8 • unused_import
+warning • Unused import: 'package:flutter/foundation.dart' • lib/services/agora_service_web.dart:1:8 • unused_import
+warning • Unused import: 'package:flutter/foundation.dart' • lib/services/agora_token_service.dart:1:8 • unused_import
+   info • Use interpolation to compose strings and values • lib/services/appwrite_service.dart:286:98 • prefer_interpolation_to_compose_strings
+   info • Use 'isEmpty' instead of 'length' to test whether the collection is empty • lib/services/appwrite_service.dart:1875:11 • prefer_is_empty
+   info • Unnecessary braces in a string interpolation • lib/services/appwrite_service.dart:2026:75 • unnecessary_brace_in_string_interps
+   info • Unnecessary braces in a string interpolation • lib/services/appwrite_service.dart:2037:79 • unnecessary_brace_in_string_interps
+   info • Unnecessary braces in a string interpolation • lib/services/appwrite_service.dart:2037:116 • unnecessary_brace_in_string_interps
+   info • Unnecessary braces in a string interpolation • lib/services/appwrite_service.dart:2042:99 • unnecessary_brace_in_string_interps
+   info • Unnecessary braces in a string interpolation • lib/services/appwrite_service.dart:2047:45 • unnecessary_brace_in_string_interps
+   info • Unnecessary braces in a string interpolation • lib/services/appwrite_service.dart:2052:104 • unnecessary_brace_in_string_interps
+   info • Unnecessary braces in a string interpolation • lib/services/appwrite_service.dart:2133:75 • unnecessary_brace_in_string_interps
+   info • Unnecessary braces in a string interpolation • lib/services/appwrite_service.dart:2144:79 • unnecessary_brace_in_string_interps
+   info • Unnecessary braces in a string interpolation • lib/services/appwrite_service.dart:2144:116 • unnecessary_brace_in_string_interps
+   info • Unnecessary braces in a string interpolation • lib/services/appwrite_service.dart:2149:99 • unnecessary_brace_in_string_interps
+   info • Unnecessary braces in a string interpolation • lib/services/appwrite_service.dart:2154:45 • unnecessary_brace_in_string_interps
+   info • Unnecessary braces in a string interpolation • lib/services/appwrite_service.dart:2159:104 • unnecessary_brace_in_string_interps
+warning • The operand can't be 'null', so the condition is always 'true' • lib/services/appwrite_service.dart:2353:75 • unnecessary_null_comparison
+warning • The value of the local variable 'response' isn't used • lib/services/appwrite_service.dart:2660:13 • unused_local_variable
+warning • The value of the local variable 'transaction' isn't used • lib/services/appwrite_service.dart:3075:13 • unused_local_variable
+warning • Unused import: 'package:flutter/material.dart' • lib/services/challenge_messaging_service.dart:1:8 • unused_import
+warning • The declaration '_inviteJudgesAndModerators' isn't referenced • lib/services/challenge_messaging_service.dart:645:16 • unused_element
+warning • Unused import: 'package:flutter/foundation.dart' • lib/services/chat_service.dart:1:8 • unused_import
+warning • Unused import: '../models/user_profile.dart' • lib/services/chat_service.dart:5:8 • unused_import
+warning • The left operand can't be null, so the right operand is never executed • lib/services/chat_service.dart:37:62 • dead_null_aware_expression
+warning • The value of the local variable 'newMessage' isn't used • lib/services/chat_service.dart:183:19 • unused_local_variable
+warning • Unused import: 'package:flutter/foundation.dart' • lib/services/firebase_gift_service.dart:4:8 • unused_import
+warning • Unused import: '../models/gift.dart' • lib/services/firebase_gift_service.dart:6:8 • unused_import
+   info • 'background' is deprecated and shouldn't be used. Use surface instead. This feature was deprecated after v3.18.0-0.1.pre • lib/services/theme_service.dart:41:7 • deprecated_member_use
+   info • 'onBackground' is deprecated and shouldn't be used. Use onSurface instead. This feature was deprecated after v3.18.0-0.1.pre • lib/services/theme_service.dart:45:7 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/services/theme_service.dart:76:46 • deprecated_member_use
+   info • 'background' is deprecated and shouldn't be used. Use surface instead. This feature was deprecated after v3.18.0-0.1.pre • lib/services/theme_service.dart:92:7 • deprecated_member_use
+   info • 'onBackground' is deprecated and shouldn't be used. Use onSurface instead. This feature was deprecated after v3.18.0-0.1.pre • lib/services/theme_service.dart:96:7 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/services/theme_service.dart:127:45 • deprecated_member_use
+warning • The value of the field '_shimmerAnimation' isn't used • lib/widgets/arena_role_notification_modal.dart:30:26 • unused_field
+warning • The value of the field '_themeService' isn't used • lib/widgets/arena_role_notification_modal.dart:32:22 • unused_field
+warning • The value of the local variable 'isJudge' isn't used • lib/widgets/arena_role_notification_modal.dart:87:11 • unused_local_variable
+warning • The value of the local variable 'isModerator' isn't used • lib/widgets/arena_role_notification_modal.dart:88:11 • unused_local_variable
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/arena_role_notification_modal.dart:101:57 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/arena_role_notification_modal.dart:104:39 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/arena_role_notification_modal.dart:109:42 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/arena_role_notification_modal.dart:124:90 • deprecated_member_use
+warning • The value of the local variable 'isJudge' isn't used • lib/widgets/arena_role_notification_modal.dart:173:11 • unused_local_variable
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/arena_role_notification_modal.dart:187:75 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/arena_role_notification_modal.dart:262:36 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/arena_role_notification_modal.dart:264:55 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/widgets/arena_role_notification_modal.dart:266:20 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/widgets/arena_role_notification_modal.dart:268:25 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/widgets/arena_role_notification_modal.dart:269:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/widgets/arena_role_notification_modal.dart:271:17 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/widgets/arena_role_notification_modal.dart:272:26 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/widgets/arena_role_notification_modal.dart:274:28 • prefer_const_constructors
+warning • The value of the local variable 'isJudge' isn't used • lib/widgets/arena_role_notification_modal.dart:292:11 • unused_local_variable
+warning • The value of the field '_shimmerAnimation' isn't used • lib/widgets/challenge_modal.dart:29:26 • unused_field
+warning • The value of the field '_themeService' isn't used • lib/widgets/challenge_modal.dart:31:22 • unused_field
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/challenge_modal.dart:93:41 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/widgets/challenge_modal.dart:122:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/widgets/challenge_modal.dart:123:19 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/widgets/challenge_modal.dart:124:19 • prefer_const_literals_to_create_immutables
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/challenge_modal.dart:221:52 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/challenge_modal.dart:274:73 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/challenge_modal.dart:274:103 • deprecated_member_use
+   info • Don't use 'BuildContext's across async gaps • lib/widgets/challenge_modal.dart:439:24 • use_build_context_synchronously
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/debater_invite_choice_modal.dart:52:27 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/debater_invite_choice_modal.dart:130:36 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/debater_invite_choice_modal.dart:175:38 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/debater_invite_choice_modal.dart:177:57 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/widgets/debater_invite_choice_modal.dart:182:21 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/debater_invite_choice_modal.dart:227:55 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/debater_invite_choice_modal.dart:227:86 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/debater_invite_choice_modal.dart:230:71 • deprecated_member_use
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/widgets/glassmorphism_challenge_modal.dart:3:8 • unnecessary_import
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/glassmorphism_challenge_modal.dart:119:45 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/glassmorphism_challenge_modal.dart:180:46 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/glassmorphism_challenge_modal.dart:209:48 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/glassmorphism_challenge_modal.dart:247:49 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/glassmorphism_challenge_modal.dart:289:46 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/glassmorphism_challenge_modal.dart:352:94 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/glassmorphism_challenge_modal.dart:447:31 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/glassmorphism_challenge_modal.dart:455:35 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/glassmorphism_challenge_modal.dart:512:33 • deprecated_member_use
+   info • Don't use 'BuildContext's across async gaps • lib/widgets/glassmorphism_challenge_modal.dart:572:24 • use_build_context_synchronously
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:51:51 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:54:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:61:32 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:63:32 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:107:26 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:108:26 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:131:37 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:136:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:180:31 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:186:32 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:238:31 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:243:32 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:357:71 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:382:36 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:397:39 • deprecated_member_use
+warning • The value of the local variable 'roleIcon' isn't used • lib/widgets/liquid_glass_widgets.dart:429:14 • unused_local_variable
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:469:44 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:483:46 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:534:32 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:582:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:587:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:595:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:600:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:608:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/liquid_glass_widgets.dart:616:33 • deprecated_member_use
+warning • Unused import: '../constants/appwrite.dart' • lib/widgets/modern_chat_widget.dart:5:8 • unused_import
+   info • The private field _isChatOpen could be 'final' • lib/widgets/modern_chat_widget.dart:40:8 • prefer_final_fields
+warning • The value of the field '_isChatOpen' isn't used • lib/widgets/modern_chat_widget.dart:40:8 • unused_field
+   info • Use 'const' with the constructor to improve performance • lib/widgets/modern_chat_widget.dart:175:19 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/widgets/modern_chat_widget.dart:176:19 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/widgets/modern_chat_widget.dart:177:19 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/widgets/modern_chat_widget.dart:188:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/widgets/modern_chat_widget.dart:194:11 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/widgets/modern_chat_widget.dart:195:20 • prefer_const_constructors
+warning • The value of the local variable 'userProfile' isn't used • lib/widgets/modern_chat_widget.dart:298:11 • unused_local_variable
+   info • Use 'const' with the constructor to improve performance • lib/widgets/modern_chat_widget.dart:330:30 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/widgets/modern_chat_widget.dart:484:25 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/widgets/modern_chat_widget.dart:485:25 • prefer_const_literals_to_create_immutables
+   info • Use 'const' with the constructor to improve performance • lib/widgets/modern_chat_widget.dart:496:23 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/widgets/modern_chat_widget.dart:499:32 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • lib/widgets/modern_chat_widget.dart:501:39 • prefer_const_constructors
+  error • The method 'setKey' isn't defined for the type 'Client' • setup_gift_collection.dart:8:7 • undefined_method
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:13:5 • avoid_print
+  error • The method 'createCollection' isn't defined for the type 'Databases' • setup_gift_collection.dart:16:40 • undefined_method
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:22:5 • avoid_print
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:25:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • setup_gift_collection.dart:27:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:34:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • setup_gift_collection.dart:36:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:43:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • setup_gift_collection.dart:45:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:52:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • setup_gift_collection.dart:54:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:61:5 • avoid_print
+  error • The method 'createIntegerAttribute' isn't defined for the type 'Databases' • setup_gift_collection.dart:63:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:69:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • setup_gift_collection.dart:71:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:78:5 • avoid_print
+  error • The method 'createDatetimeAttribute' isn't defined for the type 'Databases' • setup_gift_collection.dart:80:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:86:5 • avoid_print
+   info • Use 'const' with the constructor to improve performance • setup_gift_collection.dart:89:26 • prefer_const_constructors
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:92:5 • avoid_print
+  error • The method 'createIndex' isn't defined for the type 'Databases' • setup_gift_collection.dart:94:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:101:5 • avoid_print
+  error • The method 'createIndex' isn't defined for the type 'Databases' • setup_gift_collection.dart:103:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:110:5 • avoid_print
+  error • The method 'createIndex' isn't defined for the type 'Databases' • setup_gift_collection.dart:112:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:119:5 • avoid_print
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:121:5 • avoid_print
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:122:5 • avoid_print
+   info • Don't invoke 'print' in production code • setup_gift_collection.dart:125:5 • avoid_print
+  error • The method 'setKey' isn't defined for the type 'Client' • setup_messages_collection.dart:8:7 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:13:5 • avoid_print
+  error • The method 'createCollection' isn't defined for the type 'Databases' • setup_messages_collection.dart:16:40 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:22:5 • avoid_print
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:25:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • setup_messages_collection.dart:27:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:34:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • setup_messages_collection.dart:36:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:43:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • setup_messages_collection.dart:45:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:52:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • setup_messages_collection.dart:54:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:61:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • setup_messages_collection.dart:63:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:71:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • setup_messages_collection.dart:73:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:80:5 • avoid_print
+  error • The method 'createDatetimeAttribute' isn't defined for the type 'Databases' • setup_messages_collection.dart:82:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:88:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • setup_messages_collection.dart:90:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:97:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • setup_messages_collection.dart:99:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:107:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • setup_messages_collection.dart:109:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:116:5 • avoid_print
+  error • The method 'createBooleanAttribute' isn't defined for the type 'Databases' • setup_messages_collection.dart:118:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:125:5 • avoid_print
+  error • The method 'createDatetimeAttribute' isn't defined for the type 'Databases' • setup_messages_collection.dart:127:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:133:5 • avoid_print
+  error • The method 'createBooleanAttribute' isn't defined for the type 'Databases' • setup_messages_collection.dart:135:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:142:5 • avoid_print
+   info • Use 'const' with the constructor to improve performance • setup_messages_collection.dart:145:26 • prefer_const_constructors
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:148:5 • avoid_print
+  error • The method 'createIndex' isn't defined for the type 'Databases' • setup_messages_collection.dart:150:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:157:5 • avoid_print
+  error • The method 'createIndex' isn't defined for the type 'Databases' • setup_messages_collection.dart:159:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:166:5 • avoid_print
+  error • The method 'createIndex' isn't defined for the type 'Databases' • setup_messages_collection.dart:168:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:176:5 • avoid_print
+  error • The method 'createIndex' isn't defined for the type 'Databases' • setup_messages_collection.dart:178:21 • undefined_method
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:186:5 • avoid_print
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:188:5 • avoid_print
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:189:5 • avoid_print
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:190:5 • avoid_print
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:191:5 • avoid_print
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:192:5 • avoid_print
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:193:5 • avoid_print
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:194:5 • avoid_print
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:197:5 • avoid_print
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:198:5 • avoid_print
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:199:5 • avoid_print
+   info • Don't invoke 'print' in production code • setup_messages_collection.dart:200:5 • avoid_print
+  error • The method 'setKey' isn't defined for the type 'Client' • simple_setup.dart:9:7 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:14:5 • avoid_print
+  error • The method 'createCollection' isn't defined for the type 'Databases' • simple_setup.dart:17:40 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:23:5 • avoid_print
+   info • Don't invoke 'print' in production code • simple_setup.dart:26:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • simple_setup.dart:28:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:35:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • simple_setup.dart:37:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:44:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • simple_setup.dart:46:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:53:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • simple_setup.dart:55:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:62:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • simple_setup.dart:64:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:72:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • simple_setup.dart:74:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:81:5 • avoid_print
+  error • The method 'createDatetimeAttribute' isn't defined for the type 'Databases' • simple_setup.dart:83:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:89:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • simple_setup.dart:91:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:98:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • simple_setup.dart:100:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:108:5 • avoid_print
+  error • The method 'createStringAttribute' isn't defined for the type 'Databases' • simple_setup.dart:110:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:117:5 • avoid_print
+  error • The method 'createBooleanAttribute' isn't defined for the type 'Databases' • simple_setup.dart:119:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:126:5 • avoid_print
+  error • The method 'createDatetimeAttribute' isn't defined for the type 'Databases' • simple_setup.dart:128:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:134:5 • avoid_print
+  error • The method 'createBooleanAttribute' isn't defined for the type 'Databases' • simple_setup.dart:136:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:143:5 • avoid_print
+   info • Use 'const' with the constructor to improve performance • simple_setup.dart:146:26 • prefer_const_constructors
+   info • Don't invoke 'print' in production code • simple_setup.dart:149:5 • avoid_print
+  error • The method 'createIndex' isn't defined for the type 'Databases' • simple_setup.dart:151:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:158:5 • avoid_print
+  error • The method 'createIndex' isn't defined for the type 'Databases' • simple_setup.dart:160:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:167:5 • avoid_print
+  error • The method 'createIndex' isn't defined for the type 'Databases' • simple_setup.dart:169:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:177:5 • avoid_print
+  error • The method 'createIndex' isn't defined for the type 'Databases' • simple_setup.dart:179:21 • undefined_method
+   info • Don't invoke 'print' in production code • simple_setup.dart:187:5 • avoid_print
+   info • Don't invoke 'print' in production code • simple_setup.dart:189:5 • avoid_print
+   info • Don't invoke 'print' in production code • simple_setup.dart:190:5 • avoid_print
+   info • Don't invoke 'print' in production code • simple_setup.dart:191:5 • avoid_print
+   info • Don't invoke 'print' in production code • simple_setup.dart:192:5 • avoid_print
+   info • Don't invoke 'print' in production code • simple_setup.dart:193:5 • avoid_print
+   info • Don't invoke 'print' in production code • simple_setup.dart:194:5 • avoid_print
+   info • Don't invoke 'print' in production code • simple_setup.dart:195:5 • avoid_print
+   info • Don't invoke 'print' in production code • simple_setup.dart:200:5 • avoid_print
+   info • Don't invoke 'print' in production code • simple_setup.dart:201:5 • avoid_print
+   info • Don't invoke 'print' in production code • simple_setup.dart:202:5 • avoid_print
+   info • Don't invoke 'print' in production code • simple_setup.dart:203:5 • avoid_print
+   info • Can't use a relative path to import a library in 'lib' • test/appwrite_schema_test.dart:2:8 • avoid_relative_lib_imports
+   info • Use 'const' for final variables initialized to a constant value • test/core/error/app_error_test.dart:48:7 • prefer_const_declarations
+warning • Unused import: 'package:arena/core/state/app_state.dart' • test/core/providers/app_providers_test.dart:6:8 • unused_import
+warning • Unused import: 'package:flutter/services.dart' • test/core/providers/app_providers_test.dart:9:8 • unused_import
+warning • The value of the local variable 'authNotifier' isn't used • test/core/providers/app_providers_test.dart:48:13 • unused_local_variable
+warning • Unused import: 'package:mockito/mockito.dart' • test/features/arena/providers/arena_provider_test.dart:3:8 • unused_import
+  error • There's no constant named 'preparation' in 'DebatePhase' • test/features/arena/providers/arena_provider_test.dart:50:60 • undefined_enum_constant
+  error • There's no constant named 'opening' in 'DebatePhase' • test/features/arena/providers/arena_provider_test.dart:65:35 • undefined_enum_constant
+  error • There's no constant named 'opening' in 'DebatePhase' • test/features/arena/providers/arena_provider_test.dart:72:60 • undefined_enum_constant
+  error • Invalid constant value • test/features/arena/providers/arena_provider_test.dart:88:17 • invalid_constant
+  error • There's no constant named 'affirmativeDebater' in 'ArenaRole' • test/features/arena/providers/arena_provider_test.dart:88:27 • undefined_enum_constant
+  error • Invalid constant value • test/features/arena/providers/arena_provider_test.dart:94:17 • invalid_constant
+  error • There's no constant named 'negativeDebater' in 'ArenaRole' • test/features/arena/providers/arena_provider_test.dart:94:27 • undefined_enum_constant
+  error • Invalid constant value • test/features/arena/providers/arena_provider_test.dart:122:17 • invalid_constant
+  error • There's no constant named 'affirmativeDebater' in 'ArenaRole' • test/features/arena/providers/arena_provider_test.dart:122:27 • undefined_enum_constant
+  error • Invalid constant value • test/features/arena/providers/arena_provider_test.dart:128:17 • invalid_constant
+  error • There's no constant named 'negativeDebater' in 'ArenaRole' • test/features/arena/providers/arena_provider_test.dart:128:27 • undefined_enum_constant
+  error • Invalid constant value • test/features/arena/providers/arena_provider_test.dart:150:17 • invalid_constant
+  error • There's no constant named 'affirmativeDebater' in 'ArenaRole' • test/features/arena/providers/arena_provider_test.dart:150:27 • undefined_enum_constant
+  error • Invalid constant value • test/features/arena/providers/arena_provider_test.dart:155:17 • invalid_constant
+  error • There's no constant named 'judge' in 'ArenaRole' • test/features/arena/providers/arena_provider_test.dart:155:27 • undefined_enum_constant
+  error • Invalid constant value • test/features/arena/providers/arena_provider_test.dart:160:17 • invalid_constant
+  error • There's no constant named 'judge' in 'ArenaRole' • test/features/arena/providers/arena_provider_test.dart:160:27 • undefined_enum_constant
+  error • There's no constant named 'judge' in 'ArenaRole' • test/features/arena/providers/arena_provider_test.dart:166:74 • undefined_enum_constant
+  error • There's no constant named 'affirmativeDebater' in 'ArenaRole' • test/features/arena/providers/arena_provider_test.dart:167:76 • undefined_enum_constant
+  error • The method 'getPhaseDuration' isn't defined for the type 'ArenaState' • test/features/arena/providers/arena_provider_test.dart:183:34 • undefined_method
+  error • There's no constant named 'preparation' in 'DebatePhase' • test/features/arena/providers/arena_provider_test.dart:183:63 • undefined_enum_constant
+  error • The method 'getPhaseDuration' isn't defined for the type 'ArenaState' • test/features/arena/providers/arena_provider_test.dart:184:34 • undefined_method
+  error • There's no constant named 'opening' in 'DebatePhase' • test/features/arena/providers/arena_provider_test.dart:184:63 • undefined_enum_constant
+  error • The method 'getPhaseDuration' isn't defined for the type 'ArenaState' • test/features/arena/providers/arena_provider_test.dart:185:34 • undefined_method
+  error • There's no constant named 'rebuttal' in 'DebatePhase' • test/features/arena/providers/arena_provider_test.dart:185:63 • undefined_enum_constant
+  error • The method 'getPhaseDuration' isn't defined for the type 'ArenaState' • test/features/arena/providers/arena_provider_test.dart:186:34 • undefined_method
+  error • There's no constant named 'closing' in 'DebatePhase' • test/features/arena/providers/arena_provider_test.dart:186:63 • undefined_enum_constant
+  error • The method 'getPhaseDuration' isn't defined for the type 'ArenaState' • test/features/arena/providers/arena_provider_test.dart:187:34 • undefined_method
+  error • There's no constant named 'voting' in 'DebatePhase' • test/features/arena/providers/arena_provider_test.dart:187:63 • undefined_enum_constant
+  error • The method 'getPhaseDuration' isn't defined for the type 'ArenaState' • test/features/arena/providers/arena_provider_test.dart:188:34 • undefined_method
+  error • There's no constant named 'completed' in 'DebatePhase' • test/features/arena/providers/arena_provider_test.dart:188:63 • undefined_enum_constant
+  error • Invalid constant value • test/features/arena/providers/arena_provider_test.dart:203:17 • invalid_constant
+  error • There's no constant named 'affirmativeDebater' in 'ArenaRole' • test/features/arena/providers/arena_provider_test.dart:203:27 • undefined_enum_constant
+  error • There's no constant named 'opening' in 'DebatePhase' • test/features/arena/providers/arena_provider_test.dart:219:35 • undefined_enum_constant
+  error • There's no constant named 'preparation' in 'DebatePhase' • test/features/arena/providers/arena_provider_test.dart:228:35 • undefined_enum_constant
+   info • Use 'const' with the constructor to improve performance • test/widget_test.dart:17:29 • prefer_const_constructors
+   info • Use 'const' with the constructor to improve performance • test/widget_test.dart:17:50 • prefer_const_constructors
+
+1244 issues found. (ran in 1.3s)
