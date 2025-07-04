@@ -2341,7 +2341,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                         : (_judgingEnabled ? 'Judge' : 'Vote Closed'),
                     onPressed: _hasCurrentUserSubmittedVote 
                         ? null 
-                        : (_judgingEnabled ? _showComingSoonDialog : null),
+                        : (_judgingEnabled ? _showJudgingPanel : null),
                     color: _hasCurrentUserSubmittedVote 
                         ? Colors.green 
                         : (_judgingEnabled ? Colors.amber : Colors.grey),
