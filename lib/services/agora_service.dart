@@ -38,5 +38,11 @@ class AgoraService {
   Future<void> switchToAudience() => _impl.switchToAudience();
   Future<void> muteLocalAudio(bool muted) => _impl.muteLocalAudio(muted);
   Future<void> setEnableSpeakerphone(bool enabled) => _impl.setEnableSpeakerphone(enabled);
+  
+  // Screen sharing functionality
+  Future<void> startScreenShare() => _impl.startScreenShare();
+  Future<void> stopScreenShare() => _impl.stopScreenShare();
+  bool get isScreenSharingSupported => _impl.isScreenSharingSupported;
+  
   void dispose() => _impl.dispose();
 } 

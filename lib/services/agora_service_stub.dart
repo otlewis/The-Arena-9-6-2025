@@ -62,6 +62,17 @@ class AgoraServiceImplementation {
     AppLogger().debug('Agora Stub: ${enabled ? 'Enable' : 'Disable'} speakerphone (simulated)');
   }
 
+  // Screen sharing functionality (stub implementation)
+  Future<void> startScreenShare() async {
+    AppLogger().debug('🖥️ Agora Stub: Start screen share (simulated)');
+  }
+
+  Future<void> stopScreenShare() async {
+    AppLogger().debug('🛑 Agora Stub: Stop screen share (simulated)');
+  }
+
+  bool get isScreenSharingSupported => false; // Not supported in stub
+
   void dispose() {
     AppLogger().debug('📱 Agora Stub: Dispose (no-op)');
     _isJoined = false;

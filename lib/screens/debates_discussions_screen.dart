@@ -288,53 +288,60 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       ));
     }
 
+    // Calculate responsive dimensions based on screen size
+    final screenHeight = MediaQuery.of(context).size.height;
+    final availableHeight = screenHeight - 200; // Account for header and controls
+    final videoTileHeight = (availableHeight * 0.25).clamp(80.0, 110.0);
+    final moderatorHeight = (availableHeight * 0.22).clamp(80.0, 100.0);
+    final audienceHeight = (availableHeight * 0.28).clamp(80.0, 120.0);
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
       child: Column(
         children: [
           // Top row - 3 participants
           SizedBox(
-            height: 130,
+            height: videoTileHeight,
             child: Row(
               children: [
                 Expanded(
                   child: _buildVideoTile(allParticipants[0]),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 4),
                 Expanded(
                   child: _buildVideoTile(allParticipants[1]),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 4),
                 Expanded(
                   child: _buildVideoTile(allParticipants[2]),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 4), // Reduced spacing
+          const SizedBox(height: 2),
           // Second row - 3 participants
           SizedBox(
-            height: 130,
+            height: videoTileHeight,
             child: Row(
               children: [
                 Expanded(
                   child: _buildVideoTile(allParticipants[3]),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 4),
                 Expanded(
                   child: _buildVideoTile(allParticipants[4]),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 4),
                 Expanded(
                   child: _buildVideoTile(allParticipants[5]),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 6), // Reduced spacing
+          const SizedBox(height: 2),
           // Moderator row - 1 moderator (centered)
           SizedBox(
-            height: 120, // Reduced height for better space management
+            height: moderatorHeight,
             child: Row(
               children: [
                 Expanded(
@@ -356,9 +363,12 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 4), // Reduced spacing before audience
+          const SizedBox(height: 2),
           // Audience section
-          _buildAudienceSection(),
+          SizedBox(
+            height: audienceHeight,
+            child: _buildAudienceSection(),
+          ),
         ],
       ),
     );
@@ -400,16 +410,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             ),
             // Name label at bottom
             Positioned(
-              bottom: 4,
-              left: 4,
-              right: 4,
+              bottom: 2,
+              left: 2,
+              right: 2,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 decoration: BoxDecoration(
                   color: isModerator 
                       ? const Color(0xFF8B5CF6).withValues(alpha: 0.9)
                       : Colors.black.withValues(alpha: 0.7),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(4),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -419,16 +429,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                       const Icon(
                         LucideIcons.crown,
                         color: Colors.white,
-                        size: 12,
+                        size: 10,
                       ),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 2),
                     ],
                     Flexible(
                       child: Text(
-                        isModerator ? '${participant.name} (Moderator)' : participant.name,
+                        isModerator ? '${participant.name} (Mod)' : participant.name,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 10,
+                          fontSize: 8,
                           fontWeight: FontWeight.w500,
                         ),
                         textAlign: TextAlign.center,
@@ -442,9 +452,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             ),
             // Controls row at top
             Positioned(
-              top: 4,
-              left: 4,
-              right: 4,
+              top: 2,
+              left: 2,
+              right: 2,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -452,19 +462,19 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                   GestureDetector(
                     onTap: () => _toggleParticipantVideo(participant.id),
                     child: Container(
-                      padding: const EdgeInsets.all(3),
+                      padding: const EdgeInsets.all(2),
                       decoration: BoxDecoration(
                         color: _getParticipantVideoState(participant.id) 
                             ? Colors.green 
                             : Colors.red,
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(3),
                       ),
                       child: Icon(
                         _getParticipantVideoState(participant.id) 
                             ? LucideIcons.video 
                             : LucideIcons.videoOff,
                         color: Colors.white,
-                        size: 10,
+                        size: 8,
                       ),
                     ),
                   ),
@@ -472,19 +482,19 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                   GestureDetector(
                     onTap: () => _toggleParticipantMic(participant.id),
                     child: Container(
-                      padding: const EdgeInsets.all(3),
+                      padding: const EdgeInsets.all(2),
                       decoration: BoxDecoration(
                         color: _getParticipantMicState(participant.id) 
                             ? Colors.green 
                             : Colors.red,
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(3),
                       ),
                       child: Icon(
                         _getParticipantMicState(participant.id) 
                             ? LucideIcons.mic 
                             : LucideIcons.micOff,
                         color: Colors.white,
-                        size: 10,
+                        size: 8,
                       ),
                     ),
                   ),
@@ -660,42 +670,45 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   }
 
   Widget _buildAudienceSection() {
+    // Calculate responsive dimensions
+    final screenWidth = MediaQuery.of(context).size.width;
+    final crossAxisCount = screenWidth < 360 ? 3 : 4; // Fewer columns on very small screens
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Audience header
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          padding: const EdgeInsets.symmetric(horizontal: 6.0),
           child: Row(
             children: [
               const Icon(
                 LucideIcons.users,
                 color: Colors.white,
-                size: 16,
+                size: 14,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Text(
                 'Audience (${_audienceMembers.length})',
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 14,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 4), // Reduced spacing after header
-        // Audience members - 4 columns grid
-        SizedBox(
-          height: 110, // Further reduced height for Android compatibility
+        const SizedBox(height: 2),
+        // Audience members - responsive grid
+        Expanded(
           child: GridView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4,
-              crossAxisSpacing: 6, // Reduced spacing
-              mainAxisSpacing: 4, // Reduced spacing
-              childAspectRatio: 1.0, // Adjusted ratio for better fit
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              crossAxisSpacing: 4,
+              mainAxisSpacing: 2,
+              childAspectRatio: 0.85, // Slightly taller to accommodate text
             ),
             itemCount: _audienceMembers.length,
             itemBuilder: (context, index) {
@@ -708,18 +721,23 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   }
 
   Widget _buildAudienceMember(UserProfile member) {
+    // Calculate responsive avatar size
+    final screenWidth = MediaQuery.of(context).size.width;
+    final avatarSize = screenWidth < 360 ? 40.0 : 44.0;
+    final fontSize = screenWidth < 360 ? 8.0 : 9.0;
+    
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         // Profile picture
         Container(
-          width: 48, // Reduced size for better fit
-          height: 48, // Reduced size for better fit
+          width: avatarSize,
+          height: avatarSize,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(
               color: Colors.grey[600]!,
-              width: 1.5, // Reduced border width
+              width: 1.0,
             ),
           ),
           child: ClipOval(
@@ -728,18 +746,18 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                     member.avatar!,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) =>
-                        _buildAudienceAvatar(member),
+                        _buildAudienceAvatar(member, avatarSize),
                   )
-                : _buildAudienceAvatar(member),
+                : _buildAudienceAvatar(member, avatarSize),
           ),
         ),
-        const SizedBox(height: 1), // Reduced spacing
+        const SizedBox(height: 1),
         // Name
         Text(
           member.name,
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.white,
-            fontSize: 9, // Reduced font size
+            fontSize: fontSize,
             fontWeight: FontWeight.w500,
           ),
           textAlign: TextAlign.center,
@@ -750,7 +768,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     );
   }
 
-  Widget _buildAudienceAvatar(UserProfile member) {
+  Widget _buildAudienceAvatar(UserProfile member, [double? size]) {
     // Generate different colors for different users
     final colors = [
       const Color(0xFF8B5CF6),
@@ -764,10 +782,12 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     ];
     
     final colorIndex = member.name.hashCode % colors.length;
+    final avatarSize = size ?? 44.0;
+    final fontSize = avatarSize * 0.4; // Dynamic font size based on avatar size
     
     return Container(
-      width: 58,
-      height: 58,
+      width: avatarSize,
+      height: avatarSize,
       decoration: BoxDecoration(
         color: colors[colorIndex],
         shape: BoxShape.circle,
@@ -775,9 +795,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       child: Center(
         child: Text(
           member.initials,
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.white,
-            fontSize: 18,
+            fontSize: fontSize,
             fontWeight: FontWeight.bold,
           ),
         ),

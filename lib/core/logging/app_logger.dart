@@ -21,7 +21,7 @@ class AppLogger {
         methodCount: 2,
         errorMethodCount: 8,
         lineLength: 120,
-        colors: true,
+        colors: false, // Disabled to prevent ANSI escape sequence parse errors
         printEmojis: true,
         dateTimeFormat: DateTimeFormat.none,
       ),

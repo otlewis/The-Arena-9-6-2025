@@ -13,6 +13,8 @@ import 'dart:async';
 import 'dart:io' show Platform;
 import '../main.dart' show ArenaApp, getIt;
 import '../core/logging/app_logger.dart';
+import '../services/agora_service.dart';
+import 'arena_modals.dart';
 // Removed problematic provider imports to prevent infinite loops
 
 // Legacy Debate Phase Enum - kept for backwards compatibility
@@ -161,6 +163,14 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   List<Message> _chatMessages = [];
   StreamSubscription? _chatSubscription;
   final TextEditingController _chatController = TextEditingController();
+  
+  // Screen sharing state
+  bool _isScreenSharing = false;
+  final AgoraService _agoraService = AgoraService();
+  
+  // Screen sharing permissions - tracks who has permission to share
+  Map<String, bool> _screenSharingPermissions = {};
+  String? _currentScreenSharer; // Track who is currently sharing
   
   // Colors
   static const Color scarletRed = Color(0xFFFF2400);
@@ -2371,6 +2381,18 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 ),
               ),
 
+              // Share Screen button (for moderators, debaters, and judges only - NOT audience)
+              if (_isModerator || _isDebater || _isJudge)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: _buildControlButton(
+                    icon: _isScreenSharing ? Icons.stop_screen_share : Icons.screen_share,
+                    label: _isScreenSharing ? 'Stop Share' : 'Share Screen',
+                    onPressed: _showShareScreenBottomSheet,
+                    color: _isScreenSharing ? Colors.red : Colors.green,
+                  ),
+                ),
+
               // Role Manager (always available for testing)
               if (!_judgingComplete)
                 Padding(
@@ -3017,6 +3039,177 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         onSendMessage: _sendChatMessage,
       ),
     );
+  }
+
+  /// Show share screen bottom sheet
+  void _showShareScreenBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ShareScreenBottomSheet(
+        currentUserId: _currentUserId,
+        userRole: _userRole,
+        isScreenSharing: _isScreenSharing,
+        onStartScreenShare: _startScreenShare,
+        onStopScreenShare: _stopScreenShare,
+        onRequestScreenShare: _requestScreenSharePermission,
+        agoraEngine: _agoraService.engine, // Pass the Agora engine for video view
+      ),
+    );
+  }
+
+  /// Start screen sharing
+  Future<void> _startScreenShare() async {
+    try {
+      AppLogger().debug('🖥️ Starting screen share...');
+      
+      // Check if screen sharing is supported
+      if (!_agoraService.isScreenSharingSupported) {
+        _showSnackBar('Screen sharing is not supported on this platform', isError: true);
+        return;
+      }
+      
+      // Check permissions for non-moderators
+      if (!_isModerator) {
+        final hasPermission = _screenSharingPermissions[_currentUserId] ?? false;
+        if (!hasPermission) {
+          _showSnackBar('You need permission from the moderator to share your screen', isError: true);
+          return;
+        }
+      }
+      
+      // Check if someone else is already sharing
+      if (_currentScreenSharer != null && _currentScreenSharer != _currentUserId) {
+        _showSnackBar('Another participant is currently sharing their screen', isError: true);
+        return;
+      }
+      
+      // Start screen sharing through Agora
+      await _agoraService.startScreenShare();
+      
+      setState(() {
+        _isScreenSharing = true;
+        _currentScreenSharer = _currentUserId;
+      });
+      
+      _showSnackBar('Screen sharing started', isError: false);
+      
+      // Close the bottom sheet
+      Navigator.pop(context);
+      
+      AppLogger().info('✅ Screen share started successfully');
+    } catch (e) {
+      AppLogger().error('❌ Error starting screen share: $e');
+      _showSnackBar('Failed to start screen sharing: ${e.toString()}', isError: true);
+    }
+  }
+
+  /// Stop screen sharing
+  Future<void> _stopScreenShare() async {
+    try {
+      AppLogger().debug('🛑 Stopping screen share...');
+      
+      // Stop screen sharing through Agora
+      await _agoraService.stopScreenShare();
+      
+      setState(() {
+        _isScreenSharing = false;
+        _currentScreenSharer = null;
+      });
+      
+      _showSnackBar('Screen sharing stopped', isError: false);
+      
+      // Close the bottom sheet
+      Navigator.pop(context);
+      
+      AppLogger().info('✅ Screen share stopped successfully');
+    } catch (e) {
+      AppLogger().error('❌ Error stopping screen share: $e');
+      _showSnackBar('Failed to stop screen sharing: ${e.toString()}', isError: true);
+    }
+  }
+
+  /// Request screen share permission (for debaters, judges, and audience)
+  void _requestScreenSharePermission() {
+    if (_isModerator) {
+      // Moderators don't need to request permission
+      _showSnackBar('As a moderator, you can share your screen anytime', isError: false);
+      Navigator.pop(context);
+      return;
+    }
+    
+    // Send permission request to moderator (this would be sent via messaging service)
+    _sendScreenSharePermissionRequest();
+    _showSnackBar('Screen share permission request sent to moderator', isError: false);
+    Navigator.pop(context);
+  }
+  
+  /// Send screen share permission request to moderator
+  Future<void> _sendScreenSharePermissionRequest() async {
+    try {
+      // This would send a message to the moderator requesting permission
+      // For now, we'll just log it - in a real implementation, this would
+      // use the messaging service to notify the moderator
+      AppLogger().info('📨 Screen share permission request sent from ${_currentUser?.name} ($_userRole)');
+      
+      // TODO: Implement actual messaging to moderator
+      // await _messagingService.sendScreenShareRequest(
+      //   roomId: widget.roomId,
+      //   requesterId: _currentUserId,
+      //   requesterName: _currentUser?.name,
+      //   requesterRole: _userRole,
+      // );
+    } catch (e) {
+      AppLogger().error('❌ Error sending screen share permission request: $e');
+    }
+  }
+  
+  /// Grant screen sharing permission (for moderators only)
+  void _grantScreenSharePermission(String userId) {
+    if (!_isModerator) return;
+    
+    setState(() {
+      _screenSharingPermissions[userId] = true;
+    });
+    
+    _showSnackBar('Screen sharing permission granted', isError: false);
+    AppLogger().info('✅ Screen sharing permission granted to $userId');
+  }
+  
+  /// Revoke screen sharing permission (for moderators only)
+  void _revokeScreenSharePermission(String userId) {
+    if (!_isModerator) return;
+    
+    setState(() {
+      _screenSharingPermissions[userId] = false;
+      // If this user is currently sharing, stop their sharing
+      if (_currentScreenSharer == userId) {
+        _currentScreenSharer = null;
+        _isScreenSharing = false;
+      }
+    });
+    
+    _showSnackBar('Screen sharing permission revoked', isError: false);
+    AppLogger().info('🚫 Screen sharing permission revoked from $userId');
+  }
+
+  /// Check if current user is a debater
+  bool get _isDebater {
+    return _userRole == 'affirmative' || _userRole == 'negative';
+  }
+
+  /// Show snack bar with message
+  void _showSnackBar(String message, {bool isError = false}) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: isError ? Colors.red : Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   /// Build a chat message widget

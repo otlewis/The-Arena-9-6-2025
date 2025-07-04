@@ -103,6 +103,18 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
       // Refresh arena list to show the new room
       ref.read(arenaLobbyProvider.notifier).refreshArenas();
 
+      // Wait for room setup to complete before navigation
+      AppLogger().info('Waiting for room setup to stabilize before navigation...');
+      await Future.delayed(const Duration(seconds: 2));
+      
+      // Verify room exists and is properly set up before navigating
+      final roomData = await _appwrite.getArenaRoom(roomId);
+      if (roomData == null) {
+        throw Exception('Room was not properly created or was deleted');
+      }
+      
+      AppLogger().info('Room verified, proceeding with navigation to: $roomId');
+      
       // Navigate to the arena room
       if (mounted) {
         await Navigator.pushReplacement(

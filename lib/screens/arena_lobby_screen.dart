@@ -5,7 +5,6 @@ import '../features/arena/providers/arena_lobby_provider.dart';
 import 'arena_screen.dart';
 import 'dart:async';
 import '../core/logging/app_logger.dart';
-import '../services/firebase_test_service.dart';
 
 class ArenaLobbyScreen extends ConsumerStatefulWidget {
   const ArenaLobbyScreen({super.key});
@@ -17,8 +16,6 @@ class ArenaLobbyScreen extends ConsumerStatefulWidget {
 class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with WidgetsBindingObserver {
   final AppwriteService _appwrite = AppwriteService();
   String? _currentUserId;
-  bool _isCreatingRoom = false;
-  DateTime? _lastCreateAttempt;
 
   // Colors
   static const Color scarletRed = Color(0xFFFF2400);
@@ -52,6 +49,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
     }
   }
 
+
   Future<void> _loadCurrentUser() async {
     final user = await _appwrite.getCurrentUser();
     if (user != null) {
@@ -69,7 +67,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
 
     try {
       // For manual rooms, use the joinArenaRoom method, for challenge rooms use assignArenaRole
-      final isManualRoom = roomId.startsWith('manual_arena_') || roomId.startsWith('arena_');
+      final isManualRoom = roomId.startsWith('manual_arena_');
       
       if (isManualRoom) {
         await _appwrite.joinArenaRoom(
@@ -86,7 +84,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
       }
 
       // Navigate to Arena and refresh lobby when returning
-      await Navigator.push(
+      final navigationResult = await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => ArenaScreen(
@@ -99,7 +97,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
       
       // Refresh the lobby when user returns from arena
       AppLogger().debug('🔄 User returned from arena - refreshing lobby');
-      ref.read(arenaLobbyProvider.notifier).loadActiveArenas(isBackgroundRefresh: true);
+      ref.read(arenaLobbyProvider.notifier).refreshArenas();
       
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -115,26 +113,8 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
       );
       return;
     }
-    
-    // Debounce: prevent rapid double-tap or duplicate trigger
-    final now = DateTime.now();
-    if (_lastCreateAttempt != null && now.difference(_lastCreateAttempt!).inMilliseconds < 2000) {
-      AppLogger().warning('🚫 Debounce: Room creation attempted too quickly after previous attempt.');
-      return;
-    }
-    _lastCreateAttempt = now;
-    
-    if (_isCreatingRoom) {
-      AppLogger().warning('🚫 DUPLICATE PREVENTION: Room creation already in progress, blocking request');
-      return; // Prevent double-clicks
-    }
-    
-    AppLogger().info('🔒 DUPLICATE PREVENTION: Setting _isCreatingRoom = true');
-    setState(() {
-      _isCreatingRoom = true;
-    });
 
-    // Show simplified dialog to get room details
+    // Show dialog to get room details
     final dialogResult = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => const CreateArenaDialog(),
@@ -144,16 +124,46 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
       try {
         final topic = dialogResult['topic'] as String;
         final description = dialogResult['description'] as String?;
+        final affirmativeDebater = dialogResult['affirmativeDebater'] as Map<String, dynamic>?;
+        final negativeDebater = dialogResult['negativeDebater'] as Map<String, dynamic>?;
+        final judges = dialogResult['judges'] as List<dynamic>?;
         
-        // Simple room creation like discussion rooms - no complex duplicate logic
-        final roomId = await _appwrite.createSimpleArenaRoom(
+        final roomId = await _appwrite.createManualArenaRoom(
           creatorId: _currentUserId!,
           topic: topic,
           description: description,
         );
 
+        // Assign roles if selected
+        if (affirmativeDebater != null) {
+          await _appwrite.assignArenaRole(
+            roomId: roomId,
+            userId: affirmativeDebater['id'],
+            role: 'affirmative',
+          );
+        }
+        
+        if (negativeDebater != null) {
+          await _appwrite.assignArenaRole(
+            roomId: roomId,
+            userId: negativeDebater['id'],
+            role: 'negative',
+          );
+        }
+        
+        if (judges != null && judges.isNotEmpty) {
+          for (int i = 0; i < judges.length && i < 3; i++) {
+            final judge = judges[i] as Map<String, dynamic>;
+            await _appwrite.assignArenaRole(
+              roomId: roomId,
+              userId: judge['id'],
+              role: 'judge${i + 1}',
+            );
+          }
+        }
+
         // Navigate to the created arena
-        await Navigator.push(
+        final navigationResult = await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => ArenaScreen(
@@ -169,42 +179,85 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
         AppLogger().debug('🔄 User returned from created arena - refreshing lobby');
         ref.read(arenaLobbyProvider.notifier).refreshArenas();
 
+        // Show success message with role assignments
+        final assignedRoles = <String>[];
+        if (affirmativeDebater != null) assignedRoles.add('Affirmative');
+        if (negativeDebater != null) assignedRoles.add('Negative');
+        if (judges != null && judges.isNotEmpty) assignedRoles.add('${judges.length} Judge${judges.length > 1 ? 's' : ''}');
+        
+        final roleText = assignedRoles.isNotEmpty 
+            ? ' with ${assignedRoles.join(', ')} assigned'
+            : '';
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🏛️ Arena created! You are the moderator.'),
-            backgroundColor: Color(0xFF8B5CF6),
+          SnackBar(
+            content: Text('🏛️ Arena created! You are the moderator$roleText.'),
+            backgroundColor: const Color(0xFF8B5CF6),
           ),
         );
 
-        // Reset flag only after everything succeeds
-        AppLogger().info('🔓 DUPLICATE PREVENTION: Resetting _isCreatingRoom = false (success)');
-        if (mounted) {
-          setState(() {
-            _isCreatingRoom = false;
-          });
-        }
-
+        // Refresh the list again to ensure consistency
+        ref.read(arenaLobbyProvider.notifier).refreshArenas();
       } catch (e) {
-        // Reset flag on error
-        AppLogger().info('🔓 DUPLICATE PREVENTION: Resetting _isCreatingRoom = false (error)');
-        if (mounted) {
-          setState(() {
-            _isCreatingRoom = false;
-          });
-        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error creating arena: $e')),
         );
       }
-      // No finally block that resets the flag prematurely!
-    } else {
-      // Dialog was cancelled - reset flag
-      AppLogger().info('🔓 DUPLICATE PREVENTION: Resetting _isCreatingRoom = false (cancelled)');
-      if (mounted) {
-        setState(() {
-          _isCreatingRoom = false;
-        });
-      }
+    }
+  }
+
+  Future<void> _createDemoArena() async {
+    if (_currentUserId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to create demo arena')),
+      );
+      return;
+    }
+
+    try {
+      // Create a demo arena room
+      final roomId = await _appwrite.createArenaRoom(
+        challengeId: 'demo_${DateTime.now().millisecondsSinceEpoch}',
+        challengerId: _currentUserId!,
+        challengedId: 'demo_opponent',
+        topic: 'Should AI replace human judges in debates?',
+        description: 'Demo Arena - Experience The Arena interface',
+      );
+
+      // Assign current user as audience
+      await _appwrite.assignArenaRole(
+        roomId: roomId,
+        userId: _currentUserId!,
+        role: 'audience',
+      );
+
+      // Navigate to demo arena
+      final navigationResult = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ArenaScreen(
+            roomId: roomId,
+            challengeId: 'demo_challenge',
+            topic: 'Should AI replace human judges in debates?',
+            description: 'Demo Arena - Experience The Arena interface',
+          ),
+        ),
+      );
+
+      // Refresh the lobby when user returns from demo arena
+      AppLogger().debug('🔄 User returned from demo arena - refreshing lobby');
+      ref.read(arenaLobbyProvider.notifier).refreshArenas();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('🎭 Demo Arena created! This is how real debates look.'),
+          backgroundColor: Color(0xFF8B5CF6),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error creating demo: $e')),
+      );
     }
   }
 
@@ -312,7 +365,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
           ),
           const SizedBox(height: 8),
           const Text(
-            'Join live debates as an audience member or create your own arena!',
+            'Join live debates as an audience member or challenge someone to debate!',
             style: TextStyle(
               color: Colors.white,
               fontSize: 14,
@@ -359,15 +412,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
           ],
         ),
         const SizedBox(height: 16),
-        ...activeArenas.map((arena) => _buildArenaCard(
-          arena.id, 
-          arena.topic, 
-          arena.status, 
-          arena.challengeId ?? '', 
-          arena.description ?? '', 
-          arena.currentParticipants, 
-          arena.isManual
-        )),
+        ...activeArenas.map((arena) => _buildArenaCard(arena.id, arena.topic, arena.status, arena.challengeId ?? '', arena.description ?? '', arena.currentParticipants, arena.isManual)),
       ],
     );
   }
@@ -448,7 +493,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              if (description.isNotEmpty) ...[ 
+              if (description.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text(
                   description,
@@ -487,151 +532,265 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
   }
 
   Widget _buildDemoSection() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: accentPurple.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.play_circle_outline, color: accentPurple, size: 24),
-              const SizedBox(width: 8),
-              const Text(
-                'Quick Start',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: deepPurple,
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.add_circle, color: accentPurple, size: 20),
+            const SizedBox(width: 8),
+            const Text(
+              'Create or Try Arena',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: deepPurple,
               ),
-            ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        
+        // Create New Arena Card
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: scarletRed.withValues(alpha: 0.2)),
           ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _isCreatingRoom ? null : _createManualArena,
-            icon: _isCreatingRoom 
-              ? SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : const Icon(Icons.add_circle_outline, size: 20),
-            label: Text(_isCreatingRoom ? 'Creating...' : 'Create New Arena'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: accentPurple,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 48),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            onTap: _createManualArena,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: scarletRed.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.add, color: scarletRed, size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Create New Arena',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: deepPurple,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Start your own debate room and invite participants',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.arrow_forward_ios, color: scarletRed, size: 16),
+                ],
               ),
             ),
           ),
-        ],
-      ),
+        ),
+        
+        const SizedBox(height: 12),
+        
+        // Demo Arena Card
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: accentPurple.withValues(alpha: 0.2)),
+          ),
+          child: InkWell(
+            onTap: _createDemoArena,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: accentPurple.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.smart_toy, color: accentPurple, size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Demo Arena',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: deepPurple,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Experience The Arena interface with sample debate',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.arrow_forward_ios, color: accentPurple, size: 16),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildHowItWorksSection() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'How The Arena Works',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: deepPurple,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildHowItWorksStep(
-            '1',
-            'Create or Join',
-            'Start your own debate room or join an existing one',
-            Icons.stadium,
-          ),
-          _buildHowItWorksStep(
-            '2',
-            'Assign Roles',
-            'Become moderator, debater, judge, or audience member',
-            Icons.groups,
-          ),
-          _buildHowItWorksStep(
-            '3',
-            'Real-time Sync',
-            'All participants see the same timer and debate phases',
-            Icons.sync,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHowItWorksStep(String number, String title, String description, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: accentPurple,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                number,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.help_outline, color: deepPurple, size: 20),
+            const SizedBox(width: 8),
+            const Text(
+              'How to Start an Instant Debate',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: deepPurple,
               ),
             ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
           ),
-          const SizedBox(width: 16),
-          Icon(icon, color: accentPurple, size: 24),
-          const SizedBox(width: 12),
-          Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: deepPurple,
-                    fontSize: 16,
-                  ),
+                _buildStepItem(
+                  '1',
+                  'Visit User Profiles',
+                  'Go to any user\'s profile page',
+                  Icons.person,
                 ),
-                Text(
-                  description,
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
-                  ),
+                _buildStepItem(
+                  '2',
+                  'Send Challenge',
+                  'Challenge them to a debate on any topic',
+                  Icons.flash_on,
+                ),
+                _buildStepItem(
+                  '3',
+                  'Arena Opens',
+                  'When accepted, you\'ll both enter The Arena',
+                  Icons.stadium,
+                ),
+                _buildStepItem(
+                  '4',
+                  'Others Join',
+                  'People can watch as audience members',
+                  Icons.people,
+                  isLast: true,
                 ),
               ],
             ),
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepItem(String number, String title, String description, IconData icon, {bool isLast = false}) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: scarletRed,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Center(
+                child: Text(
+                  number,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Icon(icon, color: deepPurple, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: deepPurple,
+                    ),
+                  ),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (!isLast) ...[
+          const SizedBox(height: 16),
+          Container(
+            margin: const EdgeInsets.only(left: 16),
+            width: 2,
+            height: 16,
+            color: Colors.grey[300],
+          ),
+          const SizedBox(height: 16),
         ],
-      ),
+      ],
     );
   }
 }
 
+// Create Arena Dialog Widget
 class CreateArenaDialog extends StatefulWidget {
   const CreateArenaDialog({super.key});
 
@@ -640,9 +799,14 @@ class CreateArenaDialog extends StatefulWidget {
 }
 
 class _CreateArenaDialogState extends State<CreateArenaDialog> {
+  final _formKey = GlobalKey<FormState>();
   final _topicController = TextEditingController();
   final _descriptionController = TextEditingController();
-  bool _isSubmitting = false;
+
+  // Colors
+  static const Color scarletRed = Color(0xFFFF2400);
+  static const Color accentPurple = Color(0xFF8B5CF6);
+  static const Color deepPurple = Color(0xFF6B46C1);
 
   @override
   void dispose() {
@@ -653,58 +817,248 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Create Arena'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: 400,
+          maxHeight: MediaQuery.of(context).size.height * 0.85, // Limit height to 85% of screen
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 20,
+              spreadRadius: 5,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildHeader(),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _buildForm(),
+                    _buildActions(),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [accentPurple, deepPurple],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+      ),
+      child: Row(
         children: [
-          TextField(
-            controller: _topicController,
-            decoration: const InputDecoration(
-              labelText: 'Debate Topic',
-              border: OutlineInputBorder(),
+          const Icon(Icons.add_circle, color: Colors.white, size: 24),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Create New Arena',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            maxLines: 2,
           ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _descriptionController,
-            decoration: const InputDecoration(
-              labelText: 'Description (optional)',
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 3,
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: const Icon(Icons.close, color: Colors.white),
           ),
         ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _isSubmitting
-              ? null
-              : () {
-                  final topic = _topicController.text.trim();
-                  final description = _descriptionController.text.trim();
-                  if (topic.isNotEmpty) {
-                    setState(() => _isSubmitting = true);
-                    Navigator.pop(context, {
-                      'topic': topic,
-                      'description': description.isNotEmpty ? description : null,
-                    });
-                  }
-                },
-          child: _isSubmitting
-              ? SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : const Text('Create'),
-        ),
-      ],
     );
+  }
+
+  Widget _buildForm() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Debate Topic',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: deepPurple,
+              ),
+            ),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: _topicController,
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'Enter the debate topic (e.g., "Should AI replace human teachers?")',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: accentPurple, width: 2),
+                ),
+                contentPadding: const EdgeInsets.all(12),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter a debate topic';
+                }
+                if (value.trim().length < 10) {
+                  return 'Topic should be at least 10 characters';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Description (Optional)',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: deepPurple,
+              ),
+            ),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: _descriptionController,
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'Add more context or rules for the debate...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: accentPurple, width: 2),
+                ),
+                contentPadding: const EdgeInsets.all(12),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: accentPurple.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.info, color: accentPurple, size: 16),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'How it works:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: deepPurple,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    '• You will be the moderator\n'
+                    '• Others can join as audience\n'
+                    '• Assign roles once people join\n'
+                    '• Control the debate flow and timing',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: deepPurple,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActions() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
+            child: ElevatedButton(
+              onPressed: _createArena,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accentPurple,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Create Arena',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+
+  void _createArena() {
+    if (_formKey.currentState?.validate() ?? false) {
+      Navigator.pop(context, <String, dynamic>{
+        'topic': _topicController.text.trim(),
+        'description': _descriptionController.text.trim().isNotEmpty 
+            ? _descriptionController.text.trim() 
+            : null,
+      });
+    }
   }
 }

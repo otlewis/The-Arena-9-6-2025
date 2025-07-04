@@ -132,7 +132,7 @@ class AgoraServiceImplementation {
   }
 
   Future<void> _requestPermissions() async {
-    await [Permission.microphone].request();
+    await [Permission.microphone, Permission.camera].request();
   }
 
   // Join channel - equivalent to client.join()
@@ -291,6 +291,56 @@ class AgoraServiceImplementation {
     } catch (e) {
       AppLogger().error('Error ${enabled ? 'enabling' : 'disabling'} speakerphone: $e');
     }
+  }
+
+  // Screen sharing functionality
+  Future<void> startScreenShare() async {
+    if (_engine == null) return;
+
+    try {
+      AppLogger().debug('🖥️ Starting screen share...');
+      
+      // Enable video module for screen sharing
+      await _engine!.enableVideo();
+      
+      // Start screen capture with proper parameters for mobile
+      await _engine!.startScreenCapture(
+        const ScreenCaptureParameters2(
+          captureAudio: false, // Don't capture system audio to avoid conflicts
+          captureVideo: true,  // Capture video for screen sharing
+        ),
+      );
+      
+      AppLogger().info('✅ Screen share started successfully');
+    } catch (e) {
+      AppLogger().error('❌ Error starting screen share: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> stopScreenShare() async {
+    if (_engine == null) return;
+
+    try {
+      AppLogger().debug('🛑 Stopping screen share...');
+      
+      // Stop screen capture
+      await _engine!.stopScreenCapture();
+      
+      // Disable video module
+      await _engine!.disableVideo();
+      
+      AppLogger().info('✅ Screen share stopped successfully');
+    } catch (e) {
+      AppLogger().error('❌ Error stopping screen share: $e');
+      rethrow;
+    }
+  }
+
+  // Check if screen sharing is supported
+  bool get isScreenSharingSupported {
+    // Screen sharing is supported on mobile platforms
+    return true;
   }
 
   void dispose() {

@@ -2438,30 +2438,34 @@ class AppwriteService {
         bool shouldCleanup = false;
         String reason = '';
 
-        // Cleanup criteria (more aggressive):
-        // 1. Room is older than 30 minutes with no active participants
-        // 2. Room is older than 2 hours regardless
-        // 3. Room has only audience members for 10+ minutes
-        // 4. Room is in "waiting" status for more than 10 minutes
+        // Cleanup criteria (more reasonable):
+        // 1. Room is older than 6 hours regardless of status
+        // 2. Room is older than 2 hours with no active participants
+        // 3. Room is in "waiting" status for more than 2 hours with no moderator
+        // 4. Room has only audience members for 1+ hours
         
-        if (roomAge.inHours >= 2) {
+        if (roomAge.inHours >= 6) {
           shouldCleanup = true;
-          reason = 'older than 2 hours';
-        } else if (roomAge.inMinutes >= 30 && participants.documents.isEmpty) {
+          reason = 'older than 6 hours';
+        } else if (roomAge.inHours >= 2 && participants.documents.isEmpty) {
           shouldCleanup = true;
-          reason = 'older than 30 minutes with no participants';
-        } else if (roomAge.inMinutes >= 10 && room.data['status'] == 'waiting') {
-          shouldCleanup = true;
-          reason = 'waiting status for 10+ minutes';
-        } else if (participants.documents.isNotEmpty) {
+          reason = 'older than 2 hours with no participants';
+        } else if (roomAge.inHours >= 2 && room.data['status'] == 'waiting') {
+          // Check if room has a moderator
+          final hasModerator = participants.documents.any((p) => p.data['role'] == 'moderator');
+          if (!hasModerator) {
+            shouldCleanup = true;
+            reason = 'waiting status for 2+ hours with no moderator';
+          }
+        } else if (participants.documents.isNotEmpty && roomAge.inHours >= 1) {
           // Check if only audience members remain
           final importantRoles = ['affirmative', 'negative', 'moderator', 'judge1', 'judge2', 'judge3'];
           final hasImportantParticipants = participants.documents.any((p) => 
             importantRoles.contains(p.data['role']));
           
-          if (!hasImportantParticipants && roomAge.inMinutes >= 10) {
+          if (!hasImportantParticipants) {
             shouldCleanup = true;
-            reason = 'only audience members for 10+ minutes';
+            reason = 'only audience members for 1+ hours';
           }
         }
 
@@ -2954,6 +2958,7 @@ class AppwriteService {
         },
       );
       AppLogger().info('✅ Room document created: $documentId');
+      
       // Assign creator as moderator
       try {
         await assignArenaRole(
@@ -2965,6 +2970,7 @@ class AppwriteService {
       } catch (e) {
         AppLogger().error('⚠️ Failed to assign moderator role: $e');
       }
+      
       // Initialize Firebase timer
       try {
         final firebaseTimer = FirebaseArenaTimerService();
@@ -2973,6 +2979,10 @@ class AppwriteService {
       } catch (e) {
         AppLogger().warning('⚠️ Failed to initialize Firebase timer: $e');
       }
+      
+      // Brief delay to ensure all room setup operations are fully propagated
+      await Future.delayed(const Duration(milliseconds: 500));
+      
       AppLogger().info('🎉 Room creation completed successfully: $documentId');
       return documentId;
     } catch (e) {

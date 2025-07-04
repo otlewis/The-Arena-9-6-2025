@@ -146,6 +146,25 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
           manualArenas?.cast<Map<String, dynamic>>() ?? [];
       
       _logger.debug('📈 ARENA FETCH: Challenge arenas: ${typedChallengeArenas.length}, Manual arenas: ${typedManualArenas.length}');
+      
+      // Enhanced logging for debugging room visibility issues
+      _logger.debug('🔍 CHALLENGE ARENAS:');
+      for (final arena in typedChallengeArenas) {
+        final id = arena['id'] ?? 'no-id';
+        final topic = arena['topic'] ?? 'no-topic';
+        final status = arena['status'] ?? 'no-status';
+        final challengeId = arena['challengeId'] ?? '';
+        _logger.debug('   📋 $id: "$topic" [$status] ${challengeId.isEmpty ? "MANUAL" : "CHALLENGE"}');
+      }
+      
+      _logger.debug('🔍 MANUAL ARENAS:');
+      for (final arena in typedManualArenas) {
+        final id = arena['id'] ?? 'no-id';
+        final topic = arena['topic'] ?? 'no-topic';
+        final status = arena['status'] ?? 'no-status';
+        final challengeId = arena['challengeId'] ?? '';
+        _logger.debug('   📋 $id: "$topic" [$status] ${challengeId.isEmpty ? "MANUAL" : "CHALLENGE"}');
+      }
 
       // Combine both types of arenas and deduplicate by room ID
       final allArenas = [...typedChallengeArenas, ...typedManualArenas];
@@ -166,17 +185,22 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
       final preFilteredArenas = uniqueArenas.where((arena) {
         final status = arena['status'] ?? 'waiting';
         final roomAge = DateTime.now().difference(DateTime.parse(arena['\$createdAt']));
+        final id = arena['id'] ?? 'no-id';
+        final topic = arena['topic'] ?? 'no-topic';
 
         // Skip completed, closed, cleaning, or abandoned rooms
         if (['completed', 'abandoned', 'force_cleaned', 'force_closed', 'closing'].contains(status)) {
+          _logger.debug('   ❌ FILTERED OUT ($id): Status "$status" is excluded');
           return false;
         }
 
-        // Skip very old waiting rooms (older than 2 hours)
-        if (status == 'waiting' && roomAge.inHours > 2) {
+        // Skip very old waiting rooms (older than 6 hours)
+        if (status == 'waiting' && roomAge.inHours > 6) {
+          _logger.debug('   ❌ FILTERED OUT ($id): Too old (${roomAge.inHours} hours)');
           return false;
         }
 
+        _logger.debug('   ✅ KEPT ($id): "$topic" [$status] Age: ${roomAge.inMinutes}min');
         return true;
       }).toList();
 
@@ -262,8 +286,8 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
         if (status == 'completed' || status == 'abandoned' || status == 'force_cleaned') {
           shouldInclude = false;
           _logger.debug('🔍 FILTER: Excluding completed/abandoned room');
-        } else if (status == 'waiting' && roomAge.inHours > 6 && activeParticipants == 0) {
-          // Only exclude very old waiting rooms with no participants (6+ hours)
+        } else if (status == 'waiting' && roomAge.inHours > 12 && activeParticipants == 0) {
+          // Only exclude very old waiting rooms with no participants (12+ hours)
           shouldInclude = false;
           _logger.debug('🔍 FILTER: Excluding very old empty room');
         } else {
@@ -288,9 +312,6 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
 
   /// Run cleanup in background without blocking UI
   void _runBackgroundCleanup() async {
-    // TEMPORARILY DISABLED - cleanup is too aggressive and kicking users out
-    _logger.debug('🧹 Cleanup temporarily disabled to prevent users getting kicked out');
-    return;
     
     // Only run cleanup if it hasn't been done recently (within last 5 minutes)
     final now = DateTime.now();
@@ -333,11 +354,11 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
         bool shouldCleanup = false;
         String reason = '';
         
-        // Check for rooms without moderator (but give new rooms 2 minutes grace period)
+        // Check for rooms without moderator (but give new rooms 2 hours grace period)
         if (moderatorId == null || moderatorId.isEmpty) {
-          if (roomAge.inMinutes >= 2) {
+          if (roomAge.inHours >= 2) {
             shouldCleanup = true;
-            reason = 'No moderator assigned after 2 minutes';
+            reason = 'No moderator assigned after 2 hours';
           }
         }
         // Check for very old rooms (older than 6 hours)
@@ -345,22 +366,22 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
           shouldCleanup = true;
           reason = 'Room too old (${roomAge.inHours} hours)';
         }
-        // Check for rooms without participants for more than 30 minutes
-        else if (status == 'waiting' && roomAge.inMinutes > 30) {
+        // Check for rooms without participants for more than 2 hours
+        else if (status == 'waiting' && roomAge.inHours > 2) {
           try {
             final participants = await _appwrite.getArenaParticipants(roomId);
             final activeParticipants = participants.where((p) => p['isActive'] == true).length;
             
             if (activeParticipants == 0) {
               shouldCleanup = true;
-              reason = 'No active participants for 30+ minutes';
+              reason = 'No active participants for 2+ hours';
             }
           } catch (e) {
             _logger.warning('Error checking participants for room $roomId: $e');
           }
         }
-        // Check for very old waiting rooms (older than 2 hours) regardless of moderator
-        else if (status == 'waiting' && roomAge.inHours > 2) {
+        // Check for very old waiting rooms (older than 6 hours) regardless of moderator
+        else if (status == 'waiting' && roomAge.inHours > 6) {
           shouldCleanup = true;
           reason = 'Waiting room too old (${roomAge.inHours} hours)';
         }

@@ -65,6 +65,19 @@ class AgoraServiceImplementation {
     AppLogger().debug('Agora Web Stub: ${enabled ? 'Enable' : 'Disable'} speakerphone (simulated)');
   }
 
+  // Screen sharing functionality (web implementation)
+  Future<void> startScreenShare() async {
+    AppLogger().debug('🖥️ Agora Web: Start screen share (simulated - would use getDisplayMedia)');
+    // In a real web implementation, you would use:
+    // navigator.mediaDevices.getDisplayMedia()
+  }
+
+  Future<void> stopScreenShare() async {
+    AppLogger().debug('🛑 Agora Web: Stop screen share (simulated)');
+  }
+
+  bool get isScreenSharingSupported => kIsWeb; // Supported on web
+
   void dispose() {
     AppLogger().debug('🌐 Agora Web Stub: Dispose (no-op for web)');
     _isJoined = false;

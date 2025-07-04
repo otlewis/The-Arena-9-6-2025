@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import '../widgets/user_avatar.dart';
 import '../models/user_profile.dart';
 import '../models/message.dart';
-import '../services/appwrite_service.dart';
-import '../services/challenge_messaging_service.dart';
 import '../services/chat_service.dart';
-import '../core/logging/app_logger.dart';
 import '../widgets/debater_invite_choice_modal.dart';
-import 'arena_timer_widget.dart';
+import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 
 // Color constants
 class ArenaModalColors {
@@ -186,17 +182,25 @@ class ArenaModals {
   static void showDebaterInviteChoiceModal(
     BuildContext context,
     {
-      required String role,
-      required List<UserProfile> availableUsers,
-      required Function(List<String>) onInviteUsers,
+      required String currentUserId,
+      required String debaterRole,
+      required List<UserProfile> networkUsers,
+      required Function(Map<String, String?>) onInviteSelectionComplete,
+      required VoidCallback onSkip,
+      String? challengerId,
+      String? challengedId,
     }
   ) {
     showDialog(
       context: context,
       builder: (context) => DebaterInviteChoiceModal(
-        role: role,
-        availableUsers: availableUsers,
-        onInviteUsers: onInviteUsers,
+        currentUserId: currentUserId,
+        debaterRole: debaterRole,
+        networkUsers: networkUsers,
+        onInviteSelectionComplete: onInviteSelectionComplete,
+        onSkip: onSkip,
+        challengerId: challengerId,
+        challengedId: challengedId,
       ),
     );
   }
@@ -1108,5 +1112,480 @@ class _ArenaChatBottomSheetState extends State<ArenaChatBottomSheet> {
         ],
       ),
     );
+  }
+}
+
+// Share Screen Bottom Sheet
+class ShareScreenBottomSheet extends StatefulWidget {
+  final String? currentUserId;
+  final String? userRole;
+  final VoidCallback? onStartScreenShare;
+  final VoidCallback? onStopScreenShare;
+  final bool isScreenSharing;
+  final VoidCallback? onRequestScreenShare;
+  final RtcEngine? agoraEngine; // Add Agora engine for video view
+
+  const ShareScreenBottomSheet({
+    super.key,
+    this.currentUserId,
+    this.userRole,
+    this.onStartScreenShare,
+    this.onStopScreenShare,
+    this.isScreenSharing = false,
+    this.onRequestScreenShare,
+    this.agoraEngine,
+  });
+
+  @override
+  State<ShareScreenBottomSheet> createState() => _ShareScreenBottomSheetState();
+}
+
+class _ShareScreenBottomSheetState extends State<ShareScreenBottomSheet> {
+  bool _isDebater = false;
+  bool _canShareScreen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPermissions();
+  }
+
+  void _checkPermissions() {
+    _isDebater = widget.userRole == 'affirmative' || widget.userRole == 'negative';
+    final isJudge = widget.userRole?.startsWith('judge') == true;
+    final isModerator = widget.userRole == 'moderator';
+    
+    // Only moderators, debaters, and judges can access screen sharing
+    // Audience members cannot share screens at all
+    _canShareScreen = isModerator || _isDebater || isJudge;
+  }
+  
+  String _getInfoTextForRole() {
+    switch (widget.userRole) {
+      case 'moderator':
+        return 'As a moderator, you can share your screen at any time to present information.';
+      case 'affirmative':
+      case 'negative':
+        return 'As a debater, you need moderator permission to share your screen. You can present evidence or visual aids during your speaking time.';
+      default:
+        if (widget.userRole?.startsWith('judge') == true) {
+          return 'As a judge, you need moderator permission to share your screen for deliberation purposes.';
+        }
+        return 'Screen sharing is not available for your role.';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.8, // Increased height for video view
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: ArenaModalColors.accentPurple,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.screen_share, color: Colors.white),
+                const SizedBox(width: 8),
+                const Text(
+                  'Share Screen',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close, color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+          
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  // Screen sharing status
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: widget.isScreenSharing 
+                          ? Colors.green.withValues(alpha: 0.1)
+                          : Colors.grey.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: widget.isScreenSharing 
+                            ? Colors.green
+                            : Colors.grey,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          widget.isScreenSharing 
+                              ? Icons.screen_share
+                              : Icons.stop_screen_share,
+                          color: widget.isScreenSharing 
+                              ? Colors.green
+                              : Colors.grey,
+                          size: 32,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.isScreenSharing 
+                                    ? 'Screen Sharing Active'
+                                    : 'Screen Sharing Inactive',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: widget.isScreenSharing 
+                                      ? Colors.green
+                                      : Colors.grey,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                widget.isScreenSharing
+                                    ? 'Your screen is being shared with the audience'
+                                    : 'Share your screen to show content to the audience',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  // Screen sharing video view (when actively sharing)
+                  if (widget.isScreenSharing && widget.agoraEngine != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      height: 250, // Increased height for better viewing
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green.withValues(alpha: 0.5), width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.green.withValues(alpha: 0.2),
+                            blurRadius: 8,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: _buildScreenShareVideoView(),
+                          ),
+                          // Live indicator
+                          Positioned(
+                            top: 8,
+                            left: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  const Text(
+                                    'LIVE',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          // Screen share info
+                          Positioned(
+                            bottom: 8,
+                            left: 8,
+                            right: 8,
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.7),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                '🖥️ This is what the audience sees',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.green, size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Your screen is being shared. Use this preview to monitor your presentation.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.green[700],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  
+                  const SizedBox(height: 24),
+                  
+                  // Action buttons
+                  if (_canShareScreen) ...[
+                    if (!widget.isScreenSharing) ...[
+                      // Start screen share button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: widget.onStartScreenShare,
+                          icon: const Icon(Icons.screen_share, color: Colors.white),
+                          label: const Text(
+                            'Start Screen Share',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: ArenaModalColors.accentPurple,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Info text
+                      Text(
+                        _getInfoTextForRole(),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ] else ...[
+                      // Stop screen share button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: widget.onStopScreenShare,
+                          icon: const Icon(Icons.stop_screen_share, color: Colors.white),
+                          label: const Text(
+                            'Stop Screen Share',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: ArenaModalColors.scarletRed,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Your screen is currently being shared. Click above to stop sharing.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ] else ...[
+                    // Permission denied message
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.orange),
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: Colors.orange,
+                            size: 32,
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Screen Sharing Restricted',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Only debaters and moderators can share their screen during the debate.',
+                            style: TextStyle(fontSize: 12),
+                            textAlign: TextAlign.center,
+                          ),
+                          if (widget.userRole == 'audience') ...[
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: widget.onRequestScreenShare,
+                                icon: const Icon(Icons.pan_tool, color: Colors.white),
+                                label: const Text(
+                                  'Request Permission',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build the screen sharing video view
+  Widget _buildScreenShareVideoView() {
+    if (widget.agoraEngine == null) {
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.videocam_off,
+                color: Colors.grey,
+                size: 48,
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Video preview unavailable',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    try {
+      return AgoraVideoView(
+        controller: VideoViewController(
+          rtcEngine: widget.agoraEngine!,
+          canvas: const VideoCanvas(
+            uid: 0, // Local user's screen share
+            sourceType: VideoSourceType.videoSourceScreen,
+            renderMode: RenderModeType.renderModeFit,
+          ),
+        ),
+      );
+    } catch (e) {
+      return Container(
+        color: Colors.black,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                color: Colors.orange,
+                size: 48,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Error loading video preview',
+                style: TextStyle(
+                  color: Colors.orange[300],
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Screen sharing is still active',
+                style: TextStyle(
+                  color: Colors.grey[400],
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
   }
 }
