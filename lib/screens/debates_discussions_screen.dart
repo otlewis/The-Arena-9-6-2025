@@ -311,7 +311,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4), // Reduced spacing
           // Second row - 3 participants
           SizedBox(
             height: 130,
@@ -331,10 +331,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6), // Reduced spacing
           // Moderator row - 1 moderator (centered)
           SizedBox(
-            height: 140,
+            height: 120, // Reduced height for better space management
             child: Row(
               children: [
                 Expanded(
@@ -356,7 +356,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4), // Reduced spacing before audience
           // Audience section
           _buildAudienceSection(),
         ],
@@ -685,17 +685,17 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4), // Reduced spacing after header
         // Audience members - 4 columns grid
         SizedBox(
-          height: 140, // Reduced height to prevent overflow
+          height: 110, // Further reduced height for Android compatibility
           child: GridView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 4,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              childAspectRatio: 0.9, // Adjusted ratio for better fit
+              crossAxisSpacing: 6, // Reduced spacing
+              mainAxisSpacing: 4, // Reduced spacing
+              childAspectRatio: 1.0, // Adjusted ratio for better fit
             ),
             itemCount: _audienceMembers.length,
             itemBuilder: (context, index) {
@@ -713,13 +713,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       children: [
         // Profile picture
         Container(
-          width: 58,
-          height: 58,
+          width: 48, // Reduced size for better fit
+          height: 48, // Reduced size for better fit
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(
               color: Colors.grey[600]!,
-              width: 2,
+              width: 1.5, // Reduced border width
             ),
           ),
           child: ClipOval(
@@ -733,13 +733,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                 : _buildAudienceAvatar(member),
           ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 1), // Reduced spacing
         // Name
         Text(
           member.name,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 10,
+            fontSize: 9, // Reduced font size
             fontWeight: FontWeight.w500,
           ),
           textAlign: TextAlign.center,

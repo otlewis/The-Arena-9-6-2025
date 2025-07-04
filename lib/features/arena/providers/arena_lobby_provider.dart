@@ -144,12 +144,26 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
           challengeArenas?.cast<Map<String, dynamic>>() ?? [];
       final List<Map<String, dynamic>> typedManualArenas = 
           manualArenas?.cast<Map<String, dynamic>>() ?? [];
+      
+      _logger.debug('📈 ARENA FETCH: Challenge arenas: ${typedChallengeArenas.length}, Manual arenas: ${typedManualArenas.length}');
 
-      // Combine both types of arenas
+      // Combine both types of arenas and deduplicate by room ID
       final allArenas = [...typedChallengeArenas, ...typedManualArenas];
+      
+      // Deduplicate rooms by ID to prevent showing the same room multiple times
+      final Map<String, Map<String, dynamic>> deduplicatedArenas = {};
+      for (final arena in allArenas) {
+        final roomId = arena['id'] ?? '';
+        if (roomId.isNotEmpty && !deduplicatedArenas.containsKey(roomId)) {
+          deduplicatedArenas[roomId] = arena;
+        }
+      }
+      final uniqueArenas = deduplicatedArenas.values.toList();
+      
+      _logger.debug('🔍 Deduplicated from ${allArenas.length} to ${uniqueArenas.length} unique rooms');
 
       // Pre-filter rooms at the database level to reduce processing
-      final preFilteredArenas = allArenas.where((arena) {
+      final preFilteredArenas = uniqueArenas.where((arena) {
         final status = arena['status'] ?? 'waiting';
         final roomAge = DateTime.now().difference(DateTime.parse(arena['\$createdAt']));
 
@@ -166,7 +180,7 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
         return true;
       }).toList();
 
-      _logger.debug('🔍 Pre-filtered from ${allArenas.length} to ${preFilteredArenas.length} rooms');
+      _logger.debug('🔍 Pre-filtered from ${uniqueArenas.length} to ${preFilteredArenas.length} rooms');
 
       // Batch process remaining rooms with participant data
       final activeRooms = await _batchProcessRooms(preFilteredArenas);
