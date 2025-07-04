@@ -18,6 +18,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
   final AppwriteService _appwrite = AppwriteService();
   String? _currentUserId;
   bool _isCreatingRoom = false;
+  DateTime? _lastCreateAttempt;
 
   // Colors
   static const Color scarletRed = Color(0xFFFF2400);
@@ -114,6 +115,14 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
       );
       return;
     }
+    
+    // Debounce: prevent rapid double-tap or duplicate trigger
+    final now = DateTime.now();
+    if (_lastCreateAttempt != null && now.difference(_lastCreateAttempt!).inMilliseconds < 2000) {
+      AppLogger().warning('🚫 Debounce: Room creation attempted too quickly after previous attempt.');
+      return;
+    }
+    _lastCreateAttempt = now;
     
     if (_isCreatingRoom) {
       AppLogger().warning('🚫 DUPLICATE PREVENTION: Room creation already in progress, blocking request');
@@ -633,6 +642,7 @@ class CreateArenaDialog extends StatefulWidget {
 class _CreateArenaDialogState extends State<CreateArenaDialog> {
   final _topicController = TextEditingController();
   final _descriptionController = TextEditingController();
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -673,18 +683,26 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: () {
-            final topic = _topicController.text.trim();
-            final description = _descriptionController.text.trim();
-            
-            if (topic.isNotEmpty) {
-              Navigator.pop(context, {
-                'topic': topic,
-                'description': description.isNotEmpty ? description : null,
-              });
-            }
-          },
-          child: const Text('Create'),
+          onPressed: _isSubmitting
+              ? null
+              : () {
+                  final topic = _topicController.text.trim();
+                  final description = _descriptionController.text.trim();
+                  if (topic.isNotEmpty) {
+                    setState(() => _isSubmitting = true);
+                    Navigator.pop(context, {
+                      'topic': topic,
+                      'description': description.isNotEmpty ? description : null,
+                    });
+                  }
+                },
+          child: _isSubmitting
+              ? SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Text('Create'),
         ),
       ],
     );

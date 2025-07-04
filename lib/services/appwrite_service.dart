@@ -2898,69 +2898,48 @@ class AppwriteService {
     required String topic,
     String? description,
   }) async {
-    
+    // Use a deterministic document ID for waiting rooms
+    final documentId = 'waiting_${creatorId}';
+
     // Global lock check - prevent ANY room creation by this user
     if (_roomCreationLocks[creatorId] == true) {
       AppLogger().warning('🚫 GLOBAL LOCK: User $creatorId already creating a room, blocking request');
-      // Check for recently created rooms to return existing one
-      final existingRooms = await databases.listDocuments(
-        databaseId: 'arena_db',
-        collectionId: 'arena_rooms',
-        queries: [
-          Query.equal('moderatorId', creatorId),
-          Query.equal('status', 'waiting'),
-          Query.limit(1),
-        ],
-      );
-      if (existingRooms.documents.isNotEmpty) {
-        return existingRooms.documents.first.$id;
-      }
+      // Try to fetch the existing room by deterministic ID
+      try {
+        final existingRoom = await databases.getDocument(
+          databaseId: 'arena_db',
+          collectionId: 'arena_rooms',
+          documentId: documentId,
+        );
+          return existingRoom.$id;
+      } catch (_) {}
       throw Exception('Room creation in progress, please wait');
     }
-    
-    // Set global lock
     _roomCreationLocks[creatorId] = true;
-    
     try {
       AppLogger().info('🔒 GLOBAL LOCK: Set for user $creatorId');
-      
-      // Step 1: STRICT check for any existing waiting rooms by this moderator
-      AppLogger().info('🔍 DUPLICATE PREVENTION: Checking for existing waiting rooms...');
-      final existingRooms = await databases.listDocuments(
-        databaseId: 'arena_db',
-        collectionId: 'arena_rooms',
-        queries: [
-          Query.equal('moderatorId', creatorId),
-          Query.equal('status', 'waiting'),
-          Query.limit(1),
-        ],
-      );
-      
-      if (existingRooms.documents.isNotEmpty) {
-        final existingRoom = existingRooms.documents.first;
-        AppLogger().warning('🚫 DUPLICATE PREVENTION: User already has waiting room: ${existingRoom.$id}');
-        AppLogger().warning('🚫 DUPLICATE PREVENTION: Existing room topic: "${existingRoom.data['topic']}"');
-        AppLogger().warning('🚫 DUPLICATE PREVENTION: Existing room created: ${existingRoom.$createdAt}');
-        AppLogger().warning('🚫 DUPLICATE PREVENTION: Returning existing room instead of creating new one');
-        return existingRoom.$id;
+      // Try to fetch the existing room by deterministic ID
+      try {
+        final existingRoom = await databases.getDocument(
+          databaseId: 'arena_db',
+          collectionId: 'arena_rooms',
+          documentId: documentId,
+        );
+           AppLogger().warning('🚫 DUPLICATE PREVENTION: User already has waiting room: ${existingRoom.$id}');
+           return existingRoom.$id;
+      } catch (_) {
+        // Not found, continue to create
       }
-      
-      AppLogger().info('✅ DUPLICATE PREVENTION: No existing waiting rooms found');
-      
-      // Step 2: Create the room immediately with auto-generated ID
-      final roomId = ID.unique();
-      
-      AppLogger().info('🏗️ DUPLICATE PREVENTION: Creating room with ID: $roomId');
-      
-      // Create room document with all required fields
+      AppLogger().info('✅ DUPLICATE PREVENTION: No existing waiting room found for $creatorId');
+      // Create the room with deterministic ID
       await databases.createDocument(
         databaseId: 'arena_db',
         collectionId: 'arena_rooms',
-        documentId: roomId,
+        documentId: documentId,
         data: {
-          'challengeId': '', // Empty for manual rooms
-          'challengerId': '', // Empty for manual rooms
-          'challengedId': '', // Empty for manual rooms
+          'challengeId': '',
+          'challengerId': '',
+          'challengedId': '',
           'topic': topic,
           'description': description ?? '',
           'status': 'waiting',
@@ -2971,43 +2950,35 @@ class AppwriteService {
           'judgingEnabled': false,
           'totalJudges': 0,
           'judgesSubmitted': 0,
-          'moderatorId': creatorId, // Store creator as moderator
+          'moderatorId': creatorId,
         },
       );
-      
-      AppLogger().info('✅ DUPLICATE PREVENTION: Room document created: $roomId');
-
-      // Step 3: Assign creator as moderator
+      AppLogger().info('✅ Room document created: $documentId');
+      // Assign creator as moderator
       try {
         await assignArenaRole(
-          roomId: roomId,
+          roomId: documentId,
           userId: creatorId,
           role: 'moderator',
         );
-        AppLogger().info('✅ DUPLICATE PREVENTION: Moderator role assigned');
+        AppLogger().info('✅ Moderator role assigned');
       } catch (e) {
-        AppLogger().error('⚠️ DUPLICATE PREVENTION: Failed to assign moderator role: $e');
-        // Continue despite role assignment failure
+        AppLogger().error('⚠️ Failed to assign moderator role: $e');
       }
-
-      // Step 4: Initialize Firebase timer
+      // Initialize Firebase timer
       try {
         final firebaseTimer = FirebaseArenaTimerService();
-        await firebaseTimer.initializeArenaTimer(roomId);
-        AppLogger().info('✅ DUPLICATE PREVENTION: Firebase timer initialized');
+        await firebaseTimer.initializeArenaTimer(documentId);
+        AppLogger().info('✅ Firebase timer initialized');
       } catch (e) {
-        AppLogger().warning('⚠️ DUPLICATE PREVENTION: Failed to initialize Firebase timer: $e');
-        // Continue despite timer initialization failure
+        AppLogger().warning('⚠️ Failed to initialize Firebase timer: $e');
       }
-      
-      AppLogger().info('🎉 DUPLICATE PREVENTION: Room creation completed successfully: $roomId');
-      return roomId;
-      
+      AppLogger().info('🎉 Room creation completed successfully: $documentId');
+      return documentId;
     } catch (e) {
-      AppLogger().error('❌ DUPLICATE PREVENTION: Error creating room: $e');
+      AppLogger().error('❌ Error creating room: $e');
       rethrow;
     } finally {
-      // Always release the global lock
       _roomCreationLocks.remove(creatorId);
       AppLogger().info('🔓 GLOBAL LOCK: Released for user $creatorId');
     }
