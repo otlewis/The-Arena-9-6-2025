@@ -1,8 +1,6 @@
-import 'package:flutter/foundation.dart';
 import 'package:appwrite/appwrite.dart';
 import '../services/appwrite_service.dart';
 import '../models/message.dart';
-import '../models/user_profile.dart';
 import 'dart:async';
 import '../core/logging/app_logger.dart';
 

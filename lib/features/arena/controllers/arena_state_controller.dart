@@ -1,20 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../models/user_profile.dart';
-import '../../../services/appwrite_service.dart';
-import '../../../services/challenge_messaging_service.dart';
-import '../../../services/sound_service.dart';
-import '../../../services/chat_service.dart';
 import '../../../core/logging/app_logger.dart';
 import '../models/debate_phase.dart';
 
 /// Arena State Controller - DO NOT MODIFY STATE LOGIC
 /// This controller manages all arena state exactly as the original
 class ArenaStateController extends ChangeNotifier {
-  final AppwriteService _appwrite = AppwriteService();
-  final ChallengeMessagingService _messagingService = ChallengeMessagingService();
-  final ChatService _chatService = ChatService();
-  late final SoundService _soundService;
 
   // Room data
   Map<String, dynamic>? _roomData;
@@ -30,12 +22,7 @@ class ArenaStateController extends ChangeNotifier {
   bool _hasNavigated = false; // Track if we've already navigated to prevent duplicate navigation
   bool _isExiting = false; // Prevent state updates during exit
   Timer? _roomStatusChecker; // Periodic room status checker
-  Timer? _roomCompletionTimer; // Timer for room completion after closure
   StreamSubscription? _realtimeSubscription; // Track realtime subscription
-  int _roomStatusCheckerIterations = 0; // Track iterations to prevent infinite loops
-  int _reconnectAttempts = 0; // Track reconnection attempts
-  static const int _maxReconnectAttempts = 5; // Maximum reconnection attempts
-  bool _isRealtimeHealthy = true; // Track realtime connection health
 
   // Enhanced Timer and Debate Management
   DebatePhase _currentPhase = DebatePhase.preDebate;
@@ -64,11 +51,9 @@ class ArenaStateController extends ChangeNotifier {
   bool _bothDebatersPresent = false;
   bool _invitationModalShown = false;
   bool _invitationsInProgress = false;
-  Map<String, String?> _affirmativeSelections = {'moderator': null};
-  Map<String, String?> _negativeSelections = {'moderator': null};
-  bool _affirmativeCompletedSelection = false;
-  bool _negativeCompletedSelection = false;
-  bool _waitingForOtherDebater = false;
+  final bool _affirmativeCompletedSelection = false;
+  final bool _negativeCompletedSelection = false;
+  final bool _waitingForOtherDebater = false;
 
   // Getters for all state
   Map<String, dynamic>? get roomData => _roomData;

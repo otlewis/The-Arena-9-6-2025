@@ -5,7 +5,6 @@ import '../providers/arena_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../services/firebase_gift_service.dart';
 import '../../../models/gift.dart';
-import '../../../models/user_profile.dart';
 import '../../../services/appwrite_service.dart';
 import 'arena_waiting_room.dart';
 
@@ -25,7 +24,6 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
   int _currentUserCoinBalance = 0;
   Gift? _selectedGift;
   List<Gift> _availableGifts = [];
-  Map<String, UserProfile> _userProfiles = {};
 
   @override
   void initState() {
@@ -123,9 +121,9 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        const Text(
           'Current Phase',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
             color: Colors.grey,
@@ -171,9 +169,9 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
           children: [
             Icon(Icons.mic_off, color: Colors.grey.shade600),
             const SizedBox(width: 8),
-            Text(
+            const Text(
               'Listening mode',
-              style: TextStyle(color: Colors.grey.shade600),
+              style: TextStyle(color: Color(0xFF757575)),
             ),
           ],
         ),
@@ -231,11 +229,11 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              const Icon(Icons.admin_panel_settings, color: Colors.purple),
-              const SizedBox(width: 8),
-              const Text(
+              Icon(Icons.admin_panel_settings, color: Colors.purple),
+              SizedBox(width: 8),
+              Text(
                 'Moderator Controls',
                 style: TextStyle(
                   fontSize: 16,
@@ -328,13 +326,13 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
             ),
             
             // Header
-            Padding(
-              padding: const EdgeInsets.all(20),
+            const Padding(
+              padding: EdgeInsets.all(20),
               child: Row(
                 children: [
-                  const Icon(Icons.mic, color: Colors.purple, size: 28),
-                  const SizedBox(width: 12),
-                  const Text(
+                  Icon(Icons.mic, color: Colors.purple, size: 28),
+                  SizedBox(width: 12),
+                  Text(
                     'Speaker Controls',
                     style: TextStyle(
                       fontSize: 24,
@@ -457,7 +455,7 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: roleColor.withOpacity(0.1),
+              color: roleColor.withValues(alpha: 0.1),
               border: Border.all(
                 color: isCurrent ? Colors.green : roleColor,
                 width: isCurrent ? 2 : 1,
@@ -515,9 +513,9 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
           children: [
             const Icon(Icons.error, color: Colors.red, size: 48),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'Failed to load debate controls',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
@@ -544,9 +542,6 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
     ref.read(arenaProvider(widget.roomId).notifier).stopSpeaking();
   }
 
-  void _startDebate(WidgetRef ref) {
-    ref.read(arenaProvider(widget.roomId).notifier).startDebate();
-  }
 
   void _retry() {
     // Handle retry logic
@@ -560,7 +555,7 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
         borderRadius: BorderRadius.circular(25),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -616,10 +611,10 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: color.withOpacity(0.3),
+                color: color.withValues(alpha: 0.3),
                 width: 1,
               ),
             ),
@@ -656,8 +651,8 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
     // Check if user has premium subscription for gifting
     final currentUser = await _appwriteService.getCurrentUser();
     if (currentUser != null) {
-      final userProfile = await _appwriteService.getUserProfile(currentUser.$id);
-      final isPremium = userProfile?.isPremium ?? false;
+      await _appwriteService.getUserProfile(currentUser.$id);
+      const isPremium = false; // TODO: Add isPremium property to UserProfile
       
       if (!isPremium) {
         _showPremiumRequiredDialog();
@@ -698,11 +693,11 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Row(
+        title: const Row(
           children: [
-            const Icon(Icons.workspace_premium, color: Colors.amber, size: 28),
-            const SizedBox(width: 12),
-            const Text('Premium Feature'),
+            Icon(Icons.workspace_premium, color: Colors.amber, size: 28),
+            SizedBox(width: 12),
+            Text('Premium Feature'),
           ],
         ),
         content: const Column(
@@ -801,7 +796,7 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.amber.withOpacity(0.1),
+                    color: Colors.amber.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -869,7 +864,7 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: roleColor.withOpacity(0.1),
+                          color: roleColor.withValues(alpha: 0.1),
                           border: Border.all(color: roleColor),
                           borderRadius: BorderRadius.circular(20),
                         ),
@@ -909,8 +904,8 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
   Widget _buildGiftCategories() {
     // Simplified gift categories for arena
     final categories = [
-      {'name': 'Recognition', 'icon': Icons.star, 'gifts': _availableGifts.where((g) => g.category == 'Intellectual Achievement').toList()},
-      {'name': 'Support', 'icon': Icons.favorite, 'gifts': _availableGifts.where((g) => g.category == 'Recognition & Status').toList()},
+      {'name': 'Recognition', 'icon': Icons.star, 'gifts': _availableGifts.where((g) => g.category == GiftCategory.intellectual).toList()},
+      {'name': 'Support', 'icon': Icons.favorite, 'gifts': _availableGifts.where((g) => g.category == GiftCategory.recognition).toList()},
     ];
 
     return DefaultTabController(
@@ -962,7 +957,7 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isSelected 
-            ? Colors.amber.withOpacity(0.1)
+            ? Colors.amber.withValues(alpha: 0.1)
             : (canAfford ? Colors.white : Colors.grey.shade100),
           border: Border.all(
             color: isSelected 
@@ -1075,10 +1070,11 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
 
       if (eligibleParticipants.isNotEmpty) {
         await _giftService.sendGift(
-          fromUserId: currentUser.$id,
-          toUserId: eligibleParticipants.first.userId,
-          gift: _selectedGift!,
+          giftId: _selectedGift!.id,
+          senderId: currentUser.$id,
+          recipientId: eligibleParticipants.first.userId,
           roomId: widget.roomId,
+          cost: _selectedGift!.cost,
         );
 
         // Update local balance
@@ -1234,37 +1230,11 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
   }
 
   String _getPhaseDisplayName(DebatePhase phase) {
-    switch (phase) {
-      case DebatePhase.preparation:
-        return 'Preparation';
-      case DebatePhase.opening:
-        return 'Opening Statements';
-      case DebatePhase.rebuttal:
-        return 'Rebuttals';
-      case DebatePhase.closing:
-        return 'Closing Arguments';
-      case DebatePhase.voting:
-        return 'Voting';
-      case DebatePhase.completed:
-        return 'Completed';
-    }
+    return phase.displayName;
   }
 
   String _getPhaseDescription(DebatePhase phase) {
-    switch (phase) {
-      case DebatePhase.preparation:
-        return 'Participants can prepare their arguments';
-      case DebatePhase.opening:
-        return 'Present opening statements';
-      case DebatePhase.rebuttal:
-        return 'Respond to opposing arguments';
-      case DebatePhase.closing:
-        return 'Final closing arguments';
-      case DebatePhase.voting:
-        return 'Vote for the winner';
-      case DebatePhase.completed:
-        return 'Debate has ended';
-    }
+    return phase.description;
   }
 }
 

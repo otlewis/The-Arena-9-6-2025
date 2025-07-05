@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/challenge_messaging_service.dart';
-import '../services/appwrite_service.dart';
 import '../widgets/challenge_modal.dart';
 import '../widgets/user_avatar.dart';
-import 'package:flutter/foundation.dart';
 import '../main.dart' show getIt;
 import 'dart:async';
 import '../core/logging/app_logger.dart';
@@ -304,7 +302,7 @@ class _MessagesScreenState extends State<MessagesScreen>
               ? Colors.grey.shade300
               : isExpiringSoon 
                   ? Colors.orange.shade300
-                  : scarletRed.withOpacity(0.2),
+                  : scarletRed.withValues(alpha: 0.2),
           width: isDismissed ? 1 : 2,
         ),
       ),
@@ -408,7 +406,7 @@ class _MessagesScreenState extends State<MessagesScreen>
                   color: isDismissed ? Colors.grey[50] : lightScarlet,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isDismissed ? Colors.grey[200]! : scarletRed.withOpacity(0.2),
+                    color: isDismissed ? Colors.grey[200]! : scarletRed.withValues(alpha: 0.2),
                   ),
                 ),
                 child: Column(
@@ -453,8 +451,8 @@ class _MessagesScreenState extends State<MessagesScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: challenge.position == 'affirmative' 
-                      ? (isDismissed ? Colors.grey[100] : Colors.green.withOpacity(0.1))
-                      : (isDismissed ? Colors.grey[100] : Colors.red.withOpacity(0.1)),
+                      ? (isDismissed ? Colors.grey[100] : Colors.green.withValues(alpha: 0.1))
+                      : (isDismissed ? Colors.grey[100] : Colors.red.withValues(alpha: 0.1)),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: isDismissed 
@@ -553,7 +551,7 @@ class _MessagesScreenState extends State<MessagesScreen>
         elevation: 2,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: accentPurple.withOpacity(0.2)),
+          side: BorderSide(color: accentPurple.withValues(alpha: 0.2)),
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -614,9 +612,9 @@ class _MessagesScreenState extends State<MessagesScreen>
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: accentPurple.withOpacity(0.1),
+                    color: accentPurple.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: accentPurple.withOpacity(0.3)),
+                    border: Border.all(color: accentPurple.withValues(alpha: 0.3)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -630,7 +628,7 @@ class _MessagesScreenState extends State<MessagesScreen>
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            invitation.position?.toUpperCase() ?? 'ARENA ROLE',
+                            invitation.position.toUpperCase() ?? 'ARENA ROLE',
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
@@ -707,7 +705,7 @@ class _MessagesScreenState extends State<MessagesScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('${invitation.position?.toUpperCase()} Invitation'),
+        title: Text('${invitation.position.toUpperCase()} Invitation'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

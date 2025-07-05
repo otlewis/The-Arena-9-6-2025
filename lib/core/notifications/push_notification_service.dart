@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
@@ -202,7 +201,7 @@ class PushNotificationService {
         await _appwriteService.databases.createDocument(
           databaseId: AppwriteConstants.databaseId,
           collectionId: 'device_tokens',
-          documentId: 'device_${_currentUserId}', // Use consistent ID per user
+          documentId: 'device_$_currentUserId', // Use consistent ID per user
           data: deviceData,
         );
         AppLogger().debug('🔔 📱 ✅ Device token registered successfully');
@@ -212,7 +211,7 @@ class PushNotificationService {
           await _appwriteService.databases.updateDocument(
             databaseId: AppwriteConstants.databaseId,
             collectionId: 'device_tokens',
-            documentId: 'device_${_currentUserId}',
+            documentId: 'device_$_currentUserId',
             data: deviceData,
           );
           AppLogger().debug('🔔 📱 ✅ Device token updated successfully');
@@ -343,32 +342,32 @@ class PushNotificationService {
         notificationData[key] = value.toString();
       });
       
-      // Create platform-specific payloads
-      final androidConfig = AndroidConfig(
-        notification: AndroidNotification(
-          title: title,
-          body: body,
-          imageUrl: imageUrl,
-          priority: _getAndroidPriority(priority),
-          channelId: _getChannelId(type),
-        ),
-        priority: AndroidMessagePriority.high,
-        data: notificationData,
-      );
+      // Create platform-specific payloads (currently unused)
+      // final androidConfig = AndroidConfig(
+      //   notification: AndroidNotification(
+      //     title: title,
+      //     body: body,
+      //     imageUrl: imageUrl,
+      //     priority: _getAndroidPriority(priority),
+      //     channelId: _getChannelId(type),
+      //   ),
+      //   priority: AndroidMessagePriority.high,
+      //   data: notificationData,
+      // );
       
-      final apnsConfig = ApnsConfig(
-        payload: ApnsPayload(
-          aps: Aps(
-            alert: ApsAlert(title: title, body: body),
-            badge: 1,
-            sound: 'default',
-          ),
-        ),
-        headers: {
-          'apns-priority': '10',
-          'apns-push-type': 'alert',
-        },
-      );
+      // final apnsConfig = ApnsConfig(
+      //   payload: ApnsPayload(
+      //     aps: Aps(
+      //       alert: ApsAlert(title: title, body: body),
+      //       badge: 1,
+      //       sound: 'default',
+      //     ),
+      //   ),
+      //   headers: {
+      //     'apns-priority': '10',
+      //     'apns-push-type': 'alert',
+      //   },
+      // );
       
       // Send via Firebase Admin SDK (would need server-side implementation)
       // For now, log the notification details
@@ -461,45 +460,7 @@ class PushNotificationService {
     }
   }
 
-  /// Get Android notification priority
-  AndroidNotificationPriority _getAndroidPriority(NotificationPriority priority) {
-    switch (priority) {
-      case NotificationPriority.urgent:
-        return AndroidNotificationPriority.maxPriority;
-      case NotificationPriority.high:
-        return AndroidNotificationPriority.highPriority;
-      case NotificationPriority.medium:
-        return AndroidNotificationPriority.defaultPriority;
-      case NotificationPriority.low:
-        return AndroidNotificationPriority.lowPriority;
-    }
-  }
 
-  /// Get notification channel ID for type
-  String _getChannelId(NotificationType type) {
-    switch (type) {
-      case NotificationType.challenge:
-      case NotificationType.arenaRole:
-        return 'urgent_notifications';
-      case NotificationType.arenaStarted:
-      case NotificationType.arenaEnded:
-        return 'arena_updates';
-      case NotificationType.tournamentInvite:
-      case NotificationType.friendRequest:
-        return 'social_notifications';
-      case NotificationType.mention:
-      case NotificationType.roomChat:
-        return 'chat_notifications';
-      case NotificationType.achievement:
-        return 'achievement_notifications';
-      case NotificationType.systemAnnouncement:
-        return 'system_notifications';
-      case NotificationType.voteReminder:
-        return 'reminder_notifications';
-      case NotificationType.followUp:
-        return 'general_notifications';
-    }
-  }
 
   /// Unregister device token when user logs out
   Future<void> unregisterDevice() async {

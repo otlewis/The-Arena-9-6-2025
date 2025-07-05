@@ -43,8 +43,6 @@ class InstantNavigationSystem {
   Future<void> _initializeCaching() async {
     _logger.debug('🗄️ Initializing smart caching...');
     
-    final cache = SmartCacheManager();
-    
     // Pre-cache common data
     await Future.wait([
       _precacheUserData(),

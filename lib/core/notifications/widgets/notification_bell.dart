@@ -105,7 +105,7 @@ class _NotificationBellState extends State<NotificationBell>
           child: GestureDetector(
             onTap: _hideNotificationCenter,
             child: Container(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
             ),
           ),
         ),

@@ -9,7 +9,6 @@ import '../core/logging/app_logger.dart';
 class ArenaStateManager {
   // Services
   final AppwriteService _appwrite;
-  final ChallengeMessagingService _messagingService;
   
   // Room data
   Map<String, dynamic>? _roomData;
@@ -110,14 +109,15 @@ class ArenaStateManager {
   // Load room data
   Future<void> _loadRoomData(String roomId) async {
     try {
-      _roomData = await _appwrite.getDocument(
+      final roomDoc = await _appwrite.databases.getDocument(
         databaseId: 'arena_db',
         collectionId: 'debate_rooms',
         documentId: roomId,
       );
+      _roomData = roomDoc.data;
       
-      _currentUser = await _appwrite.getCurrentUser();
-      _currentUserId = _currentUser?.id;
+      final currentAppwriteUser = await _appwrite.getCurrentUser();
+      _currentUserId = currentAppwriteUser?.$id;
       
       AppLogger().info('Room data loaded successfully');
       _notifyStateChanged();
@@ -130,7 +130,7 @@ class ArenaStateManager {
   // Load participants
   Future<void> _loadParticipants(String roomId) async {
     try {
-      final participantsData = await _appwrite.listDocuments(
+      final participantsData = await _appwrite.databases.listDocuments(
         databaseId: 'arena_db',
         collectionId: 'room_participants',
         queries: [
@@ -138,7 +138,7 @@ class ArenaStateManager {
         ],
       );
       
-      await _processParticipants(participantsData['documents']);
+      await _processParticipants(participantsData.documents.map((doc) => doc.data).toList());
       _notifyStateChanged();
     } catch (e) {
       AppLogger().error('Error loading participants: $e');
@@ -183,23 +183,23 @@ class ArenaStateManager {
   // Load user data with optimization
   Future<UserProfile?> _loadUserDataOptimized(String userId) async {
     try {
-      final userData = await _appwrite.getDocument(
+      final userData = await _appwrite.databases.getDocument(
         databaseId: 'arena_db',
         collectionId: 'user_profiles',
         documentId: userId,
       );
       
       return UserProfile(
-        id: userData['\$id'],
-        name: userData['name'] ?? 'Unknown User',
-        email: userData['email'] ?? '',
-        avatar: userData['avatar'],
-        bio: userData['bio'],
-        reputation: userData['reputation'] ?? 0,
-        totalWins: userData['totalWins'] ?? 0,
-        totalDebates: userData['totalDebates'] ?? 0,
-        createdAt: DateTime.parse(userData['\$createdAt']),
-        updatedAt: DateTime.parse(userData['\$updatedAt']),
+        id: userData.$id,
+        name: userData.data['name'] ?? 'Unknown User',
+        email: userData.data['email'] ?? '',
+        avatar: userData.data['avatar'],
+        bio: userData.data['bio'],
+        reputation: userData.data['reputation'] ?? 0,
+        totalWins: userData.data['totalWins'] ?? 0,
+        totalDebates: userData.data['totalDebates'] ?? 0,
+        createdAt: DateTime.parse(userData.$createdAt),
+        updatedAt: DateTime.parse(userData.$updatedAt),
       );
     } catch (e) {
       AppLogger().warning('Error loading user data for $userId: $e');
@@ -210,7 +210,7 @@ class ArenaStateManager {
   // Setup real-time subscription
   void _setupRealtimeSubscription(String roomId) {
     try {
-      _realtimeSubscription = _appwrite.client.realtime.subscribe([
+      _realtimeSubscription = _appwrite.realtime.subscribe([
         'databases.arena_db.collections.room_participants.documents',
         'databases.arena_db.collections.debate_rooms.documents.$roomId',
       ]);
@@ -245,15 +245,15 @@ class ArenaStateManager {
   
   // Start room status checker
   void _startRoomStatusChecker(String roomId) {
-    _roomStatusChecker = Timer.periodic(const Duration(seconds: 10), (timer) async {
+    _roomStatusChecker = Timer.periodic(Duration(seconds: 10), (timer) async {
       try {
-        final roomStatus = await _appwrite.getDocument(
+        final roomStatus = await _appwrite.databases.getDocument(
           databaseId: 'arena_db',
           collectionId: 'debate_rooms',
           documentId: roomId,
         );
         
-        final status = roomStatus['status'];
+        final status = roomStatus.data['status'];
         if (status == 'closed' || status == 'completed') {
           timer.cancel();
           _handleClosedRoom(status);
@@ -274,7 +274,7 @@ class ArenaStateManager {
   // Assign role to user
   Future<void> assignRoleToUser(UserProfile user, String role) async {
     try {
-      await _appwrite.createDocument(
+      await _appwrite.databases.createDocument(
         databaseId: 'arena_db',
         collectionId: 'room_participants',
         documentId: '${_roomData?['\$id']}_${user.id}_$role',
@@ -298,7 +298,7 @@ class ArenaStateManager {
   Future<void> assignModeratorFromAudience(UserProfile selectedUser) async {
     try {
       // Remove from audience
-      await _appwrite.deleteDocument(
+      await _appwrite.databases.deleteDocument(
         databaseId: 'arena_db',
         collectionId: 'room_participants',
         documentId: '${_roomData?['\$id']}_${selectedUser.id}_audience',
@@ -325,7 +325,7 @@ class ArenaStateManager {
       final judgeRole = availableJudgeSlots.first;
       
       // Remove from audience
-      await _appwrite.deleteDocument(
+      await _appwrite.databases.deleteDocument(
         databaseId: 'arena_db',
         collectionId: 'room_participants',
         documentId: '${_roomData?['\$id']}_${selectedUser.id}_audience',
@@ -390,11 +390,13 @@ class ArenaStateManager {
   
   // Send single moderator invitation
   void _sendSingleModeratorInvitation(String moderatorId) {
-    _messagingService.sendModeratorInvitation(
-      challengeId: _roomData?['challengeId'] ?? '',
-      moderatorId: moderatorId,
-      debateRoomId: _roomData?['\$id'] ?? '',
-    );
+    // TODO: Implement sendModeratorInvitation method in ChallengeMessagingService
+    AppLogger().info('Sending moderator invitation to: $moderatorId');
+    // _messagingService.sendModeratorInvitation(
+    //   challengeId: _roomData?['challengeId'] ?? '',
+    //   moderatorId: moderatorId,
+    //   debateRoomId: _roomData?['\$id'] ?? '',
+    // );
   }
   
   // Handle approval response
@@ -492,7 +494,7 @@ class ArenaStateManager {
     }
     
     try {
-      await _appwrite.createDocument(
+      await _appwrite.databases.createDocument(
         databaseId: 'arena_db',
         collectionId: 'debate_votes',
         documentId: '${_roomData?['\$id']}_${_currentUserId}_vote',
@@ -517,7 +519,7 @@ class ArenaStateManager {
   // Close room
   Future<void> closeRoom() async {
     try {
-      await _appwrite.updateDocument(
+      await _appwrite.databases.updateDocument(
         databaseId: 'arena_db',
         collectionId: 'debate_rooms',
         documentId: _roomData?['\$id'] ?? '',
@@ -531,7 +533,7 @@ class ArenaStateManager {
       onShowSnackBar?.call('Room has been closed');
       
       // Start countdown timer for navigation
-      _roomCompletionTimer = Timer(const Duration(seconds: 10), () {
+      _roomCompletionTimer = Timer(Duration(seconds: 10), () {
         onNavigateHome?.call('Room closed');
       });
     } catch (e) {
@@ -542,7 +544,7 @@ class ArenaStateManager {
   
   // Cleanup
   void dispose() {
-    _realtimeSubscription?.cancel();
+    _realtimeSubscription?.close();
     _roomStatusChecker?.cancel();
     _roomCompletionTimer?.cancel();
     AppLogger().info('Arena state manager disposed');

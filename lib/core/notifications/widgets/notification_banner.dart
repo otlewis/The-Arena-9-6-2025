@@ -152,7 +152,7 @@ class _NotificationBannerState extends State<NotificationBanner>
                             child: Icon(
                               Icons.close,
                               size: 20,
-                              color: Theme.of(context).iconTheme.color?.withOpacity(0.6),
+                              color: Theme.of(context).iconTheme.color?.withValues(alpha: 0.6),
                             ),
                           ),
                         ],
@@ -232,7 +232,7 @@ class _NotificationBannerState extends State<NotificationBanner>
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(25),
       ),
       child: Icon(
@@ -276,7 +276,7 @@ class _NotificationBannerState extends State<NotificationBanner>
           height: 3,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(1.5),
-            color: Colors.grey.withOpacity(0.2),
+            color: Colors.grey.withValues(alpha: 0.2),
           ),
           child: FractionallySizedBox(
             alignment: Alignment.centerLeft,

@@ -1,18 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user_profile.dart';
 import 'gavel_logo.dart';
-// Import your providers
-import '../providers/user_profile_notifier.dart';
-import '../providers/theme_notifier.dart';
+import 'animated_fade_in.dart';
 
-class WelcomeCard extends ConsumerWidget {
+class WelcomeCard extends StatelessWidget {
   const WelcomeCard({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final userProfileAsync = ref.watch(userProfileNotifierProvider);
-    final isDarkMode = ref.watch(themeNotifierProvider);
+  Widget build(BuildContext context) {
+    // For now, showing a simple welcome card without providers
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return AnimatedFadeIn(
       delay: const Duration(milliseconds: 200),
@@ -61,13 +58,9 @@ class WelcomeCard extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 18),
-              userProfileAsync.when(
-                data: (profile) => AnimatedSlideIn(
-                  delay: const Duration(milliseconds: 1000),
-                  child: _buildStatsRow(context, profile, isDarkMode),
-                ),
-                loading: () => _buildSkeletonStats(context, isDarkMode),
-                error: (_, __) => _buildStatsRow(context, null, isDarkMode),
+              AnimatedSlideIn(
+                delay: const Duration(milliseconds: 1000),
+                child: _buildStatsRow(context, null, isDarkMode),
               ),
             ],
           ),
@@ -90,9 +83,9 @@ class WelcomeCard extends ConsumerWidget {
   Widget _buildSkeletonStatBox(BuildContext context, bool isDarkMode) {
     return Column(
       children: [
-        SkeletonText(width: 40, height: 20),
+        Container(width: 40, height: 20, color: Colors.grey[300]),
         const SizedBox(height: 4),
-        SkeletonText(width: 60, height: 14),
+        Container(width: 60, height: 14, color: Colors.grey[300]),
       ],
     );
   }

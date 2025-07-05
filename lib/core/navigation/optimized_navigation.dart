@@ -26,8 +26,6 @@ class OptimizedMainNavigator extends ConsumerStatefulWidget {
 }
 
 class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator> with WidgetsBindingObserver {
-  // Pre-instantiated screens to avoid rebuilds
-  late final List<Widget> _persistentScreens;
   
   // Challenge system components
   late final ChallengeMessagingService _messagingService;
@@ -46,8 +44,6 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
     _soundService = GetIt.instance<SoundService>();
     _notificationService = GetIt.instance<NotificationService>();
     
-    // Initialize screens once and reuse
-    _initializePersistentScreens();
     
     // Setup challenge listening after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -84,21 +80,17 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
     }
   }
 
-  void _initializePersistentScreens() {
-    // Note: This will be rebuilt when authentication state changes
-    // Don't cache these screens - they need to respond to auth changes
-    _persistentScreens = [];
-  }
 
   List<Widget> _buildScreensBasedOnAuth() {
     final navState = ref.watch(navigationProvider);
     
     return [
       const _PersistentScreenWrapper(
-        child: MessagesScreen(),
         screenIndex: 0,
+        child: MessagesScreen(),
       ),
       _PersistentScreenWrapper(
+        screenIndex: 1,
         child: navState.isAuthenticated 
           ? const HomeScreen() 
           : LoginScreen(
@@ -107,13 +99,13 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
                 ref.read(navigationProvider.notifier).refreshAuth();
               },
             ),
-        screenIndex: 1,
       ),
       const _PersistentScreenWrapper(
-        child: PremiumScreen(),
         screenIndex: 2,
+        child: PremiumScreen(),
       ),
       _PersistentScreenWrapper(
+        screenIndex: 3,
         child: navState.isAuthenticated 
           ? ProfileScreen(
               onLogout: _handleLogout,
@@ -124,7 +116,6 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
                 ref.read(navigationProvider.notifier).refreshAuth();
               },
             ),
-        screenIndex: 3,
       ),
     ];
   }

@@ -103,7 +103,7 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                 prefixIcon: Icon(Icons.search, color: accentPurple),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: accentPurple.withOpacity(0.3)),
+                  borderSide: BorderSide(color: accentPurple.withValues(alpha: 0.3)),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -111,7 +111,7 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.withOpacity(0.3)),
+                  borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
                 ),
               ),
             ),
@@ -180,7 +180,7 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.withOpacity(0.2)),
+        side: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
       ),
       child: InkWell(
         onTap: () => _navigateToUserProfile(user),
@@ -193,7 +193,7 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                 avatarUrl: user.avatar,
                 initials: user.initials,
                 radius: 24,
-                backgroundColor: accentPurple.withOpacity(0.1),
+                backgroundColor: accentPurple.withValues(alpha: 0.1),
                 textColor: accentPurple,
               ),
               const SizedBox(width: 16),
@@ -258,7 +258,7 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: scarletRed.withOpacity(0.1),
+                      color: scarletRed.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(

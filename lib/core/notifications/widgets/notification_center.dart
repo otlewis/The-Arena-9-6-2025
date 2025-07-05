@@ -41,7 +41,7 @@ class _NotificationCenterState extends State<NotificationCenter> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -77,7 +77,7 @@ class _NotificationCenterState extends State<NotificationCenter> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).primaryColor.withOpacity(0.1),
+        color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(12),
           topRight: Radius.circular(12),
@@ -208,7 +208,7 @@ class _NotificationCenterState extends State<NotificationCenter> {
             borderRadius: BorderRadius.circular(8),
             color: notification.isRead 
                 ? null 
-                : Theme.of(context).primaryColor.withOpacity(0.05),
+                : Theme.of(context).primaryColor.withValues(alpha: 0.05),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -261,7 +261,7 @@ class _NotificationCenterState extends State<NotificationCenter> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.2),
+                    color: Colors.grey.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text(
@@ -338,7 +338,7 @@ class _NotificationCenterState extends State<NotificationCenter> {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Icon(

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/services.dart';
 import '../widgets/arena_header.dart';
 import '../widgets/arena_timer_with_controls.dart';
 import '../widgets/participants_list.dart';

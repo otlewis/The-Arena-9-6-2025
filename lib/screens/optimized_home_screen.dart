@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../core/widgets/skeleton_widgets.dart';
 import '../core/cache/smart_cache_manager.dart';
-import '../core/providers/app_providers.dart';
 import '../widgets/user_avatar.dart';
 import '../models/user_profile.dart';
 import '../core/logging/app_logger.dart';
@@ -149,7 +148,7 @@ class _OptimizedHomeScreenState extends ConsumerState<OptimizedHomeScreen>
                 Hero(
                   tag: 'user_avatar',
                   child: UserAvatar(
-                    avatarUrl: profile?.avatarUrl,
+                    avatarUrl: profile?.avatar,
                     initials: profile?.name.isNotEmpty == true 
                       ? profile!.name[0] 
                       : 'U',
@@ -190,7 +189,7 @@ class _OptimizedHomeScreenState extends ConsumerState<OptimizedHomeScreen>
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          profile?.rank ?? 'Rookie',
+                          'Rookie',
                           style: const TextStyle(
                             fontSize: 12,
                             color: Color(0xFF10B981),
@@ -207,9 +206,9 @@ class _OptimizedHomeScreenState extends ConsumerState<OptimizedHomeScreen>
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildStatItem('Debates', profile?.debatesCount.toString() ?? '0'),
-                _buildStatItem('Wins', profile?.winsCount.toString() ?? '0'),
-                _buildStatItem('Rating', profile?.rating.toString() ?? '1200'),
+                _buildStatItem('Debates', profile?.totalDebates.toString() ?? '0'),
+                _buildStatItem('Wins', profile?.totalWins.toString() ?? '0'),
+                _buildStatItem('Rating', profile?.reputation.toString() ?? '0'),
               ],
             ),
           ],

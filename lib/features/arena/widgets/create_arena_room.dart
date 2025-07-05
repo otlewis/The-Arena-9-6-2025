@@ -26,10 +26,8 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
 
   bool _isCreating = false;
   DateTime? _lastCreateAttempt;
-  String? _lastCreatedRoomId;
   
   // Colors
-  static const Color scarletRed = Color(0xFFFF2400);
   static const Color accentPurple = Color(0xFF8B5CF6);
   static const Color deepPurple = Color(0xFF6B46C1);
 
@@ -103,7 +101,7 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
 
       // Wait for room setup to complete before navigation
       AppLogger().info('Waiting for room setup to stabilize before navigation...');
-      await Future.delayed(const Duration(seconds: 2));
+      await Future.delayed(Duration(seconds: 2));
       
       // Verify room exists and is properly set up before navigating
       final roomData = await _appwrite.getArenaRoom(roomId);
@@ -214,7 +212,7 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
           ],
         ),
         backgroundColor: Colors.green,
-        duration: const Duration(seconds: 3),
+        duration: Duration(seconds: 3),
       ),
     );
   }
@@ -232,7 +230,7 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
           ],
         ),
         backgroundColor: Colors.red,
-        duration: const Duration(seconds: 4),
+        duration: Duration(seconds: 4),
       ),
     );
   }
@@ -278,7 +276,7 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           colors: [accentPurple, deepPurple],
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,

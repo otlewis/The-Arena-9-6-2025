@@ -118,7 +118,7 @@ class ArenaRoomState with _$ArenaRoomState {
   
   /// Returns all available judge slots
   List<String> get availableJudgeSlots {
-    final maxJudges = 3;
+    const maxJudges = 3;
     final availableSlots = <String>[];
     
     for (int i = 1; i <= maxJudges; i++) {

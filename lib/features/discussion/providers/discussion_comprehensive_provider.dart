@@ -62,7 +62,7 @@ final discussionTimerStreamProvider = StreamProvider.family<int, DiscussionInitP
     return Stream.value(discussion.timerState.speakingTime);
   }
   
-  return Stream.periodic(const Duration(seconds: 1), (count) {
+  return Stream.periodic(Duration(seconds: 1), (count) {
     final remaining = discussion.timerState.speakingTime - count - 1;
     return remaining > 0 ? remaining : 0;
   }).takeWhile((time) => time >= 0);
@@ -465,7 +465,7 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
       );
       
       logger.debug('Discussion subscription ended, attempting to reconnect...');
-      Timer(const Duration(seconds: 3), () {
+      Timer(Duration(seconds: 3), () {
         if (mounted && !state.isExiting) {
           _setupRealtimeSubscription();
         }
@@ -475,7 +475,7 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
 
   void _startFallbackRefresh() {
     _fallbackRefreshTimer?.cancel();
-    _fallbackRefreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+    _fallbackRefreshTimer = Timer.periodic(Duration(seconds: 30), (timer) {
       if (!mounted || state.isExiting) {
         timer.cancel();
         return;
@@ -678,7 +678,7 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
   void _startTimerUpdater() {
     _stopTimerUpdater();
     
-    _speakingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _speakingTimer = Timer.periodic(Duration(seconds: 1), (timer) {
       if (!mounted || state.isExiting || !state.timerState.isTimerRunning || state.timerState.isTimerPaused) {
         timer.cancel();
         return;

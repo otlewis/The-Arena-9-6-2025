@@ -10,7 +10,6 @@ import '../constants/appwrite.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:appwrite/appwrite.dart';
 
 class OpenDiscussionRoomScreen extends StatefulWidget {
   final Room room;
@@ -43,7 +42,6 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   StreamSubscription? _realtimeSubscription; // Real-time subscription
   int _currentUserCoinBalance = 0; // Firebase coin balance (separate from Appwrite profile)
   final Set<String> _handsRaised = {}; // Track users with hands raised
-  bool _showModerationPanel = false; // Show/hide moderation controls
   int _reconnectAttempts = 0; // Track reconnection attempts
   static const int _maxReconnectAttempts = 5; // Maximum reconnection attempts
   
@@ -53,7 +51,6 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   
   // Timer functionality
   int _speakingTime = 300; // Start with 5 minutes (300 seconds) for countdown
-  int _speakingTimeLimit = 300; // 5 minutes default
   Timer? _speakingTimer;
   bool _isTimerRunning = false;
   bool _isTimerPaused = false;
@@ -268,15 +265,11 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
             
             if (!mounted) return;
             
-            // Add comprehensive null checks
-            if (response == null) {
-              debugPrint('⚠️ Received null realtime response, ignoring');
-              return;
-            }
+            // Note: response is guaranteed to be non-null by the realtime API
             
-            // Add null check for payload
+            // Check payload type
             final payload = response.payload;
-            if (payload == null || payload is! Map) {
+            if (payload is! Map) {
               debugPrint('⚠️ Received realtime response with invalid payload, ignoring');
               return;
             }
@@ -491,7 +484,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     });
     
     _speakingTimer?.cancel(); // Cancel any existing timer
-    _speakingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _speakingTimer = Timer.periodic(Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
         return;
@@ -576,7 +569,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         SnackBar(
           content: Text(_isSpeakerphoneEnabled ? 'Speakerphone enabled' : 'Speakerphone disabled'),
           backgroundColor: _isSpeakerphoneEnabled ? Colors.green : Colors.orange,
-          duration: const Duration(seconds: 1),
+          duration: Duration(seconds: 1),
         ),
       );
     }
@@ -651,7 +644,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         title: const Row(
           children: [
             Icon(Icons.pan_tool, color: Colors.orange),
-            SizedBox(width: 8),
+            const SizedBox(width: 8),
             Text('Hand Raised'),
           ],
         ),
@@ -977,7 +970,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
           SnackBar(
             content: Text('Mute request sent to ${muteAllTasks.length} participants'),
             backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 3),
+            duration: Duration(seconds: 3),
           ),
         );
       }
@@ -1140,7 +1133,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                   color: scarletRed.withValues(alpha: 0.3),
                 ),
               ),
-              child: Icon(
+              child: const Icon(
                 Icons.exit_to_app,
                 color: scarletRed,
                 size: 18,
@@ -2329,7 +2322,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       SnackBar(
         content: Text('Selected ${gift.emoji} ${gift.name}'),
         backgroundColor: Colors.green,
-        duration: const Duration(seconds: 1),
+        duration: Duration(seconds: 1),
       ),
     );
 
@@ -2351,7 +2344,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       SnackBar(
         content: Text('Selected recipient: ${userProfile?.displayName}'),
         backgroundColor: Colors.green,
-        duration: const Duration(seconds: 1),
+        duration: Duration(seconds: 1),
       ),
     );
 
@@ -2434,7 +2427,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
             ],
           ),
           backgroundColor: Colors.blue,
-          duration: const Duration(seconds: 2),
+          duration: Duration(seconds: 2),
         ),
       );
 
@@ -2633,7 +2626,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         children: [
           Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.front_hand,
                 color: Colors.orange,
                 size: 24,
@@ -3434,7 +3427,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     if (!_isRealtimeHealthy && mounted) {
       debugPrint('🔄 Starting fallback refresh timer (every 30 seconds)');
       
-      _fallbackRefreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      _fallbackRefreshTimer = Timer.periodic(Duration(seconds: 30), (timer) {
         if (!mounted) {
           timer.cancel();
           return;

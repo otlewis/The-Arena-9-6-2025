@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import '../models/gift_transaction.dart';
 import '../models/gift.dart';
 import '../core/logging/app_logger.dart';
@@ -359,5 +358,16 @@ class FirebaseGiftService {
       }
       return 0;
     });
+  }
+
+  /// Get list of available gifts
+  Future<List<Gift>> getAvailableGifts() async {
+    try {
+      AppLogger().debug('🎁 Getting available gifts from constants');
+      return GiftConstants.allGifts;
+    } catch (e) {
+      AppLogger().error('Error getting available gifts: $e');
+      return [];
+    }
   }
 } 

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../lib/services/appwrite_service.dart';
+import 'package:arena/services/appwrite_service.dart';
 
 /// Simple test script to verify Appwrite schema is working
 /// Run this after setting up the schema in Appwrite Console

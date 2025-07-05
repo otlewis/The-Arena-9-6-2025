@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/message.dart';
 import '../services/chat_service.dart';
-import '../constants/appwrite.dart';
 import '../widgets/user_avatar.dart';
 import 'dart:async';
 
@@ -37,7 +36,6 @@ class _ModernChatWidgetState extends State<ModernChatWidget> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   
-  bool _isChatOpen = false;
   bool _isSending = false;
   List<Message> _messages = [];
   StreamSubscription? _messagesSubscription;
@@ -172,29 +170,29 @@ class _ModernChatWidgetState extends State<ModernChatWidget> {
   Widget _buildChatHeader() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [scarletRed, accentPurple],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: const BorderRadius.only(
+        borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
         ),
       ),
       child: Row(
         children: [
-          Icon(
+          const Icon(
             Icons.chat_bubble_outline,
             color: Colors.white,
             size: 20,
           ),
           const SizedBox(width: 12),
-          Expanded(
+          const Expanded(
             child: Text(
               'Room Chat',
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -295,8 +293,6 @@ class _ModernChatWidgetState extends State<ModernChatWidget> {
       return _buildSystemMessage(message, isGiftMessage);
     }
 
-    final userProfile = widget.userProfiles[message.senderId];
-
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -327,7 +323,7 @@ class _ModernChatWidgetState extends State<ModernChatWidget> {
                     padding: const EdgeInsets.only(bottom: 4, left: 8),
                     child: Text(
                       message.senderName,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: deepPurple,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -481,7 +477,7 @@ class _ModernChatWidgetState extends State<ModernChatWidget> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
+              gradient: const LinearGradient(
                 colors: [scarletRed, accentPurple],
               ),
               borderRadius: BorderRadius.circular(22),
@@ -493,7 +489,7 @@ class _ModernChatWidgetState extends State<ModernChatWidget> {
                 onTap: _isSending ? null : _sendMessage,
                 child: Center(
                   child: _isSending
-                    ? SizedBox(
+                    ? const SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(

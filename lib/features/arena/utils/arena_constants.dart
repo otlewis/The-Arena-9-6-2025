@@ -8,7 +8,7 @@ class ArenaConstants {
   static const Color scarletRed = Color(0xFFFF2400);
   static const Color lightGray = Color(0xFFF5F5F5);
   static const Color successGreen = Color(0xFF4CAF50);
-  static const Color warningAmber = Color(0xFFC107);
+  static const Color warningAmber = Color(0xFFFFC107);
   
   // Gradients
   static const LinearGradient purpleGradient = LinearGradient(

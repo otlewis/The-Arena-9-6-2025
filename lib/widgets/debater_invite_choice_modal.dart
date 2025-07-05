@@ -49,7 +49,7 @@ class _DebaterInviteChoiceModalState extends State<DebaterInviteChoiceModal> {
     final maxModalHeight = screenHeight * 0.85; // 85% of screen height
     
     return Material(
-      color: Colors.black.withOpacity(0.7),
+      color: Colors.black.withValues(alpha: 0.7),
       child: SafeArea(
         child: Center(
           child: Container(
@@ -127,7 +127,7 @@ class _DebaterInviteChoiceModalState extends State<DebaterInviteChoiceModal> {
             margin: const EdgeInsets.only(top: 12),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.1),
+              color: Colors.orange.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Row(
@@ -172,9 +172,9 @@ class _DebaterInviteChoiceModalState extends State<DebaterInviteChoiceModal> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
+                  color: Colors.blue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                  border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -224,10 +224,10 @@ class _DebaterInviteChoiceModalState extends State<DebaterInviteChoiceModal> {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF6B46C1).withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+          color: isSelected ? const Color(0xFF6B46C1).withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isSelected ? const Color(0xFF6B46C1) : Colors.grey.withOpacity(0.3),
+            color: isSelected ? const Color(0xFF6B46C1) : Colors.grey.withValues(alpha: 0.3),
             width: isSelected ? 2 : 1,
           ),
         ),

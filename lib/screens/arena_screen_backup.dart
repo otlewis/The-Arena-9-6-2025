@@ -53,7 +53,7 @@ enum DebatePhase {
   }
   
   DebatePhase? get nextPhase {
-    final phases = DebatePhase.values;
+    const phases = DebatePhase.values;
     final currentIndex = phases.indexOf(this);
     if (currentIndex < phases.length - 1) {
       return phases[currentIndex + 1];
@@ -157,7 +157,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   static const Color scarletRed = Color(0xFFFF2400);
   static const Color accentPurple = Color(0xFF8B5CF6);
   static const Color deepPurple = Color(0xFF6B46C1);
-  static const Color lightGray = Color(0xFFF5F5F5);
 
   @override
   void initState() {
@@ -347,11 +346,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               AppLogger().debug('🗑️ PARTICIPANT DELETION EVENT detected: ${response.events}');
             }
             
-            // Add comprehensive null check for payload - ENHANCED
-            if (response.payload == null) {
-              AppLogger().warning('Received null payload in arena update - skipping');
-              return;
-            }
+            // Note: response.payload is guaranteed to be non-null by the API
             
             // Ensure payload is a valid Map with enhanced safety
             Map<String, dynamic> payload;
@@ -467,7 +462,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           if (mounted && !_isExiting && _reconnectAttempts < _maxReconnectAttempts) {
             _reconnectAttempts++;
             AppLogger().debug('🔄 Arena subscription ended, attempting to reconnect...');
-            Timer(const Duration(seconds: 3), () {
+            Timer(Duration(seconds: 3), () {
               if (mounted && !_isExiting) {
                 _setupRealtimeSubscription();
               }
@@ -520,12 +515,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               SnackBar(
                 content: Text('🔒 This arena room has been closed'),
                 backgroundColor: Colors.orange,
-                duration: const Duration(seconds: 2),
+                duration: Duration(seconds: 2),
               ),
             );
             
             // Navigate back to arena lobby after a short delay
-            Future.delayed(const Duration(seconds: 1), () {
+            Future.delayed(Duration(seconds: 1), () {
               if (mounted && !_isExiting) {
                 // Navigate back to arena lobby with complete stack replacement
                 WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -953,11 +948,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         SnackBar(
           content: Text('🔒 This arena room has been closed'),
           backgroundColor: Colors.orange,
-          duration: const Duration(seconds: 2),
+          duration: Duration(seconds: 2),
         ),
       );
       
-      Future.delayed(const Duration(seconds: 1), () {
+      Future.delayed(Duration(seconds: 1), () {
         if (mounted && !_isExiting) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_isExiting) {
@@ -1193,7 +1188,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 : '⚖️ Judging is now CLOSED - Calculating results...'
           ),
           backgroundColor: _judgingEnabled ? Colors.green : Colors.orange,
-          duration: const Duration(seconds: 3),
+          duration: Duration(seconds: 3),
         ),
       );
     } catch (e) {
@@ -1369,7 +1364,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         }
         
         // After 15 seconds, mark room as completed - with proper mounted checks
-        _roomCompletionTimer = Timer(const Duration(seconds: 15), () async {
+        _roomCompletionTimer = Timer(Duration(seconds: 15), () async {
           try {
             AppLogger().debug('⏰ 15 seconds elapsed - checking if widget is still mounted');
             
@@ -3087,7 +3082,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       }
       
       // DEBUG: Confirm timer is still running (every 30 seconds)
-      final heartbeatThreshold = 8000;
+      const heartbeatThreshold = 8000;
       if (DateTime.now().millisecondsSinceEpoch % 30000 < heartbeatThreshold) {
         AppLogger().debug('🔍 TIMER HEARTBEAT: Status checker still running every ${interval}ms');
       }
@@ -3642,7 +3637,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             SnackBar(
               content: Text('⏳ Waiting for ${otherDebaterRole} debater to review and approve your selections...'),
               backgroundColor: const Color(0xFF6B46C1),
-              duration: const Duration(seconds: 5),
+              duration: Duration(seconds: 5),
             ),
           );
         }
@@ -3935,7 +3930,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           SnackBar(
             content: Text('❌ Error sending invitations: $e'),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
+            duration: Duration(seconds: 3),
           ),
         );
       }
@@ -6012,7 +6007,7 @@ class _RoomClosingModalState extends State<RoomClosingModal> {
   }
 
   void _startCountdown() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
           _secondsRemaining--;

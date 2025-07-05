@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
 import 'package:arena/core/providers/app_providers.dart';
-import 'package:arena/core/state/app_state.dart';
+// import 'package:arena/core/state/app_state.dart';  // Unused
 import 'package:arena/services/appwrite_service.dart';
 import 'package:arena/core/logging/app_logger.dart';
-import 'package:flutter/services.dart';
+// import 'package:flutter/services.dart';  // Unused
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'package:appwrite/models.dart' as models;

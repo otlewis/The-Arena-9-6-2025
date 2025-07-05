@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import '../core/logging/app_logger.dart';
 
 // Fallback stub implementation

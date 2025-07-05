@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../services/sound_service.dart';
 import '../../../core/logging/app_logger.dart';
-import '../models/debate_phase.dart';
 import 'arena_state_controller.dart';
 
 /// Arena Timer Controller - DO NOT MODIFY TIMER LOGIC

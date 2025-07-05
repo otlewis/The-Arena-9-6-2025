@@ -159,7 +159,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
               width: isPopular ? 2 : 1,
             ),
             borderRadius: BorderRadius.circular(12),
-            color: isPopular ? color.withOpacity(0.05) : null,
+            color: isPopular ? color.withValues(alpha: 0.05) : null,
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),

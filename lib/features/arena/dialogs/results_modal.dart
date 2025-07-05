@@ -36,9 +36,6 @@ class ResultsModal extends StatelessWidget {
       }
     }
 
-    final isAffirmativeWinner = winner == 'affirmative';
-    final winnerDebater = isAffirmativeWinner ? affirmativeDebater : negativeDebater;
-
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
@@ -84,13 +81,13 @@ class ResultsModal extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [ArenaColors.accentPurple, ArenaColors.deepPurple],
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),
-        borderRadius: const BorderRadius.only(
+        borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
         ),
@@ -138,7 +135,6 @@ class ResultsModal extends StatelessWidget {
 
   Widget _buildContent(int affirmativeVotes, int negativeVotes) {
     final isAffirmativeWinner = winner == 'affirmative';
-    final winnerDebater = isAffirmativeWinner ? affirmativeDebater : negativeDebater;
 
     return Padding(
       padding: const EdgeInsets.all(20), // Reduced from 24
@@ -180,7 +176,7 @@ class ResultsModal extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12), // Reduced from 16
-                if (winnerDebater != null)
+                if ((winner == 'affirmative' ? affirmativeDebater : negativeDebater) != null)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -190,8 +186,8 @@ class ResultsModal extends StatelessWidget {
                           border: Border.all(color: Colors.amber, width: 2), // Reduced from 3
                         ),
                         child: UserAvatar(
-                          avatarUrl: winnerDebater.avatar,
-                          initials: winnerDebater.name.isNotEmpty ? winnerDebater.name[0] : '?',
+                          avatarUrl: (winner == 'affirmative' ? affirmativeDebater : negativeDebater)?.avatar,
+                          initials: (winner == 'affirmative' ? affirmativeDebater : negativeDebater)?.name.isNotEmpty == true ? (winner == 'affirmative' ? affirmativeDebater : negativeDebater)!.name[0] : '?',
                           radius: 24, // Reduced from 32
                         ),
                       ),
@@ -201,7 +197,7 @@ class ResultsModal extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              winnerDebater.name,
+                              (winner == 'affirmative' ? affirmativeDebater : negativeDebater)?.name ?? 'Unknown',
                               style: const TextStyle(
                                 fontSize: 16, // Reduced from 20
                                 fontWeight: FontWeight.bold,
@@ -286,7 +282,7 @@ class ResultsModal extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 3), // Reduced from 4
                       child: Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.gavel,
                             size: 14, // Reduced from 16
                             color: ArenaColors.accentPurple,

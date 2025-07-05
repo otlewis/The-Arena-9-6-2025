@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mockito/mockito.dart';
+// import 'package:mockito/mockito.dart';  // Unused
 import 'package:mockito/annotations.dart';
 import 'package:arena/features/arena/providers/arena_provider.dart';
 import 'package:arena/features/arena/models/arena_state.dart';

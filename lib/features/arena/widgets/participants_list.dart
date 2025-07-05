@@ -40,8 +40,8 @@ class ParticipantsList extends ConsumerWidget {
   }
 
   Widget _buildDebaters(BuildContext context, ArenaState state) {
-    final affirmative = state.getParticipantsByRole(ArenaRole.affirmativeDebater);
-    final negative = state.getParticipantsByRole(ArenaRole.negativeDebater);
+    final affirmative = state.getParticipantsByRole(ArenaRole.affirmative);
+    final negative = state.getParticipantsByRole(ArenaRole.negative);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -143,7 +143,11 @@ class ParticipantsList extends ConsumerWidget {
   }
 
   Widget _buildJudges(BuildContext context, ArenaState state) {
-    final judges = state.getParticipantsByRole(ArenaRole.judge);
+    // Get all judges (judge1, judge2, judge3)
+    final judges = <ArenaParticipant>[];
+    judges.addAll(state.getParticipantsByRole(ArenaRole.judge1));
+    judges.addAll(state.getParticipantsByRole(ArenaRole.judge2));
+    judges.addAll(state.getParticipantsByRole(ArenaRole.judge3));
     
     return _buildRoleSection(
       context,

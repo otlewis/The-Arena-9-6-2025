@@ -60,7 +60,6 @@ final arenaIOSOptimizationServiceProvider = Provider<ArenaIOSOptimizationService
 class ArenaStateNotifier extends StateNotifier<ArenaRoomState> {
   final String roomId;
   final AppwriteService _appwriteService;
-  final ChallengeMessagingService _messagingService;
   final SoundService _soundService;
   final ArenaRealtimeService _realtimeService;
   final ArenaParticipantService _participantService;

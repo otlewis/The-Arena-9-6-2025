@@ -237,8 +237,6 @@ class ArenaNotifier extends StateNotifier<ArenaState> {
       final remainingTime = payload['remainingTime'] ?? state.remainingSeconds;
       final isTimerRunning = payload['isTimerRunning'] ?? false;
       final isPaused = payload['isPaused'] ?? false;
-      final phaseStartedAt = payload['phaseStartedAt'];
-      final lastTimerUpdate = payload['lastTimerUpdate'];
 
       state = state.copyWith(
         status: newStatus,

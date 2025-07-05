@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'notification_types.dart';
 import 'notification_preferences.dart';
 import 'notification_service.dart';
@@ -65,7 +63,6 @@ class NotificationAnalytics {
   NotificationAnalytics._internal();
 
   final List<NotificationEvent> _events = [];
-  final NotificationPreferencesService _preferencesService = NotificationPreferencesService();
 
   /// Track a notification event
   void trackEvent({
@@ -254,7 +251,7 @@ class NotificationAnalytics {
       insights.add(NotificationInsight(
         type: InsightType.timeOptimization,
         title: 'Optimal Notification Time',
-        description: 'You\'re most responsive to notifications around ${bestHour}:00',
+        description: 'You\'re most responsive to notifications around $bestHour:00',
         severity: InsightSeverity.low,
         actionable: false,
         metadata: {'optimalHour': bestHour},

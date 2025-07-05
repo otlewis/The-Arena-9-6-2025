@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'dart:async';
 import '../constants/appwrite.dart';
@@ -480,7 +479,7 @@ class ChallengeMessagingService {
       rethrow;
     } finally {
       // Remove from processing set after delay to prevent rapid retries
-      Future.delayed(const Duration(seconds: 2), () {
+      Future.delayed(Duration(seconds: 2), () {
         _processingChallenges.remove(challengeId);
       });
     }

@@ -2,7 +2,7 @@ import 'package:appwrite/appwrite.dart';
 import 'lib/services/appwrite_service.dart';
 
 void main() async {
-  print('🧹 CLEANING UP UNUSED DISCUSSION ROOMS...');
+  // //print('🧹 CLEANING UP UNUSED DISCUSSION ROOMS...');
   
   try {
     final appwrite = AppwriteService();
@@ -18,17 +18,17 @@ void main() async {
       ],
     );
     
-    print('Found ${discussionRooms.documents.length} active discussion rooms');
+    // //print('Found ${discussionRooms.documents.length} active discussion rooms');
     
-    int cleanedCount = 0;
+    // int cleanedCount = 0;  // Unused variable removed
     
     for (final room in discussionRooms.documents) {
       final roomId = room.$id;
-      final roomTitle = room.data['title'] ?? 'Unknown Room';
+      // final roomTitle = room.data['title'] ?? 'Unknown Room';
       final createdAt = DateTime.parse(room.$createdAt);
       final roomAge = DateTime.now().difference(createdAt);
       
-      print('🔍 Room $roomId: "$roomTitle" (Age: ${roomAge.inHours}h ${roomAge.inMinutes % 60}m)');
+      // //print('🔍 Room $roomId: "$roomTitle" (Age: ${roomAge.inHours}h ${roomAge.inMinutes % 60}m)');
       
       // Get participants for this room
       final participants = await appwrite.databases.listDocuments(
@@ -41,28 +41,28 @@ void main() async {
       );
       
       final participantCount = participants.documents.length;
-      print('   👥 Participants: $participantCount');
+      //print('   👥 Participants: $participantCount');
       
       // Check cleanup criteria
       bool shouldCleanup = false;
-      String reason = '';
+      // String reason = '';  // Unused variable removed
       
       if (roomAge.inHours >= 24) {
         shouldCleanup = true;
-        reason = 'older than 24 hours';
+        // reason = 'older than 24 hours';
       } else if (roomAge.inHours >= 4 && participantCount == 0) {
         shouldCleanup = true;
-        reason = 'older than 4 hours with no participants';
+        // reason = 'older than 4 hours with no participants';
       } else if (roomAge.inMinutes >= 30 && participantCount == 0) {
         shouldCleanup = true;
-        reason = 'empty for 30+ minutes';
+        // reason = 'empty for 30+ minutes';
       } else if (roomAge.inHours >= 2 && participantCount <= 1) {
         shouldCleanup = true;
-        reason = 'only 1 or fewer participants for 2+ hours';
+        // reason = 'only 1 or fewer participants for 2+ hours';
       }
       
       if (shouldCleanup) {
-        print('🧹 Cleaning up room: $reason');
+        //print('🧹 Cleaning up room: $reason');
         
         // Mark all participants as left
         for (final participant in participants.documents) {
@@ -88,21 +88,21 @@ void main() async {
           },
         );
         
-        cleanedCount++;
-        print('✅ Room cleaned up successfully');
+        // cleanedCount++;  // Variable was removed
+        //print('✅ Room cleaned up successfully');
       } else {
-        print('✅ Room is active, keeping it');
+        //print('✅ Room is active, keeping it');
       }
       
-      print(''); // Empty line for readability
+      //print(''); // Empty line for readability
     }
     
-    print('🎉 Cleanup completed!');
-    print('📊 Total rooms processed: ${discussionRooms.documents.length}');
-    print('🧹 Rooms cleaned up: $cleanedCount');
-    print('🏃 Active rooms remaining: ${discussionRooms.documents.length - cleanedCount}');
+    //print('🎉 Cleanup completed!');
+    //print('📊 Total rooms processed: ${discussionRooms.documents.length}');
+    //print('🧹 Rooms cleaned up: $cleanedCount');
+    //print('🏃 Active rooms remaining: ${discussionRooms.documents.length - cleanedCount}');
     
   } catch (e) {
-    print('❌ Error: $e');
+    //print('❌ Error: $e');
   }
 } 

@@ -16,7 +16,6 @@ class DebatesDiscussionsScreen extends StatefulWidget {
 
 class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   final AgoraService _agoraService = AgoraService();
-  final AppwriteService _appwrite = AppwriteService();
   List<UserProfile> _activeParticipants = [];
   List<UserProfile> _audienceMembers = [];
   Map<String, bool> _participantVideoStates = {};
@@ -344,9 +343,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             height: moderatorHeight,
             child: Row(
               children: [
-                Expanded(
+                const Expanded(
                   flex: 2,
-                  child: Container(), // Empty space
+                  child: SizedBox(), // Empty space
                 ),
                 Expanded(
                   flex: 4,
@@ -356,9 +355,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                     isModerator: true,
                   ),
                 ),
-                Expanded(
+                const Expanded(
                   flex: 2,
-                  child: Container(), // Empty space
+                  child: SizedBox(), // Empty space
                 ),
               ],
             ),
@@ -1035,7 +1034,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       SnackBar(
         content: Text('Sent ${gift.emoji} ${gift.name} to $recipient!'),
         backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
+        duration: Duration(seconds: 2),
       ),
     );
   }
@@ -1473,8 +1472,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF8B5CF6),
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(12)),
                     ),
                   ),
                   child: const Text(
@@ -1587,7 +1586,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       SnackBar(
         content: Text('Sent $amount coins to $recipient!'),
         backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
+        duration: Duration(seconds: 2),
       ),
     );
   }

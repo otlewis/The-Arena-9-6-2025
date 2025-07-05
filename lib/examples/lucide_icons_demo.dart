@@ -18,13 +18,13 @@ class LucideIconsDemo extends StatelessWidget {
         title: const Text('Lucide Icons Demo'),
         backgroundColor: Colors.white,
         foregroundColor: deepPurple,
-        actions: [
+        actions: const [
           // Notification bell
           Icon(LucideIcons.bell, color: scarletRed, size: 24),
-          const SizedBox(width: 16),
+          SizedBox(width: 16),
           // Settings
           Icon(LucideIcons.settings, color: accentPurple, size: 24),
-          const SizedBox(width: 16),
+          SizedBox(width: 16),
         ],
       ),
       body: SingleChildScrollView(
@@ -155,7 +155,7 @@ class LucideIconsDemo extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             label,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 12,
               color: deepPurple,
               fontWeight: FontWeight.w500,
@@ -176,7 +176,7 @@ class LucideIconsDemo extends StatelessWidget {
             Expanded(
               child: ElevatedButton.icon(
                 onPressed: () {},
-                icon: Icon(LucideIcons.messageCircle, size: 20),
+                icon: const Icon(LucideIcons.messageCircle, size: 20),
                 label: const Text('Chat'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: scarletRed,
@@ -192,7 +192,7 @@ class LucideIconsDemo extends StatelessWidget {
             Expanded(
               child: ElevatedButton.icon(
                 onPressed: () {},
-                icon: Icon(LucideIcons.mic, size: 20),
+                icon: const Icon(LucideIcons.mic, size: 20),
                 label: const Text('Speak'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: accentPurple,
@@ -214,11 +214,11 @@ class LucideIconsDemo extends StatelessWidget {
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: () {},
-                icon: Icon(LucideIcons.userPlus, size: 20),
+                icon: const Icon(LucideIcons.userPlus, size: 20),
                 label: const Text('Follow'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: scarletRed,
-                  side: BorderSide(color: scarletRed),
+                  side: const BorderSide(color: scarletRed),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -230,11 +230,11 @@ class LucideIconsDemo extends StatelessWidget {
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: () {},
-                icon: Icon(LucideIcons.share, size: 20),
+                icon: const Icon(LucideIcons.share, size: 20),
                 label: const Text('Share'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: accentPurple,
-                  side: BorderSide(color: accentPurple),
+                  side: const BorderSide(color: accentPurple),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -253,17 +253,17 @@ class LucideIconsDemo extends StatelessWidget {
             FloatingActionButton(
               onPressed: () {},
               backgroundColor: scarletRed,
-              child: Icon(LucideIcons.plus, color: Colors.white),
+              child: const Icon(LucideIcons.plus, color: Colors.white),
             ),
             FloatingActionButton(
               onPressed: () {},
               backgroundColor: accentPurple,
-              child: Icon(LucideIcons.bell, color: Colors.white),
+              child: const Icon(LucideIcons.bell, color: Colors.white),
             ),
             FloatingActionButton(
               onPressed: () {},
               backgroundColor: deepPurple,
-              child: Icon(LucideIcons.settings, color: Colors.white),
+              child: const Icon(LucideIcons.settings, color: Colors.white),
             ),
           ],
         ),

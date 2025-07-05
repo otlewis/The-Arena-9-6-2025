@@ -156,7 +156,6 @@ class SmartCacheManager {
 
   /// Get cache statistics
   Map<String, dynamic> getCacheStats() {
-    final now = DateTime.now();
     int expiredCount = 0;
     int totalSize = 0;
 

@@ -105,7 +105,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
 
       // Wait for room setup to complete before navigation
       AppLogger().info('Waiting for room setup to stabilize before navigation...');
-      await Future.delayed(const Duration(seconds: 2));
+      await Future.delayed(Duration(seconds: 2));
       
       // Verify room exists and is properly set up before navigating
       final roomData = await _appwrite.getArenaRoom(roomId);
@@ -170,7 +170,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
           ],
         ),
         backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
+        duration: Duration(seconds: 2),
       ),
     );
   }
@@ -188,7 +188,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
           ],
         ),
         backgroundColor: Colors.red,
-        duration: const Duration(seconds: 4),
+        duration: Duration(seconds: 4),
       ),
     );
   }
@@ -613,7 +613,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
   }
 
   Widget _buildArenaCard(String roomId, String topic, String status, String challengeId, String description, int currentParticipants, bool isManual) {
-    final maxParticipants = 8;
+    const maxParticipants = 8;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),

@@ -2041,7 +2041,7 @@ class AppwriteService {
           if (excludeArenaId != null && participationArenaId == excludeArenaId) {
             // Only exclude if they have a significant role, not just audience
             if (['affirmative', 'negative', 'moderator', 'judge1', 'judge2', 'judge3'].contains(participationRole)) {
-              AppLogger().debug('🚫 Excluding user ${user.name} - already ${participationRole} in current arena');
+              AppLogger().debug('🚫 Excluding user ${user.name} - already $participationRole in current arena');
               isOccupied = true;
               break;
             }
@@ -2052,22 +2052,22 @@ class AppwriteService {
               try {
                 final arena = await getArenaRoom(participationArenaId);
                 if (arena != null && arena['status'] != 'completed') {
-                  AppLogger().debug('🚫 Excluding user ${user.name} - already ${participationRole} in active arena ${participationArenaId}');
+                  AppLogger().debug('🚫 Excluding user ${user.name} - already $participationRole in active arena $participationArenaId');
                   isOccupied = true;
                   break;
                 } else {
                   // Arena is completed or doesn't exist - clean up this participation
-                  AppLogger().debug('🧹 Cleaning up stale participation for ${user.name} in arena ${participationArenaId}');
+                  AppLogger().debug('🧹 Cleaning up stale participation for ${user.name} in arena $participationArenaId');
                   await _cleanupArenaParticipation(participation);
                 }
               } catch (e) {
                 // Arena might not exist anymore, clean up participation
-                AppLogger().debug('🧹 Arena ${participationArenaId} not found, cleaning up participation for ${user.name}');
+                AppLogger().debug('🧹 Arena $participationArenaId not found, cleaning up participation for ${user.name}');
                 await _cleanupArenaParticipation(participation);
               }
             } else if (participationRole == 'audience') {
               // Allow users who are only audience in other arenas to become moderator/judge
-              AppLogger().info('User ${user.name} can moderate/judge - they are only audience in arena ${participationArenaId}');
+              AppLogger().info('User ${user.name} can moderate/judge - they are only audience in arena $participationArenaId');
             }
           }
         }
@@ -2148,7 +2148,7 @@ class AppwriteService {
           if (excludeArenaId != null && participationArenaId == excludeArenaId) {
             // Only exclude if they have a significant role, not just audience
             if (['affirmative', 'negative', 'moderator', 'judge1', 'judge2', 'judge3'].contains(participationRole)) {
-              AppLogger().debug('🚫 Excluding user ${user.name} - already ${participationRole} in current arena');
+              AppLogger().debug('🚫 Excluding user ${user.name} - already $participationRole in current arena');
               isOccupied = true;
               break;
             }
@@ -2159,22 +2159,22 @@ class AppwriteService {
               try {
                 final arena = await getArenaRoom(participationArenaId);
                 if (arena != null && arena['status'] != 'completed') {
-                  AppLogger().debug('🚫 Excluding user ${user.name} - already ${participationRole} in active arena ${participationArenaId}');
+                  AppLogger().debug('🚫 Excluding user ${user.name} - already $participationRole in active arena $participationArenaId');
                   isOccupied = true;
                   break;
                 } else {
                   // Arena is completed or doesn't exist - clean up this participation
-                  AppLogger().debug('🧹 Cleaning up stale participation for ${user.name} in arena ${participationArenaId}');
+                  AppLogger().debug('🧹 Cleaning up stale participation for ${user.name} in arena $participationArenaId');
                   await _cleanupArenaParticipation(participation);
                 }
               } catch (e) {
                 // Arena might not exist anymore, clean up participation
-                AppLogger().debug('🧹 Arena ${participationArenaId} not found, cleaning up participation for ${user.name}');
+                AppLogger().debug('🧹 Arena $participationArenaId not found, cleaning up participation for ${user.name}');
                 await _cleanupArenaParticipation(participation);
               }
             } else if (participationRole == 'audience') {
               // Allow users who are only audience in other arenas to become moderator/judge
-              AppLogger().info('User ${user.name} can moderate/judge - they are only audience in arena ${participationArenaId}');
+              AppLogger().info('User ${user.name} can moderate/judge - they are only audience in arena $participationArenaId');
             }
           }
         }
@@ -2368,10 +2368,10 @@ class AppwriteService {
       // Try to create a test subscription to see if real-time works
       final testSubscription = realtime.subscribe(['heartbeat']);
       
-      AppLogger().debug('🔗 Test subscription created: ${testSubscription != null}');
+      AppLogger().debug('🔗 Test subscription created successfully');
       
       // Close test subscription after 1 second
-      Future.delayed(const Duration(seconds: 1), () {
+      Future.delayed(Duration(seconds: 1), () {
         testSubscription.close();
         AppLogger().debug('🔗 Test subscription closed');
       });
@@ -2903,7 +2903,7 @@ class AppwriteService {
     String? description,
   }) async {
     // Use a deterministic document ID for waiting rooms
-    final documentId = 'waiting_${creatorId}';
+    final documentId = 'waiting_$creatorId';
 
     // Global lock check - prevent ANY room creation by this user
     if (_roomCreationLocks[creatorId] == true) {

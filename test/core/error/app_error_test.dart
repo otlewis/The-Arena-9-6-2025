@@ -45,7 +45,7 @@ void main() {
     });
 
     test('should return AppError unchanged if already AppError', () {
-      final originalAppError = const ValidationError(
+      const originalAppError = ValidationError(
         message: 'Custom validation error',
         code: 'VALIDATION_001',
       );

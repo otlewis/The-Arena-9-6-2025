@@ -104,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
           SnackBar(
             content: Text('${challenge.challengerName} declined your challenge'),
             backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 3),
+            duration: Duration(seconds: 3),
           ),
         );
       }

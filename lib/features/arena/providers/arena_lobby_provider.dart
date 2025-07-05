@@ -141,9 +141,9 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
 
       // Ensure proper typing for web compatibility (fix JSArray issues)
       final List<Map<String, dynamic>> typedChallengeArenas = 
-          challengeArenas?.cast<Map<String, dynamic>>() ?? [];
+          challengeArenas.cast<Map<String, dynamic>>() ?? [];
       final List<Map<String, dynamic>> typedManualArenas = 
-          manualArenas?.cast<Map<String, dynamic>>() ?? [];
+          manualArenas.cast<Map<String, dynamic>>() ?? [];
       
       _logger.debug('📈 ARENA FETCH: Challenge arenas: ${typedChallengeArenas.length}, Manual arenas: ${typedManualArenas.length}');
       

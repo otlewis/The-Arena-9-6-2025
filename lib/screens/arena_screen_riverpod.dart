@@ -1,17 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:appwrite/appwrite.dart';
-import '../services/appwrite_service.dart';
-import '../services/challenge_messaging_service.dart';
-import '../services/sound_service.dart';
 import '../widgets/user_avatar.dart';
-import '../widgets/debater_invite_choice_modal.dart';
-import '../models/user_profile.dart';
-import 'dart:async';
-import 'dart:io' show Platform;
-import '../main.dart' show ArenaApp, getIt;
-import '../core/logging/app_logger.dart';
 import '../features/arena/providers/arena_comprehensive_provider.dart';
 import '../features/arena/models/arena_state.dart';
 
@@ -56,7 +45,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
     final participants = ref.watch(arenaParticipantsProvider(arenaParams));
     final audience = ref.watch(arenaAudienceProvider(arenaParams));
     final judgingState = ref.watch(arenaJudgingProvider(arenaParams));
-    final uiState = ref.watch(arenaUIStateProvider(arenaParams));
+    // final uiState = ref.watch(arenaUIStateProvider(roomId));
     final networkHealthy = ref.watch(arenaNetworkHealthProvider(arenaParams));
     
     // Get notifier for actions
@@ -74,7 +63,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
               const SizedBox(height: 16),
               Text(
                 'Loading Arena...',
-                style: TextStyle(color: Colors.white.withOpacity(0.8)),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
               ),
             ],
           ),
@@ -90,7 +79,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
+              const Icon(
                 Icons.error_outline,
                 color: Colors.red,
                 size: 64,
@@ -172,8 +161,8 @@ class ArenaScreenRiverpod extends ConsumerWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF6B46C1).withOpacity(0.9),
-            const Color(0xFF8B5CF6).withOpacity(0.9),
+            const Color(0xFF6B46C1).withValues(alpha: 0.9),
+            const Color(0xFF8B5CF6).withValues(alpha: 0.9),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -214,7 +203,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
                     Text(
                       networkHealthy ? 'Connected' : 'Reconnecting...',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.8),
+                        color: Colors.white.withValues(alpha: 0.8),
                         fontSize: 12,
                       ),
                     ),
@@ -228,7 +217,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -252,8 +241,8 @@ class ArenaScreenRiverpod extends ConsumerWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF6B46C1).withOpacity(0.9),
-            const Color(0xFF8B5CF6).withOpacity(0.9),
+            const Color(0xFF6B46C1).withValues(alpha: 0.9),
+            const Color(0xFF8B5CF6).withValues(alpha: 0.9),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -261,7 +250,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha: 0.3),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -273,7 +262,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
           Text(
             state.currentPhase.description,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white.withValues(alpha: 0.9),
               fontSize: 14,
             ),
             textAlign: TextAlign.center,
@@ -390,9 +379,9 @@ class ArenaScreenRiverpod extends ConsumerWidget {
                 final member = audience[index];
                 return ListTile(
                   leading: UserAvatar(
-                    imageUrl: member.avatar,
-                    name: member.name,
-                    size: 32,
+                    avatarUrl: member.avatar,
+                    initials: member.name.isNotEmpty ? member.name[0] : '?',
+                    radius: 16,
                   ),
                   title: Text(
                     member.name,
@@ -412,9 +401,9 @@ class ArenaScreenRiverpod extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -438,9 +427,9 @@ class ArenaScreenRiverpod extends ConsumerWidget {
           const Spacer(),
           if (participant != null) ...[
             UserAvatar(
-              imageUrl: participant.avatar,
-              name: participant.name,
-              size: 24,
+              avatarUrl: participant.avatar,
+              initials: participant.name.isNotEmpty ? participant.name[0] : '?',
+              radius: 12,
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -476,9 +465,9 @@ class ArenaScreenRiverpod extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.2),
+                color: Colors.green.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.green.withOpacity(0.5)),
+                border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -501,7 +490,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -708,7 +697,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.2),
+              color: Colors.green.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -726,7 +715,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.grey.withOpacity(0.2),
+              color: Colors.grey.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
@@ -791,7 +780,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.3),
+        color: Colors.black.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(

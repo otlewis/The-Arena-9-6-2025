@@ -42,7 +42,7 @@ enum DebatePhase {
   
   /// Returns the next phase in the debate sequence
   DebatePhase? get nextPhase {
-    final phases = DebatePhase.values;
+    const phases = DebatePhase.values;
     final currentIndex = phases.indexOf(this);
     if (currentIndex < phases.length - 1) {
       return phases[currentIndex + 1];

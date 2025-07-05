@@ -39,7 +39,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   // Colors
   static const Color scarletRed = Color(0xFFFF2400);
   static const Color lightScarlet = Color(0xFFFFF1F0);
-  static const Color accentPurple = Color(0xFF8B5CF6);
   static const Color deepPurple = Color(0xFF6B46C1);
 
   // Available interests
@@ -339,7 +338,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withOpacity(0.1)),
+        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -359,7 +358,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               controller: _nameController,
               decoration: InputDecoration(
                 labelText: 'Display Name',
-                prefixIcon: Icon(Icons.person, color: scarletRed),
+                prefixIcon: const Icon(Icons.person, color: scarletRed),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -382,7 +381,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               maxLength: 200,
               decoration: InputDecoration(
                 labelText: 'Bio',
-                prefixIcon: Icon(Icons.edit, color: scarletRed),
+                prefixIcon: const Icon(Icons.edit, color: scarletRed),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -398,7 +397,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               controller: _locationController,
               decoration: InputDecoration(
                 labelText: 'Location',
-                prefixIcon: Icon(Icons.location_on, color: scarletRed),
+                prefixIcon: const Icon(Icons.location_on, color: scarletRed),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -419,7 +418,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withOpacity(0.1)),
+        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -439,7 +438,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               controller: _websiteController,
               decoration: InputDecoration(
                 labelText: 'Website',
-                prefixIcon: Icon(Icons.language, color: scarletRed),
+                prefixIcon: const Icon(Icons.language, color: scarletRed),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -460,7 +459,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               controller: _xController,
               decoration: InputDecoration(
                 labelText: 'X Handle',
-                prefixIcon: Icon(Icons.alternate_email, color: scarletRed),
+                prefixIcon: const Icon(Icons.alternate_email, color: scarletRed),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -476,7 +475,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               controller: _linkedinController,
               decoration: InputDecoration(
                 labelText: 'LinkedIn Handle',
-                prefixIcon: Icon(Icons.business, color: scarletRed),
+                prefixIcon: const Icon(Icons.business, color: scarletRed),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -492,7 +491,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               controller: _youtubeController,
               decoration: InputDecoration(
                 labelText: 'YouTube Handle',
-                prefixIcon: Icon(Icons.play_circle, color: scarletRed),
+                prefixIcon: const Icon(Icons.play_circle, color: scarletRed),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -508,7 +507,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               controller: _facebookController,
               decoration: InputDecoration(
                 labelText: 'Facebook Handle',
-                prefixIcon: Icon(Icons.facebook, color: scarletRed),
+                prefixIcon: const Icon(Icons.facebook, color: scarletRed),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -524,7 +523,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               controller: _instagramController,
               decoration: InputDecoration(
                 labelText: 'Instagram Handle',
-                prefixIcon: Icon(Icons.camera_alt, color: scarletRed),
+                prefixIcon: const Icon(Icons.camera_alt, color: scarletRed),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -546,7 +545,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withOpacity(0.1)),
+        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -603,7 +602,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withOpacity(0.1)),
+        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),

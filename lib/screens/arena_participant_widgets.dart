@@ -25,7 +25,7 @@ class ArenaParticipantWidgets {
               color: Colors.white54,
               size: 16,
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Text(
               'No audience yet',
               style: TextStyle(
@@ -52,7 +52,7 @@ class ArenaParticipantWidgets {
                 color: ArenaParticipantColors.accentPurple,
                 size: 16,
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Text(
                 'Audience (${audience.length})',
                 style: TextStyle(
@@ -87,7 +87,7 @@ class ArenaParticipantWidgets {
                     initials: audienceMember.name.isNotEmpty ? audienceMember.name[0] : '?',
                     radius: 28, // Slightly smaller to fit better with reduced spacing
                   ),
-                  const SizedBox(height: 3),
+                  SizedBox(height: 3),
                   Text(
                     audienceMember.name.length > 7 
                         ? '${audienceMember.name.substring(0, 7)}...'
@@ -156,7 +156,7 @@ class ArenaParticipantWidgets {
                 color: Colors.amber,
                 size: 24,
               ),
-              const SizedBox(height: 4),
+              SizedBox(height: 4),
             ],
             
             // Title
@@ -170,7 +170,7 @@ class ArenaParticipantWidgets {
               textAlign: TextAlign.center,
             ),
             
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             
             // Participant content
             if (participant != null)
@@ -229,7 +229,7 @@ class ArenaParticipantWidgets {
               overflow: TextOverflow.ellipsis,
             ),
             
-            const SizedBox(height: 6),
+            SizedBox(height: 6),
             
             // Participant content
             if (participant != null)
@@ -251,7 +251,7 @@ class ArenaParticipantWidgets {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.people_outline, color: Colors.white54, size: 20),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Text(
               'No audience members yet',
               style: TextStyle(
@@ -282,7 +282,7 @@ class ArenaParticipantWidgets {
                 color: ArenaParticipantColors.accentPurple,
                 size: 16,
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Text(
                 'Audience (${audience.length})',
                 style: const TextStyle(
@@ -293,7 +293,7 @@ class ArenaParticipantWidgets {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           // Grid of audience members with fixed height
           Container(
             height: gridHeight,
@@ -317,7 +317,7 @@ class ArenaParticipantWidgets {
                       initials: audienceMember.name.isNotEmpty ? audienceMember.name[0] : '?',
                       radius: 20,
                     ),
-                    const SizedBox(height: 2),
+                    SizedBox(height: 2),
                     Text(
                       audienceMember.name.length > 6
                           ? '${audienceMember.name.substring(0, 6)}...'
@@ -396,7 +396,7 @@ class ArenaParticipantWidgets {
         
         // Winner badge
         if (isWinner && !isSmall) ...[
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
@@ -460,7 +460,7 @@ class ArenaParticipantWidgets {
             initials: user.name.isNotEmpty ? user.name[0] : '?',
             radius: 25,
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -508,7 +508,7 @@ class ArenaParticipantWidgets {
               initials: participant.name.isNotEmpty ? participant.name[0] : '?',
               radius: 50,
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Text(
               participant.name,
               style: const TextStyle(
@@ -516,14 +516,14 @@ class ArenaParticipantWidgets {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             if (participant.bio?.isNotEmpty == true) ...[
               Text(
                 participant.bio!,
                 style: const TextStyle(fontSize: 14),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
             ],
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,

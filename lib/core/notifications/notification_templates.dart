@@ -33,17 +33,17 @@ class NotificationTemplates {
       createdAt: DateTime.now(),
       expiresAt: DateTime.now().add(const Duration(hours: 24)),
       actions: [
-        NotificationAction(
+        const NotificationAction(
           id: 'accept',
           label: 'Accept',
           data: {'action': 'accept'},
         ),
-        NotificationAction(
+        const NotificationAction(
           id: 'decline', 
           label: 'Decline',
           data: {'action': 'decline'},
         ),
-        NotificationAction(
+        const NotificationAction(
           id: 'view_details',
           label: 'View Details',
           deepLink: '/challenges/pending',
@@ -293,7 +293,7 @@ class NotificationTemplates {
       createdAt: DateTime.now(),
       imageUrl: iconUrl,
       actions: [
-        NotificationAction(
+        const NotificationAction(
           id: 'view_achievements',
           label: 'View All',
           deepLink: '/profile/achievements',

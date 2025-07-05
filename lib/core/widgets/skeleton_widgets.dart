@@ -11,18 +11,18 @@ class SkeletonWidgets {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Row(
+            const Row(
               children: [
                 _SkeletonItem.circular(size: 60),
-                const SizedBox(width: 16),
+                SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _SkeletonItem.rect(width: 120, height: 20),
-                      const SizedBox(height: 8),
+                      SizedBox(height: 8),
                       _SkeletonItem.rect(width: 200, height: 16),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4),
                       _SkeletonItem.rect(width: 80, height: 14),
                     ],
                   ),
@@ -46,33 +46,33 @@ class SkeletonWidgets {
 
   /// Arena room card skeleton
   static Widget arenaRoomCard() {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    return const Card(
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 _SkeletonItem.rect(width: 60, height: 20),
-                const Spacer(),
+                Spacer(),
                 _SkeletonItem.circular(size: 24),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             _SkeletonItem.rect(width: double.infinity, height: 24),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             _SkeletonItem.rect(width: 250, height: 16),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Row(
               children: [
                 _SkeletonItem.circular(size: 32),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 _SkeletonItem.circular(size: 32),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 _SkeletonItem.circular(size: 32),
-                const Spacer(),
+                Spacer(),
                 _SkeletonItem.rect(width: 80, height: 32, borderRadius: 16),
               ],
             ),
@@ -84,26 +84,26 @@ class SkeletonWidgets {
 
   /// Club card skeleton
   static Widget clubCard() {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    return const Card(
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
         child: Row(
           children: [
             _SkeletonItem.circular(size: 50),
-            const SizedBox(width: 16),
+            SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _SkeletonItem.rect(width: 150, height: 18),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   _SkeletonItem.rect(width: 200, height: 14),
-                  const SizedBox(height: 4),
+                  SizedBox(height: 4),
                   Row(
                     children: [
                       _SkeletonItem.rect(width: 60, height: 12),
-                      const SizedBox(width: 16),
+                      SizedBox(width: 16),
                       _SkeletonItem.rect(width: 80, height: 12),
                     ],
                   ),
@@ -119,23 +119,23 @@ class SkeletonWidgets {
 
   /// Message card skeleton
   static Widget messageCard() {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    return const Card(
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 _SkeletonItem.circular(size: 40),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _SkeletonItem.rect(width: 120, height: 16),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4),
                       _SkeletonItem.rect(width: 80, height: 12),
                     ],
                   ),
@@ -143,17 +143,17 @@ class SkeletonWidgets {
                 _SkeletonItem.rect(width: 60, height: 12),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             _SkeletonItem.rect(width: double.infinity, height: 18),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             _SkeletonItem.rect(width: 250, height: 16),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Row(
               children: [
                 _SkeletonItem.rect(width: 80, height: 28, borderRadius: 14),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 _SkeletonItem.rect(width: 60, height: 28, borderRadius: 14),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 _SkeletonItem.rect(width: 90, height: 28, borderRadius: 14),
               ],
             ),
@@ -193,10 +193,10 @@ class SkeletonWidgets {
   }
 
   static Widget _buildStatSkeleton() {
-    return Column(
+    return const Column(
       children: [
         _SkeletonItem.rect(width: 40, height: 24),
-        const SizedBox(height: 4),
+        SizedBox(height: 4),
         _SkeletonItem.rect(width: 60, height: 14),
       ],
     );

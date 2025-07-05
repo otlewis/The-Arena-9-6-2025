@@ -17,7 +17,6 @@ class ArenaRealtimeService {
   VoidCallback? _onRoomDataChanged;
   Function(String)? _onRoomClosed;
   VoidCallback? _onConnectionLost;
-  VoidCallback? _onConnectionRestored;
   
   bool _isConnected = false;
   int _reconnectAttempts = 0;
@@ -81,7 +80,7 @@ class ArenaRealtimeService {
         
         // Check if room was closed
         final payload = message.payload;
-        if (payload != null && payload['status'] == ArenaConstants.roomStatusClosed) {
+        if (payload['status'] == ArenaConstants.roomStatusClosed) {
           _onRoomClosed?.call(ArenaConstants.roomStatusClosed);
         }
       }

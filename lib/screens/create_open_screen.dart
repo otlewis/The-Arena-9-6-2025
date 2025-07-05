@@ -18,14 +18,12 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
   
   bool _showCreateForm = false;
   bool _isLoading = false;
-  bool _isCreatingRoom = false;
   String _selectedCategory = 'All';
   String _createFormSelectedCategory = ''; // Separate state for create form
   
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _roomTitleController = TextEditingController();
   final TextEditingController _roomDescriptionController = TextEditingController();
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   
   List<Map<String, dynamic>> _availableRooms = [];
   String? _currentUserId;
@@ -99,12 +97,11 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
       
       // Then load active rooms
       final rooms = await _appwriteService.getRooms();
-      if (rooms != null) {
-        setState(() {
-          _availableRooms = rooms;
-          _isLoading = false;
-        });
-      }
+      // Note: getRooms() is guaranteed to return a non-null List
+      setState(() {
+        _availableRooms = rooms;
+        _isLoading = false;
+      });
     } catch (e) {
       AppLogger().debug('Error loading rooms: $e');
       setState(() => _isLoading = false);
@@ -241,7 +238,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
         SnackBar(
           content: const Text('Please select a specific category for your room'),
           backgroundColor: scarletRed,
-          duration: const Duration(seconds: 3),
+          duration: Duration(seconds: 3),
         ),
       );
       return;

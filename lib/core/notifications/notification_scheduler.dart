@@ -3,7 +3,6 @@ import 'dart:math';
 
 import 'notification_service.dart';
 import 'notification_types.dart';
-import 'notification_templates.dart';
 import '../logging/app_logger.dart';
 
 /// Scheduled notification entry

@@ -1,14 +1,13 @@
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
-import 'dart:io' show Platform;
 import '../services/appwrite_service.dart';
 import '../models/user_profile.dart';
 import '../core/logging/app_logger.dart';
 
 class ArenaIOSOptimizations {
   // Static cache variables for iOS optimization
-  static Map<String, dynamic> _iosRoomCache = {};
-  static Map<String, List<Map<String, dynamic>>> _iosParticipantCache = {};
-  static Map<String, UserProfile> _iosUserProfileCache = {};
+  static final Map<String, dynamic> _iosRoomCache = {};
+  static final Map<String, List<Map<String, dynamic>>> _iosParticipantCache = {};
+  static final Map<String, UserProfile> _iosUserProfileCache = {};
   
   final AppwriteService _appwrite;
   bool _isIOSOptimizationEnabled = false;
@@ -98,20 +97,6 @@ class ArenaIOSOptimizations {
     }
   }
   
-  // Update iOS cache
-  void _updateIOSCache(String roomId, Map<String, dynamic> roomData, List<Map<String, dynamic>> participants) {
-    if (!_isIOSOptimizationEnabled) return;
-    
-    try {
-      _iosRoomCache[roomId] = roomData;
-      _iosParticipantCache[roomId] = participants;
-      _lastCacheUpdate = DateTime.now();
-      
-      AppLogger().debug('📱 iOS cache updated for room: $roomId');
-    } catch (e) {
-      AppLogger().warning('Error updating iOS cache: $e');
-    }
-  }
   
   // Check if cache is valid (within 30 seconds)
   bool _isCacheValid() {
@@ -128,17 +113,17 @@ class ArenaIOSOptimizations {
     try {
       AppLogger().debug('📱 Loading room data with iOS optimizations...');
       
-      final roomData = await _appwrite.getDocument(
+      final roomData = await _appwrite.databases.getDocument(
         databaseId: 'arena_db',
         collectionId: 'debate_rooms',
         documentId: roomId,
       );
       
       // Cache the room data for iOS
-      _iosRoomCache[roomId] = roomData;
+      _iosRoomCache[roomId] = roomData.data;
       
       AppLogger().info('📱 Room data loaded and cached for iOS');
-      return roomData;
+      return roomData.data;
     } catch (e) {
       AppLogger().error('Error loading room data with iOS optimizations: $e');
       return null;
@@ -152,7 +137,7 @@ class ArenaIOSOptimizations {
     try {
       AppLogger().debug('📱 Loading participants with iOS optimizations...');
       
-      final participantsData = await _appwrite.listDocuments(
+      final participantsData = await _appwrite.databases.listDocuments(
         databaseId: 'arena_db',
         collectionId: 'room_participants',
         queries: [
@@ -160,7 +145,7 @@ class ArenaIOSOptimizations {
         ],
       );
       
-      final participants = participantsData['documents'] as List<Map<String, dynamic>>;
+      final participants = participantsData.documents.map((doc) => doc.data).toList();
       
       // Cache participants for iOS
       _iosParticipantCache[roomId] = participants;
@@ -195,23 +180,23 @@ class ArenaIOSOptimizations {
     }
     
     try {
-      final userData = await _appwrite.getDocument(
+      final userData = await _appwrite.databases.getDocument(
         databaseId: 'arena_db',
         collectionId: 'user_profiles',
         documentId: userId,
       );
       
       final userProfile = UserProfile(
-        id: userData['\$id'],
-        name: userData['name'] ?? 'Unknown User',
-        email: userData['email'] ?? '',
-        avatar: userData['avatar'],
-        bio: userData['bio'],
-        reputation: userData['reputation'] ?? 0,
-        totalWins: userData['totalWins'] ?? 0,
-        totalDebates: userData['totalDebates'] ?? 0,
-        createdAt: DateTime.parse(userData['\$createdAt']),
-        updatedAt: DateTime.parse(userData['\$updatedAt']),
+        id: userData.$id,
+        name: userData.data['name'] ?? 'Unknown User',
+        email: userData.data['email'] ?? '',
+        avatar: userData.data['avatar'],
+        bio: userData.data['bio'],
+        reputation: userData.data['reputation'] ?? 0,
+        totalWins: userData.data['totalWins'] ?? 0,
+        totalDebates: userData.data['totalDebates'] ?? 0,
+        createdAt: DateTime.parse(userData.$createdAt),
+        updatedAt: DateTime.parse(userData.$updatedAt),
       );
       
       // Cache for future use

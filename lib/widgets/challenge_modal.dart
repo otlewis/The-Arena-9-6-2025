@@ -28,7 +28,6 @@ class _ChallengeModalState extends State<ChallengeModal>
   late Animation<double> _scaleAnimation;
   late Animation<double> _shimmerAnimation;
   bool _isResponding = false;
-  final ThemeService _themeService = ThemeService();
 
   // Colors matching app theme
   static const Color scarletRed = Color(0xFFFF2400);
@@ -44,7 +43,7 @@ class _ChallengeModalState extends State<ChallengeModal>
       vsync: this,
     );
     _shimmerController = AnimationController(
-      duration: const Duration(seconds: 2),
+      duration: Duration(seconds: 2),
       vsync: this,
     );
     _scaleAnimation = CurvedAnimation(
@@ -90,7 +89,7 @@ class _ChallengeModalState extends State<ChallengeModal>
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
+                    color: Colors.black.withValues(alpha: 0.2),
                     blurRadius: 20,
                     spreadRadius: 5,
                   ),
@@ -218,7 +217,7 @@ class _ChallengeModalState extends State<ChallengeModal>
             decoration: BoxDecoration(
               color: lightScarlet,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: scarletRed.withOpacity(0.2)),
+              border: Border.all(color: scarletRed.withValues(alpha: 0.2)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -271,7 +270,7 @@ class _ChallengeModalState extends State<ChallengeModal>
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: challengerPosition == 'affirmative' ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+              color: challengerPosition == 'affirmative' ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: challengerPosition == 'affirmative' ? Colors.green : Colors.red,

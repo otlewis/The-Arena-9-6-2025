@@ -6,6 +6,7 @@ import 'edit_profile_screen.dart';
 import 'club_details_screen.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:flutter/foundation.dart';
+import '../core/logging/app_logger.dart';
 class ProfileScreen extends StatefulWidget {
   final VoidCallback? onLogout;
   
@@ -64,7 +65,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final memberships = await _appwrite.getUserMemberships(user.$id);
           _memberships = await _loadMembershipsWithClubNames(memberships);
         } catch (e) {
-          print('Error loading memberships: $e');
+          AppLogger().error('Error loading memberships', e);
           _memberships = [];
         }
 
@@ -77,7 +78,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _followingCount = followingCount;
           });
         } catch (e) {
-          print('Error loading follow counts: $e');
+          AppLogger().error('Error loading follow counts', e);
         }
 
         setState(() => _isLoading = false);
@@ -89,7 +90,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // Handle the case where user is not authenticated (guest)
       if (e.toString().contains('general_unauthorized_scope') || 
           e.toString().contains('missing scope')) {
-        print('User not authenticated - showing guest profile');
+        AppLogger().warning('User not authenticated - showing guest profile');
         return;
       }
       // Only show error for unexpected errors
@@ -119,7 +120,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           enhancedMembership['clubName'] = club['name'] ?? 'Unknown Club';
           enhancedMemberships.add(enhancedMembership);
         } catch (e) {
-          print('Error loading club name for $clubId: $e');
+          AppLogger().error('Error loading club name for $clubId', e);
           // Add membership without club name if there's an error
           final enhancedMembership = Map<String, dynamic>.from(membership);
           enhancedMembership['clubName'] = 'Unknown Club';
@@ -399,7 +400,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withOpacity(0.1)),
+        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -510,7 +511,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withOpacity(0.1)),
+        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -541,7 +542,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withOpacity(0.1)),
+        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -591,7 +592,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withOpacity(0.1)),
+        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -665,7 +666,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: scarletRed.withOpacity(0.1)),
+                        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
                       ),
                       child: const Padding(
                         padding: EdgeInsets.all(16),
@@ -680,7 +681,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: scarletRed.withOpacity(0.1)),
+                        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
                       ),
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -738,10 +739,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isPresident ? Colors.orange.withOpacity(0.1) : accentPurple.withOpacity(0.1),
+          color: isPresident ? Colors.orange.withValues(alpha: 0.1) : accentPurple.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isPresident ? Colors.orange.withOpacity(0.3) : accentPurple.withOpacity(0.3),
+            color: isPresident ? Colors.orange.withValues(alpha: 0.3) : accentPurple.withValues(alpha: 0.3),
           ),
         ),
         child: Row(
@@ -850,7 +851,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withOpacity(0.1)),
+        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -885,9 +886,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: accentPurple.withOpacity(0.05),
+                color: accentPurple.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: accentPurple.withOpacity(0.2)),
+                border: Border.all(color: accentPurple.withValues(alpha: 0.2)),
               ),
               child: Row(
                 children: [
@@ -929,9 +930,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.amber.withOpacity(0.05),
+                color: Colors.amber.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [

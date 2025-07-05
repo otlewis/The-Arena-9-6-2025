@@ -236,7 +236,7 @@ class ArenaIOSOptimizationService {
         _iosUserProfileCache.clear();
         
         // Keep the last half
-        final keepCount = ArenaConstants.iosMaxCachedProfiles ~/ 2;
+        const keepCount = ArenaConstants.iosMaxCachedProfiles ~/ 2;
         for (int i = entries.length - keepCount; i < entries.length; i++) {
           _iosUserProfileCache[entries[i].key] = entries[i].value;
         }

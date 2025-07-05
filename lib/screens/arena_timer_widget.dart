@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
 import '../core/logging/app_logger.dart';
 import '../services/sound_service.dart';
 
@@ -44,7 +43,7 @@ enum DebatePhase {
   }
   
   DebatePhase? get nextPhase {
-    final phases = DebatePhase.values;
+    const phases = DebatePhase.values;
     final currentIndex = phases.indexOf(this);
     if (currentIndex < phases.length - 1) {
       return phases[currentIndex + 1];

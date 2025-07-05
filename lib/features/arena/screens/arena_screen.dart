@@ -10,7 +10,6 @@ import '../widgets/arena_layout/arena_main_view.dart';
 import '../dialogs/moderator_control_modal.dart';
 import '../dialogs/timer_control_modal.dart';
 import '../dialogs/results_modal.dart';
-import '../dialogs/room_closing_modal.dart';
 
 /// New Arena Screen - Orchestrates all components
 /// This maintains EXACTLY the same functionality as the original 7000+ line file
@@ -165,27 +164,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         winner: _stateController.winner ?? '',
         affirmativeDebater: _stateController.participants['affirmative'],
         negativeDebater: _stateController.participants['negative'],
-        judgments: [], // TODO: Load actual judgments
+        judgments: const [], // TODO: Load actual judgments
         topic: widget.topic,
       ),
     );
   }
 
-  /// Show room closing modal
-  void _showRoomClosingModal() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => RoomClosingModal(
-        initialSeconds: 10,
-        onCountdownComplete: () {
-          Navigator.of(context).pop();
-          _navigationService.forceNavigationWithCallback(context, null);
-        },
-        onForceNavigation: () => _navigationService.forceNavigationWithCallback(context, null),
-      ),
-    );
-  }
 
   // Placeholder methods for functionality that would need full implementation
   void _handleEmergencyReset() {

@@ -1,7 +1,17 @@
 import 'dart:io';
-import 'package:appwrite/appwrite.dart';
+// import 'package:appwrite/appwrite.dart';  // Unused - commented out
+
+// NOTE: This file contains database setup methods that are not available in the client-side Appwrite SDK
+// These methods (createStringAttribute, createDatetimeAttribute, etc.) are only available in server-side SDKs
+// Database schema should be set up through the Appwrite Console instead
+// This file is commented out to prevent compilation errors
 
 void main() async {
+  // print('⚠️  This setup script is disabled - use Appwrite Console for database schema setup');
+  // print('Database schema methods are not available in client-side SDK');
+  exit(0);
+  
+  /*
   // Initialize Appwrite client
   final client = Client()
     ..setEndpoint('https://cloud.appwrite.io/v1')
@@ -203,4 +213,5 @@ void main() async {
     print('The collection might already be created. You can check in your Appwrite console.');
     exit(1);
   }
+  */
 } 

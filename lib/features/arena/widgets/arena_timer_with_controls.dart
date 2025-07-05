@@ -126,7 +126,7 @@ class _ArenaTimerWithControlsState extends ConsumerState<ArenaTimerWithControls>
     } else {
       statusIndicator = Container(
         margin: const EdgeInsets.only(right: 8),
-        child: Icon(Icons.stop, color: Colors.grey, size: 16),
+        child: const Icon(Icons.stop, color: Colors.grey, size: 16),
       );
     }
 
@@ -207,9 +207,9 @@ class _ArenaTimerWithControlsState extends ConsumerState<ArenaTimerWithControls>
             mainAxisSize: MainAxisSize.min,
         children: [
           Row(
-            children: [
+            children: const [
               Icon(Icons.admin_panel_settings, size: 16, color: Colors.blue),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Text(
                 'Moderator Timer Controls',
                 style: TextStyle(
@@ -410,7 +410,7 @@ class _ArenaTimerWithControlsState extends ConsumerState<ArenaTimerWithControls>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${seconds > 0 ? 'Added' : 'Removed'} ${seconds.abs()} seconds'),
-            duration: const Duration(seconds: 1),
+            duration: Duration(seconds: 1),
           ),
         );
       }
@@ -436,7 +436,7 @@ class _ArenaTimerWithControlsState extends ConsumerState<ArenaTimerWithControls>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Timer set to ${(seconds / 60).toStringAsFixed(1)} minutes'),
-            duration: const Duration(seconds: 1),
+            duration: Duration(seconds: 1),
           ),
         );
       }

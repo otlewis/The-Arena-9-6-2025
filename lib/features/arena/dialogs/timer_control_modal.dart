@@ -60,10 +60,10 @@ class _TimerControlModalState extends State<TimerControlModal> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Row(
+      title: const Row(
         children: [
           Icon(Icons.timer, color: Colors.purple),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           Text('Timer Controls'),
         ],
       ),

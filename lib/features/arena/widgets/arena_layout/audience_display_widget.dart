@@ -19,7 +19,7 @@ class AudienceDisplayWidget extends StatelessWidget {
       return Container(
         height: 60,
         alignment: Alignment.center,
-        child: Row(
+        child: const Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
@@ -27,7 +27,7 @@ class AudienceDisplayWidget extends StatelessWidget {
               color: Colors.white54,
               size: 16,
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Text(
               'No audience yet',
               style: TextStyle(
@@ -49,7 +49,7 @@ class AudienceDisplayWidget extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.people,
                 color: ArenaColors.accentPurple,
                 size: 16,
@@ -57,7 +57,7 @@ class AudienceDisplayWidget extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 'Audience (${audience.length})',
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -72,7 +72,7 @@ class AudienceDisplayWidget extends StatelessWidget {
           child: GridView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             physics: const BouncingScrollPhysics(), // Enable scrolling
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 4, // 4 users across
               crossAxisSpacing: 6, // Reduced spacing
               mainAxisSpacing: 6, // Reduced spacing  
@@ -94,7 +94,7 @@ class AudienceDisplayWidget extends StatelessWidget {
                     audienceMember.name.length > 7 
                         ? '${audienceMember.name.substring(0, 7)}...'
                         : audienceMember.name,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.white70,
                       fontSize: 8,
                       fontWeight: FontWeight.w500,

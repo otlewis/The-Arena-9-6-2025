@@ -84,7 +84,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
       }
 
       // Navigate to Arena and refresh lobby when returning
-      final navigationResult = await Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => ArenaScreen(
@@ -163,7 +163,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
         }
 
         // Navigate to the created arena
-        final navigationResult = await Navigator.push(
+        await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => ArenaScreen(
@@ -232,7 +232,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
       );
 
       // Navigate to demo arena
-      final navigationResult = await Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => ArenaScreen(
@@ -418,7 +418,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
   }
 
   Widget _buildArenaCard(String roomId, String topic, String status, String challengeId, String description, int currentParticipants, bool isManual) {
-    final maxParticipants = 8; // Default since field doesn't exist in schema
+    const maxParticipants = 8; // Default since field doesn't exist in schema
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -804,7 +804,6 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
   final _descriptionController = TextEditingController();
 
   // Colors
-  static const Color scarletRed = Color(0xFFFF2400);
   static const Color accentPurple = Color(0xFF8B5CF6);
   static const Color deepPurple = Color(0xFF6B46C1);
 

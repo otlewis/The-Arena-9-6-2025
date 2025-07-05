@@ -167,7 +167,7 @@ class ArenaNavigationService {
       
     } catch (e) {
       AppLogger().error('🚪 EXIT: Error closing room: $e');
-      throw e; // Re-throw to trigger fallback navigation
+      rethrow; // Re-throw to trigger fallback navigation
     }
   }
 
@@ -209,7 +209,7 @@ class ArenaNavigationService {
       
     } catch (e) {
       AppLogger().error('🚪 EXIT: Error removing current user from room: $e');
-      throw e; // Re-throw to trigger fallback navigation
+      rethrow; // Re-throw to trigger fallback navigation
     }
   }
 
