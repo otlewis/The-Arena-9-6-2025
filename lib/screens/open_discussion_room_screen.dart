@@ -1287,7 +1287,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                     const SizedBox(width: 2),
                     Text(
                       '${_participants.length}',
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: accentPurple,
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
@@ -1305,7 +1305,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                   children: [
                     IconButton(
                       onPressed: _showModerationModal,
-                      icon: Icon(
+                      icon: const Icon(
                         Icons.admin_panel_settings,
                         color: scarletRed,
                         size: 16,
@@ -1354,12 +1354,12 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
 
   Widget _buildModeratorSection() {
     final moderator = _moderator;
-    if (moderator == null) return Container(); // No moderator section if no moderator
+    if (moderator == null) return const SizedBox(); // No moderator section if no moderator
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        const Text(
           'Room Moderator',
           style: TextStyle(
             color: deepPurple,
@@ -1387,7 +1387,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       children: [
         Text(
           'Speakers (${_speakers.length})',
-          style: TextStyle(
+          style: const TextStyle(
             color: deepPurple,
             fontSize: 16,
             fontWeight: FontWeight.w600,
@@ -1452,7 +1452,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       children: [
         Text(
           'Audience (${_audience.length})',
-          style: TextStyle(
+          style: const TextStyle(
             color: deepPurple,
             fontSize: 16,
             fontWeight: FontWeight.w600,
@@ -1592,10 +1592,10 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                 child: Container(
                   width: size * 0.3,
                   height: size * 0.3,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: scarletRed,
                     shape: BoxShape.circle,
-                    boxShadow: const [
+                    boxShadow: [
                       BoxShadow(
                         color: Colors.black26,
                         blurRadius: 2,
@@ -1637,9 +1637,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                 Container(
                   margin: const EdgeInsets.only(top: 2),
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: scarletRed,
-                    borderRadius: const BorderRadius.all(Radius.circular(8)),
+                    borderRadius: BorderRadius.all(Radius.circular(8)),
                   ),
                   child: const Text(
                     'MODERATOR',
@@ -1654,9 +1654,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                 Container(
                   margin: const EdgeInsets.only(top: 2),
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: Colors.green,
-                    borderRadius: const BorderRadius.all(Radius.circular(6)),
+                    borderRadius: BorderRadius.all(Radius.circular(6)),
                   ),
                   child: const Text(
                     'LIVE',
@@ -1932,13 +1932,13 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               ),
               child: Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.card_giftcard,
                     color: Colors.amber,
                     size: 24,
                   ),
                   const SizedBox(width: 10),
-                  Text(
+                  const Text(
                     'Send Gift',
                     style: TextStyle(
                       color: deepPurple,
@@ -1963,7 +1963,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.monetization_on, color: Colors.amber, size: 16),
+                          const Icon(Icons.monetization_on, color: Colors.amber, size: 16),
                           const SizedBox(width: 4),
                           Text(
                             '$_currentUserCoinBalance',
@@ -1974,7 +1974,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          Icon(Icons.refresh, color: Colors.amber, size: 12),
+                          const Icon(Icons.refresh, color: Colors.amber, size: 12),
                         ],
                       ),
                     ),
@@ -1998,11 +1998,11 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                 child: Column(
                   children: [
                     // Tab bar
-                    TabBar(
+                    const TabBar(
                       labelColor: deepPurple,
                       unselectedLabelColor: Colors.grey,
                       indicatorColor: scarletRed,
-                      tabs: const [
+                      tabs: [
                         Tab(text: 'Select Gift'),
                         Tab(text: 'Recipients'),
                       ],
@@ -2167,9 +2167,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                 ),
                 const Spacer(),
                 if (gift.hasVisualEffect)
-                  Icon(Icons.auto_awesome, size: 12, color: Colors.amber),
+                  const Icon(Icons.auto_awesome, size: 12, color: Colors.amber),
                 if (gift.hasProfileBadge)
-                  Icon(Icons.shield, size: 12, color: Colors.blue),
+                  const Icon(Icons.shield, size: 12, color: Colors.blue),
               ],
             ),
             
@@ -2361,7 +2361,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Send Gift?'),
+        title: const Text('Send Gift?'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2372,11 +2372,11 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
             const SizedBox(height: 8),
             Text('Your balance: $_currentUserCoinBalance coins'),
             if (_currentUserCoinBalance < gift.cost)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
                 child: Text(
                   'Insufficient coins!',
-                  style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
                 ),
               ),
           ],
@@ -2410,8 +2410,8 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       // Show loading
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
+          const SnackBar(
+            content: Row(
               children: [
                 SizedBox(
                   width: 20,
@@ -2423,7 +2423,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               ],
             ),
             backgroundColor: Colors.blue,
-            duration: const Duration(seconds: 2),
+            duration: Duration(seconds: 2),
           ),
         );
       }
@@ -2531,9 +2531,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                     size: 24,
                   ),
                   const SizedBox(width: 10),
-                  Text(
+                  const Text(
                     'Moderation Controls',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: deepPurple,
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -2737,8 +2737,8 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: const BorderRadius.all(Radius.circular(8)),
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(8)),
               ),
             ),
           ),
@@ -2751,9 +2751,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        const Text(
           'Quick Actions',
-          style: const TextStyle(
+          style: TextStyle(
             color: deepPurple,
             fontSize: 18,
             fontWeight: FontWeight.w600,
@@ -2835,9 +2835,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        const Text(
           'Manage Participants',
-          style: const TextStyle(
+          style: TextStyle(
             color: deepPurple,
             fontSize: 18,
             fontWeight: FontWeight.w600,
@@ -3096,9 +3096,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                   // Header
                   Container(
                     padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: lightScarlet,
-                      borderRadius: const BorderRadius.only(
+                      borderRadius: BorderRadius.only(
                         topLeft: Radius.circular(12),
                         topRight: Radius.circular(12),
                       ),
@@ -3148,9 +3148,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                             ),
                             child: Column(
                               children: [
-                                Text(
+                                const Text(
                                   'Countdown Timer',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: deepPurple,
                                     fontSize: 14,
                                     fontWeight: FontWeight.w500,
@@ -3178,9 +3178,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                                   ),
                                 ] else if (_speakingTime == 0) ...[
                                   const SizedBox(height: 4),
-                                  Text(
+                                  const Text(
                                     'Time\'s up!',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: Colors.red,
                                       fontSize: 14,
                                       fontWeight: FontWeight.bold,
@@ -3194,9 +3194,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                           const SizedBox(height: 16),
                           
                           // Set custom time
-                          Text(
+                          const Text(
                             'Set Countdown Time',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: deepPurple,
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
@@ -3209,13 +3209,13 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                                 child: TextFormField(
                                   controller: minutesController,
                                   keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
+                                  decoration: const InputDecoration(
                                     labelText: 'Min',
-                                    labelStyle: const TextStyle(fontSize: 12),
+                                    labelStyle: TextStyle(fontSize: 12),
                                     border: OutlineInputBorder(
-                                      borderRadius: const BorderRadius.all(Radius.circular(6)),
+                                      borderRadius: BorderRadius.all(Radius.circular(6)),
                                     ),
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                     isDense: true,
                                   ),
                                   style: const TextStyle(fontSize: 14),
@@ -3226,13 +3226,13 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                                 child: TextFormField(
                                   controller: secondsController,
                                   keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
+                                  decoration: const InputDecoration(
                                     labelText: 'Sec',
-                                    labelStyle: const TextStyle(fontSize: 12),
+                                    labelStyle: TextStyle(fontSize: 12),
                                     border: OutlineInputBorder(
-                                      borderRadius: const BorderRadius.all(Radius.circular(6)),
+                                      borderRadius: BorderRadius.all(Radius.circular(6)),
                                     ),
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                     isDense: true,
                                   ),
                                   style: const TextStyle(fontSize: 14),
@@ -3309,9 +3309,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                           const SizedBox(height: 16),
                           
                           // Quick preset times
-                          Text(
+                          const Text(
                             'Quick Presets',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: deepPurple,
                               fontSize: 14,
                               fontWeight: FontWeight.w500,

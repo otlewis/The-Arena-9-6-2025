@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../services/agora_service.dart';
-import '../services/appwrite_service.dart';
 import '../models/user_profile.dart';
 import '../models/gift.dart';
 import '../widgets/animated_fade_in.dart';
@@ -16,13 +15,11 @@ class DebatesDiscussionsScreen extends StatefulWidget {
 
 class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   final AgoraService _agoraService = AgoraService();
-  List<UserProfile> _activeParticipants = [];
+  final List<UserProfile> _activeParticipants = [];
   List<UserProfile> _audienceMembers = [];
-  Map<String, bool> _participantVideoStates = {};
-  Map<String, bool> _participantMicStates = {};
+  final Map<String, bool> _participantVideoStates = {};
+  final Map<String, bool> _participantMicStates = {};
   bool _isLoading = true;
-  bool _isVideoEnabled = true;
-  bool _isMicEnabled = true;
   bool _isJoined = false;
 
   @override
@@ -123,20 +120,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     });
   }
 
-  void _toggleVideo() {
-    setState(() {
-      _isVideoEnabled = !_isVideoEnabled;
-    });
-    // Video toggle not implemented in current AgoraService
-    // _agoraService.toggleVideo(_isVideoEnabled);
-  }
-
-  void _toggleMic() {
-    setState(() {
-      _isMicEnabled = !_isMicEnabled;
-    });
-    _agoraService.muteLocalAudio(!_isMicEnabled);
-  }
 
   bool _getParticipantVideoState(String participantId) {
     return _participantVideoStates[participantId] ?? true;
@@ -896,47 +879,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     );
   }
 
-  Widget _buildGiftTile(Gift gift) {
-    return GestureDetector(
-      onTap: () => _selectGift(gift),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.grey[800],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey[700]!, width: 1),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              gift.emoji,
-              style: const TextStyle(fontSize: 24),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              gift.name,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 8,
-                fontWeight: FontWeight.w500,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              '${gift.cost} coins',
-              style: TextStyle(
-                color: Colors.grey[400],
-                fontSize: 8,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   void _selectGift(Gift gift) {
     Navigator.pop(context);

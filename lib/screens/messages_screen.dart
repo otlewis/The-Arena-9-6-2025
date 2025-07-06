@@ -20,7 +20,6 @@ class _MessagesScreenState extends State<MessagesScreen>
   late final ChallengeMessagingService _messagingService;
   late final NotificationService _notificationService;
   late TabController _tabController;
-  bool _isInitialized = false;
   
   // Colors matching app theme
   static const Color scarletRed = Color(0xFFFF2400);
@@ -38,9 +37,6 @@ class _MessagesScreenState extends State<MessagesScreen>
     _notificationService = getIt<NotificationService>();
     
     // Just mark as initialized since main.dart should have initialized the service
-    setState(() {
-      _isInitialized = true;
-    });
     
     AppLogger().debug('📱 MessagesScreen: Using singleton service, isInitialized: ${_messagingService.isInitialized}');
   }

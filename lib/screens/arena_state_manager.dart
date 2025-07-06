@@ -2,14 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'dart:async';
 import '../services/appwrite_service.dart';
-import '../services/challenge_messaging_service.dart';
 import '../models/user_profile.dart';
 import '../core/logging/app_logger.dart';
 
 class ArenaStateManager {
   // Services
   final AppwriteService _appwrite;
-  final ChallengeMessagingService _messagingService;
   
   // Room data
   Map<String, dynamic>? _roomData;
@@ -17,7 +15,7 @@ class ArenaStateManager {
   String? _currentUserId;
   String _userRole = 'audience';
   String? _winner;
-  bool _judgingComplete = false;
+  final bool _judgingComplete = false;
   bool _judgingEnabled = false;
   bool _hasCurrentUserSubmittedVote = false;
   String _currentSpeaker = '';
@@ -26,18 +24,18 @@ class ArenaStateManager {
   bool _invitationsInProgress = false;
   
   // Participants and audience
-  Map<String, UserProfile> _participants = {};
-  List<UserProfile> _audience = [];
+  final Map<String, UserProfile> _participants = {};
+  final List<UserProfile> _audience = [];
   
   // Invitation tracking
-  List<String> _affirmativeSelections = [];
-  List<String> _negativeSelections = [];
+  final List<String> _affirmativeSelections = [];
+  final List<String> _negativeSelections = [];
   bool _affirmativeCompletedSelection = false;
   bool _negativeCompletedSelection = false;
   bool _invitationModalShown = false;
   bool _waitingForOtherDebater = false;
   bool _resultsModalShown = false;
-  bool _roomClosingModalShown = false;
+  final bool _roomClosingModalShown = false;
   
   // Real-time subscriptions
   RealtimeSubscription? _realtimeSubscription;
@@ -52,12 +50,11 @@ class ArenaStateManager {
   
   ArenaStateManager({
     required AppwriteService appwrite,
-    required ChallengeMessagingService messagingService,
     this.onStateChanged,
     this.onNavigateHome,
     this.onShowSnackBar,
     this.onShowDialog,
-  }) : _appwrite = appwrite, _messagingService = messagingService;
+  }) : _appwrite = appwrite;
   
   // Getters
   Map<String, dynamic>? get roomData => _roomData;

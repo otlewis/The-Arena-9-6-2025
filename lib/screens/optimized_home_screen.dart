@@ -190,7 +190,7 @@ class _OptimizedHomeScreenState extends ConsumerState<OptimizedHomeScreen>
                         ),
                         child: const Text(
                           'Rookie',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             color: Color(0xFF10B981),
                             fontWeight: FontWeight.w600,

@@ -25,7 +25,6 @@ class _ChallengeModalState extends State<ChallengeModal>
   late AnimationController _animationController;
   late AnimationController _shimmerController;
   late Animation<double> _scaleAnimation;
-  late Animation<double> _shimmerAnimation;
   bool _isResponding = false;
 
   // Colors matching app theme
@@ -49,15 +48,8 @@ class _ChallengeModalState extends State<ChallengeModal>
       parent: _animationController,
       curve: Curves.elasticOut,
     );
-    _shimmerAnimation = Tween<double>(
-      begin: -1.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _shimmerController,
-      curve: Curves.easeInOut,
-    ));
     _animationController.forward();
-    _shimmerController.repeat();
+    // _shimmerController.repeat(); // Removed unused shimmer animation
   }
 
   @override
@@ -434,27 +426,31 @@ class _ChallengeModalState extends State<ChallengeModal>
           // by ChallengeMessagingService when the arena room is created
 
           // Navigate to Arena
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => ArenaScreenModular(
-                roomId: roomId!,
-                challengeId: widget.challenge['id'],
-                topic: topic,
-                description: description,
-                challengerId: widget.challenge['challengerId'],
-                challengedId: widget.challenge['challengedId'],
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) => ArenaScreenModular(
+                  roomId: roomId!,
+                  challengeId: widget.challenge['id'],
+                  topic: topic,
+                  description: description,
+                  challengerId: widget.challenge['challengerId'],
+                  challengedId: widget.challenge['challengedId'],
+                ),
               ),
-            ),
-          );
+            );
+          }
           
           _dismiss();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('❌ Challenge declined'),
-              backgroundColor: Colors.orange,
-            ),
-          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('❌ Challenge declined'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
           _dismiss();
         }
       }

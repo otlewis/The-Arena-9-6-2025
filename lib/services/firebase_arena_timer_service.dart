@@ -161,8 +161,7 @@ class FirebaseArenaTimerService {
   Future<void> startTimer(String roomId, {int? initialSeconds}) async {
     try {
       // Get current document to calculate proper end time
-      final doc = await _arenaTimers.doc(roomId).get();
-      final currentData = doc.exists ? doc.data() as Map<String, dynamic> : {};
+      await _arenaTimers.doc(roomId).get();
       
       final updates = <String, dynamic>{
         'isTimerRunning': true,

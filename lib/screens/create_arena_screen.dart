@@ -711,7 +711,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
                   const SizedBox(width: 4),
                   Text(
                     isManual ? 'Tap to join room' : 'Tap to watch debate',
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: accentPurple,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,

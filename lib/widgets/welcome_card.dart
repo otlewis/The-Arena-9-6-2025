@@ -69,26 +69,6 @@ class WelcomeCard extends StatelessWidget {
     );
   }
 
-  Widget _buildSkeletonStats(BuildContext context, bool isDarkMode) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        _buildSkeletonStatBox(context, isDarkMode),
-        _buildSkeletonStatBox(context, isDarkMode),
-        _buildSkeletonStatBox(context, isDarkMode),
-      ],
-    );
-  }
-
-  Widget _buildSkeletonStatBox(BuildContext context, bool isDarkMode) {
-    return Column(
-      children: [
-        Container(width: 40, height: 20, color: Colors.grey[300]),
-        const SizedBox(height: 4),
-        Container(width: 60, height: 14, color: Colors.grey[300]),
-      ],
-    );
-  }
 
   Widget _buildStatsRow(BuildContext context, UserProfile? profile, bool isDarkMode) {
     return Row(

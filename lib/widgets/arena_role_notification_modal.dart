@@ -26,7 +26,6 @@ class _ArenaRoleNotificationModalState extends State<ArenaRoleNotificationModal>
   late AnimationController _animationController;
   late AnimationController _shimmerController;
   late Animation<double> _scaleAnimation;
-  late Animation<double> _shimmerAnimation;
   bool _isResponding = false;
 
   // Colors
@@ -60,15 +59,7 @@ class _ArenaRoleNotificationModalState extends State<ArenaRoleNotificationModal>
       parent: _animationController,
       curve: Curves.elasticOut,
     );
-    _shimmerAnimation = Tween<double>(
-      begin: -1.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _shimmerController,
-      curve: Curves.easeInOut,
-    ));
     _animationController.forward();
-    _shimmerController.repeat();
   }
 
   @override
@@ -82,8 +73,6 @@ class _ArenaRoleNotificationModalState extends State<ArenaRoleNotificationModal>
   Widget build(BuildContext context) {
     final role = widget.notification['role'] ?? 'judge';
     final topic = widget.notification['topic'] ?? 'Debate Topic';
-    final isJudge = _isJudgeRole(role);
-    final isModerator = role == 'moderator';
 
     return Material(
       color: Colors.black54,
@@ -168,7 +157,6 @@ class _ArenaRoleNotificationModalState extends State<ArenaRoleNotificationModal>
 
   Widget _buildContent(String topic, String role) {
     final isModerator = role == 'moderator';
-    final isJudge = _isJudgeRole(role);
     final description = isModerator
         ? 'Help facilitate the debate and keep the discussion on track'
         : 'Evaluate the debate and provide fair scoring for both sides';
@@ -287,7 +275,6 @@ class _ArenaRoleNotificationModalState extends State<ArenaRoleNotificationModal>
 
   Widget _buildActions(String role) {
     final isModerator = role == 'moderator';
-    final isJudge = _isJudgeRole(role);
     final color = isModerator ? accentPurple : Colors.amber.shade700;
 
     return Padding(

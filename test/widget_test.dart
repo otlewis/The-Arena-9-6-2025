@@ -14,7 +14,7 @@ import 'package:arena/main.dart';
 void main() {
   testWidgets('App should build without error', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const ProviderScope(child: const ArenaApp()));
+    await tester.pumpWidget(const ProviderScope(child: ArenaApp()));
 
     // Verify that the app builds without error
     expect(find.byType(MaterialApp), findsOneWidget);

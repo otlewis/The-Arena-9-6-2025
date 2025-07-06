@@ -45,7 +45,6 @@ void main() {
     });
 
     test('initial state should be loading false and not authenticated', () {
-      final authNotifier = container.read(authStateProvider.notifier);
       final initialState = container.read(authStateProvider);
 
       expect(initialState.isAuthenticated, false);

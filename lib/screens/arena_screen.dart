@@ -6,7 +6,6 @@ import '../services/challenge_messaging_service.dart';
 import '../services/sound_service.dart';
 import '../services/chat_service.dart';
 import '../widgets/user_avatar.dart';
-import '../widgets/debater_invite_choice_modal.dart';
 import '../models/user_profile.dart';
 import '../models/message.dart';
 import 'dart:async';
@@ -93,7 +92,6 @@ class ArenaScreen extends StatefulWidget {
 
 class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin {
   final AppwriteService _appwrite = AppwriteService();
-  final ChallengeMessagingService _messagingService = ChallengeMessagingService();
   final ChatService _chatService = ChatService();
   late final SoundService _soundService;
   
@@ -152,12 +150,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   
   // Two-stage invitation system state
   bool _bothDebatersPresent = false;
-  bool _invitationModalShown = false;
-  bool _invitationsInProgress = false;
-  Map<String, String?> _affirmativeSelections = {'moderator': null};
-  Map<String, String?> _negativeSelections = {'moderator': null};
-  bool _affirmativeCompletedSelection = false;
-  bool _negativeCompletedSelection = false;
+  final bool _invitationModalShown = false;
+  final bool _invitationsInProgress = false;
   
   // Chat state
   StreamSubscription? _chatSubscription;
@@ -430,14 +424,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 
                 // Update local completion flags based on user role
                 if (completedUserId == widget.challengerId) {
-                  setState(() {
-                    _affirmativeCompletedSelection = completedSelection;
-                  });
                   AppLogger().debug('🎭 Updated affirmative completion status: $completedSelection');
                 } else if (completedUserId == widget.challengedId) {
-                  setState(() {
-                    _negativeCompletedSelection = completedSelection;
-                  });
                   AppLogger().debug('🎭 Updated negative completion status: $completedSelection');
                 }
                 
@@ -716,12 +704,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         
         // Sync completion status and selections from database
         if (role == 'affirmative' && completedSelection) {
-          _affirmativeCompletedSelection = true;
-          _affirmativeSelections = selections;
           AppLogger().debug('🎭 SYNC: Set affirmative completion = true, selections = $selections');
         } else if (role == 'negative' && completedSelection) {
-          _negativeCompletedSelection = true;
-          _negativeSelections = selections;
           AppLogger().debug('🎭 SYNC: Set negative completion = true, selections = $selections');
         }
         
@@ -2795,7 +2779,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       _showSnackBar('Screen sharing started', isError: false);
       
       // Close the bottom sheet
-      Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context);
+      }
       
       AppLogger().info('✅ Screen share started successfully');
     } catch (e) {
@@ -2820,7 +2806,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       _showSnackBar('Screen sharing stopped', isError: false);
       
       // Close the bottom sheet
-      Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context);
+      }
       
       AppLogger().info('✅ Screen share stopped successfully');
     } catch (e) {
@@ -3340,390 +3328,16 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
-  /// Show the debater invitation choice modal
-  void _showDebaterInviteChoiceModal() async {
-    AppLogger().debug('🎭 DEBUG: _showDebaterInviteChoiceModal called');
-    AppLogger().debug('🎭 DEBUG: _invitationModalShown = $_invitationModalShown');
-    AppLogger().debug('🎭 DEBUG: _invitationsInProgress = $_invitationsInProgress');
-    
-    if (_invitationModalShown || _invitationsInProgress) {
-      AppLogger().debug('🎭 Invitation modal already shown or in progress, skipping');
-      return;
-    }
-    
-    try {
-      _invitationModalShown = true;
-      AppLogger().debug('🎭 ${_isIOSOptimizationEnabled ? "iOS" : "Android"} Loading user network for role selection...');
-      AppLogger().debug('🎭 Current platform: ${_isIOSOptimizationEnabled ? "iOS" : "Standard"}, User Role: $_userRole');
-      
-      // Load current user's network for arena roles (including current arena audience)
-      final networkUsers = await _appwrite.getUserNetworkForArenaRoles(_currentUserId!, arenaRoomId: widget.roomId);
-      AppLogger().debug('🎭 Found ${networkUsers.length} network users available for roles (including arena audience)');
-      
-      if (!mounted) return;
-      
-      // Show modal
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => DebaterInviteChoiceModal(
-          currentUserId: _currentUserId!,
-          debaterRole: _userRole!,
-          networkUsers: networkUsers,
-          challengerId: widget.challengerId,
-          challengedId: widget.challengedId,
-          onInviteSelectionComplete: (selections) async {
-            Navigator.pop(context);
-            AppLogger().debug('🎭 User completed selection: $selections');
-            AppLogger().debug('🎭 DEBUG: Current user role: $_userRole');
-            AppLogger().debug('🎭 DEBUG: Current user ID: $_currentUserId');
-            
-            // Store selections based on current user's role
-            if (_userRole == 'affirmative') {
-              _affirmativeSelections = selections;
-              AppLogger().debug('🎭 DEBUG: Set affirmative selections to: $_affirmativeSelections');
-            } else if (_userRole == 'negative') {
-              _negativeSelections = selections;
-              AppLogger().debug('🎭 DEBUG: Set negative selections to: $_negativeSelections');
-            }
-            
-            AppLogger().debug('🎭 DEBUG: About to call _handleInviteSelectionComplete');
-            // Check if we have selections from both debaters or should proceed
-            await _handleInviteSelectionComplete();
-          },
-          onSkip: () async {
-            Navigator.pop(context);
-            AppLogger().debug('🎭 User skipped personal invites, proceeding with random');
-            
-            // Proceed with random invitations only
-            await _performMixedInvitations({}, {});
-          },
-        ),
-      );
-    } catch (e) {
-      AppLogger().error('Error showing debater invite choice modal: $e');
-      _invitationModalShown = false;
-    }
-  }
 
-  /// Handle when a debater completes their invite selection
-  Future<void> _handleInviteSelectionComplete() async {
-    try {
-      AppLogger().debug('🎭 Handling invite selection completion...');
-      AppLogger().debug('🎭 Current user role: $_userRole');
-      AppLogger().debug('🎭 Affirmative selections: $_affirmativeSelections');
-      AppLogger().debug('🎭 Negative selections: $_negativeSelections');
-      AppLogger().debug('🎭 DEBUG: Before updates - _affirmativeCompletedSelection: $_affirmativeCompletedSelection');
-      AppLogger().debug('🎭 DEBUG: Before updates - _negativeCompletedSelection: $_negativeCompletedSelection');
-      
-      // Mark current debater as completed and update database
-      if (_userRole == 'affirmative') {
-        _affirmativeCompletedSelection = true;
-        AppLogger().debug('🎭 ✅ Affirmative debater completed selection');
-        AppLogger().debug('🎭 DEBUG: Set _affirmativeCompletedSelection = true');
-        
-        // Update completion status in database for real-time sync
-        try {
-          await _appwrite.updateArenaParticipantStatus(
-            roomId: widget.roomId,
-            userId: _currentUserId!,
-            completedSelection: true,
-            metadata: {
-              'role': 'affirmative',
-              'selections': _affirmativeSelections,
-            },
-          );
-          AppLogger().debug('🎭 DEBUG: Successfully updated affirmative participant status in database');
-        } catch (e) {
-          AppLogger().error('Error updating affirmative participant status: $e');
-        }
-      } else if (_userRole == 'negative') {
-        _negativeCompletedSelection = true;
-        AppLogger().debug('🎭 ✅ Negative debater completed selection');
-        AppLogger().debug('🎭 DEBUG: Set _negativeCompletedSelection = true');
-        
-        // Update completion status in database for real-time sync
-        try {
-          await _appwrite.updateArenaParticipantStatus(
-            roomId: widget.roomId,
-            userId: _currentUserId!,
-            completedSelection: true,
-            metadata: {
-              'role': 'negative',
-              'selections': _negativeSelections,
-            },
-          );
-          AppLogger().debug('🎭 DEBUG: Successfully updated negative participant status in database');
-        } catch (e) {
-          AppLogger().error('Error updating negative participant status: $e');
-        }
-      }
-      
-      AppLogger().debug('🎭 DEBUG: After updates - _affirmativeCompletedSelection: $_affirmativeCompletedSelection');
-      AppLogger().debug('🎭 DEBUG: After updates - _negativeCompletedSelection: $_negativeCompletedSelection');
-      
-      // New flow: Wait for both debaters to agree on a single moderator
-      if (_affirmativeCompletedSelection && _negativeCompletedSelection) {
-        AppLogger().debug('🎭 ✅ Both debaters completed selection - checking for moderator agreement');
-        
-        final affirmativeModerator = _affirmativeSelections['moderator'];
-        final negativeModerator = _negativeSelections['moderator'];
-        
-        AppLogger().debug('🎭 DEBUG: Affirmative moderator: $affirmativeModerator');
-        AppLogger().debug('🎭 DEBUG: Negative moderator: $negativeModerator');
-        AppLogger().debug('🎭 DEBUG: Are they both non-null? ${affirmativeModerator != null && negativeModerator != null}');
-        AppLogger().debug('🎭 DEBUG: Are they equal? ${affirmativeModerator == negativeModerator}');
-        AppLogger().debug('🎭 DEBUG: _invitationsInProgress: $_invitationsInProgress');
-        
-        if (affirmativeModerator != null && negativeModerator != null) {
-          if (affirmativeModerator == negativeModerator) {
-            // Both debaters agreed on the same moderator
-            AppLogger().debug('🎭 ✅ Debaters agreed on moderator: $affirmativeModerator');
-            if (!_invitationsInProgress) {
-              AppLogger().debug('🎭 DEBUG: About to call _sendSingleModeratorInvitation with ID: $affirmativeModerator');
-              await _sendSingleModeratorInvitation(affirmativeModerator);
-            } else {
-              AppLogger().debug('🎭 DEBUG: Skipping invitation - already in progress');
-            }
-          } else {
-            // Debaters chose different moderators - need conflict resolution
-            AppLogger().debug('🎭 ⚠️ Debaters chose different moderators: $affirmativeModerator vs $negativeModerator');
-            AppLogger().debug('🎭 DEBUG: About to show conflict resolution modal');
-            _showModeratorConflictResolution(affirmativeModerator, negativeModerator);
-          }
-        } else {
-          // One or both debaters skipped moderator selection
-          AppLogger().debug('🎭 ⚠️ One debater skipped moderator selection, proceeding with random');
-          AppLogger().debug('🎭 DEBUG: affirmativeModerator is null: ${affirmativeModerator == null}');
-          AppLogger().debug('🎭 DEBUG: negativeModerator is null: ${negativeModerator == null}');
-          if (!_invitationsInProgress) {
-            final agreedModerator = affirmativeModerator ?? negativeModerator;
-            AppLogger().debug('🎭 DEBUG: Agreed moderator (fallback): $agreedModerator');
-            if (agreedModerator != null) {
-              AppLogger().debug('🎭 DEBUG: Sending invitation to agreed moderator: $agreedModerator');
-              await _sendSingleModeratorInvitation(agreedModerator);
-            } else {
-              // Both skipped, send random moderator invite
-              AppLogger().debug('🎭 DEBUG: Both skipped, sending random moderator invitation');
-              await _sendRandomModeratorInvitation();
-            }
-          }
-        }
-      } else {
-        AppLogger().debug('🎭 ⏭️ Waiting for other debater to complete selection...');
-        AppLogger().debug('🎭 DEBUG: Completion status - affirmative: $_affirmativeCompletedSelection, negative: $_negativeCompletedSelection');
-        final completedRole = _userRole == 'affirmative' ? 'Affirmative' : 'Negative';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ $completedRole selection complete. Waiting for other debater...'),
-            backgroundColor: Colors.blue,
-          ),
-        );
-      }
-      
-    } catch (e) {
-      AppLogger().error('Error handling invite selection: $e');
-    }
-  }
 
   /// Send invitation to single agreed-upon moderator
-  Future<void> _sendSingleModeratorInvitation(String moderatorId) async {
-    try {
-      _invitationsInProgress = true;
-      AppLogger().debug('🎭 📤 Sending single moderator invitation to: $moderatorId');
-      
-      // Send invitation to the agreed moderator only
-      await _messagingService.sendArenaRoleInvitation(
-        userId: moderatorId,
-        userName: 'Selected Moderator', // Name will be fetched by the service
-        arenaRoomId: widget.roomId,
-        role: 'moderator',
-        topic: widget.topic,
-        description: widget.description,
-        category: widget.category,
-      );
-      
-      AppLogger().debug('🎭 ✅ Single moderator invitation sent successfully');
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Moderator invitation sent! Waiting for acceptance...'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      AppLogger().error('Error sending single moderator invitation: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sending invitation: $e')),
-        );
-      }
-    } finally {
-      _invitationsInProgress = false;
-    }
-  }
 
-  /// Send invitation to random moderator when no agreement
-  Future<void> _sendRandomModeratorInvitation() async {
-    try {
-      _invitationsInProgress = true;
-      AppLogger().debug('🎭 🎲 Sending random moderator invitation');
-      
-      // Use the existing mixed invitation system but only for moderator
-      await _messagingService.sendMixedArenaInvitations(
-        arenaRoomId: widget.roomId,
-        topic: widget.topic,
-        challengerId: widget.challengerId ?? '',
-        challengedId: widget.challengedId ?? '',
-        affirmativeSelections: {'moderator': null}, // No specific selection
-        negativeSelections: {'moderator': null}, // No specific selection
-        description: widget.description,
-        category: widget.category,
-      );
-      
-      AppLogger().debug('🎭 ✅ Random moderator invitation sent successfully');
-    } catch (e) {
-      AppLogger().error('Error sending random moderator invitation: $e');
-    } finally {
-      _invitationsInProgress = false;
-    }
-  }
 
-  /// Show conflict resolution when debaters choose different moderators
-  void _showModeratorConflictResolution(String affirmativeModerator, String negativeModerator) {
-    if (!mounted) return;
-    
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Moderator Selection Conflict'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Both debaters chose different moderators:'),
-            const SizedBox(height: 12),
-            Text('Affirmative chose: ${_getModeratorName(affirmativeModerator)}'),
-            Text('Negative chose: ${_getModeratorName(negativeModerator)}'),
-            const SizedBox(height: 12),
-            const Text('Choose how to resolve this conflict:'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _sendSingleModeratorInvitation(affirmativeModerator);
-            },
-            child: const Text('Use Affirmative Choice'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _sendSingleModeratorInvitation(negativeModerator);
-            },
-            child: const Text('Use Negative Choice'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _sendRandomModeratorInvitation();
-            },
-            child: const Text('Select Random Moderator'),
-          ),
-        ],
-      ),
-    );
-  }
 
-  /// Get moderator name for display
-  String _getModeratorName(String moderatorId) {
-    // Try to find the moderator in network users or return ID
-    // This is a simplified version - in production you'd fetch the actual name
-    return 'Moderator ($moderatorId)';
-  }
 
 
 
   /// Perform the mixed invitation system (personal + random)
-  Future<void> _performMixedInvitations(
-    Map<String, String?> affirmativeSelections,
-    Map<String, String?> negativeSelections,
-  ) async {
-    if (_invitationsInProgress) {
-      AppLogger().debug('🎭 Invitations already in progress, skipping');
-      return;
-    }
-    
-    try {
-      _invitationsInProgress = true;
-      AppLogger().debug('🎭 🚀 Starting mixed invitation system...');
-      
-      // Show loading indicator
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                ),
-                SizedBox(width: 12),
-                Text('🎭 Sending arena role invitations...'),
-              ],
-            ),
-            backgroundColor: Color(0xFF6B46C1),
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-      
-      // Send mixed invitations using the messaging service
-      await _messagingService.sendMixedArenaInvitations(
-        arenaRoomId: widget.roomId,
-        topic: widget.topic,
-        challengerId: widget.challengerId ?? '',
-        challengedId: widget.challengedId ?? '',
-        affirmativeSelections: affirmativeSelections,
-        negativeSelections: negativeSelections,
-        description: widget.description,
-        category: widget.category,
-      );
-      
-      AppLogger().debug('🎭 ✅ Mixed invitation system completed successfully');
-      
-      // Show success message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Arena role invitations sent successfully!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      
-    } catch (e) {
-      AppLogger().error('Error performing mixed invitations: $e');
-      
-      // Show error message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Error sending invitations: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } finally {
-      _invitationsInProgress = false;
-    }
-  }
 }
 
 // Judging Panel Widget
@@ -4258,20 +3872,24 @@ class _RoleManagerPanelState extends State<RoleManagerPanel> {
       await _loadParticipants();
       widget.onRoleAssigned();
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Role assigned successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Role assigned successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } catch (e) {
       AppLogger().error('Error assigning role: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Error assigning role: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error assigning role: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

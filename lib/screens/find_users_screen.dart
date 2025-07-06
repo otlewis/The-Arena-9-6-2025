@@ -107,7 +107,7 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: accentPurple),
+                  borderSide: const BorderSide(color: accentPurple),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -263,7 +263,7 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                     ),
                     child: Text(
                       '${user.formattedReputation} rep',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: scarletRed,

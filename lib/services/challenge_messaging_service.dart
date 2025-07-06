@@ -641,64 +641,6 @@ class ChallengeMessagingService {
   }
   
   
-  /// Get available users without triggering expensive cleanup operations
-  Future<List<Map<String, dynamic>>> _getAvailableUsersWithoutCleanup({
-    required String role,
-    required int limit,
-    required List<String> excludeUserIds,
-  }) async {
-    try {
-      final roleField = role == 'moderator' ? 'isAvailableAsModerator' : 'isAvailableAsJudge';
-      
-      AppLogger().debug('🔍 Searching for $role users with field: $roleField');
-      AppLogger().debug('🔍 Excluding user IDs: $excludeUserIds');
-      
-      // Simple query without cleanup to avoid rate limits
-      final response = await _appwrite.databases.listDocuments(
-        databaseId: AppwriteConstants.databaseId,
-        collectionId: 'users',
-        queries: [
-          Query.equal(roleField, true),
-          Query.limit(limit * 2), // Get extra for filtering
-          Query.orderDesc('reputation'),
-        ],
-      );
-      
-      AppLogger().debug('🔍 Found ${response.documents.length} $role users in database');
-      
-      List<Map<String, dynamic>> availableUsers = [];
-      
-      for (final doc in response.documents) {
-        final userId = doc.$id;
-        final userData = Map<String, dynamic>.from(doc.data);
-        userData['id'] = userId;
-        userData['name'] = userData['name'] ?? 'Unknown';
-        
-        AppLogger().debug('Processing user: $userId, name: ${userData['name']}');
-        
-        // Skip excluded users
-        if (excludeUserIds.contains(userId)) {
-          AppLogger().debug('🔍 Skipping excluded user: $userId');
-          continue;
-        }
-        
-        availableUsers.add(userData);
-        AppLogger().debug('Added available user: $userId (${userData['name']})');
-        
-        // Stop when we have enough
-        if (availableUsers.length >= limit) {
-          break;
-        }
-      }
-      
-      AppLogger().debug('Final available $role users: ${availableUsers.map((u) => '${u['id']} (${u['name']})').join(', ')}');
-      return availableUsers;
-      
-    } catch (e) {
-      AppLogger().error('Error getting available $role users: $e');
-      return [];
-    }
-  }
   
   /// Send arena role invitation to a specific user
   Future<void> _sendArenaRoleInvitation({
