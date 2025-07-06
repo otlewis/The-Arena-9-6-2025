@@ -95,6 +95,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   final ChatService _chatService = ChatService();
   late final SoundService _soundService;
   
+  // Chat messages
+  List<Message> _chatMessages = [];
+  
   // Room data
   Map<String, dynamic>? _roomData;
   UserProfile? _currentUser;
@@ -1345,7 +1348,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           title: const Row(
             children: [
               Icon(Icons.warning, color: Colors.red),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Text('Close Arena Room'),
             ],
           ),
@@ -1634,7 +1637,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         title: const Row(
           children: [
             Icon(Icons.exit_to_app, color: Colors.orange),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Text('Leave Arena'),
           ],
         ),
@@ -2553,7 +2556,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         title: const Row(
           children: [
             Icon(Icons.construction, color: Colors.orange),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Text('Coming Soon!'),
           ],
         ),
@@ -2578,7 +2581,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         title: const Row(
           children: [
             Icon(Icons.workspace_premium, color: Colors.amber),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Text('Premium Feature'),
           ],
         ),
@@ -2589,11 +2592,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               'Send virtual gifts to debaters to show your appreciation! This premium feature includes:',
               style: TextStyle(fontSize: 16),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Row(
               children: [
                 Icon(Icons.check, color: Colors.green),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Text('45+ unique virtual gifts'),
               ],
             ),
@@ -2601,7 +2604,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             Row(
               children: [
                 Icon(Icons.check, color: Colors.green),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Text('Support your favorite debaters'),
               ],
             ),
@@ -2609,7 +2612,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             Row(
               children: [
                 Icon(Icons.check, color: Colors.green),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Text('Premium coin system'),
               ],
             ),
@@ -4180,7 +4183,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         if (selections.values.every((v) => v == null))
           const Center(
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(20),
               child: Text(
                 'No personal selections made.\nRandom qualified users will be invited.',
                 textAlign: TextAlign.center,

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import '../widgets/user_avatar.dart';
 import '../services/challenge_messaging_service.dart';
-import '../services/theme_service.dart';
 import '../features/arena/screens/arena_screen_modular.dart';
 import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
@@ -43,7 +42,7 @@ class _ChallengeModalState extends State<ChallengeModal>
       vsync: this,
     );
     _shimmerController = AnimationController(
-      duration: Duration(seconds: 2),
+      duration: const Duration(seconds: 2),
       vsync: this,
     );
     _scaleAnimation = CurvedAnimation(
@@ -118,13 +117,13 @@ class _ChallengeModalState extends State<ChallengeModal>
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [scarletRed, accentPurple],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: const BorderRadius.only(
+        borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
         ),

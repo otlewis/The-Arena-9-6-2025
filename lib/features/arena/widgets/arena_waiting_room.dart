@@ -46,7 +46,7 @@ class ArenaWaitingRoom extends ConsumerWidget {
                   color: Colors.orange,
                   size: 28,
                 ),
-                SizedBox(width: 12),
+                const SizedBox(width: 12),
                 const Text(
                   'Waiting Room',
                   style: TextStyle(
@@ -72,7 +72,7 @@ class ArenaWaitingRoom extends ConsumerWidget {
               ],
             ),
             
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             
             // Debate topic
             Container(
@@ -96,9 +96,9 @@ class ArenaWaitingRoom extends ConsumerWidget {
                       color: Color(0xFF6B46C1),
                     ),
                   ),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 4),
                   Text(
-                    state.topic ?? 'Loading topic...',
+                    state.topic,
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
@@ -108,18 +108,18 @@ class ArenaWaitingRoom extends ConsumerWidget {
               ),
             ),
             
-            SizedBox(height: 24),
+            const SizedBox(height: 24),
             
             // Participants grid
             _buildParticipantsGrid(state),
             
-            SizedBox(height: 24),
+            const SizedBox(height: 24),
             
             // Ready button and status
             _buildReadySection(context, ref, state),
             
             if (allReady) ...[
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               _buildStartDebateButton(context, ref, state),
             ],
           ],
@@ -154,7 +154,7 @@ class ArenaWaitingRoom extends ConsumerWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        SizedBox(height: 12),
+        const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
@@ -165,7 +165,7 @@ class ArenaWaitingRoom extends ConsumerWidget {
                 icon: Icons.thumb_up,
               ),
             ),
-            SizedBox(width: 16),
+            const SizedBox(width: 16),
             Expanded(
               child: _buildParticipantSlot(
                 participant: debaters[1],
@@ -178,7 +178,7 @@ class ArenaWaitingRoom extends ConsumerWidget {
         ),
         
         if (officials.isNotEmpty) ...[
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
           const Text(
             'Officials',
             style: TextStyle(
@@ -186,7 +186,7 @@ class ArenaWaitingRoom extends ConsumerWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          SizedBox(height: 12),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 12,
             runSpacing: 12,
@@ -288,7 +288,7 @@ class ArenaWaitingRoom extends ConsumerWidget {
               ],
             ),
           
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           
           // Role and name
           Row(
@@ -299,7 +299,7 @@ class ArenaWaitingRoom extends ConsumerWidget {
                 size: 16,
                 color: color,
               ),
-              SizedBox(width: 4),
+              const SizedBox(width: 4),
               Text(
                 role,
                 style: TextStyle(
@@ -311,7 +311,7 @@ class ArenaWaitingRoom extends ConsumerWidget {
             ],
           ),
           
-          SizedBox(height: 4),
+          const SizedBox(height: 4),
           
           Text(
             isEmpty ? 'Waiting...' : participant.name,
@@ -326,7 +326,7 @@ class ArenaWaitingRoom extends ConsumerWidget {
           ),
           
           if (!isEmpty && !isCompact) ...[
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -450,12 +450,12 @@ class ArenaWaitingRoom extends ConsumerWidget {
         child: Column(
           children: [
             const Icon(Icons.error, color: Colors.red, size: 48),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             const Text(
               'Failed to load waiting room',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
               error.toString(),
               style: const TextStyle(color: Colors.grey),

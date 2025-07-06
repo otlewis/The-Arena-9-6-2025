@@ -1,12 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_database/firebase_database.dart';
+// import 'package:firebase_database/firebase_database.dart';
 import '../core/logging/app_logger.dart';
 
 /// Service for accurate timer synchronization using Firebase server time offset
 class FirebaseTimerSyncService {
   static final FirebaseTimerSyncService _instance = FirebaseTimerSyncService._internal();
   
-  final FirebaseDatabase _database = FirebaseDatabase.instance;
+  // final FirebaseDatabase _database = FirebaseDatabase.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
   // Cache server time offset
@@ -29,11 +29,24 @@ class FirebaseTimerSyncService {
   /// Update the server time offset from Firebase
   Future<void> _updateServerTimeOffset() async {
     try {
-      final offsetRef = _database.ref('.info/serverTimeOffset');
-      final snapshot = await offsetRef.once();
-      _serverTimeOffset = (snapshot.snapshot.value as num?)?.toInt() ?? 0;
-      _lastOffsetUpdate = DateTime.now();
-      AppLogger().debug('🔄 Updated server time offset: ${_serverTimeOffset}ms');
+      // Use Firestore server timestamp to calculate offset
+      final doc = await _firestore.collection('_server_time').add({
+        'timestamp': FieldValue.serverTimestamp(),
+        'clientTime': DateTime.now().millisecondsSinceEpoch,
+      });
+      
+      final snapshot = await doc.get();
+      final serverTimestamp = snapshot.data()?['timestamp'] as Timestamp?;
+      final clientTime = snapshot.data()?['clientTime'] as int?;
+      
+      if (serverTimestamp != null && clientTime != null) {
+        _serverTimeOffset = serverTimestamp.millisecondsSinceEpoch - clientTime;
+        _lastOffsetUpdate = DateTime.now();
+        AppLogger().debug('🔄 Updated server time offset: ${_serverTimeOffset}ms');
+      }
+      
+      // Clean up the temporary document
+      await doc.delete();
     } catch (e) {
       AppLogger().error('Error updating server time offset: $e');
     }

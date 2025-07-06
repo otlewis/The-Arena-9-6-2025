@@ -9,6 +9,7 @@ import '../core/logging/app_logger.dart';
 class ArenaStateManager {
   // Services
   final AppwriteService _appwrite;
+  final ChallengeMessagingService _messagingService;
   
   // Room data
   Map<String, dynamic>? _roomData;
@@ -245,7 +246,7 @@ class ArenaStateManager {
   
   // Start room status checker
   void _startRoomStatusChecker(String roomId) {
-    _roomStatusChecker = Timer.periodic(Duration(seconds: 10), (timer) async {
+    _roomStatusChecker = Timer.periodic(const Duration(seconds: 10), (timer) async {
       try {
         final roomStatus = await _appwrite.databases.getDocument(
           databaseId: 'arena_db',
@@ -533,7 +534,7 @@ class ArenaStateManager {
       onShowSnackBar?.call('Room has been closed');
       
       // Start countdown timer for navigation
-      _roomCompletionTimer = Timer(Duration(seconds: 10), () {
+      _roomCompletionTimer = Timer(const Duration(seconds: 10), () {
         onNavigateHome?.call('Room closed');
       });
     } catch (e) {

@@ -31,13 +31,11 @@ class ArenaRealtimeService {
     VoidCallback? onRoomDataChanged,
     Function(String)? onRoomClosed,
     VoidCallback? onConnectionLost,
-    VoidCallback? onConnectionRestored,
   }) {
     _onParticipantsChanged = onParticipantsChanged;
     _onRoomDataChanged = onRoomDataChanged;
     _onRoomClosed = onRoomClosed;
     _onConnectionLost = onConnectionLost;
-    _onConnectionRestored = onConnectionRestored;
     
     _establishSubscription(roomId);
     _startHeartbeat();
@@ -223,7 +221,6 @@ class ArenaRealtimeService {
     _onRoomDataChanged = null;
     _onRoomClosed = null;
     _onConnectionLost = null;
-    _onConnectionRestored = null;
     
     AppLogger().debug('✅ Real-time service disposed');
   }

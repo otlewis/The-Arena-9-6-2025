@@ -462,7 +462,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           if (mounted && !_isExiting && _reconnectAttempts < _maxReconnectAttempts) {
             _reconnectAttempts++;
             AppLogger().debug('🔄 Arena subscription ended, attempting to reconnect...');
-            Timer(Duration(seconds: 3), () {
+            Timer(const Duration(seconds: 3), () {
               if (mounted && !_isExiting) {
                 _setupRealtimeSubscription();
               }
@@ -515,12 +515,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               SnackBar(
                 content: Text('🔒 This arena room has been closed'),
                 backgroundColor: Colors.orange,
-                duration: Duration(seconds: 2),
+                duration: const Duration(seconds: 2),
               ),
             );
             
             // Navigate back to arena lobby after a short delay
-            Future.delayed(Duration(seconds: 1), () {
+            Future.delayed(const Duration(seconds: 1), () {
               if (mounted && !_isExiting) {
                 // Navigate back to arena lobby with complete stack replacement
                 WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -948,11 +948,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         SnackBar(
           content: Text('🔒 This arena room has been closed'),
           backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         ),
       );
       
-      Future.delayed(Duration(seconds: 1), () {
+      Future.delayed(const Duration(seconds: 1), () {
         if (mounted && !_isExiting) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_isExiting) {

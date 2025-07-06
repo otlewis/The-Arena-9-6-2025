@@ -40,7 +40,7 @@ class AgoraServiceImplementation {
 
       // Create RTC engine - equivalent to AgoraRTC.createClient()
       _engine = createAgoraRtcEngine();
-      await _engine!.initialize(RtcEngineContext(appId: appId));
+      await _engine!.initialize(const RtcEngineContext(appId: appId));
 
       // Set channel profile for live streaming (mode: "live")
       await _engine!.setChannelProfile(ChannelProfileType.channelProfileLiveBroadcasting);

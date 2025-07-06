@@ -171,7 +171,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     child: Column(
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.forum,
                           size: 60,
                           color: scarletRed,
@@ -209,13 +209,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _nameController,
                       decoration: InputDecoration(
                         labelText: 'Full Name',
-                        prefixIcon: Icon(Icons.person, color: scarletRed),
+                        prefixIcon: const Icon(Icons.person, color: scarletRed),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: scarletRed, width: 2),
+                          borderSide: const BorderSide(color: scarletRed, width: 2),
                         ),
                         filled: true,
                         fillColor: Colors.white,
@@ -238,7 +238,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     keyboardType: TextInputType.emailAddress,
                     decoration: InputDecoration(
                       labelText: 'Email',
-                      prefixIcon: Icon(Icons.email, color: scarletRed),
+                      prefixIcon: const Icon(Icons.email, color: scarletRed),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -267,7 +267,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     obscureText: _obscurePassword,
                     decoration: InputDecoration(
                       labelText: 'Password',
-                      prefixIcon: Icon(Icons.lock, color: scarletRed),
+                      prefixIcon: const Icon(Icons.lock, color: scarletRed),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePassword ? Icons.visibility : Icons.visibility_off,

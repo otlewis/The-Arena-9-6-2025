@@ -22,7 +22,7 @@ class DebateClub {
   });
 }
 
-const String CLUB_STRUCTURE = '''
+const String clubStructure = '''
 Key roles within a debate club:
 
 1. President: Oversees the club, represents officially, organizes events.
@@ -278,6 +278,7 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
       // Clear form and refresh data
       _nameController.clear();
       _descriptionController.clear();
+      if (!mounted) return;
       Navigator.pop(context); // Close the create modal
       _loadData();
     } catch (e) {
@@ -440,11 +441,11 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
-            Text('This will:'),
+            const Text('This will:'),
             const SizedBox(height: 8),
-            Text('• Remove the club permanently'),
+            const Text('• Remove the club permanently'),
             Text('• Delete all $memberCount memberships'),
-            Text('• Remove access for all members'),
+            const Text('• Remove access for all members'),
             const SizedBox(height: 12),
             const Text(
               'This action cannot be undone.',
@@ -777,7 +778,7 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
         side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
       ),
       child: ExpansionTile(
-        leading: Icon(Icons.gavel, color: scarletRed),
+        leading: const Icon(Icons.gavel, color: scarletRed),
         title: const Text(
           'Debate Club Structure & Rules',
           style: TextStyle(
@@ -827,7 +828,7 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
             width: 6,
             height: 6,
             margin: const EdgeInsets.only(top: 6, right: 8),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: scarletRed,
               shape: BoxShape.circle,
             ),

@@ -233,10 +233,10 @@ class _ModernChatWidgetState extends State<ModernChatWidget> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            const Icon(
               Icons.chat_bubble_outline,
               size: 48,
-              color: Colors.grey.shade300,
+              color: Colors.grey,
             ),
             const SizedBox(height: 16),
             Text(
@@ -407,9 +407,9 @@ class _ModernChatWidgetState extends State<ModernChatWidget> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (isGiftMessage) ...[
-                Icon(
+                const Icon(
                   Icons.card_giftcard,
-                  color: Colors.pink.shade600,
+                  color: Colors.pink,
                   size: 16,
                 ),
                 const SizedBox(width: 8),

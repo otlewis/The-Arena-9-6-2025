@@ -32,7 +32,7 @@ class ChatService {
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         roomId: roomId,
         senderId: user.$id,
-        senderName: userProfile?.displayName ?? user.name ?? 'User',
+        senderName: userProfile?.displayName ?? user.name,
         senderAvatar: userProfile?.avatar,
         type: MessageType.text,
         content: content,
@@ -178,7 +178,6 @@ class ChatService {
           // Check if this message belongs to current room
           if (messageData['roomId'] == roomId) {
             messageData['id'] = messageData['\$id'];
-            final newMessage = Message.fromMap(messageData);
             
             // Get current messages and add new one
             getRoomMessages(roomId).then((messages) {

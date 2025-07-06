@@ -125,8 +125,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   bool _isIOSOptimizationEnabled = false;
   DateTime? _lastCacheUpdate;
   
-  // Chat messages
-  List<Message> _chatMessages = [];
   
   // Enhanced Timer and Debate Management
   late AnimationController _timerController;
@@ -160,7 +158,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Map<String, String?> _negativeSelections = {'moderator': null};
   bool _affirmativeCompletedSelection = false;
   bool _negativeCompletedSelection = false;
-  bool _waitingForOtherDebater = false;
   
   // Chat state
   StreamSubscription? _chatSubscription;
@@ -301,7 +298,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _chatSubscription = _chatService.messagesStream.listen((messages) {
       if (mounted) {
         setState(() {
-          _chatMessages = messages.reversed.toList(); // Reverse for display (newest at bottom)
         });
         AppLogger().debug('💬 Received ${messages.length} chat messages');
       }
@@ -404,14 +400,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             // Ensure payload is a valid Map with enhanced safety
             Map<String, dynamic> payload;
             try {
-              if (response.payload is Map<String, dynamic>) {
-                payload = response.payload as Map<String, dynamic>;
-              } else if (response.payload is Map) {
-                payload = Map<String, dynamic>.from(response.payload as Map);
-              } else {
-                AppLogger().warning('Received invalid payload type: ${response.payload.runtimeType} - skipping');
-                return;
-              }
+              payload = Map<String, dynamic>.from(response.payload);
               
               // Additional null safety check
               if (payload.isEmpty) {
@@ -515,7 +504,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           if (mounted && !_isExiting && _reconnectAttempts < _maxReconnectAttempts) {
             _reconnectAttempts++;
             AppLogger().debug('🔄 Arena subscription ended, attempting to reconnect...');
-            Timer(Duration(seconds: 3), () {
+            Timer(const Duration(seconds: 3), () {
               if (mounted && !_isExiting) {
                 _setupRealtimeSubscription();
               }
@@ -565,15 +554,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           if (mounted) {
             // Show message and navigate back
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text('🔒 This arena room has been closed'),
+              const SnackBar(
+                content: Text('🔒 This arena room has been closed'),
                 backgroundColor: Colors.orange,
                 duration: Duration(seconds: 2),
               ),
             );
             
             // Navigate back to arena lobby after a short delay
-            Future.delayed(Duration(seconds: 1), () {
+            Future.delayed(const Duration(seconds: 1), () {
               if (mounted && !_isExiting) {
                 // Navigate back to arena lobby with complete stack replacement
                 WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -997,14 +986,14 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('🔒 This arena room has been closed'),
+        const SnackBar(
+          content: Text('🔒 This arena room has been closed'),
           backgroundColor: Colors.orange,
           duration: Duration(seconds: 2),
         ),
       );
       
-      Future.delayed(Duration(seconds: 1), () {
+      Future.delayed(const Duration(seconds: 1), () {
         if (mounted && !_isExiting) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_isExiting) {
@@ -1101,12 +1090,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _timerController.stop();
   }
 
-  // Safe setState that respects exit state
-  void _safeSetState(VoidCallback callback) {
-    if (!_isExiting && mounted) {
-      setState(callback);
-    }
-  }
 
   void _handlePhaseTimeout() {
     _stopTimer();
@@ -1232,25 +1215,29 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
       AppLogger().info('Judging ${_judgingEnabled ? 'enabled' : 'disabled'} by moderator');
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _judgingEnabled 
-                ? '⚖️ Judging is now OPEN - Judges can submit votes'
-                : '⚖️ Judging is now CLOSED - Calculating results...'
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _judgingEnabled 
+                  ? '⚖️ Judging is now OPEN - Judges can submit votes'
+                  : '⚖️ Judging is now CLOSED - Calculating results...'
+            ),
+            backgroundColor: _judgingEnabled ? Colors.green : Colors.orange,
+            duration: const Duration(seconds: 3),
           ),
-          backgroundColor: _judgingEnabled ? Colors.green : Colors.orange,
-          duration: Duration(seconds: 3),
-        ),
-      );
+        );
+      }
     } catch (e) {
       AppLogger().error('Error updating judging state: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Error updating judging state: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error updating judging state: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -1269,6 +1256,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
       if (judgments.documents.isEmpty) {
         AppLogger().warning('No votes found, cannot determine winner');
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('⚠️ No votes submitted yet'),
@@ -1331,6 +1319,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
     } catch (e) {
       AppLogger().error('Error determining winner: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('❌ Error calculating results: $e'),
@@ -1422,7 +1411,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         }
         
         // After 15 seconds, mark room as completed - with proper mounted checks
-        _roomCompletionTimer = Timer(Duration(seconds: 15), () async {
+        _roomCompletionTimer = Timer(const Duration(seconds: 15), () async {
           try {
             AppLogger().debug('⏰ 15 seconds elapsed - checking if widget is still mounted');
             
@@ -1908,7 +1897,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       return Container(
         height: 60,
         alignment: Alignment.center,
-        child: Row(
+        child: const Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
@@ -1916,7 +1905,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               color: Colors.white54,
               size: 16,
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Text(
               'No audience yet',
               style: TextStyle(
@@ -1938,7 +1927,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.people,
                 color: accentPurple,
                 size: 16,
@@ -1946,7 +1935,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               const SizedBox(width: 8),
               Text(
                 'Audience (${_audience.length})',
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -1961,7 +1950,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           child: GridView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             physics: const BouncingScrollPhysics(), // Enable scrolling
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 4, // 4 users across
               crossAxisSpacing: 6, // Reduced spacing
               mainAxisSpacing: 6, // Reduced spacing  
@@ -1983,7 +1972,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                     audience.name.length > 7 
                         ? '${audience.name.substring(0, 7)}...'
                         : audience.name,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.white70,
                       fontSize: 8,
                       fontWeight: FontWeight.w500,
@@ -2118,108 +2107,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildSimpleAudienceDisplay() {
-    if (_audience.isEmpty) {
-      return Container(
-        height: 50,
-        alignment: Alignment.center,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.people_outline,
-              color: Colors.white54,
-              size: 16,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              'No audience yet',
-              style: TextStyle(
-                color: Colors.white54,
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Calculate grid height for simple display (max 2 rows)
-    final rowCount = (_audience.length / 4).ceil();
-    final gridHeight = (rowCount * 70.0).clamp(70.0, 140.0); // Max 2 rows for simple view with bigger avatars
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            children: [
-              Icon(
-                Icons.people,
-                color: accentPurple,
-                size: 16,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Audience (${_audience.length})',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Grid of audience members
-          Container(
-            height: gridHeight,
-            child: GridView.builder(
-              scrollDirection: Axis.vertical,
-              physics: const BouncingScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4, // 4 users across
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-                childAspectRatio: 1, // Square aspect ratio
-              ),
-              itemCount: _audience.length,
-              itemBuilder: (context, index) {
-                final audience = _audience[index];
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    UserAvatar(
-                      avatarUrl: audience.avatar,
-                      initials: audience.name.isNotEmpty ? audience.name[0] : '?',
-                      radius: 24, // Bigger avatars consistent with main display
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      audience.name.length > 6 
-                          ? '${audience.name.substring(0, 6)}...'
-                          : audience.name,
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 8,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildParticipantTile(UserProfile participant, {bool isMain = false, bool isSmall = false, bool isWinner = false}) {
     final avatarSize = isMain ? 32.0 : isSmall ? 16.0 : 24.0; // Reduced sizes
@@ -2464,136 +2351,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     });
   }
 
-  Widget _buildTimerDisplay() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            deepPurple.withValues(alpha: 0.9),
-            accentPurple.withValues(alpha: 0.9),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Debate Phase Header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              _currentPhase.displayName,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // Current Speaker Indicator
-          if (_currentSpeaker.isNotEmpty) ...[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  _speakingEnabled ? Icons.mic : Icons.mic_off,
-                  color: _speakingEnabled ? Colors.green : Colors.red,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Current Speaker: ${_currentSpeaker.toUpperCase()}',
-                  style: TextStyle(
-                    color: _speakingEnabled ? Colors.greenAccent : Colors.redAccent,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-          ],
-          
-          // Timer Display
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                _isTimerRunning ? Icons.timer : (_isPaused ? Icons.pause_circle : Icons.timer_off),
-                color: Colors.white,
-                size: 28,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                _formattedTime,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'monospace',
-                ),
-              ),
-            ],
-          ),
-          
-          // Phase Description
-          if (_currentPhase.description.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              _currentPhase.description,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
 
-  void _showComingSoonDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.construction, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('Coming Soon!'),
-          ],
-        ),
-        content: const Text(
-          'This feature is being enhanced and will be available in a future update.',
-          style: TextStyle(fontSize: 16),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
 
   void _showGiftComingSoon() {
     showDialog(
@@ -2757,9 +2515,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.8,
         ),
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2769,7 +2527,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  Icon(Icons.gavel, color: accentPurple),
+                  const Icon(Icons.gavel, color: accentPurple),
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Text(
@@ -2963,61 +2721,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     return 3 - filledSlots;
   }
   
-  /// Assign selected audience member as judge
-  Future<void> _assignJudgeFromAudience(UserProfile selectedUser) async {
-    try {
-      // Find next available judge slot
-      String? availableSlot;
-      if (_participants['judge1'] == null) {
-        availableSlot = 'judge1';
-      } else if (_participants['judge2'] == null) {
-        availableSlot = 'judge2';
-      } else if (_participants['judge3'] == null) {
-        availableSlot = 'judge3';
-      }
-      
-      if (availableSlot == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('All judge slots are filled'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
-      
-      Navigator.pop(context); // Close modal
-      
-      AppLogger().debug('🎭 ASSIGN: Assigning ${selectedUser.name} as $availableSlot');
-      
-      // Update user's role in the database
-      await _appwrite.assignArenaRole(
-        roomId: widget.roomId,
-        userId: selectedUser.id,
-        role: availableSlot,
-      );
-      
-      // Refresh participants to update UI
-      await _loadParticipants();
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ ${selectedUser.name} is now $availableSlot!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-      
-    } catch (e) {
-      AppLogger().error('Error assigning judge: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error assigning judge: $e')),
-        );
-      }
-    }
-  }
 
   /// Show chat bottom sheet
   void _showChatBottomSheet() {
@@ -3161,35 +2864,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
   
-  /// Grant screen sharing permission (for moderators only)
-  void _grantScreenSharePermission(String userId) {
-    if (!_isModerator) return;
-    
-    setState(() {
-      _screenSharingPermissions[userId] = true;
-    });
-    
-    _showSnackBar('Screen sharing permission granted', isError: false);
-    AppLogger().info('✅ Screen sharing permission granted to $userId');
-  }
-  
-  /// Revoke screen sharing permission (for moderators only)
-  void _revokeScreenSharePermission(String userId) {
-    if (!_isModerator) return;
-    
-    setState(() {
-      _screenSharingPermissions[userId] = false;
-      // If this user is currently sharing, stop their sharing
-      if (_currentScreenSharer == userId) {
-        _currentScreenSharer = null;
-        _isScreenSharing = false;
-      }
-    });
-    
-    _showSnackBar('Screen sharing permission revoked', isError: false);
-    AppLogger().info('🚫 Screen sharing permission revoked from $userId');
-  }
-
   /// Check if current user is a debater
   bool get _isDebater {
     return _userRole == 'affirmative' || _userRole == 'negative';
@@ -3202,76 +2876,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         SnackBar(
           content: Text(message),
           backgroundColor: isError ? Colors.red : Colors.green,
-          duration: Duration(seconds: 3),
+          duration: const Duration(seconds: 3),
         ),
       );
     }
-  }
-
-  /// Build a chat message widget
-  Widget _buildChatMessage(String username, String message, bool isSystem, Color roleColor) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: roleColor,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Center(
-              child: Text(
-                username[0].toUpperCase(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      username,
-                      style: TextStyle(
-                        color: roleColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'now',
-                      style: TextStyle(
-                        color: Colors.grey[500],
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  message,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   /// Send a chat message
@@ -3311,121 +2919,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
-  /// Build a real chat message widget from Message object
-  Widget _buildRealChatMessage(Message message) {
-    final roleColor = _getRoleColorForUser(message.senderId);
-    final timeString = _formatMessageTime(message.timestamp);
-    final isCurrentUser = message.senderId == _currentUserId;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Avatar
-          if (message.isSystemMessage)
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: Colors.blue,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Center(
-                child: Icon(Icons.info, color: Colors.white, size: 16),
-              ),
-            )
-          else
-            UserAvatar(
-              avatarUrl: message.senderAvatar,
-              initials: message.senderName.isNotEmpty ? message.senderName[0] : '?',
-              radius: 16,
-            ),
-          const SizedBox(width: 8),
-          // Message content
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (!message.isSystemMessage)
-                  Row(
-                    children: [
-                      Text(
-                        message.senderName,
-                        style: TextStyle(
-                          color: isCurrentUser ? Colors.blue : roleColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        timeString,
-                        style: TextStyle(
-                          color: Colors.grey[500],
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ),
-                const SizedBox(height: 4),
-                Text(
-                  message.displayContent,
-                  style: TextStyle(
-                    color: message.isSystemMessage ? Colors.blue[300] : Colors.white,
-                    fontSize: 14,
-                    fontStyle: message.isSystemMessage ? FontStyle.italic : FontStyle.normal,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Get role color for a user
-  Color _getRoleColorForUser(String userId) {
-    if (userId == 'system') return Colors.blue;
-    
-    // Check if user has a specific role
-    for (final entry in _participants.entries) {
-      if (entry.value?.id == userId) {
-        switch (entry.key) {
-          case 'affirmative':
-            return Colors.blue;
-          case 'negative':
-            return Colors.red;
-          case 'moderator':
-            return Colors.purple;
-          case 'judge1':
-          case 'judge2':
-          case 'judge3':
-            return Colors.orange;
-        }
-      }
-    }
-    
-    // Default audience color
-    return Colors.grey;
-  }
-
-  /// Format message timestamp
-  String _formatMessageTime(DateTime timestamp) {
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
-    
-    if (difference.inMinutes < 1) {
-      return 'now';
-    } else if (difference.inHours < 1) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inDays < 1) {
-      return '${difference.inHours}h ago';
-    } else {
-      return '${timestamp.day}/${timestamp.month}';
-    }
-  }
   
   /// Show read-only participant view
   void _showParticipantView() {
@@ -3437,9 +2930,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.8,
         ),
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -3449,7 +2942,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  Icon(Icons.people, color: accentPurple),
+                  const Icon(Icons.people, color: accentPurple),
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Text(
@@ -3807,39 +3300,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
   
-  void _forceNavigationHome() {
-    // Keep old method for backward compatibility but make it call the sync version
-    _forceNavigationHomeSync();
-  }
-
-  void _forceNavigation() {
-    if (!_hasNavigated && mounted) {
-      _hasNavigated = true;
-      AppLogger().info('Forcing navigation back to arena lobby from closing modal');
-      
-      // Cancel all background processes immediately
-      _isExiting = true;
-      AppLogger().debug('🛑 MAIN FORCE: Set _isExiting=true');
-      if (_roomStatusChecker != null) {
-        _roomStatusChecker!.cancel();
-        _roomStatusChecker = null;
-        AppLogger().debug('🛑 MAIN FORCE: Timer cancelled and nulled');
-      }
-      _realtimeSubscription?.cancel();
-      _realtimeSubscription = null;
-      
-      try {
-        // Navigate directly without popping modal first - use pushAndRemoveUntil to clear stack
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const ArenaApp()),
-          (route) => false,
-        );
-        AppLogger().info('Successfully navigated from modal to Main App');
-      } catch (e) {
-        AppLogger().error('Modal navigation failed: $e');
-      }
-    }
-  }
 
   // Two-stage invitation system methods
 
@@ -4185,270 +3645,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     return 'Moderator ($moderatorId)';
   }
 
-  /// Show approval modal to the other debater to review and approve selections
-  void _showApprovalModalToOtherDebater() async {
-    if (_waitingForOtherDebater) {
-      AppLogger().debug('🎭 Already waiting for other debater approval');
-      return;
-    }
-    
-    try {
-      _waitingForOtherDebater = true;
-      
-      // Determine which selections to show for approval
-      final otherDebaterRole = _userRole == 'affirmative' ? 'negative' : 'affirmative';
-      final selectionsToReview = _userRole == 'affirmative' ? _affirmativeSelections : _negativeSelections;
-      
-      AppLogger().debug('🎭 📄 Showing approval modal to $otherDebaterRole debater');
-      AppLogger().debug('🎭 Selections to review: $selectionsToReview');
-      
-      if (!mounted) return;
-      
-      // Determine if current user should see approval modal
-      // Current user should see approval modal if the OTHER debater completed first
-      final shouldShowApproval = (_userRole == 'affirmative' && _negativeCompletedSelection && !_affirmativeCompletedSelection) ||
-                                (_userRole == 'negative' && _affirmativeCompletedSelection && !_negativeCompletedSelection);
-      
-      if (shouldShowApproval) {
-        AppLogger().debug('🎭 Current user should see approval modal for other debater selections');
-        
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => _buildApprovalModal(selectionsToReview, otherDebaterRole),
-        );
-      } else {
-        AppLogger().debug('🎭 Current user completed first, waiting for other debater');
-        
-        // Show waiting indicator for the debater who completed first
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('⏳ Waiting for $otherDebaterRole debater to review and approve your selections...'),
-              backgroundColor: const Color(0xFF6B46C1),
-              duration: Duration(seconds: 5),
-            ),
-          );
-        }
-      }
-      
-    } catch (e) {
-      AppLogger().error('Error showing approval modal: $e');
-      _waitingForOtherDebater = false;
-    }
-  }
 
-  /// Build approval modal for reviewing other debater's selections
-  Widget _buildApprovalModal(Map<String, String?> selectionsToReview, String otherDebaterRole) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    final maxModalHeight = screenHeight * 0.85; // 85% of screen height
-    
-    return Material(
-      color: Colors.black.withValues(alpha: 0.7),
-      child: SafeArea(
-        child: Center(
-          child: Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            constraints: BoxConstraints(
-              maxWidth: 500,
-              maxHeight: maxModalHeight,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header
-                Row(
-                  children: [
-                    Icon(
-                      Icons.approval,
-                      color: const Color(0xFF6B46C1),
-                      size: 32,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Review Official Selections',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF6B46C1),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '${otherDebaterRole.toUpperCase()} debater has made their selections. Please review and approve:',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                
-                // Show selections
-                Flexible(
-                  child: _buildSelectionReview(selectionsToReview),
-                ),
-                
-                const SizedBox(height: 16),
-                
-                // Action buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _handleApprovalResponse(false);
-                        },
-                        child: const Text(
-                          'Request Changes',
-                          style: TextStyle(color: Colors.red),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _handleApprovalResponse(true);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF22C55E),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        child: const Text('Approve & Send Invites'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-  
-  /// Build review of selections
-  Widget _buildSelectionReview(Map<String, String?> selections) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 300),
-      child: ListView(
-        shrinkWrap: true,
-        physics: const BouncingScrollPhysics(),
-        children: [
-        for (final entry in selections.entries)
-          if (entry.value != null)
-            Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: Icon(
-                  entry.key == 'moderator' ? Icons.account_balance : Icons.balance,
-                  color: const Color(0xFF6B46C1),
-                ),
-                title: Text(
-                  _getRoleDisplayName(entry.key),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: FutureBuilder<UserProfile?>(
-                  future: _appwrite.getUserProfile(entry.value!),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasData && snapshot.data != null) {
-                      return Text(snapshot.data!.name);
-                    }
-                    return const Text('Loading...');
-                  },
-                ),
-                trailing: const Icon(Icons.check_circle, color: Color(0xFF22C55E)),
-              ),
-            ),
-        if (selections.values.every((v) => v == null))
-          const Center(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Text(
-                'No personal selections made.\nRandom qualified users will be invited.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  /// Handle approval response
-  Future<void> _handleApprovalResponse(bool approved) async {
-    try {
-      AppLogger().debug('🎭 📋 Approval response: $approved');
-      
-      if (approved) {
-        // Both debaters have agreed, proceed with invitations
-        AppLogger().debug('🎭 ✅ Approval granted - proceeding with mixed invitations');
-        await _performMixedInvitations(_affirmativeSelections, _negativeSelections);
-      } else {
-        // Request changes - reset the process
-        AppLogger().debug('🎭 ❌ Changes requested - resetting selection process');
-        _resetInvitationProcess();
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('🔄 Selection process reset. Please make new selections.'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-        
-        // Show modal again for new selections
-        _showDebaterInviteChoiceModal();
-      }
-      
-    } catch (e) {
-      AppLogger().error('Error handling approval response: $e');
-    } finally {
-      _waitingForOtherDebater = false;
-    }
-  }
-  
-  /// Reset invitation process state
-  void _resetInvitationProcess() {
-    _affirmativeSelections.clear();
-    _negativeSelections.clear();
-    _affirmativeCompletedSelection = false;
-    _negativeCompletedSelection = false;
-    _invitationModalShown = false;
-    _waitingForOtherDebater = false;
-    AppLogger().debug('🎭 🔄 Invitation process state reset');
-  }
-  
-  /// Get role display name
-  String _getRoleDisplayName(String roleId) {
-    switch (roleId) {
-      case 'moderator':
-        return 'Moderator';
-      case 'judge1':
-        return 'Judge 1';
-      case 'judge2':
-        return 'Judge 2';
-      case 'judge3':
-        return 'Judge 3';
-      default:
-        return 'Official';
-    }
-  }
 
   /// Perform the mixed invitation system (personal + random)
   Future<void> _performMixedInvitations(
@@ -4519,7 +3716,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           SnackBar(
             content: Text('❌ Error sending invitations: $e'),
             backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -5062,8 +4259,8 @@ class _RoleManagerPanelState extends State<RoleManagerPanel> {
       widget.onRoleAssigned();
       
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('✅ Role assigned successfully'),
+        const SnackBar(
+          content: Text('✅ Role assigned successfully'),
           backgroundColor: Colors.green,
         ),
       );
@@ -5885,11 +5082,11 @@ class _TimerControlModalState extends State<TimerControlModal> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Row(
+      title: const Row(
         children: [
           Icon(Icons.timer, color: Colors.purple),
-          const SizedBox(width: 8),
-          const Text('Timer Controls'),
+          SizedBox(width: 8),
+          Text('Timer Controls'),
         ],
       ),
       content: ConstrainedBox(
@@ -6185,8 +5382,6 @@ class ResultsModal extends StatelessWidget {
       }
     }
 
-    final isAffirmativeWinner = winner == 'affirmative';
-
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
@@ -6232,13 +5427,13 @@ class ResultsModal extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [accentPurple, deepPurple],
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),
-        borderRadius: const BorderRadius.only(
+        borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
         ),
@@ -6434,7 +5629,7 @@ class ResultsModal extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 3), // Reduced from 4
                       child: Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.gavel,
                             size: 14, // Reduced from 16
                             color: accentPurple,
@@ -6634,7 +5829,7 @@ class _RoomClosingModalState extends State<RoomClosingModal> {
   }
 
   void _startCountdown() {
-    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
           _secondsRemaining--;
@@ -7003,7 +6198,7 @@ class _JudgeSelectionModalState extends State<JudgeSelectionModal> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.check_circle, color: Colors.amber, size: 16),
+                        const Icon(Icons.check_circle, color: Colors.amber, size: 16),
                         const SizedBox(width: 8),
                         Text(
                           '${_selectedJudges.length} judge${_selectedJudges.length == 1 ? '' : 's'} selected',
@@ -7196,9 +6391,9 @@ class _RoleSelectionModalState extends State<RoleSelectionModal>
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.8,
       ),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -7236,14 +6431,14 @@ class _RoleSelectionModalState extends State<RoleSelectionModal>
               labelColor: Colors.purple.shade700,
               unselectedLabelColor: Colors.grey.shade600,
               indicatorColor: Colors.purple.shade700,
-              tabs: [
+              tabs: const [
                 Tab(
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.person, size: 16),
-                      const SizedBox(width: 8),
-                      const Text('Debaters'),
+                      SizedBox(width: 8),
+                      Text('Debaters'),
                     ],
                   ),
                 ),
@@ -7252,8 +6447,8 @@ class _RoleSelectionModalState extends State<RoleSelectionModal>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.balance, size: 16),
-                      const SizedBox(width: 8),
-                      const Text('Judges'),
+                      SizedBox(width: 8),
+                      Text('Judges'),
                     ],
                   ),
                 ),
@@ -7371,24 +6566,24 @@ class _RoleSelectionModalState extends State<RoleSelectionModal>
                             onSelected: (role) => widget.onRoleAssigned(member, role),
                             itemBuilder: (context) => [
                               if (!widget.hasAffirmativeDebater)
-                                PopupMenuItem(
+                                const PopupMenuItem(
                                   value: 'affirmative',
                                   child: Row(
                                     children: [
                                       Icon(Icons.thumb_up, color: Colors.green, size: 16),
-                                      const SizedBox(width: 8),
-                                      const Text('Affirmative Debater'),
+                                      SizedBox(width: 8),
+                                      Text('Affirmative Debater'),
                                     ],
                                   ),
                                 ),
                               if (!widget.hasNegativeDebater)
-                                PopupMenuItem(
+                                const PopupMenuItem(
                                   value: 'negative',
                                   child: Row(
                                     children: [
                                       Icon(Icons.thumb_down, color: Colors.red, size: 16),
-                                      const SizedBox(width: 8),
-                                      const Text('Negative Debater'),
+                                      SizedBox(width: 8),
+                                      Text('Negative Debater'),
                                     ],
                                   ),
                                 ),
@@ -7583,7 +6778,7 @@ class _RoleSelectionModalState extends State<RoleSelectionModal>
             mainAxisSize: MainAxisSize.min,
             children: availableSlots.map((slot) {
               return ListTile(
-                leading: Icon(Icons.balance, color: Colors.amber),
+                leading: const Icon(Icons.balance, color: Colors.amber),
                 title: Text('Judge ${slot.substring(5)}'),
                 onTap: () {
                   Navigator.pop(context);
@@ -7739,7 +6934,7 @@ class _ArenaChatBottomSheetState extends State<ArenaChatBottomSheet> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.chat_bubble, color: Colors.blue, size: 24),
+                  const Icon(Icons.chat_bubble, color: Colors.blue, size: 24),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(

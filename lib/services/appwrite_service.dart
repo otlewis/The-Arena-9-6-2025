@@ -287,7 +287,7 @@ class AppwriteService {
       AppLogger().debug('Response createdAt: ${response.$createdAt}');
       AppLogger().debug('Response updatedAt: ${response.$updatedAt}');
       AppLogger().debug('Response data keys: ${response.data.keys.toList()}');
-      AppLogger().debug('Response data values preview: ${response.data.toString().length > 500 ? response.data.toString().substring(0, 500) + "..." : response.data.toString()}');
+      AppLogger().debug('Response data values preview: ${response.data.toString().length > 500 ? '${response.data.toString().substring(0, 500)}...' : response.data.toString()}');
       
       final profileData = Map<String, dynamic>.from(response.data);
       AppLogger().debug('Profile data after Map.from conversion - keys: ${profileData.keys.toList()}');
@@ -1504,7 +1504,6 @@ class AppwriteService {
       }
       
       // Create new room with unique ID
-      final now = DateTime.now().toIso8601String();
       final response = await databases.createDocument(
         databaseId: 'arena_db',
         collectionId: 'arena_rooms',
@@ -1890,7 +1889,7 @@ class AppwriteService {
 
       AppLogger().debug('🔍 WINNER DETERMINATION: Found ${judgments.documents.length} judgments');
 
-      if (judgments.documents.length < 1) {
+      if (judgments.documents.isEmpty) {
         AppLogger().error('WINNER DETERMINATION: Not enough judgments (need at least 1)');
         return; // Need at least 1 judge for testing
       }
@@ -2371,7 +2370,7 @@ class AppwriteService {
       AppLogger().debug('🔗 Test subscription created successfully');
       
       // Close test subscription after 1 second
-      Future.delayed(Duration(seconds: 1), () {
+      Future.delayed(const Duration(seconds: 1), () {
         testSubscription.close();
         AppLogger().debug('🔗 Test subscription closed');
       });
@@ -2761,7 +2760,6 @@ class AppwriteService {
       AppLogger().info('Attempting to create room with ID: $roomId');
       
       final now = DateTime.now();
-      final nowString = now.toIso8601String();
       
       // ATOMIC duplicate prevention - check for recent rooms by this user with same topic
       final recentThreshold = now.subtract(const Duration(minutes: 1)).toIso8601String();
@@ -2825,10 +2823,8 @@ class AppwriteService {
         AppLogger().debug('Room $roomId does not exist, proceeding with creation');
       }
       
-      late final models.Document response;
-      
       try {
-        response = await databases.createDocument(
+        await databases.createDocument(
           databaseId: 'arena_db',
           collectionId: 'arena_rooms',
           documentId: roomId,
@@ -3374,7 +3370,7 @@ class AppwriteService {
       AppLogger().debug('🎁 DEBUG: Attempting to create document...');
 
       // Create gift transaction
-      final transaction = await databases.createDocument(
+      await databases.createDocument(
         databaseId: 'gifts_db',
         collectionId: 'gift_transactions',
         documentId: ID.unique(),

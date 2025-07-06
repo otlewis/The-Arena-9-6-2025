@@ -222,8 +222,8 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
     if (_roomTitleController.text.trim().isEmpty || 
         _roomDescriptionController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please fill in both title and description'),
+        const SnackBar(
+          content: Text('Please fill in both title and description'),
           backgroundColor: scarletRed,
         ),
       );
@@ -235,8 +235,8 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
         _createFormSelectedCategory == 'All' || 
         _createFormSelectedCategory == 'Custom') {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please select a specific category for your room'),
+        const SnackBar(
+          content: Text('Please select a specific category for your room'),
           backgroundColor: scarletRed,
           duration: Duration(seconds: 3),
         ),
@@ -283,20 +283,24 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
       });
 
       // Navigate to room screen
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OpenDiscussionRoomScreen(room: room),
-        ),
-      );
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OpenDiscussionRoomScreen(room: room),
+          ),
+        );
+      }
     } catch (e) {
       setState(() => _isCreating = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error creating room: $e'),
-          backgroundColor: scarletRed,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error creating room: $e'),
+            backgroundColor: scarletRed,
+          ),
+        );
+      }
     }
   }
 
@@ -391,7 +395,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
             children: [
               IconButton(
                 onPressed: () => Navigator.pop(context),
-                icon: Icon(
+                icon: const Icon(
                   Icons.arrow_back_ios,
                   color: scarletRed,
                   size: 20,
@@ -434,7 +438,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
                       _createFormSelectedCategory = ''; // Reset create form category
                     });
                   },
-                  child: Text(
+                  child: const Text(
                     'Cancel',
                     style: TextStyle(color: scarletRed),
                   ),
@@ -469,7 +473,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
           hintStyle: TextStyle(
             color: deepPurple.withValues(alpha: 0.6),
           ),
-          prefixIcon: Icon(
+          prefixIcon: const Icon(
             Icons.search,
             color: scarletRed,
           ),
@@ -501,7 +505,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             'Categories',
             style: TextStyle(
               color: deepPurple,
@@ -572,7 +576,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
         children: [
           Row(
             children: [
-              Text(
+              const Text(
                 'Active Rooms',
                 style: TextStyle(
                   color: deepPurple,
@@ -600,9 +604,9 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
           ),
           const SizedBox(height: 15),
           if (_isLoading)
-            Center(
+            const Center(
               child: Padding(
-                padding: const EdgeInsets.all(40),
+                padding: EdgeInsets.all(40),
                 child: CircularProgressIndicator(
                   color: scarletRed,
                 ),
@@ -706,7 +710,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
                               shape: BoxShape.circle,
                               color: accentPurple.withValues(alpha: 0.2),
                             ),
-                            child: Icon(
+                            child: const Icon(
                               Icons.person,
                               size: 16,
                               color: accentPurple,
@@ -728,7 +732,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
                         width: 2,
                       ),
                     ),
-                    child: Icon(
+                    child: const Icon(
                       Icons.person,
                       size: 16,
                       color: accentPurple,
@@ -768,7 +772,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
                       width: 1,
                     ),
                   ),
-                  child: Text(
+                  child: const Text(
                     'LIVE',
                     style: TextStyle(
                       color: scarletRed,
@@ -792,7 +796,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
             const SizedBox(height: 12),
             Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.people,
                   size: 16,
                   color: accentPurple,
@@ -806,7 +810,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
                   ),
                 ),
                 const SizedBox(width: 16),
-                Icon(
+                const Icon(
                   Icons.access_time,
                   size: 16,
                   color: accentPurple,
@@ -833,7 +837,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
                     ),
                     child: Text(
                       roomData['tags'].first,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: scarletRed,
                         fontSize: 10,
                         fontWeight: FontWeight.w500,
@@ -854,7 +858,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             'Room Details',
             style: TextStyle(
               color: deepPurple,
@@ -865,7 +869,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
           const SizedBox(height: 20),
           
           // Category Selection
-          Text(
+          const Text(
             'Category *',
             style: TextStyle(
               color: deepPurple,
@@ -879,7 +883,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
           const SizedBox(height: 20),
           
           // Room Title
-          Text(
+          const Text(
             'Room Title *',
             style: TextStyle(
               color: deepPurple,
@@ -912,7 +916,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
+                borderSide: const BorderSide(
                   color: scarletRed,
                   width: 2,
                 ),
@@ -923,7 +927,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
           const SizedBox(height: 20),
           
           // Room Description
-          Text(
+          const Text(
             'Description *',
             style: TextStyle(
               color: deepPurple,
@@ -957,7 +961,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
+                borderSide: const BorderSide(
                   color: scarletRed,
                   width: 2,
                 ),
@@ -990,7 +994,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
                 shadowColor: scarletRed.withValues(alpha: 0.3),
               ),
               child: _isCreating
-                ? Row(
+                ? const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       SizedBox(
@@ -1001,8 +1005,8 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
                           valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      const Text(
+                      SizedBox(width: 12),
+                      Text(
                         'Creating Room...',
                         style: TextStyle(
                           fontSize: 16,
@@ -1064,7 +1068,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
               ),
               if (_createFormSelectedCategory.isNotEmpty) ...[
                 const Spacer(),
-                Icon(
+                const Icon(
                   Icons.check_circle,
                   color: Colors.green,
                   size: 20,

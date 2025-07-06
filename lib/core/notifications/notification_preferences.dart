@@ -238,10 +238,16 @@ class NotificationPreferences {
         try {
           result[type] = converter(map[type.value]);
         } catch (e) {
-          result[type] = defaultValues[type]!;
+          final defaultValue = defaultValues[type];
+          if (defaultValue != null) {
+            result[type] = defaultValue;
+          }
         }
       } else {
-        result[type] = defaultValues[type]!;
+        final defaultValue = defaultValues[type];
+        if (defaultValue != null) {
+          result[type] = defaultValue;
+        }
       }
     }
     

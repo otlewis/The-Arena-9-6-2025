@@ -700,11 +700,11 @@ class ArenaScreenRiverpod extends ConsumerWidget {
               color: Colors.green.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Row(
+            child: const Row(
               children: [
-                const Icon(Icons.check, color: Colors.green),
-                const SizedBox(width: 8),
-                const Text(
+                Icon(Icons.check, color: Colors.green),
+                SizedBox(width: 8),
+                Text(
                   'Vote Cast',
                   style: TextStyle(color: Colors.white),
                 ),

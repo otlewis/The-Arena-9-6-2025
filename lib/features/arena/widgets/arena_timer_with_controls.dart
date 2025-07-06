@@ -206,8 +206,8 @@ class _ArenaTimerWithControlsState extends ConsumerState<ArenaTimerWithControls>
           child: Column(
             mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: const [
+          const Row(
+            children: [
               Icon(Icons.admin_panel_settings, size: 16, color: Colors.blue),
               SizedBox(width: 8),
               Text(
@@ -410,7 +410,7 @@ class _ArenaTimerWithControlsState extends ConsumerState<ArenaTimerWithControls>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${seconds > 0 ? 'Added' : 'Removed'} ${seconds.abs()} seconds'),
-            duration: Duration(seconds: 1),
+            duration: const Duration(seconds: 1),
           ),
         );
       }
@@ -436,7 +436,7 @@ class _ArenaTimerWithControlsState extends ConsumerState<ArenaTimerWithControls>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Timer set to ${(seconds / 60).toStringAsFixed(1)} minutes'),
-            duration: Duration(seconds: 1),
+            duration: const Duration(seconds: 1),
           ),
         );
       }

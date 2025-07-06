@@ -17,7 +17,6 @@ final arenaStateProvider = StateNotifierProvider.autoDispose
     .family<ArenaStateNotifier, ArenaRoomState, String>(
   (ref, roomId) {
     final appwrite = ref.read(appwriteServiceProvider);
-    final messaging = ref.read(challengeMessagingServiceProvider);
     final sound = ref.read(soundServiceProvider);
     final realtime = ref.read(arenaRealtimeServiceProvider);
     final participant = ref.read(arenaParticipantServiceProvider);
@@ -26,7 +25,6 @@ final arenaStateProvider = StateNotifierProvider.autoDispose
     return ArenaStateNotifier(
       roomId: roomId,
       appwriteService: appwrite,
-      messagingService: messaging,
       soundService: sound,
       realtimeService: realtime,
       participantService: participant,
@@ -68,13 +66,11 @@ class ArenaStateNotifier extends StateNotifier<ArenaRoomState> {
   ArenaStateNotifier({
     required this.roomId,
     required AppwriteService appwriteService,
-    required ChallengeMessagingService messagingService,
     required SoundService soundService,
     required ArenaRealtimeService realtimeService,
     required ArenaParticipantService participantService,
     required ArenaIOSOptimizationService iosService,
   }) : _appwriteService = appwriteService,
-       _messagingService = messagingService,
        _soundService = soundService,
        _realtimeService = realtimeService,
        _participantService = participantService,

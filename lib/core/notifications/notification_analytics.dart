@@ -1,5 +1,4 @@
 import 'notification_types.dart';
-import 'notification_preferences.dart';
 import 'notification_service.dart';
 import '../logging/app_logger.dart';
 

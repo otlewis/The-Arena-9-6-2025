@@ -105,7 +105,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
 
       // Wait for room setup to complete before navigation
       AppLogger().info('Waiting for room setup to stabilize before navigation...');
-      await Future.delayed(Duration(seconds: 2));
+      await Future.delayed(const Duration(seconds: 2));
       
       // Verify room exists and is properly set up before navigating
       final roomData = await _appwrite.getArenaRoom(roomId);
@@ -170,7 +170,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
           ],
         ),
         backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -188,7 +188,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
           ],
         ),
         backgroundColor: Colors.red,
-        duration: Duration(seconds: 4),
+        duration: const Duration(seconds: 4),
       ),
     );
   }
@@ -296,7 +296,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           colors: [accentPurple, deepPurple],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -310,11 +310,11 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
           ),
         ],
       ),
-      child: Column(
+      child: const Column(
         children: [
-          const Icon(Icons.stadium, color: Colors.white, size: 48),
-          const SizedBox(height: 12),
-          const Text(
+          Icon(Icons.stadium, color: Colors.white, size: 48),
+          SizedBox(height: 12),
+          Text(
             'Create Your Arena',
             style: TextStyle(
               color: Colors.white,
@@ -322,8 +322,8 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: 8),
+          Text(
             'Set up a new debate room and become the moderator',
             style: TextStyle(
               color: Colors.white,
@@ -380,10 +380,10 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: accentPurple, width: 2),
+                  borderSide: const BorderSide(color: accentPurple, width: 2),
                 ),
                 contentPadding: const EdgeInsets.all(16),
-                prefixIcon: Icon(Icons.topic, color: accentPurple),
+                prefixIcon: const Icon(Icons.topic, color: accentPurple),
                 filled: true,
                 fillColor: Colors.grey[50],
               ),
@@ -427,11 +427,11 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: accentPurple, width: 2),
+                  borderSide: const BorderSide(color: accentPurple, width: 2),
                 ),
                 contentPadding: const EdgeInsets.all(16),
-                prefixIcon: Padding(
-                  padding: const EdgeInsets.only(bottom: 60),
+                prefixIcon: const Padding(
+                  padding: EdgeInsets.only(bottom: 60),
                   child: Icon(Icons.description, color: accentPurple),
                 ),
                 filled: true,
@@ -474,7 +474,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
           elevation: 0,
         ),
         child: _isCreating
-            ? Row(
+            ? const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   SizedBox(
@@ -485,19 +485,19 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  const Text(
+                  SizedBox(width: 12),
+                  Text(
                     'Creating Arena...',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ],
               )
-            : Row(
+            : const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.add_circle, size: 24),
-                  const SizedBox(width: 8),
-                  const Text(
+                  Icon(Icons.add_circle, size: 24),
+                  SizedBox(width: 8),
+                  Text(
                     'Create Arena',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
@@ -569,9 +569,9 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
         children: [
           Row(
             children: [
-              Icon(Icons.live_tv, color: scarletRed, size: 24),
+              const Icon(Icons.live_tv, color: scarletRed, size: 24),
               const SizedBox(width: 12),
-              Text(
+              const Text(
                 'Live Debates',
                 style: TextStyle(
                   fontSize: 20,
@@ -582,9 +582,9 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: scarletRed,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
                 ),
                 child: Text(
                   '${activeArenas.length}',

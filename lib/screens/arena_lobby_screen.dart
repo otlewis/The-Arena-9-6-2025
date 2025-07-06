@@ -84,8 +84,9 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
       }
 
       // Navigate to Arena and refresh lobby when returning
-      await Navigator.push(
-        context,
+      if (mounted) {
+        await Navigator.push(
+          context,
         MaterialPageRoute(
           builder: (context) => ArenaScreen(
             roomId: roomId,
@@ -95,14 +96,17 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
         ),
       );
       
-      // Refresh the lobby when user returns from arena
-      AppLogger().debug('🔄 User returned from arena - refreshing lobby');
-      ref.read(arenaLobbyProvider.notifier).refreshArenas();
+        // Refresh the lobby when user returns from arena
+        AppLogger().debug('🔄 User returned from arena - refreshing lobby');
+        ref.read(arenaLobbyProvider.notifier).refreshArenas();
+      }
       
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error joining arena: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error joining arena: $e')),
+        );
+      }
     }
   }
 
@@ -163,17 +167,19 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
         }
 
         // Navigate to the created arena
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ArenaScreen(
-              roomId: roomId,
-              challengeId: roomId,
-              topic: topic,
-              description: description,
+        if (mounted) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ArenaScreen(
+                roomId: roomId,
+                challengeId: roomId,
+                topic: topic,
+                description: description,
+              ),
             ),
-          ),
-        );
+          );
+        }
 
         // Refresh the lobby when user returns from created arena
         AppLogger().debug('🔄 User returned from created arena - refreshing lobby');
@@ -189,19 +195,23 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
             ? ' with ${assignedRoles.join(', ')} assigned'
             : '';
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('🏛️ Arena created! You are the moderator$roleText.'),
-            backgroundColor: const Color(0xFF8B5CF6),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('🏛️ Arena created! You are the moderator$roleText.'),
+              backgroundColor: const Color(0xFF8B5CF6),
+            ),
+          );
+        }
 
         // Refresh the list again to ensure consistency
         ref.read(arenaLobbyProvider.notifier).refreshArenas();
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating arena: $e')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error creating arena: $e')),
+          );
+        }
       }
     }
   }
@@ -232,8 +242,9 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
       );
 
       // Navigate to demo arena
-      await Navigator.push(
-        context,
+      if (mounted) {
+        await Navigator.push(
+          context,
         MaterialPageRoute(
           builder: (context) => ArenaScreen(
             roomId: roomId,
@@ -244,20 +255,24 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
         ),
       );
 
-      // Refresh the lobby when user returns from demo arena
-      AppLogger().debug('🔄 User returned from demo arena - refreshing lobby');
-      ref.read(arenaLobbyProvider.notifier).refreshArenas();
+        // Refresh the lobby when user returns from demo arena
+        AppLogger().debug('🔄 User returned from demo arena - refreshing lobby');
+        ref.read(arenaLobbyProvider.notifier).refreshArenas();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('🎭 Demo Arena created! This is how real debates look.'),
-          backgroundColor: Color(0xFF8B5CF6),
-        ),
-      );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🎭 Demo Arena created! This is how real debates look.'),
+            backgroundColor: Color(0xFF8B5CF6),
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error creating demo: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error creating demo: $e')),
+        );
+      }
     }
   }
 
@@ -292,7 +307,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
           if (isRefreshing)
             Container(
               margin: const EdgeInsets.only(right: 16),
-              child: Center(
+              child: const Center(
                 child: SizedBox(
                   width: 20,
                   height: 20,
@@ -337,21 +352,21 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           colors: [accentPurple, deepPurple],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Column(
+      child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Icon(Icons.stadium, color: Colors.white, size: 32),
-              const SizedBox(width: 12),
-              const Expanded(
+              SizedBox(width: 12),
+              Expanded(
                 child: Text(
                   'Welcome to The Arena',
                   style: TextStyle(
@@ -363,8 +378,8 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: 8),
+          Text(
             'Join live debates as an audience member or challenge someone to debate!',
             style: TextStyle(
               color: Colors.white,
@@ -383,7 +398,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
       children: [
         Row(
           children: [
-            Icon(Icons.live_tv, color: scarletRed, size: 20),
+            const Icon(Icons.live_tv, color: scarletRed, size: 20),
             const SizedBox(width: 8),
             const Text(
               'Live Debates',
@@ -516,7 +531,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                   const SizedBox(width: 4),
                   Text(
                     isManual ? 'Tap to join room' : 'Tap to watch debate',
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: accentPurple,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -535,11 +550,11 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        const Row(
           children: [
             Icon(Icons.add_circle, color: accentPurple, size: 20),
-            const SizedBox(width: 8),
-            const Text(
+            SizedBox(width: 8),
+            Text(
               'Create or Try Arena',
               style: TextStyle(
                 fontSize: 20,
@@ -572,7 +587,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                       color: scarletRed.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(Icons.add, color: scarletRed, size: 24),
+                    child: const Icon(Icons.add, color: scarletRed, size: 24),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -598,7 +613,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                       ],
                     ),
                   ),
-                  Icon(Icons.arrow_forward_ios, color: scarletRed, size: 16),
+                  const Icon(Icons.arrow_forward_ios, color: scarletRed, size: 16),
                 ],
               ),
             ),
@@ -628,7 +643,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                       color: accentPurple.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(Icons.smart_toy, color: accentPurple, size: 24),
+                    child: const Icon(Icons.smart_toy, color: accentPurple, size: 24),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -654,7 +669,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                       ],
                     ),
                   ),
-                  Icon(Icons.arrow_forward_ios, color: accentPurple, size: 16),
+                  const Icon(Icons.arrow_forward_ios, color: accentPurple, size: 16),
                 ],
               ),
             ),
@@ -668,11 +683,11 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        const Row(
           children: [
             Icon(Icons.help_outline, color: deepPurple, size: 20),
-            const SizedBox(width: 8),
-            const Text(
+            SizedBox(width: 8),
+            Text(
               'How to Start an Instant Debate',
               style: TextStyle(
                 fontSize: 20,
@@ -858,13 +873,13 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [accentPurple, deepPurple],
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),
-        borderRadius: const BorderRadius.only(
+        borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
         ),
@@ -919,7 +934,7 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: accentPurple, width: 2),
+                  borderSide: const BorderSide(color: accentPurple, width: 2),
                 ),
                 contentPadding: const EdgeInsets.all(12),
               ),
@@ -953,7 +968,7 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: accentPurple, width: 2),
+                  borderSide: const BorderSide(color: accentPurple, width: 2),
                 ),
                 contentPadding: const EdgeInsets.all(12),
               ),
@@ -965,14 +980,14 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
                 color: accentPurple.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Column(
+              child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
                       Icon(Icons.info, color: accentPurple, size: 16),
-                      const SizedBox(width: 6),
-                      const Text(
+                      SizedBox(width: 6),
+                      Text(
                         'How it works:',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
@@ -981,8 +996,8 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  const Text(
+                  SizedBox(height: 4),
+                  Text(
                     '• You will be the moderator\n'
                     '• Others can join as audience\n'
                     '• Assign roles once people join\n'

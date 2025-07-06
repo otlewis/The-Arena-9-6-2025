@@ -268,11 +268,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
             // Note: response is guaranteed to be non-null by the realtime API
             
             // Check payload type
-            final payload = response.payload;
-            if (payload is! Map) {
-              debugPrint('⚠️ Received realtime response with invalid payload, ignoring');
-              return;
-            }
+            final payload = response.payload as Map;
             
             debugPrint('🔔 Room participant real-time update received');
             
@@ -484,7 +480,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     });
     
     _speakingTimer?.cancel(); // Cancel any existing timer
-    _speakingTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+    _speakingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
         return;
@@ -569,7 +565,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         SnackBar(
           content: Text(_isSpeakerphoneEnabled ? 'Speakerphone enabled' : 'Speakerphone disabled'),
           backgroundColor: _isSpeakerphoneEnabled ? Colors.green : Colors.orange,
-          duration: Duration(seconds: 1),
+          duration: const Duration(seconds: 1),
         ),
       );
     }
@@ -644,7 +640,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         title: const Row(
           children: [
             Icon(Icons.pan_tool, color: Colors.orange),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Text('Hand Raised'),
           ],
         ),
@@ -704,8 +700,8 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       }
       
       debugPrint(newHandRaiseState 
-        ? '✋ Hand raised by ${_currentAppwriteUserId}' 
-        : '🫴 Hand lowered by ${_currentAppwriteUserId}');
+        ? '✋ Hand raised by $_currentAppwriteUserId' 
+        : '🫴 Hand lowered by $_currentAppwriteUserId');
         
     } catch (e) {
       debugPrint('❌ Error toggling hand raise: $e');
@@ -970,7 +966,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
           SnackBar(
             content: Text('Mute request sent to ${muteAllTasks.length} participants'),
             backgroundColor: Colors.orange,
-            duration: Duration(seconds: 3),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -1128,7 +1124,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: scarletRed.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: const BorderRadius.all(Radius.circular(8)),
                 border: Border.all(
                   color: scarletRed.withValues(alpha: 0.3),
                 ),
@@ -1182,7 +1178,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                             : _agoraService.isJoined
                               ? '${_remoteUsers.length + 1} in voice'
                               : 'Disconnected',
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: accentPurple,
                             fontSize: 10,
                           ),
@@ -1229,7 +1225,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                     color: _isTimerRunning 
                       ? Colors.green.withValues(alpha: 0.1)
                       : scarletRed.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: const BorderRadius.all(Radius.circular(10)),
                     border: Border.all(
                       color: _isTimerRunning 
                         ? Colors.green.withValues(alpha: 0.3)
@@ -1278,12 +1274,12 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                 decoration: BoxDecoration(
                   color: accentPurple.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: const BorderRadius.all(Radius.circular(10)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.people,
                       color: accentPurple,
                       size: 12,
@@ -1643,7 +1639,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: scarletRed,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: const BorderRadius.all(Radius.circular(8)),
                   ),
                   child: const Text(
                     'MODERATOR',
@@ -1660,7 +1656,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                   decoration: BoxDecoration(
                     color: Colors.green,
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: const BorderRadius.all(Radius.circular(6)),
                   ),
                   child: const Text(
                     'LIVE',
@@ -1826,7 +1822,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
             height: 40,
             decoration: BoxDecoration(
               color: lightScarlet,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: const BorderRadius.all(Radius.circular(20)),
               border: Border.all(
                 color: color.withValues(alpha: 0.3),
                 width: 1,
@@ -1919,7 +1915,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               height: 4,
               decoration: BoxDecoration(
                 color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: const BorderRadius.all(Radius.circular(2)),
               ),
             ),
             
@@ -1961,7 +1957,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: Colors.amber.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: const BorderRadius.all(Radius.circular(20)),
                         border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
                       ),
                       child: Row(
@@ -2141,7 +2137,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
           color: isSelected 
             ? scarletRed.withValues(alpha: 0.1)
             : (canAfford ? Colors.white : Colors.grey.shade100),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: const BorderRadius.all(Radius.circular(12)),
           border: Border.all(
             color: isSelected 
               ? scarletRed 
@@ -2238,13 +2234,12 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       itemBuilder: (context, index) {
         final recipient = recipients[index];
         final userProfile = _userProfiles[recipient['userId']];
-        final isCurrentUserModerator = _isCurrentUserModerator;
         final isSelected = _selectedRecipient?['userId'] == recipient['userId'];
         
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: const BorderRadius.all(Radius.circular(12)),
             border: isSelected 
               ? Border.all(color: scarletRed, width: 2)
               : null,
@@ -2261,7 +2256,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               child: userProfile?.avatar == null 
                 ? Text(
                     userProfile?.initials ?? 'U',
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: deepPurple,
                       fontWeight: FontWeight.bold,
                     ),
@@ -2322,7 +2317,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       SnackBar(
         content: Text('Selected ${gift.emoji} ${gift.name}'),
         backgroundColor: Colors.green,
-        duration: Duration(seconds: 1),
+        duration: const Duration(seconds: 1),
       ),
     );
 
@@ -2344,7 +2339,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       SnackBar(
         content: Text('Selected recipient: ${userProfile?.displayName}'),
         backgroundColor: Colors.green,
-        duration: Duration(seconds: 1),
+        duration: const Duration(seconds: 1),
       ),
     );
 
@@ -2381,7 +2376,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   'Insufficient coins!',
-                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                  style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
                 ),
               ),
           ],
@@ -2389,7 +2384,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: _currentUserCoinBalance >= gift.cost 
@@ -2399,7 +2394,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               backgroundColor: Colors.amber,
               foregroundColor: Colors.white,
             ),
-            child: Text('Send Gift'),
+            child: const Text('Send Gift'),
           ),
         ],
       ),
@@ -2413,23 +2408,25 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       Navigator.pop(context); // Close confirmation dialog
 
       // Show loading
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-              ),
-              const SizedBox(width: 10),
-              Text('Sending gift...'),
-            ],
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                ),
+                SizedBox(width: 10),
+                Text('Sending gift...'),
+              ],
+            ),
+            backgroundColor: Colors.blue,
+            duration: const Duration(seconds: 2),
           ),
-          backgroundColor: Colors.blue,
-          duration: Duration(seconds: 2),
-        ),
-      );
+        );
+      }
 
       // Send gift via Firebase
       await _firebaseGiftService.sendGift(
@@ -2459,12 +2456,14 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       await _loadFirebaseCoinBalance();
 
       // Show success notification
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('🎁 Gift sent! ${gift.emoji} ${gift.name}'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🎁 Gift sent! ${gift.emoji} ${gift.name}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
 
       // Reset selections
       setState(() {
@@ -2474,12 +2473,14 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
 
     } catch (e) {
       debugPrint('Error sending gift: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to send gift: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send gift: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -2507,7 +2508,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               height: 4,
               decoration: BoxDecoration(
                 color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: const BorderRadius.all(Radius.circular(2)),
               ),
             ),
             
@@ -2524,7 +2525,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               ),
               child: Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.admin_panel_settings,
                     color: scarletRed,
                     size: 24,
@@ -2532,7 +2533,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                   const SizedBox(width: 10),
                   Text(
                     'Moderation Controls',
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: deepPurple,
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -2589,7 +2590,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: const BorderRadius.all(Radius.circular(10)),
           border: Border.all(color: Colors.grey.shade200),
         ),
         child: Row(
@@ -2616,7 +2617,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.orange.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: const BorderRadius.all(Radius.circular(10)),
         border: Border.all(
           color: Colors.orange.withValues(alpha: 0.3),
         ),
@@ -2658,7 +2659,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: const BorderRadius.all(Radius.circular(10)),
         border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
         boxShadow: [
           BoxShadow(
@@ -2680,7 +2681,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
             child: userProfile?.avatar == null 
               ? Text(
                   userProfile?.initials ?? 'U',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: deepPurple,
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
@@ -2697,7 +2698,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               children: [
                 Text(
                   displayName,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: deepPurple,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -2737,7 +2738,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               backgroundColor: Colors.green,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: const BorderRadius.all(Radius.circular(8)),
               ),
             ),
           ),
@@ -2752,7 +2753,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       children: [
         Text(
           'Quick Actions',
-          style: TextStyle(
+          style: const TextStyle(
             color: deepPurple,
             fontSize: 18,
             fontWeight: FontWeight.w600,
@@ -2802,7 +2803,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: const BorderRadius.all(Radius.circular(12)),
           border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Column(
@@ -2836,7 +2837,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       children: [
         Text(
           'Manage Participants',
-          style: TextStyle(
+          style: const TextStyle(
             color: deepPurple,
             fontSize: 18,
             fontWeight: FontWeight.w600,
@@ -2848,11 +2849,11 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         if (raisedHands.isNotEmpty) ...[
           Row(
             children: [
-              Icon(Icons.pan_tool, color: Colors.orange, size: 18),
+              const Icon(Icons.pan_tool, color: Colors.orange, size: 18),
               const SizedBox(width: 6),
               Text(
                 'Raised Hands (${raisedHands.length})',
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.orange,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -2874,7 +2875,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         if (_speakers.isNotEmpty) ...[
           Text(
             'Speakers (${_speakers.length})',
-            style: TextStyle(
+            style: const TextStyle(
               color: deepPurple,
               fontSize: 16,
               fontWeight: FontWeight.w500,
@@ -2894,7 +2895,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         if (_audience.isNotEmpty) ...[
           Text(
             'Audience (${_audience.length})',
-            style: TextStyle(
+            style: const TextStyle(
               color: deepPurple,
               fontSize: 16,
               fontWeight: FontWeight.w500,
@@ -2930,7 +2931,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         color: isCurrentUser 
           ? accentPurple.withValues(alpha: 0.1) 
           : Colors.grey.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: const BorderRadius.all(Radius.circular(8)),
         border: Border.all(
           color: isCurrentUser 
             ? accentPurple.withValues(alpha: 0.3)
@@ -2949,7 +2950,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
             child: userProfile?.avatar == null 
               ? Text(
                   userProfile?.initials ?? 'U',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: deepPurple,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -2978,7 +2979,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                     ),
                     if (hasRaisedHand) ...[
                       const SizedBox(width: 8),
-                      Icon(
+                      const Icon(
                         Icons.pan_tool,
                         color: Colors.orange,
                         size: 16,
@@ -3104,7 +3105,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.timer, color: scarletRed, size: 20),
+                        const Icon(Icons.timer, color: scarletRed, size: 20),
                         const SizedBox(width: 8),
                         const Text('Room Timer', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         const Spacer(),
@@ -3114,7 +3115,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                             color: _isTimerRunning 
                               ? Colors.green.withValues(alpha: 0.2)
                               : Colors.grey.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: const BorderRadius.all(Radius.circular(6)),
                           ),
                           child: Text(
                             _isTimerRunning ? 'RUNNING' : _isTimerPaused ? 'PAUSED' : 'STOPPED',
@@ -3142,14 +3143,14 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
                               color: Colors.white,
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: const BorderRadius.all(Radius.circular(8)),
                               border: Border.all(color: scarletRed.withValues(alpha: 0.3)),
                             ),
                             child: Column(
                               children: [
                                 Text(
                                   'Countdown Timer',
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     color: deepPurple,
                                     fontSize: 14,
                                     fontWeight: FontWeight.w500,
@@ -3179,7 +3180,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                                   const SizedBox(height: 4),
                                   Text(
                                     'Time\'s up!',
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       color: Colors.red,
                                       fontSize: 14,
                                       fontWeight: FontWeight.bold,
@@ -3195,7 +3196,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                           // Set custom time
                           Text(
                             'Set Countdown Time',
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: deepPurple,
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
@@ -3212,7 +3213,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                                     labelText: 'Min',
                                     labelStyle: const TextStyle(fontSize: 12),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(6),
+                                      borderRadius: const BorderRadius.all(Radius.circular(6)),
                                     ),
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                     isDense: true,
@@ -3229,7 +3230,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                                     labelText: 'Sec',
                                     labelStyle: const TextStyle(fontSize: 12),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(6),
+                                      borderRadius: const BorderRadius.all(Radius.circular(6)),
                                     ),
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                     isDense: true,
@@ -3310,7 +3311,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                           // Quick preset times
                           Text(
                             'Quick Presets',
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: deepPurple,
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
@@ -3427,7 +3428,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     if (!_isRealtimeHealthy && mounted) {
       debugPrint('🔄 Starting fallback refresh timer (every 30 seconds)');
       
-      _fallbackRefreshTimer = Timer.periodic(Duration(seconds: 30), (timer) {
+      _fallbackRefreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
         if (!mounted) {
           timer.cancel();
           return;

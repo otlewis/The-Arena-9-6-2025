@@ -5,7 +5,6 @@ import '../widgets/user_avatar.dart';
 import 'edit_profile_screen.dart';
 import 'club_details_screen.dart';
 import 'package:appwrite/models.dart' as models;
-import 'package:flutter/foundation.dart';
 import '../core/logging/app_logger.dart';
 class ProfileScreen extends StatefulWidget {
   final VoidCallback? onLogout;
@@ -286,7 +285,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   
                   // Sign Out
                   ListTile(
-                    leading: Icon(Icons.logout, color: scarletRed),
+                    leading: const Icon(Icons.logout, color: scarletRed),
                     title: const Text('Logout', style: TextStyle(color: deepPurple)),
                     onTap: () async {
                       final shouldLogout = await showDialog<bool>(
@@ -301,7 +300,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             TextButton(
                               onPressed: () => Navigator.pop(context, true),
-                              child: Text('Logout', style: TextStyle(color: scarletRed)),
+                              child: const Text('Logout', style: TextStyle(color: scarletRed)),
                             ),
                           ],
                         ),
@@ -365,11 +364,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               color: lightScarlet,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Row(
+            child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.verified, size: 16, color: scarletRed),
-                const SizedBox(width: 4),
+                SizedBox(width: 4),
                 Text(
                   'Verified',
                       style: TextStyle(
@@ -384,7 +383,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
         if (isGuest) ...[
           const SizedBox(height: 8),
-          Text(
+          const Text(
             'Sign in to access all features',
             style: TextStyle(color: scarletRed),
           ),
@@ -565,7 +564,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 return Chip(
                   label: Text(interest),
                   backgroundColor: lightScarlet,
-                  labelStyle: TextStyle(color: scarletRed, fontSize: 12),
+                  labelStyle: const TextStyle(color: scarletRed, fontSize: 12),
                 );
               }).toList(),
             ),
@@ -749,7 +748,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (isPresident) ...[
-              Icon(
+              const Icon(
                 Icons.workspace_premium,
                 size: 16,
                 color: Colors.orange,
@@ -778,7 +777,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       children: [
         if (_currentUser != null) ...[
           ListTile(
-            leading: Icon(Icons.logout, color: scarletRed),
+            leading: const Icon(Icons.logout, color: scarletRed),
             title: const Text('Logout', style: TextStyle(color: deepPurple)),
             onTap: () async {
               final shouldLogout = await showDialog<bool>(
@@ -793,7 +792,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     TextButton(
                       onPressed: () => Navigator.pop(context, true),
-                      child: Text('Logout', style: TextStyle(color: scarletRed)),
+                      child: const Text('Logout', style: TextStyle(color: scarletRed)),
                     ),
                   ],
                 ),
@@ -807,7 +806,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const Divider(),
         ],
         ListTile(
-          leading: Icon(Icons.history, color: scarletRed),
+          leading: const Icon(Icons.history, color: scarletRed),
           title: const Text('Debate History', style: TextStyle(color: deepPurple)),
           onTap: () {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -816,7 +815,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           },
         ),
         ListTile(
-          leading: Icon(Icons.bookmark, color: scarletRed),
+          leading: const Icon(Icons.bookmark, color: scarletRed),
           title: const Text('Saved Debates', style: TextStyle(color: deepPurple)),
           onTap: () {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -825,7 +824,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           },
         ),
         ListTile(
-          leading: Icon(Icons.notifications, color: scarletRed),
+          leading: const Icon(Icons.notifications, color: scarletRed),
           title: const Text('Notifications', style: TextStyle(color: deepPurple)),
           onTap: () {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -834,7 +833,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           },
         ),
         ListTile(
-          leading: Icon(Icons.help, color: scarletRed),
+          leading: const Icon(Icons.help, color: scarletRed),
           title: const Text('Help & Support', style: TextStyle(color: deepPurple)),
           onTap: () {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -858,11 +857,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            const Row(
               children: [
                 Icon(Icons.gavel, color: accentPurple, size: 20),
-                const SizedBox(width: 8),
-                const Text(
+                SizedBox(width: 8),
+                Text(
                   'Arena Availability',
                   style: TextStyle(
                     fontSize: 18,
@@ -892,7 +891,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.person_pin_circle, color: accentPurple, size: 20),
+                  const Icon(Icons.person_pin_circle, color: accentPurple, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(

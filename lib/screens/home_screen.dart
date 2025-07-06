@@ -104,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
           SnackBar(
             content: Text('${challenge.challengerName} declined your challenge'),
             backgroundColor: Colors.orange,
-            duration: Duration(seconds: 3),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -247,19 +247,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     children: [
                       // Judge's gavel icon
-                      AnimatedScaleIn(
-                        delay: const Duration(milliseconds: 800),
+                      const AnimatedScaleIn(
+                        delay: Duration(milliseconds: 800),
                         curve: Curves.elasticOut,
-                        child: const Icon(
+                        child: Icon(
                           Icons.gavel,
                           size: 48,
                           color: Color(0xFF8B5CF6),
                         ),
                       ),
                       const SizedBox(height: 16),
-                      AnimatedFadeIn(
-                        delay: const Duration(milliseconds: 1000),
-                        child: const Text(
+                      const AnimatedFadeIn(
+                        delay: Duration(milliseconds: 1000),
+                        child: Text(
                           'Welcome to The Arena',
                           style: TextStyle(
                             fontSize: 20,
@@ -270,9 +270,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      AnimatedFadeIn(
-                        delay: const Duration(milliseconds: 1100),
-                        child: const Text(
+                      const AnimatedFadeIn(
+                        delay: Duration(milliseconds: 1100),
+                        child: Text(
                           'Where Debate is Royalty',
                           style: TextStyle(
                             fontSize: 16,

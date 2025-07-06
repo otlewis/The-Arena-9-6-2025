@@ -215,7 +215,6 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
   late final ChallengeMessagingService _messagingService;
   late final SoundService _soundService;
   late final NotificationService _notificationService;
-  late final PushNotificationService _pushNotificationService;
   
   // Arena role notification overlays
   final List<OverlayEntry> _arenaRoleOverlays = [];
@@ -231,7 +230,6 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
     _messagingService = getIt<ChallengeMessagingService>();
     _soundService = getIt<SoundService>();
     _notificationService = getIt<NotificationService>();
-    _pushNotificationService = getIt<PushNotificationService>();
     
     // Trigger initial auth check and setup messaging
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -275,7 +273,6 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
     // Update local references to the new instances
     _messagingService = getIt<ChallengeMessagingService>();
     _notificationService = getIt<NotificationService>();
-    _pushNotificationService = getIt<PushNotificationService>();
     
     // Clear any overlays
     _ensureBottomNavigationVisible();

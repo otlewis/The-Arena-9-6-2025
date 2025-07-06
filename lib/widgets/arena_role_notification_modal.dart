@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/appwrite_service.dart';
 import '../services/challenge_messaging_service.dart';
-import '../services/theme_service.dart';
 import '../features/arena/screens/arena_screen_modular.dart';
 import '../main.dart' show getIt;
 import '../core/logging/app_logger.dart';
@@ -54,7 +53,7 @@ class _ArenaRoleNotificationModalState extends State<ArenaRoleNotificationModal>
       vsync: this,
     );
     _shimmerController = AnimationController(
-      duration: Duration(seconds: 2),
+      duration: const Duration(seconds: 2),
       vsync: this,
     );
     _scaleAnimation = CurvedAnimation(
@@ -262,11 +261,11 @@ class _ArenaRoleNotificationModalState extends State<ArenaRoleNotificationModal>
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
             ),
-            child: Row(
+            child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.timer, size: 16, color: Colors.orange),
-                const SizedBox(width: 4),
+                SizedBox(width: 4),
                 Flexible(
                   child: Text(
                     'Response needed within 2 minutes',

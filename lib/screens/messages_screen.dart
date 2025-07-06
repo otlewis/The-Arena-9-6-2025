@@ -628,7 +628,7 @@ class _MessagesScreenState extends State<MessagesScreen>
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            invitation.position.toUpperCase() ?? 'ARENA ROLE',
+                            invitation.position.toUpperCase(),
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
@@ -671,7 +671,7 @@ class _MessagesScreenState extends State<MessagesScreen>
                         onPressed: () => _respondToArenaRole(invitation, false),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: scarletRed,
-                          side: BorderSide(color: scarletRed),
+                          side: const BorderSide(color: scarletRed),
                           padding: const EdgeInsets.symmetric(vertical: 8),
                         ),
                         child: const Text('Decline'),

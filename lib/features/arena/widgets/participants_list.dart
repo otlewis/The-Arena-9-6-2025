@@ -48,7 +48,7 @@ class ParticipantsList extends ConsumerWidget {
       children: [
         Row(
           children: [
-            Icon(Icons.gavel, size: 20, color: Colors.blue),
+            const Icon(Icons.gavel, size: 20, color: Colors.blue),
             const SizedBox(width: 8),
             Text(
               'Debaters',
@@ -267,13 +267,13 @@ class ParticipantsList extends ConsumerWidget {
             ),
           ),
           if (participant.isReady)
-            Icon(
+            const Icon(
               Icons.check_circle,
               size: 16,
               color: Colors.green,
             )
           else
-            Icon(
+            const Icon(
               Icons.schedule,
               size: 16,
               color: Colors.orange,

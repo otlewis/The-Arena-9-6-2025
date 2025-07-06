@@ -100,7 +100,7 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
               onChanged: _filterUsers,
               decoration: InputDecoration(
                 hintText: 'Search users by name or email...',
-                prefixIcon: Icon(Icons.search, color: accentPurple),
+                prefixIcon: const Icon(Icons.search, color: accentPurple),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: accentPurple.withValues(alpha: 0.3)),
@@ -144,10 +144,10 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
+          const Icon(
             Icons.people_outline,
             size: 64,
-            color: Colors.grey[400],
+            color: Colors.grey,
           ),
           const SizedBox(height: 16),
           Text(
@@ -214,7 +214,7 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                           ),
                         ),
                         if (user.isVerified)
-                          Icon(
+                          const Icon(
                             Icons.verified,
                             size: 16,
                             color: accentPurple,
@@ -233,10 +233,10 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.location_on,
                             size: 12,
-                            color: Colors.grey[500],
+                            color: Colors.grey,
                           ),
                           const SizedBox(width: 4),
                           Text(
@@ -281,10 +281,10 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                 ],
               ),
               const SizedBox(width: 8),
-              Icon(
+              const Icon(
                 Icons.arrow_forward_ios,
                 size: 16,
-                color: Colors.grey[400],
+                color: Colors.grey,
               ),
             ],
           ),

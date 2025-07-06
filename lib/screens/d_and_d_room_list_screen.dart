@@ -163,8 +163,8 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            const Text('Loading rooms...'),
+            SizedBox(height: 16),
+            Text('Loading rooms...'),
           ],
         ),
       );

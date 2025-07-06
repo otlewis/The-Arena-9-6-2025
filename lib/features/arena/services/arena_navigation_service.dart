@@ -90,13 +90,17 @@ class ArenaNavigationService {
       
       // 3. Navigate home
       AppLogger().info('🚪 EXIT: Step 3 - Navigating home');
-      _forceNavigationHomeSync(context);
+      if (context.mounted) {
+        _forceNavigationHomeSync(context);
+      }
       AppLogger().info('🚪 EXIT: Step 3 completed');
       
     } catch (e) {
       AppLogger().error('🚪 EXIT: Error in moderator exit: $e');
       AppLogger().info('🚪 EXIT: Attempting fallback navigation');
-      _forceNavigationHomeSync(context); // Still navigate even if cleanup fails
+      if (context.mounted) {
+        _forceNavigationHomeSync(context); // Still navigate even if cleanup fails
+      }
     }
   }
 
@@ -117,13 +121,17 @@ class ArenaNavigationService {
       
       // 3. Navigate home
       AppLogger().info('🚪 EXIT: Step 3 - Navigating home');
-      _forceNavigationHomeSync(context);
+      if (context.mounted) {
+        _forceNavigationHomeSync(context);
+      }
       AppLogger().info('🚪 EXIT: Step 3 completed');
       
     } catch (e) {
       AppLogger().error('🚪 EXIT: Error in participant exit: $e');
       AppLogger().info('🚪 EXIT: Attempting fallback navigation');
-      _forceNavigationHomeSync(context); // Still navigate even if cleanup fails
+      if (context.mounted) {
+        _forceNavigationHomeSync(context); // Still navigate even if cleanup fails
+      }
     }
   }
 

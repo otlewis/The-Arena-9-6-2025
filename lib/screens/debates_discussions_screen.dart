@@ -1034,7 +1034,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       SnackBar(
         content: Text('Sent ${gift.emoji} ${gift.name} to $recipient!'),
         backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -1586,7 +1586,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       SnackBar(
         content: Text('Sent $amount coins to $recipient!'),
         backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
+        duration: const Duration(seconds: 2),
       ),
     );
   }

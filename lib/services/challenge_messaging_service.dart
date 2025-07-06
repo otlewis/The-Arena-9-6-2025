@@ -479,7 +479,7 @@ class ChallengeMessagingService {
       rethrow;
     } finally {
       // Remove from processing set after delay to prevent rapid retries
-      Future.delayed(Duration(seconds: 2), () {
+      Future.delayed(const Duration(seconds: 2), () {
         _processingChallenges.remove(challengeId);
       });
     }
@@ -640,68 +640,6 @@ class ChallengeMessagingService {
     }
   }
   
-  /// Invite available judges and moderators to arena
-  Future<void> _inviteJudgesAndModerators(String arenaRoomId, ChallengeMessage challenge) async {
-    try {
-      AppLogger().info('Inviting judges and moderators for arena: $arenaRoomId');
-      
-      // Get list of users to exclude (the debaters)
-      final excludeUserIds = [challenge.challengerId, challenge.challengedId];
-      
-      // Get available users WITHOUT triggering cleanup (to avoid rate limits)
-      final availableModerators = await _getAvailableUsersWithoutCleanup(
-        role: 'moderator',
-        limit: 3,
-        excludeUserIds: excludeUserIds,
-      );
-      
-      final availableJudges = await _getAvailableUsersWithoutCleanup(
-        role: 'judge', 
-        limit: 6,
-        excludeUserIds: excludeUserIds,
-      );
-      
-      AppLogger().info('Found ${availableModerators.length} available moderators and ${availableJudges.length} available judges');
-      
-      // Send moderator invitations (with rate limiting)
-      for (int i = 0; i < availableModerators.length && i < 3; i++) {
-        final moderator = availableModerators[i];
-        await _sendArenaRoleInvitation(
-          userId: moderator['id'],
-          userName: moderator['name'],
-          arenaRoomId: arenaRoomId,
-          role: 'moderator',
-          topic: challenge.topic,
-          description: challenge.description,
-        );
-        
-        // Add small delay to prevent rate limiting
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-      
-      // Send judge invitations (with rate limiting)
-      for (int i = 0; i < availableJudges.length && i < 6; i++) {
-        final judge = availableJudges[i];
-        await _sendArenaRoleInvitation(
-          userId: judge['id'],
-          userName: judge['name'],
-          arenaRoomId: arenaRoomId,
-          role: 'judge',
-          topic: challenge.topic,
-          description: challenge.description,
-        );
-        
-        // Add small delay to prevent rate limiting
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-      
-      AppLogger().info('✅ Arena role invitations sent successfully');
-      
-    } catch (e) {
-      AppLogger().error('Error inviting judges and moderators: $e');
-      // Don't rethrow - arena can still function without all roles filled
-    }
-  }
   
   /// Get available users without triggering expensive cleanup operations
   Future<List<Map<String, dynamic>>> _getAvailableUsersWithoutCleanup({

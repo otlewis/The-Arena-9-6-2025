@@ -462,7 +462,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           if (mounted && !_isExiting && _reconnectAttempts < _maxReconnectAttempts) {
             _reconnectAttempts++;
             AppLogger().debug('🔄 Arena subscription ended, attempting to reconnect...');
-            Timer(Duration(seconds: 3), () {
+            Timer(const Duration(seconds: 3), () {
               if (mounted && !_isExiting) {
                 _setupRealtimeSubscription();
               }
@@ -515,12 +515,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               SnackBar(
                 content: Text('🔒 This arena room has been closed'),
                 backgroundColor: Colors.orange,
-                duration: Duration(seconds: 2),
+                duration: const Duration(seconds: 2),
               ),
             );
             
             // Navigate back to arena lobby after a short delay
-            Future.delayed(Duration(seconds: 1), () {
+            Future.delayed(const Duration(seconds: 1), () {
               if (mounted && !_isExiting) {
                 // Navigate back to arena lobby with complete stack replacement
                 WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -948,11 +948,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         SnackBar(
           content: Text('🔒 This arena room has been closed'),
           backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         ),
       );
       
-      Future.delayed(Duration(seconds: 1), () {
+      Future.delayed(const Duration(seconds: 1), () {
         if (mounted && !_isExiting) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_isExiting) {
@@ -1299,7 +1299,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           title: const Row(
             children: [
               Icon(Icons.warning, color: Colors.red),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Text('Close Arena Room'),
             ],
           ),
@@ -1606,7 +1606,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         title: const Row(
           children: [
             Icon(Icons.exit_to_app, color: Colors.orange),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Text('Leave Arena'),
           ],
         ),
@@ -3568,21 +3568,21 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               Navigator.of(context).pop();
               _sendSingleModeratorInvitation(affirmativeModerator);
             },
-            child: Text('Use Affirmative Choice'),
+            child: const Text('Use Affirmative Choice'),
           ),
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
               _sendSingleModeratorInvitation(negativeModerator);
             },
-            child: Text('Use Negative Choice'),
+            child: const Text('Use Negative Choice'),
           ),
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
               _sendRandomModeratorInvitation();
             },
-            child: Text('Select Random Moderator'),
+            child: const Text('Select Random Moderator'),
           ),
         ],
       ),
@@ -3635,9 +3635,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('⏳ Waiting for ${otherDebaterRole} debater to review and approve your selections...'),
+              content: Text('⏳ Waiting for $otherDebaterRole debater to review and approve your selections...'),
               backgroundColor: const Color(0xFF6B46C1),
-              duration: Duration(seconds: 5),
+              duration: const Duration(seconds: 5),
             ),
           );
         }
@@ -3674,17 +3674,17 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               children: [
                 // Header
                 Row(
-                  children: [
+                  children: const [
                     Icon(
                       Icons.approval,
-                      color: const Color(0xFF6B46C1),
+                      color: Color(0xFF6B46C1),
                       size: 32,
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         'Review Official Selections',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF6B46C1),
@@ -3786,7 +3786,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         if (selections.values.every((v) => v == null))
           const Center(
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(20),
               child: Text(
                 'No personal selections made.\nRandom qualified users will be invited.',
                 textAlign: TextAlign.center,
@@ -5031,7 +5031,7 @@ class ModeratorControlModal extends StatelessWidget {
                 _buildControlButton(
                   icon: Icons.balance,
                   label: debateCategory != null 
-                      ? 'Select Judges (${debateCategory})' 
+                      ? 'Select Judges ($debateCategory)' 
                       : 'Select Judges',
                   onPressed: () {
                     Navigator.pop(context);
@@ -5156,7 +5156,7 @@ class ModeratorControlModal extends StatelessWidget {
         title: const Row(
           children: [
             Icon(Icons.emergency, color: Colors.orange),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Text('Emergency Controls'),
           ],
         ),

@@ -659,7 +659,7 @@ class _RoomClosingModalState extends State<RoomClosingModal> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
+          const Icon(
             Icons.warning_amber,
             size: 48,
             color: Colors.orange,
@@ -723,11 +723,11 @@ class _JudgingPanelState extends State<JudgingPanel> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Row(
+      title: const Row(
         children: [
           Icon(Icons.how_to_vote, color: ArenaModalColors.accentPurple),
-          const SizedBox(width: 8),
-          const Text('Cast Your Vote'),
+          SizedBox(width: 8),
+          Text('Cast Your Vote'),
         ],
       ),
       content: Column(
@@ -880,11 +880,11 @@ class RoleManagerPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Row(
+      title: const Row(
         children: [
           Icon(Icons.people, color: ArenaModalColors.accentPurple),
-          const SizedBox(width: 8),
-          const Text('Role Manager'),
+          SizedBox(width: 8),
+          Text('Role Manager'),
         ],
       ),
       content: ConstrainedBox(
@@ -1034,9 +1034,9 @@ class _ArenaChatBottomSheetState extends State<ArenaChatBottomSheet> {
           // Header
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: ArenaModalColors.accentPurple,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: Row(
               children: [
@@ -1104,7 +1104,7 @@ class _ArenaChatBottomSheetState extends State<ArenaChatBottomSheet> {
                 const SizedBox(width: 8),
                 IconButton(
                   onPressed: _sendMessage,
-                  icon: Icon(Icons.send, color: ArenaModalColors.accentPurple),
+                  icon: const Icon(Icons.send, color: ArenaModalColors.accentPurple),
                 ),
               ],
             ),
@@ -1188,9 +1188,9 @@ class _ShareScreenBottomSheetState extends State<ShareScreenBottomSheet> {
           // Header
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: ArenaModalColors.accentPurple,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: Row(
               children: [
@@ -1369,7 +1369,7 @@ class _ShareScreenBottomSheetState extends State<ShareScreenBottomSheet> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.info_outline, color: Colors.green, size: 16),
+                          const Icon(Icons.info_outline, color: Colors.green, size: 16),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -1461,7 +1461,7 @@ class _ShareScreenBottomSheetState extends State<ShareScreenBottomSheet> {
                       ),
                       child: Column(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.info_outline,
                             color: Colors.orange,
                             size: 32,

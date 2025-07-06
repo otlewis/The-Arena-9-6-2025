@@ -672,21 +672,25 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
     ).toList();
 
     if (eligibleParticipants.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No debaters, moderators, or judges to send gifts to'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No debaters, moderators, or judges to send gifts to'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
       return;
     }
 
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _buildGiftModal(eligibleParticipants),
-    );
+    if (mounted) {
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => _buildGiftModal(eligibleParticipants),
+      );
+    }
   }
 
   void _showPremiumRequiredDialog() {
@@ -1196,7 +1200,7 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
       ),
     );
 
-    if (shouldLeave == true) {
+    if (shouldLeave == true && mounted) {
       await ref.read(arenaProvider(widget.roomId).notifier).leaveArena();
       if (mounted) {
         Navigator.of(context).pop();

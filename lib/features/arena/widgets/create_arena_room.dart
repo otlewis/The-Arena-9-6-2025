@@ -87,7 +87,6 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
         description: description.isNotEmpty ? description : null,
       );
 
-      _lastCreatedRoomId = roomId;
       AppLogger().info('Successfully created arena room: $roomId');
 
       _showSuccess('Arena created successfully! You are the moderator.', roomId);
@@ -101,7 +100,7 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
 
       // Wait for room setup to complete before navigation
       AppLogger().info('Waiting for room setup to stabilize before navigation...');
-      await Future.delayed(Duration(seconds: 2));
+      await Future.delayed(const Duration(seconds: 2));
       
       // Verify room exists and is properly set up before navigating
       final roomData = await _appwrite.getArenaRoom(roomId);
@@ -212,7 +211,7 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
           ],
         ),
         backgroundColor: Colors.green,
-        duration: Duration(seconds: 3),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -230,7 +229,7 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
           ],
         ),
         backgroundColor: Colors.red,
-        duration: Duration(seconds: 4),
+        duration: const Duration(seconds: 4),
       ),
     );
   }
@@ -275,13 +274,13 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
           colors: [accentPurple, deepPurple],
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),
-        borderRadius: const BorderRadius.only(
+        borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
         ),
@@ -338,10 +337,10 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: accentPurple, width: 2),
+                  borderSide: const BorderSide(color: accentPurple, width: 2),
                 ),
                 contentPadding: const EdgeInsets.all(16),
-                prefixIcon: Icon(Icons.topic, color: accentPurple),
+                prefixIcon: const Icon(Icons.topic, color: accentPurple),
               ),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
@@ -380,10 +379,10 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: accentPurple, width: 2),
+                  borderSide: const BorderSide(color: accentPurple, width: 2),
                 ),
                 contentPadding: const EdgeInsets.all(16),
-                prefixIcon: Icon(Icons.description, color: accentPurple),
+                prefixIcon: const Icon(Icons.description, color: accentPurple),
               ),
               validator: (value) {
                 if (value != null && value.trim().length > 300) {
@@ -403,14 +402,14 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: accentPurple.withValues(alpha: 0.3)),
               ),
-              child: Column(
+              child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
                       Icon(Icons.info, color: accentPurple, size: 20),
-                      const SizedBox(width: 8),
-                      const Text(
+                      SizedBox(width: 8),
+                      Text(
                         'How Your Arena Works:',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
@@ -420,8 +419,8 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
+                  SizedBox(height: 8),
+                  Text(
                     '• You will be the moderator with timer controls\n'
                     '• Others can join as audience members\n'
                     '• Assign roles to participants (debaters, judges)\n'
@@ -476,7 +475,7 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
                 ),
               ),
               child: _isCreating
-                  ? Row(
+                  ? const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -488,8 +487,8 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
                             valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        const Text('Creating...'),
+                        SizedBox(width: 8),
+                        Text('Creating...'),
                       ],
                     )
                   : const Text(

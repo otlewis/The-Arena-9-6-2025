@@ -179,7 +179,7 @@ class _DebaterInviteChoiceModalState extends State<DebaterInviteChoiceModal> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.info, color: Colors.blue, size: 24),
+                    const Icon(Icons.info, color: Colors.blue, size: 24),
                     const SizedBox(height: 8),
                     Text(
                       'Judges will be\nselected by moderator',
