@@ -1181,6 +1181,7 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
   }
 
   Future<void> _confirmLeaveArena(BuildContext context, WidgetRef ref) async {
+    final navigator = Navigator.of(context);
     final shouldLeave = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1203,7 +1204,7 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
     if (shouldLeave == true && mounted) {
       await ref.read(arenaProvider(widget.roomId).notifier).leaveArena();
       if (mounted) {
-        Navigator.of(context).pop();
+        navigator.pop();
       }
     }
   }
