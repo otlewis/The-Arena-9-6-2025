@@ -9,6 +9,8 @@ class AppwriteConstants {
   static const String membershipsCollection = "memberships";
   static const String roomsCollection = "discussion_rooms";
   static const String roomParticipantsCollection = "room_participants";
+  static const String debateDiscussionRoomsCollection = "debate_discussion_rooms";
+  static const String debateDiscussionParticipantsCollection = "debate_discussion_participants";
 
   
   // Bucket IDs

@@ -6,7 +6,7 @@ import 'create_open_screen.dart';
 import '../models/user_profile.dart';
 import '../screens/arena_lobby_screen.dart';
 import '../screens/find_users_screen.dart';
-import '../screens/debates_discussions_screen.dart';
+import 'discussions_room_list_screen.dart';
 import '../services/appwrite_service.dart';
 import '../services/challenge_messaging_service.dart';
 import '../services/theme_service.dart';
@@ -539,7 +539,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _navigateToDebatesDiscussions() {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const DebatesDiscussionsScreen()));
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const DiscussionsRoomListScreen()));
   }
 
   void _showComingSoon() {

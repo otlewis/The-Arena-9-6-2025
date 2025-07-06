@@ -485,7 +485,11 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const DebatesDiscussionsScreen(),
+        builder: (context) => DebatesDiscussionsScreen(
+          roomId: room['id'] ?? '',
+          roomName: room['title'],
+          moderatorName: room['moderatorProfile']?['name'],
+        ),
       ),
     ).then((_) {
       // Refresh rooms list when user comes back

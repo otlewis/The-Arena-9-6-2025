@@ -1478,6 +1478,283 @@ class AppwriteService {
     }
   }
 
+  // Debate & Discussion Room Methods (separate from Open Discussion Rooms)
+  Future<String> createDebateDiscussionRoom({
+    required String name,
+    required String description,
+    required String category,
+    required String debateStyle,
+    required String createdBy,
+    bool isPrivate = false,
+    bool isScheduled = false,
+    DateTime? scheduledDate,
+  }) async {
+    try {
+      final response = await databases.createDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionRoomsCollection,
+        documentId: ID.unique(),
+        data: {
+          'name': name,
+          'description': description,
+          'category': category,
+          'debateStyle': debateStyle,
+          'createdBy': createdBy,
+          'moderatorId': createdBy,
+          'status': isScheduled ? 'scheduled' : 'active',
+          'isPrivate': isPrivate,
+          'isScheduled': isScheduled,
+          'scheduledDate': scheduledDate?.toIso8601String(),
+          'maxParticipants': 999999, // Effectively unlimited
+          'settings': json.encode({
+            'allowChat': true,
+            'recordSession': false,
+            'moderatorApproval': false,
+          }),
+          'createdAt': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      // Create initial participant entry for the creator as moderator
+      await joinDebateDiscussionRoom(
+        roomId: response.$id,
+        userId: createdBy,
+        role: 'moderator',
+      );
+      
+      AppLogger().debug('Created debate discussion room: ${response.$id}');
+      return response.$id;
+    } catch (e) {
+      AppLogger().error('Error creating debate discussion room: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getDebateDiscussionRooms() async {
+    try {
+      final response = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionRoomsCollection,
+        queries: [
+          Query.equal('status', ['active', 'scheduled']),
+          Query.limit(50),
+          Query.orderDesc('\$createdAt'),
+        ],
+      );
+      
+      // For each room, get participant count and moderator profile
+      List<Map<String, dynamic>> roomsWithDetails = [];
+      for (var doc in response.documents) {
+        final roomData = Map<String, dynamic>.from(doc.data);
+        roomData['id'] = doc.$id;
+        roomData['createdAt'] = doc.$createdAt;
+        
+        // Parse settings JSON
+        if (roomData['settings'] is String) {
+          try {
+            roomData['settings'] = json.decode(roomData['settings']);
+          } catch (e) {
+            roomData['settings'] = {};
+          }
+        }
+        
+        // Get participant count
+        final participantsResponse = await databases.listDocuments(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+          queries: [
+            Query.equal('roomId', doc.$id),
+            Query.equal('status', 'joined'),
+          ],
+        );
+        
+        roomData['participantCount'] = participantsResponse.documents.length;
+        
+        // Get moderator profile
+        try {
+          final moderatorProfile = await getUserProfile(roomData['createdBy']);
+          if (moderatorProfile != null) {
+            roomData['moderatorProfile'] = {
+              'name': moderatorProfile.name,
+              'avatar': moderatorProfile.avatar,
+              'email': moderatorProfile.email,
+            };
+          }
+        } catch (e) {
+          AppLogger().debug('Error getting moderator profile for room ${doc.$id}: $e');
+        }
+        
+        roomsWithDetails.add(roomData);
+      }
+      
+      return roomsWithDetails;
+    } catch (e) {
+      AppLogger().error('Error getting debate discussion rooms: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getDebateDiscussionRoom(String roomId) async {
+    try {
+      final response = await databases.getDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionRoomsCollection,
+        documentId: roomId,
+      );
+      
+      final roomData = Map<String, dynamic>.from(response.data);
+      roomData['id'] = response.$id;
+      roomData['createdAt'] = response.$createdAt;
+      
+      // Parse settings JSON
+      if (roomData['settings'] is String) {
+        try {
+          roomData['settings'] = json.decode(roomData['settings']);
+        } catch (e) {
+          roomData['settings'] = {};
+        }
+      }
+      
+      return roomData;
+    } catch (e) {
+      AppLogger().error('Error getting debate discussion room: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> joinDebateDiscussionRoom({
+    required String roomId,
+    required String userId,
+    String role = 'participant',
+  }) async {
+    try {
+      await databases.createDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+        documentId: ID.unique(),
+        data: {
+          'roomId': roomId,
+          'userId': userId,
+          'role': role,
+          'status': 'joined',
+          'joinedAt': DateTime.now().toIso8601String(),
+          'lastActiveAt': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      AppLogger().debug('User $userId joined debate discussion room $roomId as $role');
+    } catch (e) {
+      AppLogger().error('Error joining debate discussion room: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> leaveDebateDiscussionRoom({
+    required String roomId,
+    required String userId,
+  }) async {
+    try {
+      final participants = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('userId', userId),
+          Query.equal('status', 'joined'),
+        ],
+      );
+      
+      for (var participant in participants.documents) {
+        await databases.updateDocument(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+          documentId: participant.$id,
+          data: {
+            'status': 'left',
+            'leftAt': DateTime.now().toIso8601String(),
+          },
+        );
+      }
+      
+      AppLogger().debug('User $userId left debate discussion room $roomId');
+    } catch (e) {
+      AppLogger().error('Error leaving debate discussion room: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getDebateDiscussionParticipants(String roomId) async {
+    try {
+      final participants = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('status', 'joined'),
+          Query.orderDesc('\$createdAt'),
+        ],
+      );
+      
+      List<Map<String, dynamic>> participantsList = [];
+      for (var participant in participants.documents) {
+        final participantData = Map<String, dynamic>.from(participant.data);
+        participantData['id'] = participant.$id;
+        
+        // Get user profile for each participant
+        try {
+          final userProfile = await getUserProfile(participantData['userId']);
+          if (userProfile != null) {
+            participantData['userProfile'] = userProfile.toMap();
+          }
+        } catch (e) {
+          AppLogger().warning('Could not load user profile for participant: $e');
+        }
+        
+        participantsList.add(participantData);
+      }
+      
+      return participantsList;
+    } catch (e) {
+      AppLogger().error('Error getting debate discussion participants: $e');
+      return [];
+    }
+  }
+
+  Future<void> updateDebateDiscussionParticipantRole({
+    required String roomId,
+    required String userId,
+    required String newRole,
+  }) async {
+    try {
+      final participants = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('userId', userId),
+          Query.equal('status', 'joined'),
+        ],
+      );
+      
+      if (participants.documents.isNotEmpty) {
+        await databases.updateDocument(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+          documentId: participants.documents.first.$id,
+          data: {
+            'role': newRole,
+            'lastActiveAt': DateTime.now().toIso8601String(),
+          },
+        );
+        
+        AppLogger().debug('Updated participant $userId role to $newRole in room $roomId');
+      }
+    } catch (e) {
+      AppLogger().error('Error updating participant role: $e');
+      rethrow;
+    }
+  }
+
   // Arena Methods for Challenge-based Debates
   Future<String> createArenaRoom({
     required String challengeId,
