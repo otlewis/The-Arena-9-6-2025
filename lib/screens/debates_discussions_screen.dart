@@ -362,7 +362,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       
       // For now, automatically approve the request (in real implementation, moderator would approve)
       // This simulates the moderator approving the request
-      if (_speakerPanelists.length < 6) {
+      // Allow up to 6 speakers + moderator (7 total)
+      final otherSpeakersCount = _speakerPanelists.where((speaker) => speaker.id != _moderator?.id).length;
+      if (otherSpeakersCount < 6) {
         await _appwrite.updateDebateDiscussionParticipantRole(
           roomId: widget.roomId,
           userId: _currentUser!.id,
@@ -389,7 +391,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   }
 
   void _approveSpeakerRequest(UserProfile user) async {
-    if (!_isCurrentUserModerator || _speakerPanelists.length >= 6) {
+    // Allow up to 6 speakers + moderator (7 total)
+    final otherSpeakersCount = _speakerPanelists.where((speaker) => speaker.id != _moderator?.id).length;
+    if (!_isCurrentUserModerator || otherSpeakersCount >= 6) {
       return;
     }
     
@@ -607,82 +611,120 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           ),
         ),
         
-        // Floating speakers panel
-        if (_speakerPanelists.isNotEmpty)
-          Positioned(
-            top: 16, // Reduced top position
-            left: 0,
-            right: 0,
-            child: _buildSpeakerPanel(),
-          ),
+        // Floating speakers panel (always show to display all 6 slots)
+        Positioned(
+          top: 16, // Reduced top position
+          left: 0,
+          right: 0,
+          child: _buildSpeakerPanel(),
+        ),
       ],
     );
   }
 
   Widget _buildSpeakerPanel() {
-    if (_speakerPanelists.isEmpty) return const SizedBox.shrink();
+    // Show moderator first, then speakers above in dynamic 3x2 grid
     
     // Separate moderator from other speakers
-    final moderator = _speakerPanelists.firstWhere(
-      (speaker) => speaker.id == _moderator?.id, 
-      orElse: () => _speakerPanelists.first
-    );
-    final otherSpeakers = _speakerPanelists.where((speaker) => speaker.id != moderator.id).toList();
+    UserProfile? moderator;
+    List<UserProfile> otherSpeakers = [];
+    
+    if (_speakerPanelists.isNotEmpty) {
+      try {
+        moderator = _speakerPanelists.firstWhere(
+          (speaker) => speaker.id == _moderator?.id, 
+        );
+        otherSpeakers = _speakerPanelists.where((speaker) => speaker.id != moderator!.id).toList();
+      } catch (e) {
+        // If moderator not found in speakers list, use the first speaker or the actual moderator
+        if (_moderator != null) {
+          moderator = _moderator;
+        }
+        otherSpeakers = _speakerPanelists.where((speaker) => speaker.id != moderator?.id).toList();
+      }
+    } else {
+      moderator = _moderator;
+    }
+
+    // Calculate larger tile dimensions based on screen width
+    final screenWidth = MediaQuery.of(context).size.width;
+    const containerMargin = 8.0; // Minimal margins to maximize space
+    final containerWidth = screenWidth - (containerMargin * 2);
+    const tileSpacing = 4.0; // Minimal spacing between tiles
+    
+    // Calculate tile width to fit 3 per row - make them as large as possible
+    final availableWidth = containerWidth - (tileSpacing * 2); // Space for 2 gaps between 3 tiles
+    final tileWidth = (availableWidth / 3).floor().toDouble(); // Use floor to prevent overflow
+    final tileHeight = tileWidth; // Square tiles for better appearance
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
+      margin: const EdgeInsets.symmetric(horizontal: containerMargin),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Other speakers first (up to 6 speakers in 2 rows of 3)
-          if (otherSpeakers.isNotEmpty) ...{
-            ...(() {
-              final rows = <List<UserProfile>>[];
-              for (int i = 0; i < otherSpeakers.length; i += 3) {
-                final endIndex = (i + 3 < otherSpeakers.length) ? i + 3 : otherSpeakers.length;
-                rows.add(otherSpeakers.sublist(i, endIndex));
-              }
-              
-              return rows.map((row) {
-                return Container(
-                  height: 115,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: row.map((speaker) => SizedBox(
-                      width: 115,
+          // Speakers grid (only show if there are speakers)
+          if (otherSpeakers.isNotEmpty) ...[
+            // First row (up to 3 speakers)
+            SizedBox(
+              height: tileHeight,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (int i = 0; i < otherSpeakers.length && i < 3; i++) ...[
+                    if (i > 0) const SizedBox(width: tileSpacing),
+                    SizedBox(
+                      width: tileWidth,
+                      height: tileHeight,
                       child: _buildVideoTile(
-                        speaker,
+                        otherSpeakers[i],
                         isModerator: false,
                         showControls: _isCurrentUserModerator,
                       ),
-                    )).toList(),
-                  ),
-                );
-              }).toList();
-            })(),
-          },
-          
-          // Moderator at the bottom (centered)
-          Container(
-            height: 115,
-            margin: EdgeInsets.only(
-              top: otherSpeakers.isNotEmpty ? 0 : 0,
+                    ),
+                  ],
+                ],
+              ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SizedBox(
-                  width: 115,
-                  child: _buildVideoTile(
-                    moderator,
-                    isModerator: true,
-                    showControls: false, // Moderator can't remove themselves
-                  ),
+            
+            // Second row (speakers 4-6) - only if there are more than 3 speakers
+            if (otherSpeakers.length > 3) ...[
+              const SizedBox(height: tileSpacing),
+              SizedBox(
+                height: tileHeight,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (int i = 3; i < otherSpeakers.length && i < 6; i++) ...[
+                      if (i > 3) const SizedBox(width: tileSpacing),
+                      SizedBox(
+                        width: tileWidth,
+                        height: tileHeight,
+                        child: _buildVideoTile(
+                          otherSpeakers[i],
+                          isModerator: false,
+                          showControls: _isCurrentUserModerator,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
+              ),
+            ],
+            
+            const SizedBox(height: tileSpacing), // Space between speakers and moderator
+          ],
+          
+          // Moderator at the bottom (always shown)
+          if (moderator != null)
+            SizedBox(
+              width: tileWidth,
+              height: tileHeight,
+              child: _buildVideoTile(
+                moderator,
+                isModerator: true,
+                showControls: false, // Moderator can't remove themselves
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -821,18 +863,35 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final crossAxisCount = screenWidth < 360 ? 3 : 4; // Reduced count for larger tiles
     
-    // Calculate top padding based on speakers panel height (no border)
+    // Calculate top padding based on speakers panel height (same as speaker panel)
+    const containerMargin = 8.0; // Same as speaker panel
+    final containerWidth = screenWidth - (containerMargin * 2);
+    const tileSpacing = 4.0; // Same as speaker panel
+    
+    // Same tile calculations as speaker panel for consistency
+    final availableWidth = containerWidth - (tileSpacing * 2);
+    final tileWidth = (availableWidth / 3).floor().toDouble();
+    final tileHeight = tileWidth; // Square tiles
+    
+    // Calculate speakers panel height
     final otherSpeakersCount = _speakerPanelists.where((speaker) => speaker.id != _moderator?.id).length;
-    final speakerRows = (otherSpeakersCount / 3).ceil(); // Back to 3 per row
-    final speakersPanelHeight = _speakerPanelists.isNotEmpty ? 
-      (speakerRows * 115.0 + 115.0 + 40.0) : 0.0; // All tiles same size (115px) + padding
+    double speakersPanelHeight = 16.0; // Initial top padding
+    
+    if (otherSpeakersCount > 0) {
+      speakersPanelHeight += tileHeight; // First row
+      if (otherSpeakersCount > 3) {
+        speakersPanelHeight += tileSpacing + tileHeight; // Gap + second row
+      }
+      speakersPanelHeight += tileSpacing; // Gap before moderator
+    }
+    
+    speakersPanelHeight += tileHeight + 16; // Moderator tile + bottom padding
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Add spacing for floating speakers panel
-        if (_speakerPanelists.isNotEmpty)
-          SizedBox(height: speakersPanelHeight),
+        // Add spacing for floating speakers panel (dynamic height)
+        SizedBox(height: speakersPanelHeight),
         
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4.0), // Reduced padding
@@ -926,7 +985,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     final avatarSize = screenWidth < 360 ? 36.0 : 42.0;
     final fontSize = screenWidth < 360 ? 9.0 : 10.0;
     final isCurrentUser = member.id == _currentUser?.id;
-    final canRequestSpeaker = isCurrentUser && !_isCurrentUserModerator && !_isCurrentUserSpeaker && !_hasRequestedSpeaker && _speakerPanelists.length < 6;
+    // Allow up to 6 speakers + moderator (7 total)
+    final otherSpeakersCount = _speakerPanelists.where((speaker) => speaker.id != _moderator?.id).length;
+    final canRequestSpeaker = isCurrentUser && !_isCurrentUserModerator && !_isCurrentUserSpeaker && !_hasRequestedSpeaker && otherSpeakersCount < 6;
     
     return Container(
       decoration: BoxDecoration(
