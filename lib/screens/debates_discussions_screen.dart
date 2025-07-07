@@ -37,9 +37,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   final List<UserProfile> _audienceMembers = [];
   final List<UserProfile> _speakerRequests = []; // Pending speaker requests
   
-  // Video/Audio states
-  final Map<String, bool> _participantVideoStates = {};
-  final Map<String, bool> _participantMicStates = {};
+  // Video/Audio states (removed unused fields)
   
   // Room state
   bool _isLoading = true;
@@ -133,7 +131,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       );
       
       // Initialize Agora (optional - room can work without it)
-      bool agoraInitialized = false;
       try {
         await _agoraService.initialize();
         _agoraService.onUserJoined = _onUserJoined;
@@ -141,7 +138,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         
         // Join the channel
         await _agoraService.joinChannel();
-        agoraInitialized = true;
         _isAgoraEnabled = true;
         AppLogger().debug('Agora initialized successfully');
       } catch (e) {
@@ -513,7 +509,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
+                color: Colors.white.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Icon(
@@ -569,7 +565,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               ),
               if (!_isAgoraEnabled) ...[ 
                 const SizedBox(width: 8),
-                Icon(
+                const Icon(
                   LucideIcons.micOff,
                   color: Colors.orange,
                   size: 14,
@@ -582,7 +578,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF8B5CF6).withOpacity(0.2),
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Icon(
@@ -634,74 +630,60 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     final otherSpeakers = _speakerPanelists.where((speaker) => speaker.id != moderator.id).toList();
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12), // Reduced margin
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(16), // Smaller radius
-        border: Border.all(
-          color: const Color(0xFF8B5CF6).withOpacity(0.3),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Other speakers first (up to 6 speakers in 2 rows of 3)
+          if (otherSpeakers.isNotEmpty) ...{
+            ...(() {
+              final rows = <List<UserProfile>>[];
+              for (int i = 0; i < otherSpeakers.length; i += 3) {
+                final endIndex = (i + 3 < otherSpeakers.length) ? i + 3 : otherSpeakers.length;
+                rows.add(otherSpeakers.sublist(i, endIndex));
+              }
+              
+              return rows.map((row) {
+                return Container(
+                  height: 115,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: row.map((speaker) => SizedBox(
+                      width: 115,
+                      child: _buildVideoTile(
+                        speaker,
+                        isModerator: false,
+                        showControls: _isCurrentUserModerator,
+                      ),
+                    )).toList(),
+                  ),
+                );
+              }).toList();
+            })(),
+          },
+          
+          // Moderator at the bottom (centered)
+          Container(
+            height: 115,
+            margin: EdgeInsets.only(
+              top: otherSpeakers.isNotEmpty ? 0 : 0,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 115,
+                  child: _buildVideoTile(
+                    moderator,
+                    isModerator: true,
+                    showControls: false, // Moderator can't remove themselves
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12), // Reduced padding
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Other speakers first (up to 6 speakers in 3x2 grid)
-            if (otherSpeakers.isNotEmpty) ...{
-              ...(() {
-                final rows = <List<UserProfile>>[];
-                for (int i = 0; i < otherSpeakers.length; i += 3) {
-                  final endIndex = (i + 3 < otherSpeakers.length) ? i + 3 : otherSpeakers.length;
-                  rows.add(otherSpeakers.sublist(i, endIndex));
-                }
-                
-                return rows.map((row) {
-                  return Container(
-                    height: 95, // Reduced height
-                    margin: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ...row.map((speaker) => Container(
-                          width: 80, // Reduced width
-                          margin: const EdgeInsets.symmetric(horizontal: 2), // Reduced margin
-                          child: _buildVideoTile(
-                            speaker,
-                            isModerator: false,
-                            showControls: _isCurrentUserModerator,
-                          ),
-                        )),
-                      ],
-                    ),
-                  );
-                });
-              })(),
-            },
-            
-            // Moderator at the bottom (centered)
-            Container(
-              height: 105, // Reduced height
-              width: 110, // Reduced width
-              margin: EdgeInsets.only(
-                top: otherSpeakers.isNotEmpty ? 10 : 0,
-              ),
-              child: _buildVideoTile(
-                moderator,
-                isModerator: true,
-                showControls: false, // Moderator can't remove themselves
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -757,8 +739,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                 decoration: BoxDecoration(
                   color: isModerator 
-                      ? const Color(0xFF8B5CF6).withOpacity(0.9)
-                      : Colors.black.withOpacity(0.7),
+                      ? const Color(0xFF8B5CF6).withValues(alpha: 0.9)
+                      : Colors.black.withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Row(
@@ -819,7 +801,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.8),
+                    color: Colors.orange.withValues(alpha: 0.8),
                     borderRadius: BorderRadius.circular(3),
                   ),
                   child: const Icon(
@@ -839,11 +821,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final crossAxisCount = screenWidth < 360 ? 3 : 4; // Reduced count for larger tiles
     
-    // Calculate top padding based on speakers panel height
+    // Calculate top padding based on speakers panel height (no border)
     final otherSpeakersCount = _speakerPanelists.where((speaker) => speaker.id != _moderator?.id).length;
-    final speakerRows = (otherSpeakersCount / 3).ceil();
+    final speakerRows = (otherSpeakersCount / 3).ceil(); // Back to 3 per row
     final speakersPanelHeight = _speakerPanelists.isNotEmpty ? 
-      (speakerRows * 95.0 + 105.0 + 70.0) : 0.0; // Updated dimensions + padding
+      (speakerRows * 115.0 + 115.0 + 40.0) : 0.0; // All tiles same size (115px) + padding
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -882,9 +864,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             padding: const EdgeInsets.all(8),
             margin: const EdgeInsets.symmetric(horizontal: 6),
             decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.1),
+              color: Colors.orange.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -922,12 +904,12 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                   ),
                 )
               : GridView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 4), // Reduced padding
+                  padding: EdgeInsets.zero, // No padding around the grid
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: crossAxisCount,
-                    crossAxisSpacing: 4, // Further reduced spacing
-                    mainAxisSpacing: 4,
-                    childAspectRatio: 1.0, // Adjusted for better fit
+                    crossAxisSpacing: 0, // No horizontal gap
+                    mainAxisSpacing: 0, // No vertical gap
+                    childAspectRatio: 1.0, // Square tiles, adjust as needed
                   ),
                   itemCount: _audienceMembers.length,
                   itemBuilder: (context, index) {
@@ -941,21 +923,21 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
 
   Widget _buildAudienceMember(UserProfile member) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final avatarSize = screenWidth < 360 ? 36.0 : 42.0; // Reduced size to prevent overflow
-    final fontSize = screenWidth < 360 ? 9.0 : 10.0; // Reduced font size
+    final avatarSize = screenWidth < 360 ? 36.0 : 42.0;
+    final fontSize = screenWidth < 360 ? 9.0 : 10.0;
     final isCurrentUser = member.id == _currentUser?.id;
     final canRequestSpeaker = isCurrentUser && !_isCurrentUserModerator && !_isCurrentUserSpeaker && !_hasRequestedSpeaker && _speakerPanelists.length < 6;
     
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey[800]?.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.grey[800]?.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.zero, // No border radius for flush look
         border: Border.all(
           color: Colors.grey[700]!,
           width: 0.5,
         ),
       ),
-      padding: const EdgeInsets.all(4), // Reduced padding
+      padding: EdgeInsets.zero, // No padding
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
@@ -980,7 +962,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                       )
                     : null,
               ),
-              // Hand raise button for current user
               if (canRequestSpeaker)
                 Positioned(
                   bottom: -2,
@@ -1004,7 +985,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                 ),
             ],
           ),
-          const SizedBox(height: 4), // Reduced spacing
+          const SizedBox(height: 4),
           Flexible(
             child: Text(
               member.name,
@@ -1080,7 +1061,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               ? Colors.red
               : isActive
                   ? const Color(0xFF8B5CF6)
-                  : Colors.white.withOpacity(0.1),
+                  : Colors.white.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(25),
           border: isActive
               ? null
@@ -1199,65 +1180,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     );
   }
 
-  void _showMoreOptions() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.grey[900],
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Room Options',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 20),
-            if (_isCurrentUserModerator) ...[
-              _buildOptionTile(
-                icon: LucideIcons.userPlus,
-                title: 'Manage Speakers',
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Speaker management coming soon!')),
-                  );
-                },
-              ),
-              _buildOptionTile(
-                icon: LucideIcons.settings,
-                title: 'Room Settings',
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Room settings coming soon!')),
-                  );
-                },
-              ),
-            ],
-            _buildOptionTile(
-              icon: LucideIcons.flag,
-              title: 'Report Issue',
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Report feature coming soon!')),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildOptionTile({
     required IconData icon,
     required String title,
@@ -1284,7 +1206,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         width: 50,
         height: 50,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(25),
           border: Border.all(color: Colors.grey[600]!, width: 1),
         ),

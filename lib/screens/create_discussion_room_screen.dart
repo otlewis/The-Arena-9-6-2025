@@ -24,9 +24,7 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
   
   // Purple theme colors
   static const Color primaryPurple = Color(0xFF8B5CF6);
-  static const Color deepPurple = Color(0xFF6B46C1);
   static const Color lightPurple = Color(0xFFF3F4F6);
-  static const Color accentPurple = Color(0xFF9333EA);
   
   // Categories with priority order
   final List<String> _categories = [
@@ -233,7 +231,7 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
         borderRadius: BorderRadius.circular(15),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -350,7 +348,7 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
         borderRadius: BorderRadius.circular(15),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -385,7 +383,7 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: isSelected ? primaryPurple.withOpacity(0.1) : lightPurple,
+                      color: isSelected ? primaryPurple.withValues(alpha: 0.1) : lightPurple,
                       border: Border.all(
                         color: isSelected ? primaryPurple : Colors.grey.shade300,
                         width: 2,
@@ -441,7 +439,7 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
         borderRadius: BorderRadius.circular(15),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -541,7 +539,7 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
         borderRadius: BorderRadius.circular(15),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),

@@ -201,6 +201,7 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
     
     // Navigate to the actual debates & discussions screen with room data
     Future.delayed(const Duration(milliseconds: 800), () {
+      if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => DebatesDiscussionsScreen(
@@ -213,45 +214,6 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
     });
   }
   
-  void _showRoomDetailsModal(Map<String, dynamic> roomData) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          roomData['name'],
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: primaryPurple,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Style: ${roomData['debateStyle']}'),
-            Text('Category: ${roomData['category']}'),
-            Text('Moderator: ${roomData['moderator']}'),
-            if (roomData['description']?.isNotEmpty == true) ...[
-              const SizedBox(height: 8),
-              Text(roomData['description']),
-            ],
-            const SizedBox(height: 16),
-            const Text(
-              '🚧 Room functionality coming soon!\nThis would connect you to the live debate room.',
-              style: TextStyle(fontStyle: FontStyle.italic),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
