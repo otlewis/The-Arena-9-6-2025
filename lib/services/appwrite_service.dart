@@ -1755,6 +1755,25 @@ class AppwriteService {
     }
   }
 
+  Future<void> updateDebateDiscussionRoom({
+    required String roomId,
+    Map<String, dynamic>? data,
+  }) async {
+    try {
+      await databases.updateDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionRoomsCollection,
+        documentId: roomId,
+        data: data ?? {},
+      );
+      
+      AppLogger().debug('Updated debate discussion room $roomId');
+    } catch (e) {
+      AppLogger().error('Error updating debate discussion room: $e');
+      rethrow;
+    }
+  }
+
   // Arena Methods for Challenge-based Debates
   Future<String> createArenaRoom({
     required String challengeId,

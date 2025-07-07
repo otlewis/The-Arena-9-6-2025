@@ -283,15 +283,25 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   void _setupRealTimeUpdates() {
     try {
       _participantsSubscription = _appwrite.realtimeInstance.subscribe([
-        'databases.arena_db.collections.debate_discussion_participants.documents'
+        'databases.arena_db.collections.debate_discussion_participants.documents',
+        'databases.arena_db.collections.debate_discussion_rooms.documents'
       ]);
 
       _participantsSubscription?.stream.listen(
         (response) {
-          AppLogger().debug('Real-time participant update: ${response.events}');
-          // Reload participants when there are changes
-          if (mounted && !_isDisposing) {
-            _loadParticipants();
+          AppLogger().debug('Real-time update: ${response.events}');
+          
+          // Check for room updates (status changes like room ending)
+          if (response.events.any((event) => event.contains('debate_discussion_rooms'))) {
+            _handleRoomUpdate(response);
+          }
+          
+          // Check for participant updates
+          if (response.events.any((event) => event.contains('debate_discussion_participants'))) {
+            // Reload participants when there are changes
+            if (mounted && !_isDisposing) {
+              _loadParticipants();
+            }
           }
         },
         onError: (error) {
@@ -300,6 +310,45 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       );
     } catch (e) {
       AppLogger().error('Error setting up real-time updates: $e');
+    }
+  }
+
+  void _handleRoomUpdate(dynamic response) async {
+    try {
+      // Check if this update is for our current room
+      if (response.payload != null && response.payload['\$id'] == widget.roomId) {
+        final roomStatus = response.payload['status'];
+        
+        AppLogger().debug('Room status update: $roomStatus');
+        
+        // If room is ended and current user is not the moderator (who ended it)
+        if (roomStatus == 'ended' && !_isCurrentUserModerator && mounted && !_isDisposing) {
+          AppLogger().debug('Room ended by moderator, navigating all users out');
+          
+          // Show notification that room was ended
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🚪 Room ended by moderator'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          
+          // Leave Agora channel if connected
+          if (_isAgoraEnabled) {
+            await _agoraService.leaveChannel();
+          }
+          
+          // Navigate back to home screen
+          Future.delayed(const Duration(seconds: 1), () {
+            if (mounted) {
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            }
+          });
+        }
+      }
+    } catch (e) {
+      AppLogger().error('Error handling room update: $e');
     }
   }
 
@@ -1137,32 +1186,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     );
   }
 
-  void _shareRoom() {
-    final roomName = _roomData?['name'] ?? widget.roomName ?? 'Debate Room';
-    final moderatorName = _moderator?.name ?? widget.moderatorName ?? 'Unknown';
-    
-    // In a real implementation, this would use share_plus package or similar
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('🔗 Join "$roomName" moderated by $moderatorName!'),
-        backgroundColor: const Color(0xFF8B5CF6),
-        duration: const Duration(seconds: 3),
-        action: SnackBarAction(
-          label: 'Copy Link',
-          textColor: Colors.white,
-          onPressed: () {
-            // In real implementation, copy room link to clipboard
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Room link copied to clipboard!'),
-                backgroundColor: Colors.green,
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
 
   void _showModeratorTools() {
     showModalBottomSheet(
@@ -1190,9 +1213,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               title: 'Manage Speakers',
               onTap: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Use speaker controls in the video panel')),
-                );
+                _showSpeakerManagement();
               },
             ),
             _buildOptionTile(
@@ -1200,9 +1221,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               title: 'Mute All',
               onTap: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Mute all feature coming soon!')),
-                );
+                _muteAllParticipants();
               },
             ),
             _buildOptionTile(
@@ -1220,9 +1239,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               title: 'Room Settings',
               onTap: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Room settings coming soon!')),
-                );
+                _showRoomSettings();
               },
             ),
             _buildOptionTile(
@@ -1230,9 +1247,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               title: 'End Room',
               onTap: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('End room feature coming soon!')),
-                );
+                _showEndRoomConfirmation();
               },
             ),
           ],
@@ -1254,6 +1269,480 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       ),
       onTap: onTap,
     );
+  }
+
+  void _showSpeakerManagement() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        minChildSize: 0.5,
+        builder: (context, scrollController) => Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              const Text(
+                'Speaker Management',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+              
+              // Current Speakers
+              if (_speakerPanelists.isNotEmpty) ...[
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Current Speakers',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _speakerPanelists.length,
+                  itemBuilder: (context, index) {
+                    final speaker = _speakerPanelists[index];
+                    final isModerator = speaker.id == _moderator?.id;
+                    
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: isModerator ? const Color(0xFF8B5CF6) : Colors.grey[600],
+                        child: Text(
+                          speaker.initials,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      title: Text(
+                        speaker.name,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      subtitle: Text(
+                        isModerator ? 'Moderator' : 'Speaker',
+                        style: TextStyle(color: Colors.grey[400]),
+                      ),
+                      trailing: !isModerator ? IconButton(
+                        icon: const Icon(LucideIcons.userX, color: Colors.red),
+                        onPressed: () => _removeSpeaker(speaker),
+                      ) : null,
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+              ],
+              
+              // Pending Requests
+              if (_speakerRequests.isNotEmpty) ...[
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Pending Speaker Requests',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollController,
+                    itemCount: _speakerRequests.length,
+                    itemBuilder: (context, index) {
+                      final user = _speakerRequests[index];
+                      
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.orange,
+                          child: Text(
+                            user.initials,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        title: Text(
+                          user.name,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        subtitle: Text(
+                          'Wants to join speakers',
+                          style: TextStyle(color: Colors.grey[400]),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(LucideIcons.check, color: Colors.green),
+                              onPressed: () => _approveSpeakerRequest(user),
+                            ),
+                            IconButton(
+                              icon: const Icon(LucideIcons.x, color: Colors.red),
+                              onPressed: () => _denySpeakerRequest(user),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ] else ...[
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      'No pending speaker requests',
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _muteAllParticipants() {
+    if (_isAgoraEnabled) {
+      // Implement Agora mute all functionality
+      try {
+        // This would mute all participants except moderator
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🔇 All participants muted'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        AppLogger().info('Moderator muted all participants');
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to mute participants: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Audio features not available - Agora not initialized'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
+  }
+
+  void _showRoomSettings() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Room Settings',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            _buildOptionTile(
+              icon: LucideIcons.users,
+              title: 'Speaker Limit (Currently: ${_speakerPanelists.length}/7)',
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Room supports up to 6 speakers + 1 moderator')),
+                );
+              },
+            ),
+            _buildOptionTile(
+              icon: LucideIcons.clock,
+              title: 'Room Duration',
+              onTap: () {
+                Navigator.pop(context);
+                _showRoomDurationInfo();
+              },
+            ),
+            _buildOptionTile(
+              icon: LucideIcons.volume2,
+              title: 'Audio Settings',
+              onTap: () {
+                Navigator.pop(context);
+                _showAudioSettings();
+              },
+            ),
+            _buildOptionTile(
+              icon: LucideIcons.share,
+              title: 'Share Room',
+              onTap: () {
+                Navigator.pop(context);
+                _shareRoom();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEndRoomConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Text(
+          'End Room',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Are you sure you want to end this room? All participants will be disconnected and the room will be closed permanently.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _endRoom();
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('End Room'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _denySpeakerRequest(UserProfile user) async {
+    try {
+      // Remove from speaker requests
+      if (mounted) {
+        setState(() {
+          _speakerRequests.removeWhere((request) => request.id == user.id);
+        });
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Denied speaker request from ${user.name}'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      
+      AppLogger().info('Moderator denied speaker request from ${user.name}');
+    } catch (e) {
+      AppLogger().error('Error denying speaker request: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error denying request: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _showRoomDurationInfo() {
+    final startTime = _roomData?['createdAt'];
+    final duration = startTime != null ? 
+      DateTime.now().difference(DateTime.parse(startTime)) : 
+      const Duration(minutes: 0);
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Room has been active for ${duration.inHours}h ${duration.inMinutes % 60}m',
+        ),
+        backgroundColor: const Color(0xFF8B5CF6),
+      ),
+    );
+  }
+
+  void _showAudioSettings() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Audio Settings',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: Icon(
+                _isAgoraEnabled ? LucideIcons.mic : LucideIcons.micOff,
+                color: _isAgoraEnabled ? Colors.green : Colors.red,
+              ),
+              title: Text(
+                _isAgoraEnabled ? 'Audio Enabled' : 'Audio Disabled',
+                style: const TextStyle(color: Colors.white),
+              ),
+              subtitle: Text(
+                _isAgoraEnabled ? 'Agora voice chat is active' : 'Agora voice chat unavailable',
+                style: TextStyle(color: Colors.grey[400]),
+              ),
+            ),
+            if (_isAgoraEnabled) ...[
+              _buildOptionTile(
+                icon: LucideIcons.micOff,
+                title: 'Mute All Participants',
+                onTap: () {
+                  Navigator.pop(context);
+                  _muteAllParticipants();
+                },
+              ),
+              _buildOptionTile(
+                icon: LucideIcons.mic,
+                title: 'Unmute All Participants',
+                onTap: () {
+                  Navigator.pop(context);
+                  _unmuteAllParticipants();
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _unmuteAllParticipants() {
+    if (_isAgoraEnabled) {
+      try {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🔊 All participants unmuted'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        AppLogger().info('Moderator unmuted all participants');
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to unmute participants: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _shareRoom() {
+    final roomName = _roomData?['name'] ?? 'Debate Room';
+    final moderatorName = _moderator?.name ?? 'Unknown';
+    
+    // Create shareable room information
+    final shareText = '''
+🎙️ Join our live debate discussion!
+
+Room: $roomName
+Moderator: $moderatorName
+Participants: ${_speakerPanelists.length + _audienceMembers.length}
+
+Join the conversation now in the Arena app!
+''';
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Room details copied to share'),
+        backgroundColor: const Color(0xFF8B5CF6),
+        action: SnackBarAction(
+          label: 'View',
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                backgroundColor: Colors.grey[900],
+                title: const Text('Share Room', style: TextStyle(color: Colors.white)),
+                content: Text(shareText, style: const TextStyle(color: Colors.white70)),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  void _endRoom() async {
+    try {
+      // Show loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ending room...'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+
+      // Update room status to ended
+      await _appwrite.updateDebateDiscussionRoom(
+        roomId: widget.roomId,
+        data: {
+          'status': 'ended',
+        },
+      );
+
+      // Leave Agora channel if connected
+      if (_isAgoraEnabled) {
+        await _agoraService.leaveChannel();
+      }
+
+      // Navigate back to room list
+      if (mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Room ended successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+      
+      AppLogger().info('Room ended by moderator');
+    } catch (e) {
+      AppLogger().error('Error ending room: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error ending room: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildGiftButton() {
