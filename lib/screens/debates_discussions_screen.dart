@@ -224,8 +224,21 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                   _speakerPanelists.add(userProfile);
                 }
                 _isCurrentUserSpeaker = userProfile.id == _currentUser?.id;
+              } else if (role == 'pending') {
+                // User has requested to speak - add to speaker requests AND keep in audience
+                if (!_speakerRequests.any((p) => p.id == userProfile.id)) {
+                  _speakerRequests.add(userProfile);
+                }
+                // Also keep them in audience so they don't disappear
+                if (!_audienceMembers.any((p) => p.id == userProfile.id)) {
+                  _audienceMembers.add(userProfile);
+                }
+                // Check if current user has requested
+                if (userProfile.id == _currentUser?.id) {
+                  _hasRequestedSpeaker = true;
+                }
               } else {
-                // Audience member
+                // Regular audience member
                 if (!_audienceMembers.any((p) => p.id == userProfile.id)) {
                   _audienceMembers.add(userProfile);
                 }
@@ -235,7 +248,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         });
       }
       
-      AppLogger().debug('Loaded ${participants.length} participants: ${_speakerPanelists.length} speakers, ${_audienceMembers.length} audience');
+      AppLogger().debug('Loaded ${participants.length} participants: ${_speakerPanelists.length} speakers, ${_audienceMembers.length} audience, ${_speakerRequests.length} pending requests');
     } catch (e) {
       AppLogger().error('Error loading participants: $e');
       // Fallback to mock data if real data fails
@@ -288,7 +301,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       ]);
 
       _participantsSubscription?.stream.listen(
-        (response) {
+        (response) async {
           AppLogger().debug('Real-time update: ${response.events}');
           
           // Check for room updates (status changes like room ending)
@@ -298,9 +311,17 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           
           // Check for participant updates
           if (response.events.any((event) => event.contains('debate_discussion_participants'))) {
+            // Store previous speaker requests count before reloading
+            final previousRequestsCount = _speakerRequests.length;
+            
             // Reload participants when there are changes
             if (mounted && !_isDisposing) {
-              _loadParticipants();
+              await _loadParticipants();
+              
+              // Check if we have new speaker requests (only for moderators)
+              if (_isCurrentUserModerator && _speakerRequests.length > previousRequestsCount) {
+                _showNewSpeakerRequestNotification();
+              }
             }
           }
         },
@@ -311,6 +332,86 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     } catch (e) {
       AppLogger().error('Error setting up real-time updates: $e');
     }
+  }
+
+  void _showNewSpeakerRequestNotification() {
+    // Get the latest speaker request
+    if (_speakerRequests.isEmpty) return;
+    
+    final latestRequest = _speakerRequests.last;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.grey[900],
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  LucideIcons.hand,
+                  color: Color(0xFF8B5CF6),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Speaker Request',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            '${latestRequest.name} wants to join the speakers panel',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 16,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _denySpeakerRequest(latestRequest);
+              },
+              child: const Text(
+                'Deny',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _approveSpeakerRequest(latestRequest);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF8B5CF6),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Approve',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _handleRoomUpdate(dynamic response) async {
@@ -396,6 +497,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     }
     
     try {
+      // Update participant role to 'pending' to indicate speaker request
+      await _appwrite.updateDebateDiscussionParticipantRole(
+        roomId: widget.roomId,
+        userId: _currentUser!.id,
+        newRole: 'pending',
+      );
+      
       if (mounted && !_isDisposing) {
         setState(() {
           _hasRequestedSpeaker = true;
@@ -403,25 +511,15 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('🎤 Request sent to join speakers panel'),
+            content: Text('✋ Request sent to moderator for approval'),
             backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
           ),
         );
       }
       
-      // For now, automatically approve the request (in real implementation, moderator would approve)
-      // This simulates the moderator approving the request
-      // Allow up to 6 speakers + moderator (7 total)
-      final otherSpeakersCount = _speakerPanelists.where((speaker) => speaker.id != _moderator?.id).length;
-      if (otherSpeakersCount < 6) {
-        await _appwrite.updateDebateDiscussionParticipantRole(
-          roomId: widget.roomId,
-          userId: _currentUser!.id,
-          newRole: 'speaker',
-        );
-        
-        // The real-time subscription will update the UI automatically
-      }
+      // The real-time subscription will update the UI automatically
+      // The moderator will see this request in their speaker management panel
     } catch (e) {
       AppLogger().error('Error requesting to join speakers: $e');
       if (mounted && !_isDisposing) {
@@ -628,17 +726,46 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                 const SizedBox(width: 16),
                 GestureDetector(
                   onTap: _showModeratorTools,
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Icon(
-                      LucideIcons.settings,
-                      color: Color(0xFF8B5CF6),
-                      size: 20,
-                    ),
+                  child: Stack(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Icon(
+                          LucideIcons.settings,
+                          color: Color(0xFF8B5CF6),
+                          size: 20,
+                        ),
+                      ),
+                      // Show badge if there are pending speaker requests
+                      if (_speakerRequests.isNotEmpty)
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          child: Container(
+                            width: 16,
+                            height: 16,
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 1),
+                            ),
+                            child: Center(
+                              child: Text(
+                                '${_speakerRequests.length}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ],
@@ -1033,10 +1160,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final avatarSize = screenWidth < 360 ? 36.0 : 42.0;
     final fontSize = screenWidth < 360 ? 9.0 : 10.0;
-    final isCurrentUser = member.id == _currentUser?.id;
-    // Allow up to 6 speakers + moderator (7 total)
-    final otherSpeakersCount = _speakerPanelists.where((speaker) => speaker.id != _moderator?.id).length;
-    final canRequestSpeaker = isCurrentUser && !_isCurrentUserModerator && !_isCurrentUserSpeaker && !_hasRequestedSpeaker && otherSpeakersCount < 6;
     
     return Container(
       decoration: BoxDecoration(
@@ -1072,27 +1195,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                       )
                     : null,
               ),
-              if (canRequestSpeaker)
-                Positioned(
-                  bottom: -2,
-                  right: -2,
-                  child: GestureDetector(
-                    onTap: _requestToJoinSpeakers,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF8B5CF6),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 1.5),
-                      ),
-                      child: const Icon(
-                        LucideIcons.hand,
-                        color: Colors.white,
-                        size: 10,
-                      ),
-                    ),
-                  ),
-                ),
             ],
           ),
           const SizedBox(height: 4),
@@ -1532,29 +1634,38 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
 
   void _denySpeakerRequest(UserProfile user) async {
     try {
-      // Remove from speaker requests
+      // Change user role back to audience
+      await _appwrite.updateDebateDiscussionParticipantRole(
+        roomId: widget.roomId,
+        userId: user.id,
+        newRole: 'audience',
+      );
+      
+      // Remove from speaker requests locally
       if (mounted) {
         setState(() {
           _speakerRequests.removeWhere((request) => request.id == user.id);
         });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Denied speaker request from ${user.name}'),
+            backgroundColor: Colors.orange,
+          ),
+        );
       }
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Denied speaker request from ${user.name}'),
-          backgroundColor: Colors.orange,
-        ),
-      );
       
       AppLogger().info('Moderator denied speaker request from ${user.name}');
     } catch (e) {
       AppLogger().error('Error denying speaker request: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error denying request: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error denying request: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

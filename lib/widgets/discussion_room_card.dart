@@ -204,16 +204,37 @@ class DiscussionRoomCard extends StatelessWidget {
                               color: primaryPurple,
                               shape: BoxShape.circle,
                             ),
-                            child: Center(
-                              child: Text(
-                                moderatorName.isNotEmpty ? moderatorName[0].toUpperCase() : 'M',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
+                            child: moderatorAvatar != null && moderatorAvatar.isNotEmpty
+                                ? ClipOval(
+                                    child: Image.network(
+                                      moderatorAvatar,
+                                      width: 32,
+                                      height: 32,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return Center(
+                                          child: Text(
+                                            moderatorName.isNotEmpty ? moderatorName[0].toUpperCase() : 'M',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  )
+                                : Center(
+                                    child: Text(
+                                      moderatorName.isNotEmpty ? moderatorName[0].toUpperCase() : 'M',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
