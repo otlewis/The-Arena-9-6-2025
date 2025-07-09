@@ -48,8 +48,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   bool _isDisposing = false;
   bool _isAgoraEnabled = false;
   
-  // Real-time subscription
+  // Real-time subscriptions - separate instances for reliability
   RealtimeSubscription? _participantsSubscription;
+  RealtimeSubscription? _roomSubscription;
 
   @override
   void initState() {
@@ -61,6 +62,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   void dispose() {
     _isDisposing = true;
     _participantsSubscription?.close();
+    _roomSubscription?.close();
     // Don't await _leaveRoom() in dispose as it's synchronous
     // Just call it without awaiting to start the process
     _leaveRoom().catchError((error) {
@@ -295,42 +297,231 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
 
   void _setupRealTimeUpdates() {
     try {
+      // Separate subscription for participants - critical for hand-raising notifications
       _participantsSubscription = _appwrite.realtimeInstance.subscribe([
-        'databases.arena_db.collections.debate_discussion_participants.documents',
-        'databases.arena_db.collections.debate_discussion_rooms.documents'
+        'databases.arena_db.collections.debate_discussion_participants.documents'
       ]);
 
       _participantsSubscription?.stream.listen(
         (response) async {
-          AppLogger().debug('Real-time update: ${response.events}');
+          AppLogger().debug('Participant update events: ${response.events}');
+          AppLogger().debug('Participant update payload: ${response.payload}');
           
-          // Check for room updates (status changes like room ending)
-          if (response.events.any((event) => event.contains('debate_discussion_rooms'))) {
-            _handleRoomUpdate(response);
-          }
-          
-          // Check for participant updates
-          if (response.events.any((event) => event.contains('debate_discussion_participants'))) {
-            // Store previous speaker requests count before reloading
-            final previousRequestsCount = _speakerRequests.length;
+          if (mounted && !_isDisposing) {
+            // Check for specific participant role changes to 'pending' (hand-raising)
+            bool isHandRaiseEvent = false;
             
-            // Reload participants when there are changes
-            if (mounted && !_isDisposing) {
-              await _loadParticipants();
-              
-              // Check if we have new speaker requests (only for moderators)
-              if (_isCurrentUserModerator && _speakerRequests.length > previousRequestsCount) {
-                _showNewSpeakerRequestNotification();
+            for (var event in response.events) {
+              // Check if this is an update event
+              if (event.contains('debate_discussion_participants.documents') && event.endsWith('.update')) {
+                // Check if role changed to 'pending' and it's for this room
+                if (response.payload['roomId'] == widget.roomId &&
+                    response.payload['role'] == 'pending') {
+                  
+                  AppLogger().info('Hand-raise detected: ${response.payload['userId']} requested to speak');
+                  isHandRaiseEvent = true;
+                  break;
+                }
               }
+            }
+            
+            // Always reload participants to keep UI in sync
+            await _loadParticipants();
+            
+            // Show immediate notification for hand-raise events (only for moderators)
+            if (isHandRaiseEvent && _isCurrentUserModerator) {
+              AppLogger().info('Showing hand-raise notification to moderator');
+              _showHandRaiseNotificationFromPayload(response.payload);
             }
           }
         },
         onError: (error) {
-          AppLogger().error('Real-time subscription error: $error');
+          AppLogger().error('Participants subscription error: $error');
+          // Attempt to reconnect after error
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted && !_isDisposing) {
+              _reconnectParticipantsSubscription();
+            }
+          });
+        },
+        onDone: () {
+          AppLogger().warning('Participants subscription closed - attempting reconnect');
+          if (mounted && !_isDisposing) {
+            _reconnectParticipantsSubscription();
+          }
         },
       );
+
+      // Separate subscription for room status (like room ending)
+      _roomSubscription = Realtime(_appwrite.client).subscribe([
+        'databases.arena_db.collections.debate_discussion_rooms.documents.${widget.roomId}'
+      ]);
+
+      _roomSubscription?.stream.listen(
+        (response) {
+          AppLogger().debug('Room update events: ${response.events}');
+          _handleRoomUpdate(response);
+        },
+        onError: (error) {
+          AppLogger().error('Room subscription error: $error');
+        },
+      );
+      
     } catch (e) {
       AppLogger().error('Error setting up real-time updates: $e');
+    }
+  }
+
+  void _reconnectParticipantsSubscription() {
+    try {
+      AppLogger().info('Reconnecting participants subscription...');
+      _participantsSubscription?.close();
+      
+      // Create new subscription after short delay
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && !_isDisposing) {
+          _participantsSubscription = _appwrite.realtimeInstance.subscribe([
+            'databases.arena_db.collections.debate_discussion_participants.documents'
+          ]);
+
+          _participantsSubscription?.stream.listen(
+            (response) async {
+              AppLogger().debug('Reconnected - Participant update events: ${response.events}');
+              
+              if (mounted && !_isDisposing) {
+                // Check for hand-raise events
+                bool isHandRaiseEvent = false;
+                
+                for (var event in response.events) {
+                  if (event.contains('debate_discussion_participants.documents') && event.endsWith('.update')) {
+                    if (response.payload['roomId'] == widget.roomId &&
+                        response.payload['role'] == 'pending') {
+                      
+                      AppLogger().info('Hand-raise detected after reconnect: ${response.payload['userId']}');
+                      isHandRaiseEvent = true;
+                      break;
+                    }
+                  }
+                }
+                
+                await _loadParticipants();
+                
+                if (isHandRaiseEvent && _isCurrentUserModerator) {
+                  _showHandRaiseNotificationFromPayload(response.payload);
+                }
+              }
+            },
+            onError: (error) {
+              AppLogger().error('Reconnected subscription error: $error');
+            },
+            onDone: () {
+              AppLogger().warning('Reconnected subscription closed');
+              if (mounted && !_isDisposing) {
+                _reconnectParticipantsSubscription();
+              }
+            },
+          );
+          
+          AppLogger().info('Participants subscription reconnected successfully');
+        }
+      });
+    } catch (e) {
+      AppLogger().error('Error reconnecting participants subscription: $e');
+    }
+  }
+
+  void _showHandRaiseNotificationFromPayload(Map<String, dynamic> payload) async {
+    try {
+      final userId = payload['userId'];
+      if (userId == null) return;
+      
+      // Get user profile for the notification
+      final userProfile = await _appwrite.getUserProfile(userId);
+      if (userProfile == null) {
+        AppLogger().warning('Could not find user profile for hand-raise notification: $userId');
+        return;
+      }
+      
+      AppLogger().info('Showing immediate hand-raise notification for: ${userProfile.name}');
+      
+      if (mounted && !_isDisposing) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              backgroundColor: Colors.grey[900],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      LucideIcons.hand,
+                      color: Color(0xFF8B5CF6),
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Hand Raised!',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              content: Text(
+                '${userProfile.name} wants to join the speakers panel',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 16,
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _denySpeakerRequest(userProfile);
+                  },
+                  child: const Text(
+                    'Deny',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _approveSpeakerRequest(userProfile);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF8B5CF6),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    'Approve',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      }
+    } catch (e) {
+      AppLogger().error('Error showing hand-raise notification: $e');
+      // Fallback to the old method
+      _showNewSpeakerRequestNotification();
     }
   }
 
