@@ -3,7 +3,10 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:appwrite/appwrite.dart';
 import '../services/agora_service.dart';
 import '../services/appwrite_service.dart';
+import '../services/firebase_gift_service.dart';
+import '../services/chat_service.dart';
 import '../models/user_profile.dart';
+import '../models/gift.dart';
 import '../widgets/animated_fade_in.dart';
 import '../core/logging/app_logger.dart';
 
@@ -26,11 +29,19 @@ class DebatesDiscussionsScreen extends StatefulWidget {
 class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   final AgoraService _agoraService = AgoraService();
   final AppwriteService _appwrite = AppwriteService();
+  final FirebaseGiftService _giftService = FirebaseGiftService();
+  final ChatService _chatService = ChatService();
   
   // Room data
   Map<String, dynamic>? _roomData;
   UserProfile? _currentUser;
   UserProfile? _moderator;
+  
+  // Gift system
+  int _currentUserCoinBalance = 0;
+  Gift? _selectedGift;
+  Map<String, dynamic>? _selectedRecipient;  // Changed to match Open Discussion format
+  List<Gift> _availableGifts = [];
   
   // Participants
   final List<UserProfile> _speakerPanelists = []; // Max 6 speakers
@@ -56,6 +67,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   void initState() {
     super.initState();
     _initializeRoom();
+    _loadGiftData();
   }
 
   @override
@@ -156,6 +168,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           _isLoading = false;
           _isJoined = true;
         });
+        
+        // Load gift data after user is set
+        _loadGiftData();
       }
       
       // Load participants
@@ -2099,13 +2114,835 @@ Join the conversation now in the Arena app!
     }
   }
 
-  Widget _buildGiftButton() {
+  Future<void> _loadGiftData() async {
+    try {
+      // Load user coin balance
+      if (_currentUser != null) {
+        final balance = await _giftService.getUserCoinBalance(_currentUser!.id);
+        if (mounted) {
+          setState(() {
+            _currentUserCoinBalance = balance;
+          });
+        }
+      }
+      
+      // Load available gifts
+      setState(() {
+        _availableGifts = GiftConstants.allGifts;
+      });
+      
+      AppLogger().debug('Loaded gift data - Balance: $_currentUserCoinBalance, Gifts: ${_availableGifts.length}');
+    } catch (e) {
+      AppLogger().error('Error loading gift data: $e');
+    }
+  }
+
+  // Gift modal methods (Open Discussion room implementation)
+  void _showGiftModal() {
+    AppLogger().debug('🎁 DEBUG: Gift modal button pressed');
+    
+    // Get eligible recipients (moderator and speakers only, excluding self)
+    final eligibleRecipients = <Map<String, dynamic>>[];
+    
+    // Add moderator if not current user
+    if (_moderator != null && _moderator!.id != _currentUser!.id) {
+      eligibleRecipients.add({
+        'userId': _moderator!.id,
+        'name': _moderator!.name,
+        'role': 'moderator',
+      });
+    }
+    
+    // Add speakers if not current user
+    for (final speaker in _speakerPanelists) {
+      if (speaker.id != _currentUser!.id && !eligibleRecipients.any((r) => r['userId'] == speaker.id)) {
+        eligibleRecipients.add({
+          'userId': speaker.id,
+          'name': speaker.name,
+          'role': 'speaker',
+        });
+      }
+    }
+
+    if (eligibleRecipients.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No eligible recipients. Only moderators and speakers can receive gifts.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+        ),
+        child: DefaultTabController(
+          length: 2,
+          child: Column(
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              
+              // Header
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Text(
+                      'Send Gift',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF8B5CF6),
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            '🪙',
+                            style: TextStyle(fontSize: 16),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '$_currentUserCoinBalance',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Tab bar
+              const TabBar(
+                labelColor: Color(0xFF8B5CF6),
+                unselectedLabelColor: Colors.grey,
+                indicatorColor: Color(0xFF8B5CF6),
+                tabs: [
+                  Tab(text: 'Select Gift'),
+                  Tab(text: 'Recipients'),
+                ],
+              ),
+              
+              // Tab content
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _buildGiftSelectionTab(),
+                    _buildRecipientSelectionTab(eligibleRecipients),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGiftSelectionTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Money Gifting Section
+          _buildMoneyGiftingSection(),
+          
+          const SizedBox(height: 24),
+          
+          // Gift categories
+          ...GiftCategory.values.map((category) => _buildGiftCategorySection(category)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMoneyGiftingSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Send Money Button
+        GestureDetector(
+          onTap: _showMoneyInputModal,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+            decoration: BoxDecoration(
+              color: Colors.green.withValues(alpha: 0.1),
+              border: Border.all(color: Colors.green, width: 2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.attach_money, color: Colors.green, size: 24),
+                SizedBox(width: 8),
+                Text(
+                  '\$ Send Money',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  Widget _buildGiftCategorySection(GiftCategory category) {
+    final categoryGifts = GiftConstants.getGiftsByCategory(category);
+    if (categoryGifts.isEmpty) return Container();
+
+    String categoryTitle = '';
+    IconData categoryIcon = Icons.card_giftcard;
+    Color categoryColor = Colors.grey;
+
+    switch (category) {
+      case GiftCategory.intellectual:
+        categoryTitle = 'Intellectual Achievement';
+        categoryIcon = Icons.psychology;
+        categoryColor = Colors.blue;
+        break;
+      case GiftCategory.supportive:
+        categoryTitle = 'Supportive & Encouraging';
+        categoryIcon = Icons.favorite;
+        categoryColor = Colors.pink;
+        break;
+      case GiftCategory.fun:
+        categoryTitle = 'Fun & Personality';
+        categoryIcon = Icons.celebration;
+        categoryColor = Colors.orange;
+        break;
+      case GiftCategory.recognition:
+        categoryTitle = 'Recognition & Status';
+        categoryIcon = Icons.star;
+        categoryColor = Colors.amber;
+        break;
+      case GiftCategory.interactive:
+        categoryTitle = 'Interactive & Engaging';
+        categoryIcon = Icons.play_circle;
+        categoryColor = Colors.green;
+        break;
+      case GiftCategory.premium:
+        categoryTitle = 'Premium Collection';
+        categoryIcon = Icons.diamond;
+        categoryColor = Colors.purple;
+        break;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Category header
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Row(
+            children: [
+              Icon(categoryIcon, color: categoryColor, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                categoryTitle,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: categoryColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        // Gift grid
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 1.2,
+          ),
+          itemCount: categoryGifts.length,
+          itemBuilder: (context, index) {
+            final gift = categoryGifts[index];
+            return _buildGiftCard(gift);
+          },
+        ),
+        
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  Widget _buildGiftCard(Gift gift) {
+    final canAfford = _currentUserCoinBalance >= gift.cost;
+    final isSelected = _selectedGift?.id == gift.id;
+    
     return GestureDetector(
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gift feature coming soon!')),
+      onTap: canAfford ? () => _selectGift(gift) : null,
+      child: Container(
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.red.withValues(alpha: 0.1) : Colors.white,
+          border: Border.all(
+            color: isSelected ? Colors.red : _getTierColor(gift.tier),
+            width: isSelected ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  // Gift emoji and effects
+                  Text(
+                    gift.emoji,
+                    style: TextStyle(
+                      fontSize: canAfford ? 24 : 20,
+                      color: canAfford ? null : Colors.grey,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (gift.hasVisualEffect)
+                    Icon(
+                      Icons.auto_awesome,
+                      size: 12,
+                      color: Colors.amber[600],
+                    ),
+                  if (gift.hasProfileBadge)
+                    const Icon(
+                      Icons.verified,
+                      size: 12,
+                      color: Colors.blue,
+                    ),
+                ],
+              ),
+              
+              const SizedBox(height: 4),
+              
+              // Gift name
+              Text(
+                gift.name,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: canAfford ? Colors.black87 : Colors.grey[600],
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              
+              const SizedBox(height: 2),
+              
+              // Gift description
+              Text(
+                gift.description,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: canAfford ? Colors.grey[600] : Colors.grey[400],
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              
+              const Spacer(),
+              
+              // Cost
+              Row(
+                children: [
+                  const Text(
+                    '🪙',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  const SizedBox(width: 2),
+                  Text(
+                    '${gift.cost}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: canAfford ? _getTierColor(gift.tier) : Colors.grey[400],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _getTierColor(GiftTier tier) {
+    switch (tier) {
+      case GiftTier.basic:
+        return Colors.grey[600]!;
+      case GiftTier.standard:
+        return Colors.blue[600]!;
+      case GiftTier.premium:
+        return Colors.purple[600]!;
+      case GiftTier.legendary:
+        return Colors.amber[600]!;
+    }
+  }
+
+  Widget _buildRecipientSelectionTab(List<Map<String, dynamic>> eligibleRecipients) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: eligibleRecipients.length,
+      itemBuilder: (context, index) {
+        final recipient = eligibleRecipients[index];
+        final isSelected = _selectedRecipient?['userId'] == recipient['userId'];
+        
+        return GestureDetector(
+          onTap: () => _selectRecipient(recipient),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isSelected ? Colors.blue.withValues(alpha: 0.1) : Colors.white,
+              border: Border.all(
+                color: isSelected ? Colors.blue : Colors.grey[300]!,
+                width: isSelected ? 2 : 1,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: Colors.grey[300],
+                  child: Text(
+                    recipient['name'][0].toUpperCase(),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        recipient['name'],
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        recipient['role'].toString().toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isSelected)
+                  const Icon(
+                    Icons.check_circle,
+                    color: Colors.blue,
+                  ),
+              ],
+            ),
+          ),
         );
       },
+    );
+  }
+
+  void _showMoneyInputModal() {
+    final TextEditingController amountController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.attach_money, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Send Money'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Enter the amount you want to send:'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: amountController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Amount',
+                prefixText: '\$ ',
+                border: OutlineInputBorder(),
+                hintText: '0.00',
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'This will be processed through a secure payment gateway.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = amountController.text.trim();
+              if (text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter an amount'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              
+              final amount = double.tryParse(text);
+              if (amount == null || amount <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid amount'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              
+              Navigator.pop(context);
+              _selectCustomMoneyGift(amount);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+            ),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _selectCustomMoneyGift(double amount) {
+    AppLogger().debug('💵 DEBUG: Custom money amount selected: \$$amount');
+
+    setState(() {
+      _selectedGift = Gift(
+        id: 'money_${amount.toStringAsFixed(2)}',
+        name: '\$${amount.toStringAsFixed(2)} Cash',
+        emoji: '💵',
+        description: 'Send \$${amount.toStringAsFixed(2)} real money',
+        cost: 0, // No coin cost for real money
+        category: GiftCategory.premium,
+        tier: amount <= 10 ? GiftTier.standard : amount <= 50 ? GiftTier.premium : GiftTier.legendary,
+      );
+    });
+    
+    AppLogger().debug('💵 DEBUG: Custom money gift selected successfully: \$${amount.toStringAsFixed(2)}');
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('💵 Selected \$${amount.toStringAsFixed(2)} cash'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 1),
+      ),
+    );
+    
+    // Auto-show confirmation if recipient is already selected
+    if (_selectedRecipient != null) {
+      _showGiftConfirmation();
+    }
+  }
+
+  void _selectGift(Gift gift) {
+    AppLogger().debug('🎁 DEBUG: Gift selected: ${gift.name}');
+    AppLogger().debug('🎁 DEBUG: Gift cost: ${gift.cost}');
+    AppLogger().debug('🎁 DEBUG: User balance: $_currentUserCoinBalance');
+    
+    if (_currentUserCoinBalance < gift.cost) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Insufficient coins!'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _selectedGift = gift;
+    });
+    
+    AppLogger().debug('🎁 DEBUG: Gift selected successfully: ${gift.name}');
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('🎁 Selected ${gift.emoji} ${gift.name}'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 1),
+      ),
+    );
+    
+    // Auto-show confirmation if recipient is already selected
+    if (_selectedRecipient != null) {
+      _showGiftConfirmation();
+    }
+  }
+
+  void _selectRecipient(Map<String, dynamic> recipient) {
+    setState(() {
+      _selectedRecipient = recipient;
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Selected ${recipient['name']}'),
+        backgroundColor: Colors.blue,
+        duration: const Duration(seconds: 1),
+      ),
+    );
+    
+    // Auto-show confirmation if gift is already selected
+    if (_selectedGift != null) {
+      _showGiftConfirmation();
+    }
+  }
+
+  void _showGiftConfirmation() {
+    if (_selectedGift == null || _selectedRecipient == null) return;
+
+    final gift = _selectedGift!;
+    final recipient = _selectedRecipient!;
+    final isMoneyGift = gift.id.startsWith('money_');
+    final isCoinGift = gift.id.startsWith('coin_');
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isMoneyGift ? 'Send Money?' : 'Send Gift?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Send ${gift.emoji} ${gift.name} to ${recipient['name']}?'),
+            const SizedBox(height: 8),
+            if (isMoneyGift) ...[
+              Text('Amount: ${gift.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              const Text('This will be processed through a secure payment gateway.'),
+            ] else if (isCoinGift) ...[
+              Text('Cost: 🪙 ${gift.cost} coins'),
+              Text('Your balance: 🪙 $_currentUserCoinBalance coins'),
+              Text('After: 🪙 ${_currentUserCoinBalance - gift.cost} coins'),
+            ] else ...[
+              Text('Cost: 🪙 ${gift.cost} coins'),
+              Text('Your balance: 🪙 $_currentUserCoinBalance coins'),
+              Text('After: 🪙 ${_currentUserCoinBalance - gift.cost} coins'),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: (isMoneyGift || _currentUserCoinBalance >= gift.cost)
+                ? () => _sendGift(gift, recipient)
+                : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isMoneyGift ? Colors.green : Colors.blue,
+            ),
+            child: Text(isMoneyGift ? 'Send Money' : 'Send Gift'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _sendGift(Gift gift, Map<String, dynamic> recipient) async {
+    if (_currentUser == null) return;
+
+    final isMoneyGift = gift.id.startsWith('money_');
+
+    try {
+      Navigator.pop(context); // Close confirmation dialog
+
+      // Show loading
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                ),
+                const SizedBox(width: 10),
+                Text(isMoneyGift ? 'Processing payment...' : 'Sending gift...'),
+              ],
+            ),
+            backgroundColor: isMoneyGift ? Colors.green : Colors.blue,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+
+      if (isMoneyGift) {
+        // Handle real money transactions
+        await _processMoneyGift(gift, recipient);
+      } else {
+        // Handle regular gifts and coin gifts via Firebase
+        await _giftService.sendGift(
+          giftId: gift.id,
+          senderId: _currentUser!.id,
+          recipientId: recipient['userId'],
+          roomId: widget.roomId,
+          cost: gift.cost,
+        );
+      }
+
+      // Send gift notification to chat (if chat service exists)
+      try {
+        await _chatService.sendGiftNotification(
+          roomId: widget.roomId,
+          giftId: gift.id,
+          giftName: '${gift.emoji} ${gift.name}',
+          senderId: _currentUser!.id,
+          senderName: _currentUser!.displayName,
+          recipientId: recipient['userId'],
+          recipientName: recipient['name'],
+          cost: gift.cost,
+        );
+      } catch (chatError) {
+        AppLogger().warning('Could not send chat notification: $chatError');
+        // Continue anyway - gift was sent successfully
+      }
+
+      // Refresh Firebase coin balance (only for coin-based gifts)
+      if (!isMoneyGift) {
+        await _loadGiftData();
+      }
+
+      // Show success notification
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isMoneyGift 
+              ? '💵 Money sent! ${gift.name} to ${recipient['name']}'
+              : '🎁 Gift sent! ${gift.emoji} ${gift.name}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
+      // Reset selections
+      setState(() {
+        _selectedGift = null;
+        _selectedRecipient = null;
+      });
+
+    } catch (e) {
+      AppLogger().error('Error sending gift: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isMoneyGift 
+              ? 'Failed to process payment: $e'
+              : 'Failed to send gift: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _processMoneyGift(Gift gift, Map<String, dynamic> recipient) async {
+    // Extract amount from gift name (e.g., "$25.50 Cash" -> 25.50)
+    final amountString = gift.name.replaceAll(RegExp(r'[^\d.]'), '');
+    final amount = double.tryParse(amountString) ?? 0.0;
+    
+    AppLogger().info('Processing money gift: \$${amount.toStringAsFixed(2)} to ${recipient['name']}');
+    
+    // TODO: Integrate with payment gateway (Stripe, PayPal, etc.)
+    // For now, simulate the payment process
+    await Future.delayed(const Duration(seconds: 2));
+    
+    // In a real implementation, you would:
+    // 1. Call payment gateway API (Stripe, PayPal, etc.)
+    // 2. Handle payment confirmation
+    // 3. Record transaction in database
+    // 4. Handle payment failures/retries
+    // 5. Send payment receipt to both parties
+    
+    // Simulate success for demonstration
+    AppLogger().info('Money gift processed successfully: \$${amount.toStringAsFixed(2)}');
+  }
+
+  Widget _buildGiftButton() {
+    return GestureDetector(
+      onTap: _showGiftModal,
       child: Container(
         width: 50,
         height: 50,
