@@ -308,19 +308,28 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           AppLogger().debug('Participant update payload: ${response.payload}');
           
           if (mounted && !_isDisposing) {
-            // Check for specific participant role changes to 'pending' (hand-raising)
+            // Check for specific participant role changes
             bool isHandRaiseEvent = false;
+            bool isHandLowerEvent = false;
             
             for (var event in response.events) {
               // Check if this is an update event
               if (event.contains('debate_discussion_participants.documents') && event.endsWith('.update')) {
-                // Check if role changed to 'pending' and it's for this room
-                if (response.payload['roomId'] == widget.roomId &&
-                    response.payload['role'] == 'pending') {
+                // Check if it's for this room
+                if (response.payload['roomId'] == widget.roomId) {
+                  final newRole = response.payload['role'];
+                  final userId = response.payload['userId'];
                   
-                  AppLogger().info('Hand-raise detected: ${response.payload['userId']} requested to speak');
-                  isHandRaiseEvent = true;
-                  break;
+                  if (newRole == 'pending') {
+                    AppLogger().info('Hand-raise detected: $userId requested to speak');
+                    isHandRaiseEvent = true;
+                  } else if (newRole == 'audience') {
+                    // Could be hand lowering or moderator denial - check if it was current user
+                    if (userId == _currentUser?.id && _hasRequestedSpeaker) {
+                      AppLogger().info('Hand-lower detected: $userId lowered their hand');
+                      isHandLowerEvent = true;
+                    }
+                  }
                 }
               }
             }
@@ -332,6 +341,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             if (isHandRaiseEvent && _isCurrentUserModerator) {
               AppLogger().info('Showing hand-raise notification to moderator');
               _showHandRaiseNotificationFromPayload(response.payload);
+            }
+            
+            // Update local state if current user lowered their hand
+            if (isHandLowerEvent) {
+              setState(() {
+                _hasRequestedSpeaker = false;
+              });
             }
           }
         },
@@ -389,17 +405,25 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               AppLogger().debug('Reconnected - Participant update events: ${response.events}');
               
               if (mounted && !_isDisposing) {
-                // Check for hand-raise events
+                // Check for hand-raise and hand-lower events
                 bool isHandRaiseEvent = false;
+                bool isHandLowerEvent = false;
                 
                 for (var event in response.events) {
                   if (event.contains('debate_discussion_participants.documents') && event.endsWith('.update')) {
-                    if (response.payload['roomId'] == widget.roomId &&
-                        response.payload['role'] == 'pending') {
+                    if (response.payload['roomId'] == widget.roomId) {
+                      final newRole = response.payload['role'];
+                      final userId = response.payload['userId'];
                       
-                      AppLogger().info('Hand-raise detected after reconnect: ${response.payload['userId']}');
-                      isHandRaiseEvent = true;
-                      break;
+                      if (newRole == 'pending') {
+                        AppLogger().info('Hand-raise detected after reconnect: $userId');
+                        isHandRaiseEvent = true;
+                      } else if (newRole == 'audience') {
+                        if (userId == _currentUser?.id && _hasRequestedSpeaker) {
+                          AppLogger().info('Hand-lower detected after reconnect: $userId');
+                          isHandLowerEvent = true;
+                        }
+                      }
                     }
                   }
                 }
@@ -408,6 +432,12 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                 
                 if (isHandRaiseEvent && _isCurrentUserModerator) {
                   _showHandRaiseNotificationFromPayload(response.payload);
+                }
+                
+                if (isHandLowerEvent) {
+                  setState(() {
+                    _hasRequestedSpeaker = false;
+                  });
                 }
               }
             },
@@ -683,44 +713,66 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   }
 
   void _requestToJoinSpeakers() async {
-    if (_hasRequestedSpeaker || _isCurrentUserModerator || _isCurrentUserSpeaker || _currentUser == null) {
+    if (_isCurrentUserModerator || _isCurrentUserSpeaker || _currentUser == null) {
       return;
     }
     
     try {
-      // Update participant role to 'pending' to indicate speaker request
-      await _appwrite.updateDebateDiscussionParticipantRole(
-        roomId: widget.roomId,
-        userId: _currentUser!.id,
-        newRole: 'pending',
-      );
-      
-      if (mounted && !_isDisposing) {
-        setState(() {
-          _hasRequestedSpeaker = true;
-        });
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✋ Request sent to moderator for approval'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 3),
-          ),
+      if (_hasRequestedSpeaker) {
+        // User wants to lower their hand - change back to audience
+        await _appwrite.updateDebateDiscussionParticipantRole(
+          roomId: widget.roomId,
+          userId: _currentUser!.id,
+          newRole: 'audience',
         );
+        
+        if (mounted && !_isDisposing) {
+          setState(() {
+            _hasRequestedSpeaker = false;
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✋ Hand lowered - request cancelled'),
+              backgroundColor: Colors.grey,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        
+        AppLogger().info('User ${_currentUser!.name} lowered their hand');
+      } else {
+        // User wants to raise their hand - change to pending
+        await _appwrite.updateDebateDiscussionParticipantRole(
+          roomId: widget.roomId,
+          userId: _currentUser!.id,
+          newRole: 'pending',
+        );
+        
+        if (mounted && !_isDisposing) {
+          setState(() {
+            _hasRequestedSpeaker = true;
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✋ Request sent to moderator for approval'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        
+        AppLogger().info('User ${_currentUser!.name} raised their hand');
       }
       
       // The real-time subscription will update the UI automatically
-      // The moderator will see this request in their speaker management panel
     } catch (e) {
-      AppLogger().error('Error requesting to join speakers: $e');
+      AppLogger().error('Error with hand raise/lower: $e');
       if (mounted && !_isDisposing) {
-        setState(() {
-          _hasRequestedSpeaker = false;
-        });
-        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error sending request: $e'),
+            content: Text('Error: $e'),
             backgroundColor: Colors.red,
           ),
         );
