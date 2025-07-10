@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/arena_colors.dart';
 import '../../../core/logging/app_logger.dart';
+import '../../../screens/arena_modals.dart';
 
 /// Arena App Bar - DO NOT MODIFY LAYOUT
 /// This is the exact app bar from the original arena with timer and moderator controls
@@ -87,6 +88,17 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
         ],
       ),
       actions: [
+        // Rules and Guidelines button
+        IconButton(
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (context) => const DebateRulesModal(),
+            );
+          },
+          icon: const Icon(Icons.info, color: Colors.white, size: 24),
+          tooltip: 'Debate Rules & Guidelines',
+        ),
         // Leave button
         IconButton(
           onPressed: () {

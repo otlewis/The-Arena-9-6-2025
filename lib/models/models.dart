@@ -10,4 +10,5 @@ export 'room_participant.dart';
 export 'message.dart';
 export 'vote.dart';
 export 'gift.dart';
-export 'gift_transaction.dart'; 
+export 'gift_transaction.dart';
+export 'judge_scorecard.dart'; 

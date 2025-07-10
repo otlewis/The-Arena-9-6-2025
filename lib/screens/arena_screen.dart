@@ -8,12 +8,14 @@ import '../services/chat_service.dart';
 import '../widgets/user_avatar.dart';
 import '../models/user_profile.dart';
 import '../models/message.dart';
+import '../models/judge_scorecard.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
 import '../main.dart' show ArenaApp, getIt;
 import '../core/logging/app_logger.dart';
 import '../services/agora_service.dart';
 import 'arena_modals.dart';
+import '../features/arena/widgets/arena_app_bar.dart';
 // Removed problematic provider imports to prevent infinite loops
 
 // Legacy Debate Phase Enum - kept for backwards compatibility
@@ -166,7 +168,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   String? _currentScreenSharer; // Track who is currently sharing
   
   // Colors
-  static const Color scarletRed = Color(0xFFFF2400);
   static const Color accentPurple = Color(0xFF8B5CF6);
   static const Color deepPurple = Color(0xFF6B46C1);
 
@@ -1250,30 +1251,57 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         return;
       }
 
-      // Count votes
+      // Count votes and calculate scores (supports both old votes and new scorecards)
       int affirmativeVotes = 0;
       int negativeVotes = 0;
+      int totalAffirmativeScore = 0;
+      int totalNegativeScore = 0;
+      List<Map<String, dynamic>> scorecardDetails = [];
       
       for (var judgment in judgments.documents) {
         final winner = judgment.data['winner'];
+        final affirmativeTotal = judgment.data['affirmativeTotal'] ?? 0;
+        final negativeTotal = judgment.data['negativeTotal'] ?? 0;
+        final judgeName = judgment.data['judgeName'] ?? 'Unknown Judge';
+        
+        // Count votes (compatible with old and new systems)
         if (winner == 'affirmative') {
           affirmativeVotes++;
         } else if (winner == 'negative') {
           negativeVotes++;
         }
+        
+        // Accumulate scores for new scorecard system
+        totalAffirmativeScore += (affirmativeTotal as num).toInt();
+        totalNegativeScore += (negativeTotal as num).toInt();
+        
+        // Store detailed scorecard info for display
+        scorecardDetails.add({
+          'judgeName': judgeName,
+          'winner': winner,
+          'affirmativeScore': affirmativeTotal,
+          'negativeScore': negativeTotal,
+          'reasoning': judgment.data['reasonForDecision'] ?? '',
+        });
       }
       
-      // Determine winner
+      // Determine winner (now with both vote count and score totals)
       String winner;
       if (affirmativeVotes > negativeVotes) {
         winner = 'affirmative';
       } else if (negativeVotes > affirmativeVotes) {
         winner = 'negative';
+      } else if (totalAffirmativeScore > totalNegativeScore) {
+        // Use total scores as tiebreaker
+        winner = 'affirmative';
+      } else if (totalNegativeScore > totalAffirmativeScore) {
+        winner = 'negative';
       } else {
         winner = 'tie';
       }
       
-      AppLogger().debug('🏆 Winner determined: $winner (Affirmative: $affirmativeVotes, Negative: $negativeVotes)');
+      AppLogger().debug('🏆 Winner determined: $winner');
+      AppLogger().debug('📊 Vote breakdown - Affirmative: $affirmativeVotes votes ($totalAffirmativeScore points), Negative: $negativeVotes votes ($totalNegativeScore points)');
       
       // Update room with winner and mark judging as complete
       await _appwrite.databases.updateDocument(
@@ -1531,7 +1559,14 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: _buildAppBar(),
+      appBar: ArenaAppBar(
+        isModerator: _isModerator,
+        isTimerRunning: _isTimerRunning,
+        formattedTime: _formattedTime,
+        onShowModeratorControls: _showModeratorControlModal,
+        onShowTimerControls: _showTimerControlModal,
+        onExitArena: _exitArena,
+      ),
       body: Column(
         children: [
           Expanded(
@@ -1540,74 +1575,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           _buildControlPanel(),
         ],
       ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.black,
-      toolbarHeight: 56,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.white),
-        onPressed: () => _exitArena(),
-      ),
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Moderator Controls Icon (only visible to moderators)
-          if (_isModerator)
-            IconButton(
-              onPressed: _showModeratorControlModal,
-              icon: const Icon(Icons.admin_panel_settings, color: Colors.amber),
-              tooltip: 'Moderator Controls',
-            )
-          else
-            const SizedBox(width: 48), // Maintain spacing
-          
-          // Timer in center (clickable for moderators)
-          GestureDetector(
-            onTap: _isModerator ? _showTimerControlModal : null,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: _isTimerRunning ? scarletRed : accentPurple,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _formattedTime,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                  if (_isModerator) ...[
-                    const SizedBox(width: 4),
-                    const Icon(Icons.settings, color: Colors.white, size: 14),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          
-          const SizedBox(width: 48), // Maintain spacing for balance
-        ],
-      ),
-      actions: [
-        // Leave button
-        IconButton(
-          onPressed: () => _exitArena(),
-          icon: const Icon(Icons.exit_to_app, color: Colors.white),
-          tooltip: 'Leave Arena',
-        ),
-      ],
     );
   }
 
@@ -2403,8 +2370,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   void _showJudgingPanel() {
+    AppLogger().info('🎯 JUDGE PANEL: _showJudgingPanel called');
+    AppLogger().info('🎯 JUDGE PANEL: _judgingEnabled = $_judgingEnabled');
+    AppLogger().info('🎯 JUDGE PANEL: _hasCurrentUserSubmittedVote = $_hasCurrentUserSubmittedVote');
+    AppLogger().info('🎯 JUDGE PANEL: _isJudge = $_isJudge');
+    AppLogger().info('🎯 JUDGE PANEL: _isModerator = $_isModerator');
+    
     // Additional validation
     if (!_judgingEnabled) {
+      AppLogger().warning('🎯 JUDGE PANEL: Judging not enabled');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('❌ Voting is not open yet. The moderator must enable judging first.'),
@@ -2415,6 +2389,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
     
     if (_hasCurrentUserSubmittedVote) {
+      AppLogger().warning('🎯 JUDGE PANEL: User already submitted vote');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('✅ You have already submitted your vote for this debate.'),
@@ -2425,6 +2400,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
     
     if (!(_isJudge || _isModerator)) {
+      AppLogger().warning('🎯 JUDGE PANEL: User is not judge or moderator');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('❌ Only judges can vote on debates.'),
@@ -2433,20 +2409,141 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       );
       return;
     }
+    
+    AppLogger().info('🎯 JUDGE PANEL: All validations passed, showing panel');
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      useSafeArea: true,
-      builder: (context) => JudgingPanel(
+    try {
+      // Create safe participants map without null values
+      final safeParticipants = <String, UserProfile>{};
+      _participants.forEach((key, value) {
+        if (value != null) {
+          safeParticipants[key] = value;
+        }
+      });
+
+      ArenaModals.showJudgingPanel(
+        context,
+        participants: safeParticipants,
+        audience: _audience,
+        currentUserId: _currentUserId,
+        hasCurrentUserSubmittedVote: _hasCurrentUserSubmittedVote,
+        onSubmitScorecard: (scorecard) {
+          // Handle the submitted scorecard
+          _handleScorecardSubmission(scorecard);
+        },
         roomId: widget.roomId,
-        challengeId: widget.challengeId,
-        affirmativeDebater: _participants['affirmative'],
-        negativeDebater: _participants['negative'],
-        judgingEnabled: _judgingEnabled,
-      ),
-    );
+        roomTopic: widget.challengeId, // Using challengeId as topic for now
+      );
+    } catch (e) {
+      AppLogger().error('Failed to show judging panel: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Failed to open judging panel: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _handleScorecardSubmission(JudgeScorecard scorecard) async {
+    try {
+      // Handle the submitted scorecard
+      AppLogger().info('📊 Judge scorecard submitted: ${scorecard.judgeName}');
+      AppLogger().info('📊 Winner: ${scorecard.winningTeam.displayName}');
+      AppLogger().info('📊 Total scores - Affirmative: ${scorecard.getTotalScoreForTeam(TeamSide.affirmative)}, Negative: ${scorecard.getTotalScoreForTeam(TeamSide.negative)}');
+      
+      // Save scorecard to database (compatible with old vote system)
+      // Get speaker scores for compatibility with old system
+      final affirmativeSpeakers = scorecard.getSpeakersForTeam(TeamSide.affirmative);
+      final negativeSpeakers = scorecard.getSpeakersForTeam(TeamSide.negative);
+      
+      // Calculate category totals for old system compatibility
+      int affirmativeArguments = 0;
+      int affirmativePresentation = 0;
+      int affirmativeRebuttal = 0;
+      for (final speaker in affirmativeSpeakers) {
+        affirmativeArguments += speaker.categoryScores[ScoringCategory.arguments] ?? 0;
+        affirmativePresentation += speaker.categoryScores[ScoringCategory.presentation] ?? 0;
+        affirmativeRebuttal += speaker.categoryScores[ScoringCategory.rebuttal] ?? 0;
+      }
+      
+      int negativeArguments = 0;
+      int negativePresentation = 0;
+      int negativeRebuttal = 0;
+      for (final speaker in negativeSpeakers) {
+        negativeArguments += speaker.categoryScores[ScoringCategory.arguments] ?? 0;
+        negativePresentation += speaker.categoryScores[ScoringCategory.presentation] ?? 0;
+        negativeRebuttal += speaker.categoryScores[ScoringCategory.rebuttal] ?? 0;
+      }
+      
+      // Create document data with required affirmativeScores field
+      final documentData = {
+        'roomId': widget.roomId,
+        'challengeId': widget.challengeId,
+        'judgeId': _currentUserId ?? 'unknown_judge',
+        'winner': scorecard.winningTeam.name.toLowerCase(),
+        'submittedAt': DateTime.now().toIso8601String(),
+        'comments': scorecard.reasonForDecision,
+        // Required scores as strings (JSON format)
+        'affirmativeScores': '{"arguments": $affirmativeArguments, "presentation": $affirmativePresentation, "rebuttal": $affirmativeRebuttal}',
+        'negativeScores': '{"arguments": $negativeArguments, "presentation": $negativePresentation, "rebuttal": $negativeRebuttal}',
+      };
+      
+      // Log the data for debugging
+      AppLogger().info('📊 Document data to save: ${documentData.toString()}');
+      
+      await _appwrite.databases.createDocument(
+        databaseId: 'arena_db',
+        collectionId: 'arena_judgments',
+        documentId: ID.unique(),
+        data: documentData,
+      );
+      
+      AppLogger().info('📊 Scorecard saved to database successfully');
+      
+      // Update local state
+      setState(() {
+        _hasCurrentUserSubmittedVote = true;
+      });
+      
+      // NOTE: Don't call Navigator.pop() here - the JudgingPanel already handles closing itself
+      
+      // Show confirmation
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Your scorecard has been submitted successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+      
+      // Send realtime update to other participants
+      try {
+        await _appwrite.databases.updateDocument(
+          databaseId: 'arena_db',
+          collectionId: 'arena_rooms',
+          documentId: widget.roomId,
+          data: {
+            'lastUpdated': DateTime.now().toIso8601String(),
+            'lastActivity': 'judge_vote_submitted',
+          },
+        );
+      } catch (e) {
+        AppLogger().warning('Failed to send realtime update: $e');
+      }
+      
+    } catch (e) {
+      AppLogger().error('📊 Failed to save scorecard: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to submit scorecard: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _showRoleManager() {
@@ -3338,458 +3435,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
 
   /// Perform the mixed invitation system (personal + random)
-}
-
-// Judging Panel Widget
-class JudgingPanel extends StatefulWidget {
-  final String roomId;
-  final String challengeId;
-  final UserProfile? affirmativeDebater;
-  final UserProfile? negativeDebater;
-  final bool judgingEnabled;
-
-  const JudgingPanel({
-    super.key,
-    required this.roomId,
-    required this.challengeId,
-    this.affirmativeDebater,
-    this.negativeDebater,
-    required this.judgingEnabled,
-  });
-
-  @override
-  State<JudgingPanel> createState() => _JudgingPanelState();
-}
-
-class _JudgingPanelState extends State<JudgingPanel> {
-  final _formKey = GlobalKey<FormState>();
-  
-  // Scoring (1-10 scale for each category)
-  double _affirmativeArguments = 5.0;
-  double _affirmativePresentation = 5.0;
-  double _affirmativeRebuttal = 5.0;
-  
-  double _negativeArguments = 5.0;
-  double _negativePresentation = 5.0;
-  double _negativeRebuttal = 5.0;
-  
-  String _overallWinner = '';
-  String _judgeComments = '';
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.8,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
-      ),
-      child: Column(
-        children: [
-          _buildJudgingHeader(),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildDebaterScoring('Affirmative', widget.affirmativeDebater),
-                    const SizedBox(height: 24),
-                    _buildDebaterScoring('Negative', widget.negativeDebater),
-                    const SizedBox(height: 24),
-                    _buildOverallJudgment(),
-                    const SizedBox(height: 24),
-                    _buildSubmitButton(),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildJudgingHeader() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF6B46C1), Color(0xFF8B5CF6)],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.gavel, color: Colors.white, size: 24),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'Judge This Debate',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: const Icon(Icons.close, color: Colors.white),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDebaterScoring(String side, UserProfile? debater) {
-    final isAffirmative = side == 'Affirmative';
-    
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        border: Border.all(color: isAffirmative ? Colors.green : Colors.red),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isAffirmative ? Colors.green : Colors.red,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  side,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              if (debater != null) ...[
-                const SizedBox(width: 12),
-                Text(
-                  debater.name,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 16),
-          
-          // Arguments & Content
-          Text(
-            'Arguments & Content (1-10)',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[700],
-            ),
-          ),
-          Slider(
-            value: isAffirmative ? _affirmativeArguments : _negativeArguments,
-            min: 1,
-            max: 10,
-            divisions: 9,
-            label: (isAffirmative ? _affirmativeArguments : _negativeArguments).round().toString(),
-            onChanged: (value) {
-              setState(() {
-                if (isAffirmative) {
-                  _affirmativeArguments = value;
-                } else {
-                  _negativeArguments = value;
-                }
-              });
-            },
-          ),
-          
-          // Presentation & Delivery
-          Text(
-            'Presentation & Delivery (1-10)',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[700],
-            ),
-          ),
-          Slider(
-            value: isAffirmative ? _affirmativePresentation : _negativePresentation,
-            min: 1,
-            max: 10,
-            divisions: 9,
-            label: (isAffirmative ? _affirmativePresentation : _negativePresentation).round().toString(),
-            onChanged: (value) {
-              setState(() {
-                if (isAffirmative) {
-                  _affirmativePresentation = value;
-                } else {
-                  _negativePresentation = value;
-                }
-              });
-            },
-          ),
-          
-          // Rebuttal & Defense
-          Text(
-            'Rebuttal & Defense (1-10)',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[700],
-            ),
-          ),
-          Slider(
-            value: isAffirmative ? _affirmativeRebuttal : _negativeRebuttal,
-            min: 1,
-            max: 10,
-            divisions: 9,
-            label: (isAffirmative ? _affirmativeRebuttal : _negativeRebuttal).round().toString(),
-            onChanged: (value) {
-              setState(() {
-                if (isAffirmative) {
-                  _affirmativeRebuttal = value;
-                } else {
-                  _negativeRebuttal = value;
-                }
-              });
-            },
-          ),
-          
-          // Total Score
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Total Score:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  '${((isAffirmative ? _affirmativeArguments + _affirmativePresentation + _affirmativeRebuttal : _negativeArguments + _negativePresentation + _negativeRebuttal)).toStringAsFixed(1)}/30',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOverallJudgment() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Overall Winner',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: RadioListTile<String>(
-                title: const Text('Affirmative'),
-                value: 'affirmative',
-                groupValue: _overallWinner,
-                onChanged: (value) {
-                  setState(() {
-                    _overallWinner = value ?? '';
-                  });
-                },
-              ),
-            ),
-            Expanded(
-              child: RadioListTile<String>(
-                title: const Text('Negative'),
-                value: 'negative',
-                groupValue: _overallWinner,
-                onChanged: (value) {
-                  setState(() {
-                    _overallWinner = value ?? '';
-                  });
-                },
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        
-        // Judge Comments
-        const Text(
-          'Judge Comments (Optional)',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextFormField(
-          maxLines: 4,
-          decoration: InputDecoration(
-            hintText: 'Provide feedback on the debate performance...',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-          onChanged: (value) {
-            _judgeComments = value;
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSubmitButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: _submitJudgment,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF8B5CF6),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-        child: const Text(
-          'Submit Judgment',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _submitJudgment() async {
-    if (!mounted) return;
-    
-    if (_overallWinner.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a winner')),
-        );
-      }
-      return;
-    }
-
-    try {
-      final appwrite = AppwriteService();
-      final user = await appwrite.getCurrentUser();
-      
-      AppLogger().debug('🔍 JUDGMENT DEBUG: Starting submission...');
-      AppLogger().debug('🔍 JUDGMENT DEBUG: Selected winner: $_overallWinner');
-      
-      if (user == null) {
-        throw Exception('User not authenticated');
-      }
-      
-      AppLogger().debug('🔍 JUDGMENT DEBUG: Current user ID: ${user.$id}');
-
-      // Verify user is actually a judge in this arena
-      AppLogger().debug('🔍 JUDGMENT DEBUG: Checking participants for room: ${widget.roomId}');
-      
-      final participants = await appwrite.getArenaParticipants(widget.roomId);
-      
-      AppLogger().debug('🔍 JUDGMENT DEBUG: Found ${participants.length} participants');
-      for (var p in participants) {
-        AppLogger().debug('Participant ${p['userId']} has role: ${p['role']}');
-      }
-      
-      final currentUserParticipant = participants.firstWhere(
-        (p) => p['userId'] == user.$id,
-        orElse: () => <String, dynamic>{},
-      );
-      
-      if (currentUserParticipant.isEmpty) {
-        AppLogger().debug('🔍 JUDGMENT DEBUG: User not found in participants');
-        throw Exception('You are not a participant in this arena');
-      }
-      
-      final userRole = currentUserParticipant['role'] as String?;
-      AppLogger().debug('🔍 JUDGMENT DEBUG: Current user role: $userRole');
-      
-      if (!(userRole?.startsWith('judge') ?? false)) {
-        AppLogger().debug('🔍 JUDGMENT DEBUG: User role does not start with judge');
-        throw Exception('Only judges can submit votes. Your role: $userRole');
-      }
-
-      // Check if judging is enabled by the moderator
-      AppLogger().debug('🔍 JUDGMENT DEBUG: Judging enabled: ${widget.judgingEnabled}');
-      if (!widget.judgingEnabled) {
-        throw Exception('Voting is not yet open. The moderator must enable judging first.');
-      }
-
-      AppLogger().debug('🔍 JUDGMENT DEBUG: All validations passed, submitting judgment...');
-
-      await appwrite.submitArenaJudgment(
-        roomId: widget.roomId,
-        judgeId: user.$id,
-        challengeId: widget.challengeId,
-        affirmativeArguments: _affirmativeArguments,
-        affirmativePresentation: _affirmativePresentation,
-        affirmativeRebuttal: _affirmativeRebuttal,
-        negativeArguments: _negativeArguments,
-        negativePresentation: _negativePresentation,
-        negativeRebuttal: _negativeRebuttal,
-        winner: _overallWinner,
-        comments: _judgeComments.isNotEmpty ? _judgeComments : null,
-      );
-      
-      AppLogger().debug('🔍 JUDGMENT DEBUG: Judgment submitted successfully!');
-      
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Judgment submitted successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      AppLogger().debug('🔍 JUDGMENT DEBUG: Error submitting judgment: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Error submitting judgment: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 }
 
 // Role Manager Panel Widget
@@ -4981,7 +4626,6 @@ class ResultsModal extends StatelessWidget {
   });
 
   // Colors
-  static const Color scarletRed = Color(0xFFFF2400);
   static const Color accentPurple = Color(0xFF8B5CF6);
   static const Color deepPurple = Color(0xFF6B46C1);
 
@@ -5174,7 +4818,7 @@ class ResultsModal extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 12, // Reduced from 14
                                 fontWeight: FontWeight.w600,
-                                color: isAffirmativeWinner ? Colors.green : scarletRed,
+                                color: isAffirmativeWinner ? Colors.green : const Color(0xFFFF2400),
                               ),
                             ),
                           ],
@@ -5211,7 +4855,7 @@ class ResultsModal extends StatelessWidget {
                 const SizedBox(height: 12), // Reduced from 16
                 _buildVoteRow('Affirmative', affirmativeVotes, isAffirmativeWinner, Colors.green),
                 const SizedBox(height: 6), // Reduced from 8
-                _buildVoteRow('Negative', negativeVotes, !isAffirmativeWinner, scarletRed),
+                _buildVoteRow('Negative', negativeVotes, !isAffirmativeWinner, const Color(0xFFFF2400)),
               ],
             ),
           ),
@@ -5265,7 +4909,7 @@ class ResultsModal extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1), // Reduced padding
                             decoration: BoxDecoration(
-                              color: judgeWinner == 'affirmative' ? Colors.green : scarletRed,
+                              color: judgeWinner == 'affirmative' ? Colors.green : const Color(0xFFFF2400),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(

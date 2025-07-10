@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/arena_state.dart';
 import '../providers/arena_provider.dart';
+import '../../../screens/arena_modals.dart';
 
 class ArenaHeader extends ConsumerWidget {
   const ArenaHeader({
@@ -46,6 +47,17 @@ class ArenaHeader extends ConsumerWidget {
                     ),
                     textAlign: TextAlign.center,
                   ),
+                ),
+                // Rules and Guidelines button
+                IconButton(
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => const DebateRulesModal(),
+                    );
+                  },
+                  icon: const Icon(Icons.info, color: Colors.white, size: 24),
+                  tooltip: 'Debate Rules & Guidelines',
                 ),
                 _buildStatusChip(arenaState.status, theme),
               ],

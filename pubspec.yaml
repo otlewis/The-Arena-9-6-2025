@@ -37,6 +37,7 @@ dependencies:
   hive_flutter: ^1.1.0
   freezed_annotation: ^2.4.1
   timeago: ^3.6.1
+  intl: ^0.18.1
 
 dev_dependencies:
   flutter_test:

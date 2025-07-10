@@ -3,8 +3,10 @@ import 'dart:async';
 import '../widgets/user_avatar.dart';
 import '../models/user_profile.dart';
 import '../models/message.dart';
+import '../models/judge_scorecard.dart';
 import '../services/chat_service.dart';
 import '../widgets/debater_invite_choice_modal.dart';
+import 'package:intl/intl.dart';
 // Conditional import to avoid web compilation issues
 
 // Color constants
@@ -119,7 +121,9 @@ class ArenaModals {
       required List<UserProfile> audience,
       required String? currentUserId,
       required bool hasCurrentUserSubmittedVote,
-      required Function(String) onSubmitVote,
+      required Function(JudgeScorecard) onSubmitScorecard,
+      required String roomId,
+      String? roomTopic,
     }
   ) {
     showDialog(
@@ -129,7 +133,9 @@ class ArenaModals {
         audience: audience,
         currentUserId: currentUserId,
         hasCurrentUserSubmittedVote: hasCurrentUserSubmittedVote,
-        onSubmitVote: onSubmitVote,
+        onSubmitScorecard: onSubmitScorecard,
+        roomId: roomId,
+        roomTopic: roomTopic,
       ),
     );
   }
@@ -702,7 +708,9 @@ class JudgingPanel extends StatefulWidget {
   final List<UserProfile> audience;
   final String? currentUserId;
   final bool hasCurrentUserSubmittedVote;
-  final Function(String) onSubmitVote;
+  final Function(JudgeScorecard) onSubmitScorecard;
+  final String roomId;
+  final String? roomTopic;
 
   const JudgingPanel({
     super.key,
@@ -710,103 +718,707 @@ class JudgingPanel extends StatefulWidget {
     required this.audience,
     required this.currentUserId,
     required this.hasCurrentUserSubmittedVote,
-    required this.onSubmitVote,
+    required this.onSubmitScorecard,
+    required this.roomId,
+    this.roomTopic,
   });
 
   @override
   State<JudgingPanel> createState() => _JudgingPanelState();
 }
 
-class _JudgingPanelState extends State<JudgingPanel> {
-  String? _selectedWinner;
+class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMixin {
+  late TabController _tabController;
+  late JudgeScorecard _scorecard;
+  final PageController _pageController = PageController();
+  int _currentSpeakerIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _initializeScorecard();
+  }
+
+  void _initializeScorecard() {
+    final currentUser = widget.audience.firstWhere(
+      (user) => user.id == widget.currentUserId,
+      orElse: () => UserProfile(
+        id: widget.currentUserId ?? '',
+        name: 'Judge',
+        email: '',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    );
+
+    final speakers = <SpeakerScore>[];
+    
+    // Add affirmative speaker
+    if (widget.participants['affirmative'] != null) {
+      speakers.add(SpeakerScore(
+        speakerName: widget.participants['affirmative']!.name,
+        teamSide: TeamSide.affirmative,
+      ));
+    }
+    
+    // Add negative speaker
+    if (widget.participants['negative'] != null) {
+      speakers.add(SpeakerScore(
+        speakerName: widget.participants['negative']!.name,
+        teamSide: TeamSide.negative,
+      ));
+    }
+
+    _scorecard = JudgeScorecard(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      roomId: widget.roomId,
+      judgeId: currentUser.id,
+      judgeName: currentUser.name,
+      debateTopic: widget.roomTopic ?? '',
+      debateRound: 'Round 1',
+      speakerScores: speakers,
+    );
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Row(
-        children: [
-          Icon(Icons.how_to_vote, color: ArenaModalColors.accentPurple),
-          SizedBox(width: 8),
-          Text('Cast Your Vote'),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (widget.hasCurrentUserSubmittedVote) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Row(
+    if (widget.hasCurrentUserSubmittedVote) {
+      return _buildAlreadySubmittedDialog();
+    }
+
+    return Dialog(
+      insetPadding: const EdgeInsets.all(16),
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.95,
+        height: MediaQuery.of(context).size.height * 0.9,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            _buildHeader(),
+            _buildTabBar(),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
                 children: [
-                  Icon(Icons.check_circle, color: Colors.green),
-                  SizedBox(width: 8),
-                  Text('You have already submitted your vote'),
+                  _buildScoringTab(),
+                  _buildDecisionTab(),
                 ],
               ),
             ),
-          ] else ...[
-            const Text(
-              'Select the winner of this debate:',
-              style: TextStyle(fontSize: 16),
-            ),
-            const SizedBox(height: 16),
-            
-            // Affirmative option
-            if (widget.participants['affirmative'] != null)
-              _buildVoteOption(
-                'affirmative',
-                widget.participants['affirmative']!,
-                Colors.green,
-              ),
-            
-            const SizedBox(height: 12),
-            
-            // Negative option
-            if (widget.participants['negative'] != null)
-              _buildVoteOption(
-                'negative',
-                widget.participants['negative']!,
-                ArenaModalColors.scarletRed,
-              ),
+            _buildActionButtons(),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAlreadySubmittedDialog() {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.check_circle, color: Colors.green),
+          SizedBox(width: 8),
+          Text('Scorecard Submitted'),
         ],
       ),
+      content: const Text('You have already submitted your scorecard for this debate.'),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: const Text('Close'),
         ),
-        if (!widget.hasCurrentUserSubmittedVote && _selectedWinner != null)
-          ElevatedButton(
-            onPressed: () {
-              widget.onSubmitVote(_selectedWinner!);
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: ArenaModalColors.accentPurple),
-            child: const Text('Submit Vote', style: TextStyle(color: Colors.white)),
-          ),
       ],
     );
   }
 
-  Widget _buildVoteOption(String role, UserProfile participant, Color color) {
-    final isSelected = _selectedWinner == role;
+  Widget _buildHeader() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: const BoxDecoration(
+        color: ArenaModalColors.accentPurple,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.gavel, color: Colors.white, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Judge Scorecard (70-Point Scale)',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'Judge: ${_scorecard.judgeName} • ${DateFormat('MMM dd, yyyy').format(_scorecard.dateScored)}',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: _showRulesModal,
+            icon: const Icon(Icons.info_outline, color: Colors.white),
+            tooltip: 'View Debate Rules',
+          ),
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close, color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabBar() {
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.grey, width: 0.5)),
+      ),
+      child: TabBar(
+        controller: _tabController,
+        labelColor: ArenaModalColors.accentPurple,
+        unselectedLabelColor: Colors.grey,
+        indicatorColor: ArenaModalColors.accentPurple,
+        tabs: const [
+          Tab(text: 'Scoring', icon: Icon(Icons.edit_note)),
+          Tab(text: 'Decision', icon: Icon(Icons.how_to_vote)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScoringTab() {
+    if (_scorecard.speakerScores.isEmpty) {
+      return const Center(
+        child: Text('No speakers found for this debate.'),
+      );
+    }
+
+    return Column(
+      children: [
+        _buildSpeakerNavigation(),
+        Expanded(
+          child: PageView.builder(
+            controller: _pageController,
+            onPageChanged: (index) {
+              setState(() {
+                _currentSpeakerIndex = index;
+              });
+            },
+            itemCount: _scorecard.speakerScores.length,
+            itemBuilder: (context, index) {
+              return _buildSpeakerScoringPage(_scorecard.speakerScores[index], index);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSpeakerNavigation() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: _currentSpeakerIndex > 0
+                ? () {
+                    _pageController.previousPage(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                    );
+                  }
+                : null,
+            icon: const Icon(Icons.arrow_back_ios),
+          ),
+          Expanded(
+            child: Center(
+              child: Text(
+                'Speaker ${_currentSpeakerIndex + 1} of ${_scorecard.speakerScores.length}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: _currentSpeakerIndex < _scorecard.speakerScores.length - 1
+                ? () {
+                    _pageController.nextPage(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                    );
+                  }
+                : null,
+            icon: const Icon(Icons.arrow_forward_ios),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpeakerScoringPage(SpeakerScore speakerScore, int index) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSpeakerHeader(speakerScore),
+          const SizedBox(height: 24),
+          _buildScoringGuidelines(),
+          const SizedBox(height: 24),
+          ...ScoringCategory.values.map((category) => 
+            _buildCategoryScoring(speakerScore, category, index)
+          ),
+          const SizedBox(height: 24),
+          _buildTotalScore(speakerScore),
+          const SizedBox(height: 24),
+          _buildCommentsSection(speakerScore, index),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpeakerHeader(SpeakerScore speakerScore) {
+    final participant = speakerScore.teamSide == TeamSide.affirmative
+        ? widget.participants['affirmative']
+        : widget.participants['negative'];
+
+    final teamColor = speakerScore.teamSide == TeamSide.affirmative 
+        ? Colors.green 
+        : ArenaModalColors.scarletRed;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: teamColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: teamColor),
+      ),
+      child: Row(
+        children: [
+          if (participant != null) ...[
+            UserAvatar(
+              avatarUrl: participant.avatar,
+              initials: participant.name.isNotEmpty ? participant.name[0] : '?',
+              radius: 30,
+            ),
+            const SizedBox(width: 16),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  speakerScore.speakerName,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  '${speakerScore.teamSide.displayName} Side',
+                  style: TextStyle(
+                    color: teamColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScoringGuidelines() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Scoring Guidelines (70-Point Scale)',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...PerformanceLevel.values.map((level) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Text(
+              '${level.minScore}-${level.maxScore}: ${level.description}',
+              style: const TextStyle(fontSize: 12),
+            ),
+          )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryScoring(SpeakerScore speakerScore, ScoringCategory category, int speakerIndex) {
+    final currentScore = speakerScore.categoryScores[category] ?? 0;
     
+    Color getCategoryColor() {
+      switch (category) {
+        case ScoringCategory.arguments:
+          return Colors.blue;
+        case ScoringCategory.presentation:
+          return Colors.green;
+        case ScoringCategory.rebuttal:
+          return Colors.orange;
+        case ScoringCategory.crossExam:
+          return Colors.purple;
+      }
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 4,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: getCategoryColor(),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  category.displayName,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                '$currentScore / ${category.maxPoints}',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: getCategoryColor(),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            category.description,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 16),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: getCategoryColor(),
+              thumbColor: getCategoryColor(),
+              overlayColor: getCategoryColor().withValues(alpha: 0.2),
+              valueIndicatorColor: getCategoryColor(),
+              inactiveTrackColor: Colors.grey.withValues(alpha: 0.3),
+            ),
+            child: Slider(
+              value: currentScore.toDouble(),
+              min: 0,
+              max: category.maxPoints.toDouble(),
+              divisions: category.maxPoints,
+              label: currentScore.toString(),
+              onChanged: (value) {
+                setState(() {
+                  final updatedSpeaker = speakerScore.copyWith(
+                    categoryScores: {
+                      ...speakerScore.categoryScores,
+                      category: value.round(),
+                    },
+                  );
+                  _scorecard = _scorecard.copyWith(
+                    speakerScores: [
+                      ..._scorecard.speakerScores.take(speakerIndex),
+                      updatedSpeaker,
+                      ..._scorecard.speakerScores.skip(speakerIndex + 1),
+                    ],
+                  );
+                });
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTotalScore(SpeakerScore speakerScore) {
+    final totalScore = speakerScore.totalScore;
+    final performanceLevel = speakerScore.performanceLevel;
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: ArenaModalColors.accentPurple.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: ArenaModalColors.accentPurple),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Total Score',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                performanceLevel.description,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+          Text(
+            '$totalScore / ${ScoringCategory.totalMaxPoints}',
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: ArenaModalColors.accentPurple,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommentsSection(SpeakerScore speakerScore, int speakerIndex) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Comments/Feedback',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          onChanged: (value) {
+            final updatedSpeaker = speakerScore.copyWith(comments: value);
+            setState(() {
+              _scorecard = _scorecard.copyWith(
+                speakerScores: [
+                  ..._scorecard.speakerScores.take(speakerIndex),
+                  updatedSpeaker,
+                  ..._scorecard.speakerScores.skip(speakerIndex + 1),
+                ],
+              );
+            });
+          },
+          maxLines: 4,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: 'Provide specific feedback on the speaker\'s performance...',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDecisionTab() {
+    final calculatedWinner = _scorecard.calculatedWinner;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildTeamScoreSummary(),
+          const SizedBox(height: 24),
+          _buildWinnerSelection(calculatedWinner),
+          const SizedBox(height: 24),
+          _buildReasonForDecision(),
+          const SizedBox(height: 24),
+          _buildValidationWarnings(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeamScoreSummary() {
+    final affirmativeTotal = _scorecard.getTotalScoreForTeam(TeamSide.affirmative);
+    final negativeTotal = _scorecard.getTotalScoreForTeam(TeamSide.negative);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Team Score Summary',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildTeamScoreCard(
+                  'Affirmative',
+                  affirmativeTotal,
+                  Colors.green,
+                  affirmativeTotal > negativeTotal,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildTeamScoreCard(
+                  'Negative',
+                  negativeTotal,
+                  ArenaModalColors.scarletRed,
+                  negativeTotal > affirmativeTotal,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeamScoreCard(String teamName, int score, Color color, bool isWinning) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isWinning ? color : color.withValues(alpha: 0.3),
+          width: isWinning ? 2 : 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Text(
+            teamName,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            score.toString(),
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          if (isWinning) ...[
+            const SizedBox(height: 4),
+            Icon(
+              Icons.emoji_events,
+              color: color,
+              size: 16,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWinnerSelection(TeamSide calculatedWinner) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Winner Declaration',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Based on scores, ${calculatedWinner.displayName} should win.',
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+          ),
+        ),
+        const SizedBox(height: 16),
+        ...TeamSide.values.map((side) => _buildWinnerOption(side)),
+      ],
+    );
+  }
+
+  Widget _buildWinnerOption(TeamSide side) {
+    final isSelected = _scorecard.winningTeam == side;
+    final color = side == TeamSide.affirmative ? Colors.green : ArenaModalColors.scarletRed;
+
     return GestureDetector(
       onTap: () {
         setState(() {
-          _selectedWinner = role;
+          _scorecard = _scorecard.copyWith(winningTeam: side);
         });
       },
       child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? color.withValues(alpha: 0.2) : color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
+          color: isSelected ? color.withValues(alpha: 0.2) : color.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isSelected ? color : color.withValues(alpha: 0.3),
             width: isSelected ? 2 : 1,
@@ -814,48 +1426,152 @@ class _JudgingPanelState extends State<JudgingPanel> {
         ),
         child: Row(
           children: [
-            Radio<String>(
-              value: role,
-              groupValue: _selectedWinner,
+            Radio<TeamSide>(
+              value: side,
+              groupValue: _scorecard.winningTeam,
               onChanged: (value) {
-                setState(() {
-                  _selectedWinner = value;
-                });
+                if (value != null) {
+                  setState(() {
+                    _scorecard = _scorecard.copyWith(winningTeam: value);
+                  });
+                }
               },
               activeColor: color,
             ),
-            const SizedBox(width: 8),
-            UserAvatar(
-              avatarUrl: participant.avatar,
-              initials: participant.name.isNotEmpty ? participant.name[0] : '?',
-              radius: 25,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    participant.name,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    role.toUpperCase(),
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+            Text(
+              side.displayName,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: color,
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildReasonForDecision() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Reason for Decision',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          onChanged: (value) {
+            setState(() {
+              _scorecard = _scorecard.copyWith(reasonForDecision: value);
+            });
+          },
+          maxLines: 4,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: 'Explain your decision and key factors that influenced your judgment...',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildValidationWarnings() {
+    final warnings = <String>[];
+    
+    if (!_scorecard.isWinnerConsistentWithScores) {
+      warnings.add('Warning: Winner selection does not match score totals.');
+    }
+    
+    if (!_scorecard.isComplete) {
+      warnings.add('Please complete all scores and provide a reason for decision.');
+    }
+
+    if (warnings.isEmpty) return Container();
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.warning, color: Colors.orange, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Validation Issues',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.orange,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...warnings.map((warning) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              '• $warning',
+              style: const TextStyle(fontSize: 12),
+            ),
+          )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: Colors.grey, width: 0.5)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: _scorecard.isComplete 
+                ? () {
+                    final finalScorecard = _scorecard.copyWith(
+                      isSubmitted: true,
+                      dateScored: DateTime.now(),
+                    );
+                    widget.onSubmitScorecard(finalScorecard);
+                    Navigator.pop(context);
+                  }
+                : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: ArenaModalColors.accentPurple,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Submit Scorecard'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRulesModal() {
+    showDialog(
+      context: context,
+      builder: (context) => const DebateRulesModal(),
     );
   }
 }
@@ -1621,5 +2337,230 @@ class _ShareScreenBottomSheetState extends State<ShareScreenBottomSheet> {
         ),
       );
     }
+  }
+}
+
+// Debate Rules Modal Component
+class DebateRulesModal extends StatelessWidget {
+  const DebateRulesModal({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.85,
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 20,
+              spreadRadius: 5,
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: ArenaModalColors.accentPurple,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.gavel, color: Colors.white, size: 24),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Debate Rules & Guidelines',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Scrollable content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSection(
+                      'DEBATE FORMAT',
+                      [
+                        '• Opening Statements: Each side presents their main arguments (3-5 minutes each)',
+                        '• Cross-Examination: Opposing sides question each other directly (2-3 minutes each)',
+                        '• Rebuttal Phase: Address opposing arguments and reinforce your position (3-4 minutes each)',
+                        '• Closing Statements: Final opportunity to summarize and persuade (2-3 minutes each)',
+                      ],
+                    ),
+                    
+                    _buildSection(
+                      'SCORING CRITERIA (70 Points Total)',
+                      [
+                        'Arguments & Content (20 points): Strength and logic of arguments, quality of evidence, relevance to topic',
+                        'Presentation & Delivery (20 points): Clarity, fluency, voice projection, engagement with audience',
+                        'Rebuttal & Defence (20 points): Effective refutation of opposing arguments, defense of own positions',
+                        'Cross-Examination (10 points): Quality of questions asked and responses given during cross-examination',
+                      ],
+                    ),
+                    
+                    _buildSection(
+                      'PERFORMANCE LEVELS',
+                      [
+                        'Excellent (60-70 points): Outstanding performance demonstrating mastery',
+                        'Good (50-59 points): Strong performance with minor areas for improvement',
+                        'Average (40-49 points): Adequate performance meeting basic requirements',
+                        'Below Average (30-39 points): Performance needs significant improvement',
+                        'Poor (Below 30 points): Performance falls short of expectations',
+                      ],
+                    ),
+                    
+                    _buildSection(
+                      'CONDUCT RULES',
+                      [
+                        '• Respect time limits - moderator will enforce strict timing',
+                        '• No personal attacks or inappropriate language',
+                        '• Address arguments, not individuals',
+                        '• Stay on topic and relevant to the debate resolution',
+                        '• Allow opponents to speak without interruption',
+                        '• Use evidence and sources to support claims',
+                      ],
+                    ),
+                    
+                    _buildSection(
+                      'JUDGING GUIDELINES',
+                      [
+                        '• Judges must remain impartial and base decisions solely on performance',
+                        '• Consider both content quality and presentation skills',
+                        '• Take notes during each phase to support scoring decisions',
+                        '• Provide constructive feedback in decision rationale',
+                        '• Winner must have higher total points across all categories',
+                      ],
+                    ),
+                    
+                    _buildSection(
+                      'TECHNICAL REQUIREMENTS',
+                      [
+                        '• Stable internet connection required for all participants',
+                        '• Clear audio and video preferred for optimal experience',
+                        '• Backup connection recommended for important debates',
+                        '• Screen sharing available for visual aids (debaters and moderators only)',
+                        '• Recording may be enabled - participants will be notified',
+                      ],
+                    ),
+                    
+                    const SizedBox(height: 24),
+                    
+                    // Footer note
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: ArenaModalColors.lightGray,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: ArenaModalColors.accentPurple.withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.info_outline,
+                            color: ArenaModalColors.accentPurple,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'These rules ensure fair, educational, and engaging debates. All participants are expected to follow these guidelines.',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[700],
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            // Footer with close button
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: ArenaModalColors.lightGray,
+                borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: ArenaModalColors.accentPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Close',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSection(String title, List<String> items) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: ArenaModalColors.deepPurple,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...items.map((item) => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            item,
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.4,
+              color: Colors.black87,
+            ),
+          ),
+        )),
+        const SizedBox(height: 24),
+      ],
+    );
   }
 }
