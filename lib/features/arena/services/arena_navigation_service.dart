@@ -273,4 +273,63 @@ class ArenaNavigationService {
       }
     }
   }
+
+  /// Emergency close room - for moderator use only
+  Future<void> emergencyCloseRoom(BuildContext context) async {
+    try {
+      AppLogger().info('🚨 EMERGENCY CLOSE: Starting emergency room closure');
+      
+      // Simple emergency close - delete all participants and close room
+      final participants = await _appwrite.databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'arena_participants',
+        queries: [
+          Query.equal('roomId', roomId),
+        ],
+      );
+      
+      AppLogger().info('🚨 EMERGENCY CLOSE: Found ${participants.documents.length} participants to remove');
+      
+      // Delete all participants from the room
+      for (final participant in participants.documents) {
+        try {
+          await _appwrite.databases.deleteDocument(
+            databaseId: 'arena_db',
+            collectionId: 'arena_participants',
+            documentId: participant.$id,
+          );
+          AppLogger().info('🚨 EMERGENCY CLOSE: Removed participant ${participant.$id}');
+        } catch (e) {
+          AppLogger().warning('🚨 EMERGENCY CLOSE: Failed to remove participant ${participant.$id}: $e');
+        }
+      }
+      
+      // Update room status to closed (only use existing fields)
+      await _appwrite.databases.updateDocument(
+        databaseId: 'arena_db',
+        collectionId: 'arena_rooms',
+        documentId: roomId,
+        data: {
+          'status': 'closed',
+        },
+      );
+      
+      AppLogger().info('🚨 EMERGENCY CLOSE: Room closed successfully');
+      
+      // Force immediate navigation to main app
+      _stateController.setHasNavigated(true);
+      if (context.mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const ArenaApp()),
+          (route) => false,
+        );
+      }
+      
+      AppLogger().info('🚨 EMERGENCY CLOSE: Emergency room closure completed successfully');
+      
+    } catch (e) {
+      AppLogger().error('🚨 EMERGENCY CLOSE: Emergency room closure failed: $e');
+      rethrow;
+    }
+  }
 }

@@ -9,7 +9,6 @@ class ModeratorControlModal extends StatelessWidget {
   final VoidCallback onAdvancePhase;
   final VoidCallback onEmergencyReset;
   final VoidCallback onEndDebate;
-  final VoidCallback onCloseRoom;
   final Function(String) onSpeakerChange;
   final VoidCallback onToggleSpeaking;
   final VoidCallback onToggleJudging;
@@ -26,7 +25,6 @@ class ModeratorControlModal extends StatelessWidget {
     required this.onAdvancePhase,
     required this.onEmergencyReset,
     required this.onEndDebate,
-    required this.onCloseRoom,
     required this.onSpeakerChange,
     required this.onToggleSpeaking,
     required this.onToggleJudging,
@@ -131,71 +129,48 @@ class ModeratorControlModal extends StatelessWidget {
                 
                 const SizedBox(height: 16),
                 
-                // Phase Management
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    return Row(
-                      children: [
-                        Expanded(
-                          child: _buildControlButton(
-                            icon: Icons.skip_next,
-                            label: 'Next Phase',
-                            onPressed: currentPhase.nextPhase != null 
-                                ? () {
-                                    Navigator.pop(context);
-                                    onAdvancePhase();
-                                  }
-                                : null,
-                            color: Colors.purple,
-                          ),
-                        ),
-                        SizedBox(width: constraints.maxWidth < 300 ? 6 : 12),
-                        Expanded(
-                          child: _buildControlButton(
-                            icon: Icons.emergency,
-                            label: 'Emergency',
-                            onPressed: () => _showEmergencyDialog(context),
-                            color: Colors.orange,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
+                // Phase Management - Single button
+                _buildControlButton(
+                  icon: Icons.skip_next,
+                  label: 'Next Phase',
+                  onPressed: currentPhase.nextPhase != null 
+                      ? () {
+                          Navigator.pop(context);
+                          onAdvancePhase();
+                        }
+                      : null,
+                  color: Colors.purple,
                 ),
                 
                 const SizedBox(height: 12),
                 
                 // Speaking Controls
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    return Row(
-                      children: [
-                        Expanded(
-                          child: _buildControlButton(
-                            icon: speakingEnabled ? Icons.mic_off : Icons.mic,
-                            label: speakingEnabled ? 'Mute All' : 'Unmute',
-                            onPressed: () {
-                              onToggleSpeaking();
-                              Navigator.pop(context);
-                            },
-                            color: speakingEnabled ? Colors.red : Colors.green,
-                          ),
-                        ),
-                        SizedBox(width: constraints.maxWidth < 300 ? 6 : 12),
-                        Expanded(
-                          child: _buildControlButton(
-                            icon: judgingEnabled ? Icons.gavel_outlined : Icons.gavel,
-                            label: judgingEnabled ? 'Close Voting' : 'Open Voting',
-                            onPressed: () {
-                              onToggleJudging();
-                              Navigator.pop(context);
-                            },
-                            color: judgingEnabled ? Colors.orange : Colors.teal,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildControlButton(
+                        icon: speakingEnabled ? Icons.mic_off : Icons.mic,
+                        label: speakingEnabled ? 'Mute All' : 'Unmute',
+                        onPressed: () {
+                          onToggleSpeaking();
+                          Navigator.pop(context);
+                        },
+                        color: speakingEnabled ? Colors.red : Colors.green,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildControlButton(
+                        icon: judgingEnabled ? Icons.gavel_outlined : Icons.gavel,
+                        label: judgingEnabled ? 'Close Voting' : 'Open Voting',
+                        onPressed: () {
+                          onToggleJudging();
+                          Navigator.pop(context);
+                        },
+                        color: judgingEnabled ? Colors.orange : Colors.teal,
+                      ),
+                    ),
+                  ],
                 ),
                 
                 const SizedBox(height: 12),
@@ -269,51 +244,26 @@ class ModeratorControlModal extends StatelessWidget {
           color: isEnabled ? color : Colors.grey[600],
           borderRadius: BorderRadius.circular(8),
         ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth < 100) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, color: Colors.white, size: 14),
-                  const SizedBox(height: 2),
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                ],
-              );
-            } else {
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, color: Colors.white, size: 16),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                  ),
-                ],
-              );
-            }
-          },
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -342,65 +292,4 @@ class ModeratorControlModal extends StatelessWidget {
     );
   }
 
-  void _showEmergencyDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.emergency, color: Colors.orange),
-            const SizedBox(width: 8),
-            Flexible(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return Text(
-                    constraints.maxWidth < 150 ? 'Emergency' : 'Emergency Controls',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-        content: const Text('Choose an emergency action:'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Close dialog
-              Navigator.pop(context); // Close modal
-              onEmergencyReset();
-            },
-            child: const Text('Reset Debate'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Close dialog
-              Navigator.pop(context); // Close modal
-              onEndDebate();
-            },
-            child: const Text('End Debate'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Close dialog
-              Navigator.pop(context); // Close modal
-              onCloseRoom();
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
-            child: const Text('Close Room'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-        ],
-      ),
-    );
-  }
 }

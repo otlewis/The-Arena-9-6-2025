@@ -5,8 +5,6 @@ import '../widgets/user_avatar.dart';
 import '../main.dart' show getIt;
 import 'dart:async';
 import '../core/logging/app_logger.dart';
-import '../core/notifications/notification_service.dart';
-import '../core/notifications/widgets/notification_center.dart';
 
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({super.key});
@@ -18,7 +16,6 @@ class MessagesScreen extends StatefulWidget {
 class _MessagesScreenState extends State<MessagesScreen>
     with SingleTickerProviderStateMixin {
   late final ChallengeMessagingService _messagingService;
-  late final NotificationService _notificationService;
   late TabController _tabController;
   
   // Colors matching app theme
@@ -34,7 +31,6 @@ class _MessagesScreenState extends State<MessagesScreen>
     
     // Get the singleton service instances from service locator
     _messagingService = getIt<ChallengeMessagingService>();
-    _notificationService = getIt<NotificationService>();
     
     // Just mark as initialized since main.dart should have initialized the service
     
@@ -77,46 +73,6 @@ class _MessagesScreenState extends State<MessagesScreen>
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
-          StreamBuilder<int>(
-            stream: _notificationService.unreadCount,
-            builder: (context, snapshot) {
-              final unreadCount = snapshot.data ?? 0;
-              return Stack(
-                children: [
-                  IconButton(
-                    onPressed: _showNotificationCenter,
-                    icon: const Icon(Icons.notifications, color: deepPurple),
-                    tooltip: 'Notifications',
-                  ),
-                  if (unreadCount > 0)
-                    Positioned(
-                      right: 6,
-                      top: 6,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: scarletRed,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 16,
-                          minHeight: 16,
-                        ),
-                        child: Text(
-                          unreadCount > 99 ? '99+' : unreadCount.toString(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
           IconButton(
             onPressed: () => _messagingService.refresh(),
             icon: const Icon(Icons.refresh, color: deepPurple),
@@ -848,36 +804,6 @@ class _MessagesScreenState extends State<MessagesScreen>
     }
   }
 
-  void _showNotificationCenter() {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black54,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: NotificationCenter(
-          notificationService: _notificationService,
-          onNotificationTap: (notification) {
-            // Mark as read when tapped
-            _notificationService.markAsRead(notification.id);
-            
-            // Handle deep linking if needed
-            if (notification.deepLink != null) {
-              // TODO: Implement deep link navigation
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Deep link: ${notification.deepLink}'),
-                  backgroundColor: Colors.blue,
-                ),
-              );
-            }
-          },
-          onDismiss: () {
-            Navigator.of(context).pop();
-          },
-        ),
-      ),
-    );
-  }
 
   Widget _buildDeclinedNotificationCard(ChallengeMessage notification) {
     return Card(

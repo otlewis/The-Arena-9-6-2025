@@ -12,6 +12,7 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onShowModeratorControls;
   final VoidCallback onShowTimerControls;
   final VoidCallback onExitArena;
+  final VoidCallback onEmergencyCloseRoom;
 
   const ArenaAppBar({
     super.key,
@@ -21,6 +22,7 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onShowModeratorControls,
     required this.onShowTimerControls,
     required this.onExitArena,
+    required this.onEmergencyCloseRoom,
   });
 
   @override
@@ -39,74 +41,101 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
         },
       ),
       title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Moderator Controls Icon (only visible to moderators)
+          // Moderator Controls Icons (only visible to moderators)
           if (isModerator)
-            IconButton(
-              onPressed: onShowModeratorControls,
-              icon: const Icon(Icons.admin_panel_settings, color: Colors.amber),
-              tooltip: 'Moderator Controls',
-            )
-          else
-            const SizedBox(width: 48), // Maintain spacing
-          
-          // Timer in center (clickable for moderators)
-          GestureDetector(
-            onTap: isModerator ? onShowTimerControls : null,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: isTimerRunning ? ArenaColors.scarletRed : ArenaColors.accentPurple,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  width: 1,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: onShowModeratorControls,
+                    icon: const Icon(Icons.admin_panel_settings, color: Colors.amber, size: 18),
+                    tooltip: 'Moderator Controls',
+                  ),
                 ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    formattedTime,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: onEmergencyCloseRoom,
+                    icon: const Icon(Icons.close, color: Colors.red, size: 18),
+                    tooltip: 'Emergency Close Room',
+                  ),
+                ),
+              ],
+            ),
+          
+          // Flexible spacer
+          Expanded(
+            child: Center(
+              child: GestureDetector(
+                onTap: isModerator ? onShowTimerControls : null,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isTimerRunning ? ArenaColors.scarletRed : ArenaColors.accentPurple,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.3),
+                      width: 1,
                     ),
                   ),
-                  if (isModerator) ...[
-                    const SizedBox(width: 4),
-                    const Icon(Icons.settings, color: Colors.white, size: 14),
-                  ],
-                ],
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        formattedTime,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      if (isModerator) ...[
+                        const SizedBox(width: 3),
+                        const Icon(Icons.settings, color: Colors.white, size: 12),
+                      ],
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
-          
-          const SizedBox(width: 48), // Maintain spacing for balance
         ],
       ),
       actions: [
         // Rules and Guidelines button
-        IconButton(
-          onPressed: () {
-            showDialog(
-              context: context,
-              builder: (context) => const DebateRulesModal(),
-            );
-          },
-          icon: const Icon(Icons.info, color: Colors.white, size: 24),
-          tooltip: 'Debate Rules & Guidelines',
+        SizedBox(
+          width: 40,
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => const DebateRulesModal(),
+              );
+            },
+            icon: const Icon(Icons.info, color: Colors.white, size: 20),
+            tooltip: 'Debate Rules & Guidelines',
+          ),
         ),
         // Leave button
-        IconButton(
-          onPressed: () {
-            AppLogger().info('🚪 EXIT: Exit button clicked in ArenaAppBar');
-            onExitArena();
-          },
-          icon: const Icon(Icons.exit_to_app, color: Colors.white),
-          tooltip: 'Leave Arena',
+        SizedBox(
+          width: 40,
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            onPressed: () {
+              AppLogger().info('🚪 EXIT: Exit button clicked in ArenaAppBar');
+              onExitArena();
+            },
+            icon: const Icon(Icons.exit_to_app, color: Colors.white, size: 20),
+            tooltip: 'Leave Arena',
+          ),
         ),
       ],
     );

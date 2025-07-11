@@ -15,7 +15,9 @@ import '../main.dart' show ArenaApp, getIt;
 import '../core/logging/app_logger.dart';
 import '../services/agora_service.dart';
 import 'arena_modals.dart';
+import '../features/arena/dialogs/moderator_control_modal.dart' as moderator_controls;
 import '../features/arena/widgets/arena_app_bar.dart';
+import '../features/arena/models/debate_phase.dart' as features;
 // Removed problematic provider imports to prevent infinite loops
 
 // Legacy Debate Phase Enum - kept for backwards compatibility
@@ -1341,153 +1343,44 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
-  Future<void> _closeRoom() async {
-    if (!_isModerator) return;
-    
-    try {
-      // Check if widget is still mounted before showing dialog
-      if (!mounted) {
-        AppLogger().warning('Widget unmounted - cannot show close room dialog');
-        return;
-      }
-      
-      // Show confirmation dialog
-      final shouldClose = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.warning, color: Colors.red),
-              SizedBox(width: 8),
-              Text('Close Arena Room'),
-            ],
-          ),
-          content: const Text(
-            'Are you sure you want to close this arena room? This will:\n\n'
-            '• End the debate immediately\n'
-            '• Remove all participants from the room\n'
-            '• Mark the room as completed\n\n'
-            'All users will be given 15 seconds to see the closure notice.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Close Room'),
-            ),
-          ],
-        ),
-      );
-      
-      if (shouldClose == true) {
-        // Trigger the countdown by updating room status to "closing"
-        await _appwrite.databases.updateDocument(
-          databaseId: 'arena_db',
-          collectionId: 'arena_rooms',
-          documentId: widget.roomId,
-          data: {
-            'status': 'closing',
-          },
-        );
-        
-        AppLogger().info('Arena room closure initiated by moderator - Status set to "closing"');
-        
-        // Stop the periodic checker since we're handling closure manually
-        _isExiting = true;
-        AppLogger().debug('🛑 MANUAL CLOSE: Set _isExiting=true');
-        if (_roomStatusChecker != null) {
-          _roomStatusChecker!.cancel();
-          _roomStatusChecker = null;
-          AppLogger().debug('🛑 MANUAL CLOSE: Timer cancelled and nulled');
-        }
-        _roomClosingModalShown = true;
-        
-        // Show countdown modal immediately to this user
-        _showRoomClosingModal(15);
-        
-        // Show success message
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('🔒 Room closure initiated - 15 second countdown started'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-        
-        // After 15 seconds, mark room as completed - with proper mounted checks
-        _roomCompletionTimer = Timer(const Duration(seconds: 15), () async {
-          try {
-            AppLogger().debug('⏰ 15 seconds elapsed - checking if widget is still mounted');
-            
-            // Check if widget is still mounted before proceeding
-            if (!mounted) {
-              AppLogger().warning('Widget unmounted - skipping room completion update');
-              return;
-            }
-            
-            AppLogger().debug('⏰ Widget still mounted - marking room as completed');
-            await _appwrite.databases.updateDocument(
-              databaseId: 'arena_db',
-              collectionId: 'arena_rooms',
-              documentId: widget.roomId,
-              data: {
-                'status': 'completed',
-              },
-            );
-            AppLogger().info('Arena room marked as completed after countdown');
-            
-            // Additional navigation fallback specifically for moderator
-            if (mounted && !_hasNavigated) {
-              AppLogger().info('Moderator navigation fallback triggered');
-              _hasNavigated = true; // Set flag to prevent duplicates
-              
-              // Use synchronous navigation immediately
-              _forceNavigationHomeSync();
-            }
-          } catch (e) {
-            AppLogger().error('Error marking room as completed: $e');
-            // Don't try to show UI messages if widget is unmounted
-            if (mounted) {
-              try {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error completing room: $e')),
-                );
-              } catch (contextError) {
-                AppLogger().error('Could not show error message - context unavailable: $contextError');
-              }
-            }
-          }
-        });
-      }
-    } catch (e) {
-      AppLogger().error('Error initiating room closure: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Error initiating room closure: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+
+
+  features.DebatePhase _convertToFeaturesPhase(DebatePhase phase) {
+    switch (phase) {
+      case DebatePhase.preDebate:
+        return features.DebatePhase.preDebate;
+      case DebatePhase.openingAffirmative:
+        return features.DebatePhase.openingAffirmative;
+      case DebatePhase.openingNegative:
+        return features.DebatePhase.openingNegative;
+      case DebatePhase.rebuttalAffirmative:
+        return features.DebatePhase.rebuttalAffirmative;
+      case DebatePhase.rebuttalNegative:
+        return features.DebatePhase.rebuttalNegative;
+      case DebatePhase.crossExamAffirmative:
+        return features.DebatePhase.crossExamAffirmative;
+      case DebatePhase.crossExamNegative:
+        return features.DebatePhase.crossExamNegative;
+      case DebatePhase.finalRebuttalAffirmative:
+        return features.DebatePhase.finalRebuttalAffirmative;
+      case DebatePhase.finalRebuttalNegative:
+        return features.DebatePhase.finalRebuttalNegative;
+      case DebatePhase.closingAffirmative:
+        return features.DebatePhase.closingAffirmative;
+      case DebatePhase.closingNegative:
+        return features.DebatePhase.closingNegative;
+      case DebatePhase.judging:
+        return features.DebatePhase.judging;
     }
   }
-
 
   void _showModeratorControlModal() {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => ModeratorControlModal(
-        currentPhase: _currentPhase,
+      builder: (context) => moderator_controls.ModeratorControlModal(
+        currentPhase: _convertToFeaturesPhase(_currentPhase),
         onAdvancePhase: _advanceToNextPhase,
         onEmergencyReset: () {
           _stopTimer();
@@ -1505,7 +1398,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           });
           _stopTimer();
         },
-        onCloseRoom: _closeRoom,
         onSpeakerChange: _forceSpeakerChange,
         onToggleSpeaking: _toggleSpeakingEnabled,
         onToggleJudging: _toggleJudging,
@@ -1566,6 +1458,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         onShowModeratorControls: _showModeratorControlModal,
         onShowTimerControls: _showTimerControlModal,
         onExitArena: _exitArena,
+        onEmergencyCloseRoom: _emergencyCloseRoom,
       ),
       body: Column(
         children: [
@@ -3296,7 +3189,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           }
           
           // If room is completed, navigate immediately with FORCE
-          else if ((roomStatus == 'completed' || roomStatus == 'abandoned' || roomStatus == 'force_cleaned' || roomStatus == 'force_closed') && !_hasNavigated) {
+          else if ((roomStatus == 'completed' || roomStatus == 'abandoned' || roomStatus == 'force_cleaned' || roomStatus == 'force_closed' || roomStatus == 'closed') && !_hasNavigated) {
             AppLogger().debug('🚪 Room completed detected via ULTRA-AGGRESSIVE check - FORCE navigating back');
             _hasNavigated = true; // Set flag FIRST before any async work
             _isExiting = true; // Set exit flag FIRST
@@ -3435,6 +3328,127 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
 
   /// Perform the mixed invitation system (personal + random)
+
+  void _emergencyCloseRoom() {
+    // Show confirmation dialog for emergency room closure
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.warning, color: Colors.red, size: 20),
+            SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                'Emergency Close Room',
+                style: TextStyle(fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        content: Container(
+          constraints: const BoxConstraints(maxWidth: 280),
+          child: const Text(
+            'Are you sure you want to immediately close this room? This action cannot be undone and will end the debate for all participants.',
+            style: TextStyle(fontSize: 14),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              _executeEmergencyClose();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Close Room'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _executeEmergencyClose() async {
+    try {
+      AppLogger().info('🚨 Emergency room close initiated by moderator');
+      
+      // Simple emergency close - just delete all participants and close room
+      final participants = await _appwrite.databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'arena_participants',
+        queries: [
+          Query.equal('roomId', widget.roomId),
+        ],
+      );
+      
+      AppLogger().info('🚨 Found ${participants.documents.length} participants to remove');
+      
+      // Delete all participants from the room
+      for (final participant in participants.documents) {
+        try {
+          await _appwrite.databases.deleteDocument(
+            databaseId: 'arena_db',
+            collectionId: 'arena_participants',
+            documentId: participant.$id,
+          );
+          AppLogger().info('🚨 Removed participant: ${participant.$id}');
+        } catch (e) {
+          AppLogger().warning('🚨 Failed to remove participant ${participant.$id}: $e');
+        }
+      }
+      
+      // Update room status to closed (only use existing fields)
+      await _appwrite.databases.updateDocument(
+        databaseId: 'arena_db',
+        collectionId: 'arena_rooms',
+        documentId: widget.roomId,
+        data: {
+          'status': 'closed',
+        },
+      );
+      
+      AppLogger().info('🚨 Emergency room close completed successfully');
+      
+      // Show countdown modal to all users before navigating home
+      if (mounted) {
+        ArenaModals.showRoomClosingModal(
+          context,
+          3, // 3 second countdown for emergency close
+          onRoomClosed: () {
+            _forceExitArena();
+          },
+        );
+      }
+      
+    } catch (e) {
+      AppLogger().error('🚨 Emergency room close failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to close room: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _forceExitArena() {
+    AppLogger().info('🚪 Force exiting arena after emergency close');
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const ArenaApp()),
+        (route) => false,
+      );
+    }
+  }
 }
 
 // Role Manager Panel Widget
@@ -3462,7 +3476,7 @@ class _RoleManagerPanelState extends State<RoleManagerPanel> {
   bool _isLoading = true;
 
   // Available roles
-  final List<String> _availableRoles = [
+  final List<String> _availableRoles = const [
     'affirmative',
     'negative', 
     'moderator',
@@ -3891,7 +3905,6 @@ class ModeratorControlModal extends StatelessWidget {
   final VoidCallback onAdvancePhase;
   final VoidCallback onEmergencyReset;
   final VoidCallback onEndDebate;
-  final VoidCallback onCloseRoom;
   final Function(String) onSpeakerChange;
   final VoidCallback onToggleSpeaking;
   final VoidCallback onToggleJudging;
@@ -3908,7 +3921,6 @@ class ModeratorControlModal extends StatelessWidget {
     required this.onAdvancePhase,
     required this.onEmergencyReset,
     required this.onEndDebate,
-    required this.onCloseRoom,
     required this.onSpeakerChange,
     required this.onToggleSpeaking,
     required this.onToggleJudging,
@@ -4265,17 +4277,6 @@ class ModeratorControlModal extends StatelessWidget {
               onEndDebate();
             },
             child: const Text('End Debate'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Close dialog
-              Navigator.pop(context); // Close modal
-              onCloseRoom();
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
-            child: const Text('Close Room'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context),

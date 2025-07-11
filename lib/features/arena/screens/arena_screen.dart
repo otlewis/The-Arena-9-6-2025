@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../main.dart' show getIt;
 import '../../../services/sound_service.dart';
+import '../../../core/logging/app_logger.dart';
 import '../controllers/arena_state_controller.dart';
 import '../controllers/arena_timer_controller.dart';
 import '../services/arena_navigation_service.dart';
@@ -80,6 +81,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             onShowModeratorControls: _showModeratorControlModal,
             onShowTimerControls: _showTimerControlModal,
             onExitArena: () => _navigationService.showExitDialog(context),
+            onEmergencyCloseRoom: _emergencyCloseRoom,
           ),
           body: Column(
             children: [
@@ -121,7 +123,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         onAdvancePhase: () => _timerController.advanceToNextPhase(),
         onEmergencyReset: _handleEmergencyReset,
         onEndDebate: _handleEndDebate,
-        onCloseRoom: _handleCloseRoom,
         onSpeakerChange: _handleSpeakerChange,
         onToggleSpeaking: _handleToggleSpeaking,
         onToggleJudging: _handleToggleJudging,
@@ -182,10 +183,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _showComingSoonDialog();
   }
 
-  void _handleCloseRoom() {
-    // TODO: Implement close room logic
-    _showComingSoonDialog();
-  }
 
   void _handleSpeakerChange(String speaker) {
     _stateController.setCurrentSpeaker(speaker);
@@ -225,6 +222,62 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   void _showRoleManager() {
     _showComingSoonDialog();
+  }
+
+  void _emergencyCloseRoom() {
+    // Show confirmation dialog for emergency room closure
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Emergency Close Room'),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to immediately close this room? This action cannot be undone and will end the debate for all participants.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              _executeEmergencyClose();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Close Room'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _executeEmergencyClose() async {
+    try {
+      AppLogger().info('🚨 Emergency room close initiated by moderator');
+      
+      // Use the navigation service to handle emergency close
+      await _navigationService.emergencyCloseRoom(context);
+      
+      AppLogger().info('🚨 Emergency room close completed');
+    } catch (e) {
+      AppLogger().error('🚨 Emergency room close failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to close room: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override

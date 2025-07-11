@@ -29,7 +29,6 @@ class ArenaModals {
       required VoidCallback onToggleSpeaking,
       required Function(String) onForceSpeakerChange,
       required VoidCallback onShowResults,
-      required VoidCallback onCloseRoom,
       required bool judgingEnabled,
       required bool speakingEnabled,
       required String currentSpeaker,
@@ -45,7 +44,6 @@ class ArenaModals {
         onToggleSpeaking: onToggleSpeaking,
         onForceSpeakerChange: onForceSpeakerChange,
         onShowResults: onShowResults,
-        onCloseRoom: onCloseRoom,
         judgingEnabled: judgingEnabled,
         speakingEnabled: speakingEnabled,
         currentSpeaker: currentSpeaker,
@@ -221,7 +219,6 @@ class ModeratorControlModal extends StatelessWidget {
   final VoidCallback onToggleSpeaking;
   final Function(String) onForceSpeakerChange;
   final VoidCallback onShowResults;
-  final VoidCallback onCloseRoom;
   final bool judgingEnabled;
   final bool speakingEnabled;
   final String currentSpeaker;
@@ -235,7 +232,6 @@ class ModeratorControlModal extends StatelessWidget {
     required this.onToggleSpeaking,
     required this.onForceSpeakerChange,
     required this.onShowResults,
-    required this.onCloseRoom,
     required this.judgingEnabled,
     required this.speakingEnabled,
     required this.currentSpeaker,
@@ -358,16 +354,6 @@ class ModeratorControlModal extends StatelessWidget {
                 color: Colors.blue,
               ),
               
-              _buildControlTile(
-                icon: Icons.close,
-                title: 'Close Room',
-                subtitle: 'End the debate session',
-                onTap: () {
-                  Navigator.pop(context);
-                  onCloseRoom();
-                },
-                color: Colors.red,
-              ),
             ],
           ),
         ),
@@ -646,6 +632,7 @@ class _RoomClosingModalState extends State<RoomClosingModal> {
         
         if (_remainingSeconds <= 0) {
           timer.cancel();
+          Navigator.pop(context); // Dismiss the modal first
           widget.onRoomClosed();
         }
       }
@@ -692,6 +679,7 @@ class _RoomClosingModalState extends State<RoomClosingModal> {
         ElevatedButton(
           onPressed: () {
             _countdownTimer?.cancel();
+            Navigator.pop(context); // Dismiss the modal first
             widget.onRoomClosed();
           },
           style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
