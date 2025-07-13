@@ -126,6 +126,7 @@ class ArenaModals {
   ) {
     showDialog(
       context: context,
+      useSafeArea: true,
       builder: (context) => JudgingPanel(
         participants: participants,
         audience: audience,
@@ -725,7 +726,15 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(_onTabChanged);
     _initializeScorecard();
+  }
+
+  void _onTabChanged() {
+    // Force rebuild when switching tabs to update auto-selected winner
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _initializeScorecard() {
@@ -797,29 +806,39 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
     }
 
     return Dialog(
-      insetPadding: const EdgeInsets.all(16),
-      child: Container(
-        width: MediaQuery.of(context).size.width * 0.95,
-        height: MediaQuery.of(context).size.height * 0.9,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildTabBar(),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildScoringTab(),
-                  _buildDecisionTab(),
-                ],
-              ),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: GestureDetector(
+        onTap: () {
+          // Dismiss keyboard when tapping outside input fields
+          FocusScope.of(context).unfocus();
+        },
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.95,
+            maxHeight: MediaQuery.of(context).size.height * 0.95,
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
             ),
-            _buildActionButtons(),
-          ],
+            child: Column(
+              children: [
+                _buildHeader(),
+                _buildTabBar(),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildScoringTab(),
+                      _buildDecisionTab(),
+                    ],
+                  ),
+                ),
+                _buildActionButtons(),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -982,7 +1001,7 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
 
   Widget _buildSpeakerScoringPage(SpeakerScore speakerScore, int index) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100), // Extra bottom padding
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1266,9 +1285,16 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
             });
           },
           maxLines: 4,
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => FocusScope.of(context).unfocus(),
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
             hintText: 'Provide specific feedback on the speaker\'s performance...',
+            suffixIcon: IconButton(
+              icon: const Icon(Icons.keyboard_hide),
+              onPressed: () => FocusScope.of(context).unfocus(),
+              tooltip: 'Hide keyboard',
+            ),
           ),
         ),
       ],
@@ -1279,7 +1305,7 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
     final calculatedWinner = _scorecard.calculatedWinner;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100), // Extra bottom padding
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1308,12 +1334,38 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Team Score Summary',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Team Score Summary',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () {
+                  // Reset to first speaker when editing scores
+                  setState(() {
+                    _currentSpeakerIndex = 0;
+                  });
+                  _pageController.animateToPage(
+                    0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  );
+                  _tabController.animateTo(0); // Go to scoring tab
+                },
+                icon: const Icon(Icons.edit, size: 16),
+                label: const Text('Edit Scores'),
+                style: TextButton.styleFrom(
+                  foregroundColor: ArenaModalColors.accentPurple,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           Row(
@@ -1386,15 +1438,57 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
   }
 
   Widget _buildWinnerSelection(TeamSide calculatedWinner) {
+    // Auto-select the winner based on scores if not already selected or if scores changed
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scorecard.winningTeam != calculatedWinner) {
+        setState(() {
+          _scorecard = _scorecard.copyWith(winningTeam: calculatedWinner);
+        });
+      }
+    });
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Winner Declaration',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Winner Declaration',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: ArenaModalColors.accentPurple.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: ArenaModalColors.accentPurple.withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.auto_awesome,
+                    size: 12,
+                    color: ArenaModalColors.accentPurple,
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'Auto-selected',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: ArenaModalColors.accentPurple,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         Text(
@@ -1402,6 +1496,15 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
           style: TextStyle(
             fontSize: 12,
             color: Colors.grey[600],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'You can change this selection below if you disagree.',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.grey[500],
+            fontStyle: FontStyle.italic,
           ),
         ),
         const SizedBox(height: 16),
@@ -1478,9 +1581,16 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
             });
           },
           maxLines: 4,
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => FocusScope.of(context).unfocus(),
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
             hintText: 'Explain your decision and key factors that influenced your judgment...',
+            suffixIcon: IconButton(
+              icon: const Icon(Icons.keyboard_hide),
+              onPressed: () => FocusScope.of(context).unfocus(),
+              tooltip: 'Hide keyboard',
+            ),
           ),
         ),
       ],
@@ -1537,6 +1647,8 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
   }
 
   Widget _buildActionButtons() {
+    final isKeyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: const BoxDecoration(
@@ -1544,24 +1656,35 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
       ),
       child: Row(
         children: [
-          Expanded(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+          if (isKeyboardVisible) ...[
+            // Show "Hide Keyboard" when keyboard is visible
+            Expanded(
+              child: TextButton.icon(
+                onPressed: () => FocusScope.of(context).unfocus(),
+                icon: const Icon(Icons.keyboard_hide),
+                label: const Text('Hide Keyboard'),
+                style: TextButton.styleFrom(
+                  foregroundColor: ArenaModalColors.accentPurple,
+                ),
+              ),
             ),
-          ),
+          ] else ...[
+            // Show normal cancel when keyboard is hidden (but don't close dialog)
+            Expanded(
+              child: TextButton(
+                onPressed: () {
+                  // Just dismiss any focus, don't close the dialog
+                  FocusScope.of(context).unfocus();
+                },
+                child: const Text('Clear Focus'),
+              ),
+            ),
+          ],
           const SizedBox(width: 16),
           Expanded(
             child: ElevatedButton(
               onPressed: _scorecard.isComplete 
-                ? () {
-                    final finalScorecard = _scorecard.copyWith(
-                      isSubmitted: true,
-                      dateScored: DateTime.now(),
-                    );
-                    widget.onSubmitScorecard(finalScorecard);
-                    Navigator.pop(context);
-                  }
+                ? () => _showSubmissionConfirmation()
                 : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: ArenaModalColors.accentPurple,
@@ -1569,6 +1692,120 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
               ),
               child: const Text('Submit Scorecard'),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSubmissionConfirmation() {
+    final winnerName = _scorecard.winningTeam.displayName;
+    final affirmativeTotal = _scorecard.getTotalScoreForTeam(TeamSide.affirmative);
+    final negativeTotal = _scorecard.getTotalScoreForTeam(TeamSide.negative);
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.how_to_vote, color: ArenaModalColors.accentPurple),
+            SizedBox(width: 8),
+            Text('Confirm Your Vote'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Your vote will be submitted and cannot be undone.',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: ArenaModalColors.accentPurple.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: ArenaModalColors.accentPurple.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Your Decision:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.emoji_events,
+                        color: _scorecard.winningTeam == TeamSide.affirmative ? Colors.green : ArenaModalColors.scarletRed,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '$winnerName wins',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: _scorecard.winningTeam == TeamSide.affirmative ? Colors.green : ArenaModalColors.scarletRed,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Affirmative: $affirmativeTotal pts • Negative: $negativeTotal pts',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Close confirmation dialog
+              // Reset to first speaker and scoring tab for review
+              setState(() {
+                _currentSpeakerIndex = 0;
+              });
+              _pageController.animateToPage(
+                0,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+              );
+              _tabController.animateTo(0); // Go to scoring tab
+            },
+            child: const Text('Review Again'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context); // Close confirmation dialog
+              final finalScorecard = _scorecard.copyWith(
+                isSubmitted: true,
+                dateScored: DateTime.now(),
+              );
+              widget.onSubmitScorecard(finalScorecard);
+              Navigator.pop(context); // Close scorecard dialog
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: ArenaModalColors.accentPurple,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Submit Vote'),
           ),
         ],
       ),
