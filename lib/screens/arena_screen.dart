@@ -104,6 +104,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   UserProfile? _currentUser;
   String? _currentUserId;
   String? _userRole;
+  int _teamSize = 1; // 1 for 1v1, 2 for 2v2
   String? _winner; // Track the debate winner
   bool _judgingComplete = false;
   bool _judgingEnabled = false; // Track if judges can submit votes
@@ -140,10 +141,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   String _currentSpeaker = '';
   bool _speakingEnabled = false;
   
-  // Participants by role
+  // Participants by role (supports both 1v1 and 2v2)
   Map<String, UserProfile?> _participants = {
-    'affirmative': null,
-    'negative': null,
+    'affirmative': null,      // For 1v1 or first affirmative in 2v2
+    'affirmative2': null,     // Second affirmative for 2v2
+    'negative': null,         // For 1v1 or first negative in 2v2
+    'negative2': null,        // Second negative for 2v2
     'moderator': null,
     'judge1': null,
     'judge2': null,
@@ -595,6 +598,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         _winner = roomData['winner'];
         _judgingComplete = roomData['judgingComplete'] ?? false;
         _judgingEnabled = roomData['judgingEnabled'] ?? false;
+        _teamSize = roomData['teamSize'] ?? 1; // Default to 1v1 if not specified
         
         // Don't auto-show results here - only show when moderator manually closes voting
         // or when user clicks "View Results" button
@@ -651,7 +655,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         );
         
         final existingRole = existingParticipant['role'];
-        final importantRoles = ['affirmative', 'negative', 'moderator', 'judge1', 'judge2', 'judge3'];
+        final importantRoles = ['affirmative', 'negative', 'affirmative2', 'negative2', 'moderator', 'judge1', 'judge2', 'judge3'];
         
         if (importantRoles.contains(existingRole)) {
           AppLogger().info('User already has important role: $existingRole - preserving it');
@@ -681,6 +685,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       _participants = {
         'affirmative': null,
         'negative': null,
+        'affirmative2': null,
+        'negative2': null,
         'moderator': null,
         'judge1': null,
         'judge2': null,
@@ -708,14 +714,18 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         // Sync completion status and selections from database
         if (role == 'affirmative' && completedSelection) {
           AppLogger().debug('🎭 SYNC: Set affirmative completion = true, selections = $selections');
+        } else if (role == 'affirmative2' && completedSelection) {
+          AppLogger().debug('🎭 SYNC: Set affirmative2 completion = true, selections = $selections');
         } else if (role == 'negative' && completedSelection) {
           AppLogger().debug('🎭 SYNC: Set negative completion = true, selections = $selections');
+        } else if (role == 'negative2' && completedSelection) {
+          AppLogger().debug('🎭 SYNC: Set negative2 completion = true, selections = $selections');
         }
         
         if (userProfileData != null) {
           final userProfile = UserProfile.fromMap(userProfileData);
           
-          if (['affirmative', 'negative', 'moderator', 'judge1', 'judge2', 'judge3'].contains(role)) {
+          if (['affirmative', 'affirmative2', 'negative', 'negative2', 'moderator', 'judge1', 'judge2', 'judge3'].contains(role)) {
             _participants[role] = userProfile;
             AppLogger().info('Assigned ${userProfile.name} to $role');
           } else if (role == 'audience') {
@@ -820,6 +830,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       }
       
       _roomData = roomData;
+      _teamSize = roomData['teamSize'] ?? 1; // Default to 1v1 if not specified
       
       // Cache for iOS
       if (_isIOSOptimizationEnabled) {
@@ -873,6 +884,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _participants = {
       'affirmative': null,
       'negative': null,
+      'affirmative2': null,
+      'negative2': null,
       'moderator': null,
       'judge1': null,
       'judge2': null,
@@ -888,7 +901,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       if (userProfileData != null) {
         final userProfile = UserProfile.fromMap(userProfileData);
         
-        if (['affirmative', 'negative', 'moderator', 'judge1', 'judge2', 'judge3'].contains(role)) {
+        if (['affirmative', 'negative', 'affirmative2', 'negative2', 'moderator', 'judge1', 'judge2', 'judge3'].contains(role)) {
           _participants[role] = userProfile;
         } else if (role == 'audience') {
           _audience.add(userProfile);
@@ -1682,13 +1695,29 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                       // Top Row - Debaters (fixed height)
                       SizedBox(
                         height: 200, // Fixed height instead of flex 40
-                        child: Row(
-                          children: [
-                            Expanded(child: _buildDebaterPosition('affirmative', 'Affirmative')),
-                            const SizedBox(width: 8),
-                            Expanded(child: _buildDebaterPosition('negative', 'Negative')),
-                          ],
-                        ),
+                        child: _teamSize == 1 
+                          ? Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Expanded(child: _buildDebaterPosition('affirmative', 'Affirmative')),
+                                const SizedBox(width: 20), // More space between slots
+                                Expanded(child: _buildDebaterPosition('negative', 'Negative')),
+                              ],
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                // Affirmative Team (2 slots)
+                                Expanded(
+                                  child: _buildTeamPosition('affirmative', 'Affirmative Team'),
+                                ),
+                                const SizedBox(width: 20), // More space between slots
+                                // Negative Team (2 slots)
+                                Expanded(
+                                  child: _buildTeamPosition('negative', 'Negative Team'),
+                                ),
+                              ],
+                            ),
                       ),
                       
                       const SizedBox(height: 6),
@@ -1834,23 +1863,23 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildDebaterPosition(String role, String title) {
+  Widget _buildDebaterPosition(String role, String title, {bool? isWinner}) {
     final participant = _participants[role];
-    final isAffirmative = role == 'affirmative';
-    final isWinner = _judgingComplete && _winner == role;
+    final isAffirmative = role.startsWith('affirmative');
+    final finalIsWinner = isWinner ?? (_judgingComplete && _winner == role);
     
     return Container(
       decoration: BoxDecoration(
         color: isAffirmative ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
         border: Border.all(
-          color: isWinner 
+          color: finalIsWinner 
               ? Colors.amber 
               : (isAffirmative ? Colors.green : Colors.red),
-          width: isWinner ? 4 : 2,
+          width: 2,
         ),
         borderRadius: BorderRadius.circular(12),
         // Add golden glow effect for winner
-        boxShadow: isWinner ? [
+        boxShadow: finalIsWinner ? [
           BoxShadow(
             color: Colors.amber.withValues(alpha: 0.5),
             blurRadius: 12,
@@ -1867,9 +1896,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.symmetric(vertical: 6),
             decoration: BoxDecoration(
-              color: isWinner 
+              color: finalIsWinner 
                   ? Colors.amber
                   : (isAffirmative ? Colors.green : Colors.red),
               borderRadius: const BorderRadius.only(
@@ -1880,33 +1909,62 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (isWinner) ...[
-                  const Icon(Icons.emoji_events, color: Colors.black, size: 16),
-                  const SizedBox(width: 4),
+                if (finalIsWinner) ...[
+                  const Icon(Icons.emoji_events, color: Colors.black, size: 14),
+                  const SizedBox(width: 3),
                 ],
                 Text(
-                  isWinner ? 'WINNER' : title,
+                  finalIsWinner ? 'WINNER' : title,
                   style: TextStyle(
-                    color: isWinner ? Colors.black : Colors.white,
+                    color: finalIsWinner ? Colors.black : Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                    fontSize: 12,
                   ),
                   textAlign: TextAlign.center,
                 ),
-                if (isWinner) ...[
-                  const SizedBox(width: 4),
-                  const Icon(Icons.emoji_events, color: Colors.black, size: 16),
+                if (finalIsWinner) ...[
+                  const SizedBox(width: 3),
+                  const Icon(Icons.emoji_events, color: Colors.black, size: 14),
                 ],
               ],
             ),
           ),
           Expanded(
             child: participant != null
-                ? _buildParticipantTile(participant, isMain: true, isWinner: isWinner)
-                : _buildEmptyPosition('Waiting for $title...'),
+                ? _buildParticipantTile(participant, isSmall: true, isWinner: finalIsWinner)
+                : _buildEmptyPosition('Waiting for $title...', isSmall: true),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTeamPosition(String baseRole, String title) {
+    final isAffirmative = baseRole == 'affirmative';
+    
+    // Check if this team won (for 2v2, winner is still 'affirmative' or 'negative')
+    final teamWon = _judgingComplete && _winner == baseRole;
+    
+    return Column(
+      children: [
+        // First team member slot (top)
+        Expanded(
+          child: _buildDebaterPosition(
+            baseRole, 
+            isAffirmative ? 'Affirmative 1' : 'Negative 1',
+            isWinner: teamWon,
+          ),
+        ),
+        const SizedBox(height: 4),
+        // Second team member slot (bottom)
+        Expanded(
+          child: _buildDebaterPosition(
+            '${baseRole}2', 
+            isAffirmative ? 'Affirmative 2' : 'Negative 2',
+            isWinner: teamWon,
+          ),
+        ),
+      ],
     );
   }
 
@@ -2622,8 +2680,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         audience: _audience,
         onRoleAssigned: (UserProfile user, String role) => _assignRoleToUser(user, role),
         availableJudgeSlots: _getAvailableJudgeSlots(),
+        teamSize: _teamSize,
         hasAffirmativeDebater: _hasRoleAssigned('affirmative'),
         hasNegativeDebater: _hasRoleAssigned('negative'),
+        hasAffirmative2Debater: _hasRoleAssigned('affirmative2'),
+        hasNegative2Debater: _hasRoleAssigned('negative2'),
         hasJudge1: _hasRoleAssigned('judge1'),
         hasJudge2: _hasRoleAssigned('judge2'),
         hasJudge3: _hasRoleAssigned('judge3'),
@@ -2663,7 +2724,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       // Show success message
       if (mounted) {
         final roleDisplayName = role == 'affirmative' ? 'Affirmative Debater' :
+                               role == 'affirmative2' ? 'Affirmative 2' :
                                role == 'negative' ? 'Negative Debater' :
+                               role == 'negative2' ? 'Negative 2' :
                                role.startsWith('judge') ? 'Judge' :
                                role.replaceAll('_', ' ');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2945,8 +3008,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   children: [
                   if (_participants['affirmative'] != null)
                     _buildParticipantInfo('Affirmative', _participants['affirmative']!, Colors.green),
+                  if (_participants['affirmative2'] != null)
+                    _buildParticipantInfo('Affirmative 2', _participants['affirmative2']!, Colors.green),
                   if (_participants['negative'] != null)
                     _buildParticipantInfo('Negative', _participants['negative']!, Colors.red),
+                  if (_participants['negative2'] != null)
+                    _buildParticipantInfo('Negative 2', _participants['negative2']!, Colors.red),
                   if (_participants['moderator'] != null)
                     _buildParticipantInfo('Moderator', _participants['moderator']!, accentPurple),
                   if (_participants['judge1'] != null)
@@ -3030,9 +3097,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           builder: (context) => ResultsModal(
             winner: _winner ?? '',
             affirmativeDebater: _participants['affirmative'],
+            affirmative2Debater: _participants['affirmative2'],
             negativeDebater: _participants['negative'],
+            negative2Debater: _participants['negative2'],
             judgments: judgments.documents,
             topic: widget.topic,
+            teamSize: _teamSize,
           ),
         );
       }
@@ -3478,7 +3548,9 @@ class _RoleManagerPanelState extends State<RoleManagerPanel> {
   // Available roles
   final List<String> _availableRoles = const [
     'affirmative',
-    'negative', 
+    'affirmative2',
+    'negative',
+    'negative2',
     'moderator',
     'judge1',
     'judge2',
@@ -3868,10 +3940,20 @@ class _RoleManagerPanelState extends State<RoleManagerPanel> {
     switch (role) {
       case 'affirmative':
         return 'Affirmative';
+      case 'affirmative2':
+        return 'Affirmative 2';
       case 'negative':
         return 'Negative';
+      case 'negative2':
+        return 'Negative 2';
       case 'moderator':
         return 'Moderator';
+      case 'judge1':
+        return 'Judge 1';
+      case 'judge2':
+        return 'Judge 2';
+      case 'judge3':
+        return 'Judge 3';
       case 'audience':
         return 'Audience';
       default:
@@ -3882,8 +3964,10 @@ class _RoleManagerPanelState extends State<RoleManagerPanel> {
   Color _getRoleColor(String role) {
     switch (role) {
       case 'affirmative':
+      case 'affirmative2':
         return Colors.green;
       case 'negative':
+      case 'negative2':
         return Colors.red;
       case 'moderator':
         return const Color(0xFF8B5CF6);
@@ -4613,17 +4697,23 @@ class _TimerControlModalState extends State<TimerControlModal> {
 class ResultsModal extends StatelessWidget {
   final String winner;
   final UserProfile? affirmativeDebater;
+  final UserProfile? affirmative2Debater;
   final UserProfile? negativeDebater;
+  final UserProfile? negative2Debater;
   final List<dynamic> judgments;
   final String topic;
+  final int? teamSize;
 
   const ResultsModal({
     super.key,
     required this.winner,
     this.affirmativeDebater,
+    this.affirmative2Debater,
     this.negativeDebater,
+    this.negative2Debater,
     required this.judgments,
     required this.topic,
+    this.teamSize,
   });
 
   // Colors
@@ -4744,7 +4834,6 @@ class ResultsModal extends StatelessWidget {
 
   Widget _buildContent(int affirmativeVotes, int negativeVotes) {
     final isAffirmativeWinner = winner == 'affirmative';
-    final winnerDebater = isAffirmativeWinner ? affirmativeDebater : negativeDebater;
 
     return Padding(
       padding: const EdgeInsets.all(20), // Reduced from 24
@@ -4786,47 +4875,7 @@ class ResultsModal extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12), // Reduced from 16
-                if (winnerDebater != null)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.amber, width: 2), // Reduced from 3
-                        ),
-                        child: UserAvatar(
-                          avatarUrl: winnerDebater.avatar,
-                          initials: winnerDebater.name.isNotEmpty ? winnerDebater.name[0] : '?',
-                          radius: 24, // Reduced from 32
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              winnerDebater.name,
-                              style: const TextStyle(
-                                fontSize: 16, // Reduced from 20
-                                fontWeight: FontWeight.bold,
-                                color: deepPurple,
-                              ),
-                            ),
-                            Text(
-                              '${winner.toUpperCase()} SIDE',
-                              style: TextStyle(
-                                fontSize: 12, // Reduced from 14
-                                fontWeight: FontWeight.w600,
-                                color: isAffirmativeWinner ? Colors.green : const Color(0xFFFF2400),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                _buildWinnerDisplay(isAffirmativeWinner),
               ],
             ),
           ),
@@ -5026,6 +5075,132 @@ class ResultsModal extends StatelessWidget {
               color: Colors.grey[600],
               fontStyle: FontStyle.italic,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWinnerDisplay(bool isAffirmativeWinner) {
+    // Get the winning team members
+    final winningDebater1 = winner == 'affirmative' ? affirmativeDebater : negativeDebater;
+    final winningDebater2 = winner == 'affirmative' ? affirmative2Debater : negative2Debater;
+    
+    // If no debaters found, return empty container
+    if (winningDebater1 == null && winningDebater2 == null) {
+      return const SizedBox.shrink();
+    }
+    
+    // For 1v1 or if only one debater exists, show single debater
+    if ((teamSize ?? 1) == 1 || winningDebater2 == null) {
+      if (winningDebater1 != null) {
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.amber, width: 2),
+              ),
+              child: UserAvatar(
+                avatarUrl: winningDebater1.avatar,
+                initials: winningDebater1.name.isNotEmpty ? winningDebater1.name[0] : '?',
+                radius: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    winningDebater1.name,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: deepPurple,
+                    ),
+                  ),
+                  Text(
+                    '${winner.toUpperCase()} SIDE',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isAffirmativeWinner ? Colors.green : const Color(0xFFFF2400),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      }
+      return const SizedBox.shrink();
+    } 
+    
+    // For 2v2, show both team members
+    return Column(
+      children: [
+        Text(
+          '${winner.toUpperCase()} TEAM',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: isAffirmativeWinner ? Colors.green : const Color(0xFFFF2400),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            // First team member  
+            if (winningDebater1 != null) ...[
+              Expanded(
+                child: _buildTeamMemberCard(winningDebater1),
+              ),
+              const SizedBox(width: 8),
+            ],
+            // Second team member
+            Expanded(
+              child: _buildTeamMemberCard(winningDebater2),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTeamMemberCard(UserProfile debater) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.amber, width: 2),
+            ),
+            child: UserAvatar(
+              avatarUrl: debater.avatar,
+              initials: debater.name.isNotEmpty ? debater.name[0] : '?',
+              radius: 20,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            debater.name,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: deepPurple,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -5607,8 +5782,11 @@ class RoleSelectionModal extends StatefulWidget {
   final List<UserProfile> audience;
   final Function(UserProfile, String) onRoleAssigned;
   final int availableJudgeSlots;
+  final int teamSize;
   final bool hasAffirmativeDebater;
   final bool hasNegativeDebater;
+  final bool hasAffirmative2Debater;
+  final bool hasNegative2Debater;
   final bool hasJudge1;
   final bool hasJudge2;
   final bool hasJudge3;
@@ -5618,8 +5796,11 @@ class RoleSelectionModal extends StatefulWidget {
     required this.audience,
     required this.onRoleAssigned,
     required this.availableJudgeSlots,
+    required this.teamSize,
     required this.hasAffirmativeDebater,
     required this.hasNegativeDebater,
+    required this.hasAffirmative2Debater,
+    required this.hasNegative2Debater,
     required this.hasJudge1,
     required this.hasJudge2,
     required this.hasJudge3,
@@ -5767,30 +5948,84 @@ class _RoleSelectionModalState extends State<RoleSelectionModal>
 
           const SizedBox(height: 16),
 
-          // Role selection buttons
-          Row(
-            children: [
-              Expanded(
-                child: _buildRoleCard(
-                  title: 'Affirmative',
-                  icon: Icons.thumb_up,
-                  color: Colors.green,
-                  isAssigned: widget.hasAffirmativeDebater,
-                  role: 'affirmative',
-                ),
+          // Role selection buttons - different layout for 1v1 vs 2v2
+          widget.teamSize == 1 
+            ? Row(
+                children: [
+                  Expanded(
+                    child: _buildRoleCard(
+                      title: 'Affirmative',
+                      icon: Icons.thumb_up,
+                      color: Colors.green,
+                      isAssigned: widget.hasAffirmativeDebater,
+                      role: 'affirmative',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildRoleCard(
+                      title: 'Negative',
+                      icon: Icons.thumb_down,
+                      color: Colors.red,
+                      isAssigned: widget.hasNegativeDebater,
+                      role: 'negative',
+                    ),
+                  ),
+                ],
+              )
+            : Column(
+                children: [
+                  // Affirmative Team Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildRoleCard(
+                          title: 'Affirmative 1',
+                          icon: Icons.thumb_up,
+                          color: Colors.green,
+                          isAssigned: widget.hasAffirmativeDebater,
+                          role: 'affirmative',
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildRoleCard(
+                          title: 'Affirmative 2',
+                          icon: Icons.thumb_up,
+                          color: Colors.green,
+                          isAssigned: widget.hasAffirmative2Debater,
+                          role: 'affirmative2',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Negative Team Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildRoleCard(
+                          title: 'Negative 1',
+                          icon: Icons.thumb_down,
+                          color: Colors.red,
+                          isAssigned: widget.hasNegativeDebater,
+                          role: 'negative',
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildRoleCard(
+                          title: 'Negative 2',
+                          icon: Icons.thumb_down,
+                          color: Colors.red,
+                          isAssigned: widget.hasNegative2Debater,
+                          role: 'negative2',
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildRoleCard(
-                  title: 'Negative',
-                  icon: Icons.thumb_down,
-                  color: Colors.red,
-                  isAssigned: widget.hasNegativeDebater,
-                  role: 'negative',
-                ),
-              ),
-            ],
-          ),
 
           const SizedBox(height: 16),
 
@@ -5829,24 +6064,46 @@ class _RoleSelectionModalState extends State<RoleSelectionModal>
                             onSelected: (role) => widget.onRoleAssigned(member, role),
                             itemBuilder: (context) => [
                               if (!widget.hasAffirmativeDebater)
-                                const PopupMenuItem(
+                                PopupMenuItem(
                                   value: 'affirmative',
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.thumb_up, color: Colors.green, size: 16),
+                                      const SizedBox(width: 8),
+                                      Text(widget.teamSize == 1 ? 'Affirmative Debater' : 'Affirmative 1'),
+                                    ],
+                                  ),
+                                ),
+                              if (widget.teamSize == 2 && !widget.hasAffirmative2Debater)
+                                const PopupMenuItem(
+                                  value: 'affirmative2',
                                   child: Row(
                                     children: [
                                       Icon(Icons.thumb_up, color: Colors.green, size: 16),
                                       SizedBox(width: 8),
-                                      Text('Affirmative Debater'),
+                                      Text('Affirmative 2'),
                                     ],
                                   ),
                                 ),
                               if (!widget.hasNegativeDebater)
-                                const PopupMenuItem(
+                                PopupMenuItem(
                                   value: 'negative',
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.thumb_down, color: Colors.red, size: 16),
+                                      const SizedBox(width: 8),
+                                      Text(widget.teamSize == 1 ? 'Negative Debater' : 'Negative 1'),
+                                    ],
+                                  ),
+                                ),
+                              if (widget.teamSize == 2 && !widget.hasNegative2Debater)
+                                const PopupMenuItem(
+                                  value: 'negative2',
                                   child: Row(
                                     children: [
                                       Icon(Icons.thumb_down, color: Colors.red, size: 16),
                                       SizedBox(width: 8),
-                                      Text('Negative Debater'),
+                                      Text('Negative 2'),
                                     ],
                                   ),
                                 ),

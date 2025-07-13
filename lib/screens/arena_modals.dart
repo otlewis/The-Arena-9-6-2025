@@ -742,7 +742,7 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
 
     final speakers = <SpeakerScore>[];
     
-    // Add affirmative speaker
+    // Add affirmative speakers (1v1: just 'affirmative', 2v2: both 'affirmative' and 'affirmative2')
     if (widget.participants['affirmative'] != null) {
       speakers.add(SpeakerScore(
         speakerName: widget.participants['affirmative']!.name,
@@ -750,10 +750,24 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
       ));
     }
     
-    // Add negative speaker
+    if (widget.participants['affirmative2'] != null) {
+      speakers.add(SpeakerScore(
+        speakerName: widget.participants['affirmative2']!.name,
+        teamSide: TeamSide.affirmative,
+      ));
+    }
+    
+    // Add negative speakers (1v1: just 'negative', 2v2: both 'negative' and 'negative2')
     if (widget.participants['negative'] != null) {
       speakers.add(SpeakerScore(
         speakerName: widget.participants['negative']!.name,
+        teamSide: TeamSide.negative,
+      ));
+    }
+    
+    if (widget.participants['negative2'] != null) {
+      speakers.add(SpeakerScore(
+        speakerName: widget.participants['negative2']!.name,
         teamSide: TeamSide.negative,
       ));
     }
@@ -989,9 +1003,14 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
   }
 
   Widget _buildSpeakerHeader(SpeakerScore speakerScore) {
-    final participant = speakerScore.teamSide == TeamSide.affirmative
-        ? widget.participants['affirmative']
-        : widget.participants['negative'];
+    // Find the correct participant by matching the speaker name
+    UserProfile? participant;
+    for (final entry in widget.participants.entries) {
+      if (entry.value.name == speakerScore.speakerName) {
+        participant = entry.value;
+        break;
+      }
+    }
 
     final teamColor = speakerScore.teamSide == TeamSide.affirmative 
         ? Colors.green 
