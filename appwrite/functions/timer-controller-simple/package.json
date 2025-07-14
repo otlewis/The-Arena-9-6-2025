@@ -1,0 +1,10 @@
+{
+  "name": "timer-controller-simple",
+  "version": "1.0.0",
+  "description": "Simple timer controller",
+  "main": "src/main.js",
+  "type": "module",
+  "dependencies": {
+    "node-appwrite": "^14.0.0"
+  }
+}

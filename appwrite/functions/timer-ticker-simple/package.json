@@ -1,0 +1,13 @@
+{
+  "name": "timer-ticker-simple",
+  "version": "1.0.0",
+  "description": "Simple timer ticker that updates database directly",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {
+    "node-appwrite": "^14.0.0"
+  }
+}

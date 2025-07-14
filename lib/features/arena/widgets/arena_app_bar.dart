@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import '../constants/arena_colors.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../screens/arena_modals.dart';
+import '../../../widgets/appwrite_timer_widget.dart';
+import '../../../models/timer_state.dart';
 
 /// Arena App Bar - DO NOT MODIFY LAYOUT
 /// This is the exact app bar from the original arena with timer and moderator controls
@@ -13,6 +14,8 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onShowTimerControls;
   final VoidCallback onExitArena;
   final VoidCallback onEmergencyCloseRoom;
+  final String roomId;
+  final String userId;
 
   const ArenaAppBar({
     super.key,
@@ -23,6 +26,8 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onShowTimerControls,
     required this.onExitArena,
     required this.onEmergencyCloseRoom,
+    required this.roomId,
+    required this.userId,
   });
 
   @override
@@ -70,39 +75,20 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
               ],
             ),
           
-          // Flexible spacer
+          // Appwrite Timer (synchronized across devices)
           Expanded(
             child: Center(
-              child: GestureDetector(
-                onTap: isModerator ? onShowTimerControls : null,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isTimerRunning ? ArenaColors.scarletRed : ArenaColors.accentPurple,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.3),
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        formattedTime,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                      if (isModerator) ...[
-                        const SizedBox(width: 3),
-                        const Icon(Icons.settings, color: Colors.white, size: 12),
-                      ],
-                    ],
-                  ),
-                ),
+              child: AppwriteTimerWidget(
+                roomId: roomId,
+                roomType: RoomType.arena,
+                isModerator: isModerator,
+                userId: userId,
+                compact: true,
+                showControls: isModerator,
+                showConnectionStatus: false,
+                onTimerExpired: () {
+                  // Handle timer expiration for debate phases
+                },
               ),
             ),
           ),

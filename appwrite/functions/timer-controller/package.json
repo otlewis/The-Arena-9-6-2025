@@ -1,0 +1,24 @@
+{
+  "name": "timer-controller",
+  "version": "1.0.0",
+  "description": "Appwrite Function for server-controlled timer operations",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "node-appwrite": "^13.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "appwrite",
+    "timer",
+    "realtime",
+    "synchronization"
+  ],
+  "author": "Arena App",
+  "license": "MIT"
+}

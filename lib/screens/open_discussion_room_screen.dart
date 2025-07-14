@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
+import '../models/timer_state.dart' as timer_models;
 import '../services/agora_service.dart';
 import '../services/appwrite_service.dart';
 import '../services/firebase_gift_service.dart';
 import '../services/chat_service.dart';
 import '../widgets/user_avatar.dart';
 import '../widgets/modern_chat_widget.dart';
+import '../widgets/appwrite_timer_widget.dart';
 import '../constants/appwrite.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -52,8 +54,6 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   // Timer functionality
   int _speakingTime = 300; // Start with 5 minutes (300 seconds) for countdown
   Timer? _speakingTimer;
-  bool _isTimerRunning = false;
-  bool _isTimerPaused = false;
   Timer? _fallbackRefreshTimer; // Fallback timer for when realtime fails
   
   // Audio player for timer sounds
@@ -116,6 +116,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         
         // Load hand raises from participant metadata
         await _loadHandRaisesFromParticipants();
+        
+        // Load initial timer state from database
+        await _loadInitialTimerState();
         
         // Set up real-time subscription for participant changes
         _setupRealtimeSubscription();
@@ -286,6 +289,12 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               }
               
               _loadRoomParticipants();
+            }
+            
+            // Check for room document updates (including timer state)
+            if (response.events.any((event) => event.contains('rooms.documents'))) {
+              debugPrint('🏠 Room document updated, checking for timer changes');
+              _handleRoomDocumentUpdate(Map<String, dynamic>.from(payload));
             }
           } catch (e) {
             debugPrint('❌ Error processing room participant update: $e');
@@ -473,47 +482,66 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     }
   }
 
-  void _startTimer() {
-    setState(() {
-      _isTimerRunning = true;
-      _isTimerPaused = false;
-    });
-    
-    _speakingTimer?.cancel(); // Cancel any existing timer
+
+
+  void _handleRoomDocumentUpdate(Map<String, dynamic> payload) {
+    try {
+      // Only non-moderators should sync timer state from database
+      if (_isCurrentUserModerator) {
+        debugPrint('🕐 Ignoring timer update for moderator');
+        return;
+      }
+
+      final settings = payload['settings'] as Map<String, dynamic>?;
+      if (settings == null) return;
+
+      final timerState = settings['timer'] as Map<String, dynamic>?;
+      if (timerState == null) return;
+
+      final updatedBy = timerState['updatedBy'] as String?;
+      if (updatedBy == _currentAppwriteUserId) {
+        debugPrint('🕐 Ignoring timer update from self');
+        return;
+      }
+
+      final newSpeakingTime = timerState['speakingTime'] as int? ?? 300;
+
+      debugPrint('🕐 Received timer update from moderator: ${newSpeakingTime}s');
+
+      setState(() {
+        _speakingTime = newSpeakingTime;
+        _thirtySecondChimePlayed = false; // Reset chime for new timer state
+      });
+
+    } catch (e) {
+      debugPrint('❌ Error handling timer update: $e');
+    }
+  }
+
+  void _startLocalTimer() {
     _speakingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
         return;
       }
       
-      // Store previous values to check for changes
-      final previousTime = _speakingTime;
-      final previousChimeFlag = _thirtySecondChimePlayed;
-      
       if (_speakingTime > 0) {
-        _speakingTime--; // Count down instead of up
-        
-        // Play chime at 30 seconds remaining (only once)
-        if (_speakingTime == 30 && !_thirtySecondChimePlayed) {
-          _thirtySecondChimePlayed = true;
-          _playChimeSound();
-        }
-        
-        // Only call setState if there's a UI-relevant change
-        if (previousTime != _speakingTime || previousChimeFlag != _thirtySecondChimePlayed) {
-          setState(() {
-            // State already updated above
-          });
-        }
+        setState(() {
+          _speakingTime--;
+          
+          // Play chime at 30 seconds remaining (only once)
+          if (_speakingTime == 30 && !_thirtySecondChimePlayed) {
+            _thirtySecondChimePlayed = true;
+            _playChimeSound();
+          }
+        });
         
       } else {
         // Timer reached zero
         timer.cancel();
-        _playBuzzerSound(); // Play buzzer when timer finishes
+        _playBuzzerSound();
         
         setState(() {
-          _isTimerRunning = false;
-          _isTimerPaused = true;
         });
         
         if (mounted) {
@@ -529,31 +557,36 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     });
   }
 
-  void _pauseTimer() {
-    setState(() {
-      _isTimerRunning = false;
-      _isTimerPaused = true;
-    });
-    _speakingTimer?.cancel();
-    _speakingTimer = null;
-  }
+  Future<void> _loadInitialTimerState() async {
+    try {
+      final roomData = await _appwriteService.getRoom(widget.room.id);
+      if (roomData == null) return;
 
-  void _resetTimer() {
-    setState(() {
-      _speakingTime = 300; // Reset to 5 minutes
-      _isTimerRunning = false;
-      _isTimerPaused = false;
-      _thirtySecondChimePlayed = false; // Reset chime flag
-    });
-    _speakingTimer?.cancel();
-    _speakingTimer = null;
-  }
+      final settings = roomData['settings'] as Map<String, dynamic>?;
+      if (settings == null) return;
 
-  void _setCustomTime(int totalSeconds) {
-    setState(() {
-      _speakingTime = totalSeconds; // Set the countdown time
-      _thirtySecondChimePlayed = false; // Reset chime flag for new time
-    });
+      final timerState = settings['timer'] as Map<String, dynamic>?;
+      if (timerState == null) return;
+
+      final speakingTime = timerState['speakingTime'] as int? ?? 300;
+      final isRunning = timerState['isTimerRunning'] as bool? ?? false;
+      final isPaused = timerState['isTimerPaused'] as bool? ?? false;
+
+      debugPrint('🕐 Loading initial timer state: ${speakingTime}s, running: $isRunning, paused: $isPaused');
+
+      setState(() {
+        _speakingTime = speakingTime;
+        _thirtySecondChimePlayed = false;
+      });
+
+      // Start timer if it should be running
+      if (isRunning && !isPaused) {
+        _startLocalTimer();
+      }
+
+    } catch (e) {
+      debugPrint('❌ Error loading initial timer state: $e');
+    }
   }
 
   Future<void> _toggleSpeakerphone() async {
@@ -1217,50 +1250,14 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
           Expanded(
             flex: 2,
             child: Center(
-              child: GestureDetector(
-                onTap: _isCurrentUserModerator ? _showTimerModal : null,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: _isTimerRunning 
-                      ? Colors.green.withValues(alpha: 0.1)
-                      : scarletRed.withValues(alpha: 0.1),
-                    borderRadius: const BorderRadius.all(Radius.circular(10)),
-                    border: Border.all(
-                      color: _isTimerRunning 
-                        ? Colors.green.withValues(alpha: 0.3)
-                        : scarletRed.withValues(alpha: 0.3)
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _isTimerRunning ? Icons.timer : Icons.timer_outlined,
-                        color: _isTimerRunning ? Colors.green : scarletRed,
-                        size: 14,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _formatTimer(_speakingTime),
-                        style: TextStyle(
-                          color: _isTimerRunning ? Colors.green : scarletRed,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                      if (_isCurrentUserModerator) ...[
-                        const SizedBox(width: 2),
-                        Icon(
-                          Icons.settings,
-                          color: _isTimerRunning ? Colors.green : scarletRed,
-                          size: 8,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+              child: AppwriteTimerWidget(
+                roomId: widget.room.id,
+                roomType: timer_models.RoomType.openDiscussion,
+                isModerator: _isCurrentUserModerator,
+                userId: _currentAppwriteUserId ?? '',
+                compact: true,
+                showControls: _isCurrentUserModerator,
+                showConnectionStatus: false,
               ),
             ),
           ),
@@ -3053,348 +3050,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   }
 
   // Timer functionality
-  String _formatTimer(int seconds) {
-    final minutes = (seconds / 60).floor();
-    final remainingSeconds = seconds % 60;
-    return '$minutes:${remainingSeconds.toString().padLeft(2, '0')}';
-  }
 
-  void _showTimerModal() {
-    final TextEditingController minutesController = TextEditingController(
-      text: '${(_speakingTime / 60).floor()}',
-    );
-    final TextEditingController secondsController = TextEditingController(
-      text: '${_speakingTime % 60}',
-    );
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) {
-          // Listen for timer updates (less frequently to reduce rebuilds)
-          if (_speakingTimer?.isActive == true) {
-            Future.delayed(const Duration(milliseconds: 500), () {
-              if (mounted) setModalState(() {});
-            });
-          }
-          
-          return AlertDialog(
-            contentPadding: EdgeInsets.zero,
-            insetPadding: EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: MediaQuery.of(context).viewInsets.bottom > 0 ? 20 : 40,
-            ),
-            content: Container(
-              width: MediaQuery.of(context).size.width * 0.9,
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.8 - 
-                  MediaQuery.of(context).viewInsets.bottom,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: const BoxDecoration(
-                      color: lightScarlet,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(12),
-                        topRight: Radius.circular(12),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.timer, color: scarletRed, size: 20),
-                        const SizedBox(width: 8),
-                        const Text('Room Timer', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: _isTimerRunning 
-                              ? Colors.green.withValues(alpha: 0.2)
-                              : Colors.grey.withValues(alpha: 0.2),
-                            borderRadius: const BorderRadius.all(Radius.circular(6)),
-                          ),
-                          child: Text(
-                            _isTimerRunning ? 'RUNNING' : _isTimerPaused ? 'PAUSED' : 'STOPPED',
-                            style: TextStyle(
-                              color: _isTimerRunning ? Colors.green : Colors.grey.shade600,
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  // Scrollable content
-                  Flexible(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Current time display
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: const BorderRadius.all(Radius.circular(8)),
-                              border: Border.all(color: scarletRed.withValues(alpha: 0.3)),
-                            ),
-                            child: Column(
-                              children: [
-                                const Text(
-                                  'Countdown Timer',
-                                  style: TextStyle(
-                                    color: deepPurple,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  _formatTimer(_speakingTime),
-                                  style: TextStyle(
-                                    color: _speakingTime <= 60 ? Colors.red : scarletRed,
-                                    fontSize: 36,
-                                    fontWeight: FontWeight.bold,
-                                    fontFamily: 'monospace',
-                                  ),
-                                ),
-                                if (_speakingTime <= 60 && _speakingTime > 0) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Less than 1 minute remaining!',
-                                    style: TextStyle(
-                                      color: Colors.red.withValues(alpha: 0.8),
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ] else if (_speakingTime == 0) ...[
-                                  const SizedBox(height: 4),
-                                  const Text(
-                                    'Time\'s up!',
-                                    style: TextStyle(
-                                      color: Colors.red,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          
-                          const SizedBox(height: 16),
-                          
-                          // Set custom time
-                          const Text(
-                            'Set Countdown Time',
-                            style: TextStyle(
-                              color: deepPurple,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextFormField(
-                                  controller: minutesController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Min',
-                                    labelStyle: TextStyle(fontSize: 12),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.all(Radius.circular(6)),
-                                    ),
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                    isDense: true,
-                                  ),
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: TextFormField(
-                                  controller: secondsController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Sec',
-                                    labelStyle: TextStyle(fontSize: 12),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.all(Radius.circular(6)),
-                                    ),
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                    isDense: true,
-                                  ),
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton(
-                                onPressed: () {
-                                  final minutes = int.tryParse(minutesController.text) ?? 0;
-                                  final seconds = int.tryParse(secondsController.text) ?? 0;
-                                  _setCustomTime(minutes * 60 + seconds);
-                                  setModalState(() {});
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: accentPurple,
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                ),
-                                child: const Text('Set', style: TextStyle(color: Colors.white, fontSize: 12)),
-                              ),
-                            ],
-                          ),
-                          
-                          const SizedBox(height: 16),
-                          
-                          // Timer controls
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: () {
-                                    if (_isTimerRunning) {
-                                      _pauseTimer();
-                                    } else {
-                                      _startTimer();
-                                    }
-                                    setModalState(() {});
-                                  },
-                                  icon: Icon(
-                                    _isTimerRunning ? Icons.pause : Icons.play_arrow,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
-                                  label: Text(
-                                    _isTimerRunning ? 'Pause' : 'Start',
-                                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: _isTimerRunning ? Colors.orange : Colors.green,
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: () {
-                                    _resetTimer();
-                                    // Update controllers to show reset time
-                                    minutesController.text = '${(_speakingTime / 60).floor()}';
-                                    secondsController.text = '${_speakingTime % 60}';
-                                    setModalState(() {});
-                                  },
-                                  icon: const Icon(Icons.refresh, color: Colors.white, size: 16),
-                                  label: const Text('Reset', style: TextStyle(color: Colors.white, fontSize: 12)),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: scarletRed,
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          
-                          const SizedBox(height: 16),
-                          
-                          // Quick preset times
-                          const Text(
-                            'Quick Presets',
-                            style: TextStyle(
-                              color: deepPurple,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton(
-                                  onPressed: () {
-                                    _setCustomTime(60); // 1 minute
-                                    minutesController.text = '1';
-                                    secondsController.text = '0';
-                                    setModalState(() {});
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blue,
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
-                                  ),
-                                  child: const Text('1 Min', style: TextStyle(color: Colors.white, fontSize: 12)),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: ElevatedButton(
-                                  onPressed: () {
-                                    _setCustomTime(300); // 5 minutes
-                                    minutesController.text = '5';
-                                    secondsController.text = '0';
-                                    setModalState(() {});
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green,
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
-                                  ),
-                                  child: const Text('5 Min', style: TextStyle(color: Colors.white, fontSize: 12)),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: ElevatedButton(
-                                  onPressed: () {
-                                    _setCustomTime(600); // 10 minutes
-                                    minutesController.text = '10';
-                                    secondsController.text = '0';
-                                    setModalState(() {});
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.orange,
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
-                                  ),
-                                  child: const Text('10 Min', style: TextStyle(color: Colors.white, fontSize: 12)),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  // Close button
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Close'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
 
   // Audio methods for timer sounds
   Future<void> _playChimeSound() async {

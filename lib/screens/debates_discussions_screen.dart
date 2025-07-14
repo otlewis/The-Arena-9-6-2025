@@ -7,7 +7,9 @@ import '../services/firebase_gift_service.dart';
 import '../services/chat_service.dart';
 import '../models/user_profile.dart';
 import '../models/gift.dart';
+import '../models/timer_state.dart';
 import '../widgets/animated_fade_in.dart';
+import '../widgets/appwrite_timer_widget.dart';
 import '../core/logging/app_logger.dart';
 
 class DebatesDiscussionsScreen extends StatefulWidget {
@@ -894,6 +896,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         child: Column(
           children: [
             _buildHeader(),
+            _buildRoomTitleSection(),
             Expanded(
               child: _buildVideoGrid(),
             ),
@@ -905,8 +908,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   }
 
   Widget _buildHeader() {
-    final roomName = _roomData?['name'] ?? widget.roomName ?? 'Debate Room';
-    final moderatorName = _moderator?.name ?? widget.moderatorName ?? 'Unknown';
     final participantCount = _speakerPanelists.length + _audienceMembers.length;
 
     return Container(
@@ -928,32 +929,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               ),
             ),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  roomName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  'Moderated by $moderatorName',
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 14,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+          const Spacer(),
+          // Timer Widget
+          AppwriteTimerWidget(
+            roomId: widget.roomId,
+            roomType: RoomType.debatesDiscussions,
+            isModerator: _isCurrentUserModerator,
+            userId: _currentUser?.id ?? '',
+            compact: true,
+            showControls: _isCurrentUserModerator,
+            showConnectionStatus: false,
           ),
           const SizedBox(width: 16),
           Row(
@@ -1027,6 +1012,54 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                   ),
                 ),
               ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRoomTitleSection() {
+    final roomName = _roomData?['name'] ?? widget.roomName ?? 'Debate Room';
+    final moderatorName = _moderator?.name ?? widget.moderatorName ?? 'Unknown';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        children: [
+          // Room name
+          Text(
+            roomName,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          // Moderator info - stacked
+          Column(
+            children: [
+              const Text(
+                'Moderated by',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 12,
+                ),
+              ),
+              Text(
+                moderatorName,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
           ),
         ],

@@ -82,6 +82,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             onShowTimerControls: _showTimerControlModal,
             onExitArena: () => _navigationService.showExitDialog(context),
             onEmergencyCloseRoom: _emergencyCloseRoom,
+            roomId: widget.roomId,
+            userId: '', // TODO: Get current user ID from state
           ),
           body: Column(
             children: [
