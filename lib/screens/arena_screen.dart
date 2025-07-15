@@ -4,11 +4,12 @@ import 'package:appwrite/appwrite.dart';
 import '../services/appwrite_service.dart';
 import '../services/challenge_messaging_service.dart';
 import '../services/sound_service.dart';
-import '../services/chat_service.dart';
 import '../widgets/user_avatar.dart';
 import '../models/user_profile.dart';
 import '../models/message.dart';
 import '../models/judge_scorecard.dart';
+import '../models/chat_message.dart';
+import '../widgets/live_chat_widget.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
 import '../main.dart' show ArenaApp, getIt;
@@ -96,7 +97,6 @@ class ArenaScreen extends StatefulWidget {
 
 class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin {
   final AppwriteService _appwrite = AppwriteService();
-  final ChatService _chatService = ChatService();
   late final SoundService _soundService;
   
   // Room data
@@ -161,7 +161,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   final bool _invitationsInProgress = false;
   
   // Chat state
-  StreamSubscription? _chatSubscription;
+  // StreamSubscription? _chatSubscription; // Removed with old chat system
   final TextEditingController _chatController = TextEditingController();
   
   // Screen sharing state
@@ -261,8 +261,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     // Step 5: Update iOS cache for future fast loading
     _updateIOSCache();
     
-    // Step 6: Initialize chat service
-    _initializeChatService();
+    // Chat service removed - now handled by floating chat button
     
     AppLogger().debug('🍎 iOS-optimized arena initialization completed');
   }
@@ -286,28 +285,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     // Step 4: Start room status checker
     _startRoomStatusChecker();
     
-    // Step 5: Initialize chat service
-    _initializeChatService();
+    // Chat service removed - now handled by floating chat button
   }
 
-  /// Initialize chat service and subscribe to messages
-  void _initializeChatService() {
-    AppLogger().debug('💬 Initializing chat service for room: ${widget.roomId}');
-    
-    // Subscribe to chat messages stream
-    _chatSubscription = _chatService.messagesStream.listen((messages) {
-      if (mounted) {
-        setState(() {
-        });
-        AppLogger().debug('💬 Received ${messages.length} chat messages');
-      }
-    });
-    
-    // Subscribe to real-time messages for this room
-    _chatService.subscribeToRoomMessages(widget.roomId);
-    
-    AppLogger().debug('💬 Chat service initialized successfully');
-  }
 
   @override
   void dispose() {
@@ -339,9 +319,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _realtimeSubscription = null;
     
     AppLogger().debug('🛑 DISPOSE: Cleaning up chat service...');
-    _chatSubscription?.cancel();
-    _chatSubscription = null;
-    _chatService.unsubscribe();
+    // Chat service disposal removed - now handled by floating chat button
     _chatController.dispose();
     
     _timerController.dispose();
@@ -1472,6 +1450,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         onShowTimerControls: _showTimerControlModal,
         onExitArena: _exitArena,
         onEmergencyCloseRoom: _emergencyCloseRoom,
+        roomId: widget.roomId,
+        userId: _currentUserId ?? 'unknown',
       ),
       body: Column(
         children: [
@@ -2761,18 +2741,31 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   /// Show chat bottom sheet
   void _showChatBottomSheet() {
+    if (_currentUser == null) return;
+    
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      enableDrag: true,
-      builder: (context) => ArenaChatBottomSheet(
-        roomId: widget.roomId,
-        chatService: _chatService,
-        currentUserId: _currentUserId,
-        participants: _participants,
-        audienceCount: _audience.length,
-        onSendMessage: _sendChatMessage,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: LiveChatWidget(
+            chatRoomId: widget.roomId,
+            roomType: ChatRoomType.arena,
+            currentUser: _currentUser!,
+            userRole: _currentUser != null ? _getUserRole(_currentUser!) : 'participant',
+            isVisible: true,
+            onToggleVisibility: () => Navigator.pop(context),
+          ),
+        ),
       ),
     );
   }
@@ -2923,42 +2916,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
-  /// Send a chat message
-  Future<void> _sendChatMessage() async {
-    final message = _chatController.text.trim();
-    if (message.isEmpty) return;
-
-    try {
-      final success = await _chatService.sendMessage(
-        roomId: widget.roomId,
-        content: message,
-      );
-
-      if (success) {
-        _chatController.clear();
-        AppLogger().debug('💬 Chat message sent successfully');
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to send message. Please try again.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      AppLogger().error('Error sending chat message: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error sending message: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 
   
   /// Show read-only participant view
@@ -6322,7 +6279,7 @@ class _RoleSelectionModalState extends State<RoleSelectionModal>
 /// Arena Chat Bottom Sheet with real-time updates
 class ArenaChatBottomSheet extends StatefulWidget {
   final String roomId;
-  final ChatService chatService;
+  // ChatService removed - using new chat system
   final String? currentUserId;
   final Map<String, UserProfile?> participants;
   final int audienceCount;
@@ -6331,7 +6288,6 @@ class ArenaChatBottomSheet extends StatefulWidget {
   const ArenaChatBottomSheet({
     super.key,
     required this.roomId,
-    required this.chatService,
     required this.currentUserId,
     required this.participants,
     required this.audienceCount,
@@ -6364,37 +6320,9 @@ class _ArenaChatBottomSheetState extends State<ArenaChatBottomSheet> {
 
   void _initializeChatStream() {
     // Subscribe to messages stream for real-time updates
-    _messageSubscription = widget.chatService.messagesStream.listen((messages) {
-      if (mounted) {
-        setState(() {
-          _messages = messages.reversed.toList(); // Reverse for chronological order
-        });
-        // Auto-scroll to bottom when new messages arrive
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scrollController.hasClients) {
-            _scrollController.animateTo(
-              _scrollController.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
-            );
-          }
-        });
-      }
-    });
-
-    // Load initial messages
-    widget.chatService.getRoomMessages(widget.roomId).then((messages) {
-      if (mounted) {
-        setState(() {
-          _messages = messages.reversed.toList();
-        });
-        // Auto-scroll to bottom after loading
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scrollController.hasClients) {
-            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-          }
-        });
-      }
+    // Chat service removed - using new chat system
+    setState(() {
+      _messages = []; // Empty messages since old chat system is disabled
     });
   }
 
@@ -6403,22 +6331,14 @@ class _ArenaChatBottomSheetState extends State<ArenaChatBottomSheet> {
     if (message.isEmpty) return;
 
     try {
-      final success = await widget.chatService.sendMessage(
-        roomId: widget.roomId,
-        content: message,
-      );
-
-      if (success) {
-        _messageController.clear();
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to send message. Please try again.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+      // Chat service removed - using new chat system
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to send message. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {

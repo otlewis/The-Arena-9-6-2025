@@ -4,9 +4,10 @@ import '../models/timer_state.dart' as timer_models;
 import '../services/agora_service.dart';
 import '../services/appwrite_service.dart';
 import '../services/firebase_gift_service.dart';
-import '../services/chat_service.dart';
+// import '../services/chat_service.dart'; // Removed with new chat system
 import '../widgets/user_avatar.dart';
-import '../widgets/modern_chat_widget.dart';
+import '../widgets/live_chat_widget.dart';
+import '../models/chat_message.dart';
 import '../widgets/appwrite_timer_widget.dart';
 import '../constants/appwrite.dart';
 import 'dart:async';
@@ -29,7 +30,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   final AgoraService _agoraService = AgoraService();
   final AppwriteService _appwriteService = AppwriteService();
   final FirebaseGiftService _firebaseGiftService = FirebaseGiftService();
-  final ChatService _chatService = ChatService();
+  // final ChatService _chatService = ChatService(); // Removed with new chat system
   
   bool _isMuted = true;
   bool _isHandRaised = false;
@@ -47,8 +48,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   int _reconnectAttempts = 0; // Track reconnection attempts
   static const int _maxReconnectAttempts = 5; // Maximum reconnection attempts
   
-  // Chat state
-  bool _isChatOpen = false;
+  // Chat state - now handled via modal bottom sheet
   bool _isRealtimeHealthy = true; // Track realtime connection health
   
   // Timer functionality
@@ -773,9 +773,56 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   }
 
   void _toggleChat() {
-    setState(() {
-      _isChatOpen = !_isChatOpen;
-    });
+    final currentUser = _getCurrentUserProfile();
+    if (currentUser == null) return;
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: LiveChatWidget(
+            chatRoomId: widget.room.id,
+            roomType: ChatRoomType.openDiscussion,
+            currentUser: currentUser,
+            userRole: _getCurrentUserRole(),
+            isVisible: true,
+            onToggleVisibility: () => Navigator.pop(context),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Get current user profile for chat
+  UserProfile? _getCurrentUserProfile() {
+    if (_currentAppwriteUserId == null) return null;
+    return _userProfiles[_currentAppwriteUserId!];
+  }
+
+  /// Get current user role for chat
+  String _getCurrentUserRole() {
+    if (_userParticipation == null) return 'participant';
+    
+    final role = _userParticipation!['role'] as String?;
+    switch (role) {
+      case 'moderator':
+        return 'moderator';
+      case 'speaker':
+        return 'speaker';
+      case 'audience':
+      default:
+        return 'participant';
+    }
   }
 
   // Moderation methods
@@ -1112,18 +1159,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
             ),
           ),
           
-          // Modern chat widget overlay
-          if (_isChatOpen)
-            ModernChatWidget(
-              roomId: widget.room.id,
-              currentUser: {
-                'id': _currentAppwriteUserId ?? '',
-                'name': _userProfiles[_currentAppwriteUserId]?.displayName ?? 'You',
-              },
-              userProfiles: _userProfiles,
-              isVisible: _isChatOpen,
-              onClose: _toggleChat,
-            ),
+          // Chat now handled via modal bottom sheet in _toggleChat()
         ],
       ),
     );
@@ -1757,7 +1793,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               _buildControlButton(
                 icon: Icons.chat_bubble,
                 label: 'Chat',
-                color: accentPurple,
+                color: const Color(0xFF8B5CF6), // Purple to match chat theme
                 onTap: _toggleChat,
               ),
               
@@ -2435,19 +2471,21 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       );
 
       // Send gift notification to chat
-      final senderProfile = _userProfiles[_currentAppwriteUserId!];
-      final recipientProfile = _userProfiles[recipient['userId']];
+      // Variables removed since gift notifications are handled by new chat system
+      // final senderProfile = _userProfiles[_currentAppwriteUserId!];
+      // final recipientProfile = _userProfiles[recipient['userId']];
       
-      await _chatService.sendGiftNotification(
-        roomId: widget.room.id,
-        giftId: gift.id,
-        giftName: '${gift.emoji} ${gift.name}',
-        senderId: _currentAppwriteUserId!,
-        senderName: senderProfile?.displayName ?? 'Someone',
-        recipientId: recipient['userId'],
-        recipientName: recipientProfile?.displayName ?? 'User',
-        cost: gift.cost,
-      );
+      // Gift notifications will be handled by new chat system
+      // await _chatService.sendGiftNotification(
+      //   roomId: widget.room.id,
+      //   giftId: gift.id,
+      //   giftName: '${gift.emoji} ${gift.name}',
+      //   senderId: _currentAppwriteUserId!,
+      //   senderName: senderProfile?.displayName ?? 'Someone',
+      //   recipientId: recipient['userId'],
+      //   recipientName: recipientProfile?.displayName ?? 'User',
+      //   cost: gift.cost,
+      // );
 
       // Refresh Firebase coin balance
       await _loadFirebaseCoinBalance();

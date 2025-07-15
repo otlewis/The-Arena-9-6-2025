@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../models/message.dart';
-import '../services/chat_service.dart';
+// import '../services/chat_service.dart'; // Old chat service removed
 import '../widgets/user_avatar.dart';
 import 'dart:async';
 
@@ -32,7 +31,7 @@ class ModernChatWidget extends StatefulWidget {
 }
 
 class _ModernChatWidgetState extends State<ModernChatWidget> {
-  final ChatService _chatService = ChatService();
+  // final ChatService _chatService = ChatService(); // Old chat service removed
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   
@@ -42,7 +41,7 @@ class _ModernChatWidgetState extends State<ModernChatWidget> {
   
 
   
-  bool _isUserScrolling = false;
+  // bool _isUserScrolling = false; // Removed with old chat system
 
   @override
   void initState() {
@@ -51,32 +50,14 @@ class _ModernChatWidgetState extends State<ModernChatWidget> {
   }
 
   void _setupChat() {
-    _chatService.subscribeToRoomMessages(widget.roomId);
-    _messagesSubscription = _chatService.messagesStream.listen((messages) {
-      if (mounted) {
-        setState(() {
-          _messages = messages;
-        });
-        
-        // Auto-scroll to bottom if user isn't manually scrolling
-        if (!_isUserScrolling && _scrollController.hasClients) {
-          _scrollToBottom();
-        }
-      }
+    // Old chat service removed - using new chat system
+    // _chatService.subscribeToRoomMessages(widget.roomId);
+    // Old chat service removed - using new chat system
+    setState(() {
+      _messages = []; // Empty messages since old chat is disabled
     });
   }
 
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
-  }
 
   void _toggleChat() {
     if (widget.onClose != null) {
@@ -92,15 +73,8 @@ class _ModernChatWidgetState extends State<ModernChatWidget> {
     final content = _messageController.text.trim();
     _messageController.clear();
 
-    final success = await _chatService.sendMessage(
-      roomId: widget.roomId,
-      content: content,
-    );
-
-    if (success) {
-      HapticFeedback.lightImpact();
-      _scrollToBottom();
-    } else {
+    // Old chat service removed - using new chat system
+    {
       // Show error and restore text
       _messageController.text = content;
       if (mounted) {
@@ -120,7 +94,7 @@ class _ModernChatWidgetState extends State<ModernChatWidget> {
   @override
   void dispose() {
     _messagesSubscription?.cancel();
-    _chatService.unsubscribe();
+    // _chatService.unsubscribe(); // Old chat service removed
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -262,13 +236,14 @@ class _ModernChatWidgetState extends State<ModernChatWidget> {
 
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
-        if (notification is ScrollStartNotification) {
-          _isUserScrolling = true;
-        } else if (notification is ScrollEndNotification) {
-          Future.delayed(const Duration(seconds: 2), () {
-            _isUserScrolling = false;
-          });
-        }
+        // Scroll tracking removed with old chat system
+        // if (notification is ScrollStartNotification) {
+        //   _isUserScrolling = true;
+        // } else if (notification is ScrollEndNotification) {
+        //   Future.delayed(const Duration(seconds: 2), () {
+        //     _isUserScrolling = false;
+        //   });
+        // }
         return false;
       },
       child: ListView.builder(

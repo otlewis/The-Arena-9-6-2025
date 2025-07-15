@@ -11,6 +11,7 @@ import '../../services/challenge_messaging_service.dart';
 import '../../services/sound_service.dart';
 import '../../widgets/challenge_modal.dart';
 import '../../widgets/arena_role_notification_modal.dart';
+import '../../widgets/floating_im_widget.dart';
 import '../../core/logging/app_logger.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../core/notifications/widgets/notification_banner.dart';
@@ -317,30 +318,32 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
       _ensureBottomNavigationVisible();
     });
     
-    return Scaffold(
-      body: Stack(
-        children: [
-          IndexedStack(
-            index: currentIndex,
-            children: screens,
-          ),
-          // Banner notifications overlay
-          NotificationBannerOverlay(
-            notificationStream: _notificationService.bannerNotifications,
-            onNotificationTap: (notification) {
-              _notificationService.markAsRead(notification.id);
-              // Handle deep linking if needed
-              if (notification.deepLink != null) {
-                // TODO: Implement deep link navigation
-              }
-            },
-            onNotificationDismiss: (notification) {
-              _notificationService.markAsDismissed(notification.id);
-            },
-          ),
-        ],
+    return FloatingIMWidget(
+      child: Scaffold(
+        body: Stack(
+          children: [
+            IndexedStack(
+              index: currentIndex,
+              children: screens,
+            ),
+            // Banner notifications overlay
+            NotificationBannerOverlay(
+              notificationStream: _notificationService.bannerNotifications,
+              onNotificationTap: (notification) {
+                _notificationService.markAsRead(notification.id);
+                // Handle deep linking if needed
+                if (notification.deepLink != null) {
+                  // TODO: Implement deep link navigation
+                }
+              },
+              onNotificationDismiss: (notification) {
+                _notificationService.markAsDismissed(notification.id);
+              },
+            ),
+          ],
+        ),
+        bottomNavigationBar: _buildOptimizedBottomNav(),
       ),
-      bottomNavigationBar: _buildOptimizedBottomNav(),
     );
   }
 

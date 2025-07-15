@@ -4,12 +4,14 @@ import 'package:appwrite/appwrite.dart';
 import '../services/agora_service.dart';
 import '../services/appwrite_service.dart';
 import '../services/firebase_gift_service.dart';
-import '../services/chat_service.dart';
+// import '../services/chat_service.dart'; // Removed with new chat system
 import '../models/user_profile.dart';
 import '../models/gift.dart';
 import '../models/timer_state.dart';
 import '../widgets/animated_fade_in.dart';
 import '../widgets/appwrite_timer_widget.dart';
+import '../widgets/live_chat_widget.dart';
+import '../models/chat_message.dart';
 import '../core/logging/app_logger.dart';
 
 class DebatesDiscussionsScreen extends StatefulWidget {
@@ -32,7 +34,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   final AgoraService _agoraService = AgoraService();
   final AppwriteService _appwrite = AppwriteService();
   final FirebaseGiftService _giftService = FirebaseGiftService();
-  final ChatService _chatService = ChatService();
+  // final ChatService _chatService = ChatService(); // Removed with new chat system
   
   // Room data
   Map<String, dynamic>? _roomData;
@@ -1516,11 +1518,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           _buildControlButton(
             icon: LucideIcons.messageCircle,
             isActive: false,
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Chat feature coming soon!')),
-              );
-            },
+            onTap: _showChat,
           ),
           // Hand raise button (only for audience members)
           if (!_isCurrentUserModerator && !_isCurrentUserSpeaker)
@@ -1579,6 +1577,43 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     );
   }
 
+  /// Show chat modal
+  void _showChat() {
+    if (_currentUser == null) return;
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: LiveChatWidget(
+            chatRoomId: widget.roomId,
+            roomType: ChatRoomType.debatesDiscussions,
+            currentUser: _currentUser!,
+            userRole: _getCurrentUserRole(),
+            isVisible: true,
+            onToggleVisibility: () => Navigator.pop(context),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Get current user role for chat
+  String _getCurrentUserRole() {
+    if (_isCurrentUserModerator) return 'moderator';
+    if (_isCurrentUserSpeaker) return 'speaker';
+    return 'participant';
+  }
 
   void _showModeratorTools() {
     showModalBottomSheet(
@@ -2898,16 +2933,17 @@ Join the conversation now in the Arena app!
 
       // Send gift notification to chat (if chat service exists)
       try {
-        await _chatService.sendGiftNotification(
-          roomId: widget.roomId,
-          giftId: gift.id,
-          giftName: '${gift.emoji} ${gift.name}',
-          senderId: _currentUser!.id,
-          senderName: _currentUser!.displayName,
-          recipientId: recipient['userId'],
-          recipientName: recipient['name'],
-          cost: gift.cost,
-        );
+        // Gift notifications will be handled by new chat system
+        // await _chatService.sendGiftNotification(
+        //   roomId: widget.roomId,
+        //   giftId: gift.id,
+        //   giftName: '${gift.emoji} ${gift.name}',
+        //   senderId: _currentUser!.id,
+        //   senderName: _currentUser!.displayName,
+        //   recipientId: recipient['userId'],
+        //   recipientName: recipient['name'],
+        //   cost: gift.cost,
+        // );
       } catch (chatError) {
         AppLogger().warning('Could not send chat notification: $chatError');
         // Continue anyway - gift was sent successfully
