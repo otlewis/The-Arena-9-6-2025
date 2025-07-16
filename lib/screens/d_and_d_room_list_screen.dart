@@ -218,6 +218,26 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
   }
 
   Widget _buildRoomCard(Map<String, dynamic> room) {
+    // Check if room is scheduled and live status
+    final isScheduled = room['isScheduled'] as bool? ?? false;
+    final isLive = room['status'] == 'active';
+    final scheduledDate = room['scheduledDate'];
+    
+    // Format scheduled date for display
+    String? formattedScheduledDate;
+    if (isScheduled && scheduledDate != null) {
+      try {
+        final dateTime = DateTime.parse(scheduledDate);
+        
+        // Format to 12-hour time
+        final hour12 = dateTime.hour == 0 ? 12 : (dateTime.hour > 12 ? dateTime.hour - 12 : dateTime.hour);
+        final amPm = dateTime.hour >= 12 ? 'PM' : 'AM';
+        formattedScheduledDate = '${dateTime.day}/${dateTime.month}/${dateTime.year} $hour12:${dateTime.minute.toString().padLeft(2, '0')} $amPm';
+      } catch (e) {
+        AppLogger().error('Error parsing scheduled date: $e');
+      }
+    }
+    
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 0,
@@ -233,9 +253,62 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header with room type and category
+              // Header with room type, category, and live/scheduled status
               Row(
                 children: [
+                  if (isLive) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.circle, color: Colors.white, size: 8),
+                          SizedBox(width: 4),
+                          Text(
+                            'LIVE',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ] else if (isScheduled) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.orange,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.schedule,
+                            color: Colors.white,
+                            size: 12,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            formattedScheduledDate ?? 'SCHEDULED',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Flexible(
                     child: _buildRoomTypeBadge(room['tags']?.isNotEmpty == true ? room['tags'][0] : 'Discussion'),
                   ),
@@ -479,9 +552,137 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
     }
   }
 
-  void _joinRoom(Map<String, dynamic> room) {
+  void _joinRoom(Map<String, dynamic> room) async {
     AppLogger().info('Joining room: ${room['title']}');
     
+    // Get current user
+    final currentUser = await _appwriteService.getCurrentUser();
+    if (currentUser == null) {
+      _showSnackBar('Please log in to join rooms');
+      return;
+    }
+    
+    // Check if room is scheduled and its current status
+    final isScheduled = room['isScheduled'] as bool? ?? false;
+    final isLive = room['status'] == 'active';
+    final scheduledDate = room['scheduledDate'];
+    final moderatorId = room['moderatorId'] as String? ?? room['createdBy'] as String?;
+    final isCurrentUserModerator = currentUser.$id == moderatorId;
+    
+    AppLogger().debug('🏁 Is room scheduled: $isScheduled');
+    AppLogger().debug('🏁 Is room live: $isLive');
+    AppLogger().debug('🏁 Room status: ${room['status']}');
+    AppLogger().debug('🏁 Scheduled date: $scheduledDate');
+    AppLogger().debug('🏁 Current user ID: ${currentUser.$id}');
+    AppLogger().debug('🏁 Moderator ID: $moderatorId');
+    AppLogger().debug('🏁 Created by: ${room['createdBy']}');
+    AppLogger().debug('🏁 Is current user moderator: $isCurrentUserModerator');
+    
+    // Handle scheduled room logic - show info but allow entry
+    if (isScheduled && !isLive) {
+      AppLogger().debug('🏁 Room is scheduled, showing schedule info and allowing entry');
+      _showScheduledRoomInfoDialog(room);
+      return;
+    } else if (isScheduled && isLive) {
+      AppLogger().debug('🏁 Room was scheduled but is now live - allowing all users to join');
+    }
+    
+    // Check if room is private
+    final isPrivate = room['isPrivate'] as bool? ?? false;
+    
+    if (isPrivate) {
+      _showPasswordDialog(room);
+    } else {
+      _navigateToRoom(room);
+    }
+  }
+
+  void _showPasswordDialog(Map<String, dynamic> room) {
+    final passwordController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Private Room'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('This room requires a password to enter.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Password',
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => _validateAndJoin(room, passwordController.text),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => _validateAndJoin(room, passwordController.text),
+            child: const Text('Join'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _validateAndJoin(Map<String, dynamic> room, String enteredPassword) async {
+    if (enteredPassword.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a password'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final isValid = await _appwriteService.validateDebateDiscussionRoomPassword(
+        roomId: room['id'] ?? '',
+        enteredPassword: enteredPassword.trim(),
+      );
+
+      if (!mounted) return;
+
+      if (isValid) {
+        Navigator.of(context).pop(); // Close password dialog
+        _navigateToRoom(room);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Incorrect password. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error validating password. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _navigateToRoom(Map<String, dynamic> room) {
+    if (!mounted) {
+      AppLogger().debug('🚀 Widget not mounted, skipping navigation');
+      return;
+    }
+    
+    AppLogger().debug('🚀 Navigating to room: ${room['title']}');
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -507,6 +708,96 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
       // Refresh rooms list when user comes back from creating a room
       _loadRooms();
     });
+  }
+
+
+  void _showScheduledRoomInfoDialog(Map<String, dynamic> room) {
+    final scheduledDate = room['scheduledDate'] as String?;
+    DateTime? scheduleDateTime;
+    
+    if (scheduledDate != null) {
+      try {
+        scheduleDateTime = DateTime.parse(scheduledDate);
+      } catch (e) {
+        AppLogger().error('Error parsing scheduled date: $e');
+      }
+    }
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Scheduled Debate'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.schedule,
+              color: Colors.orange,
+              size: 48,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'This debate is scheduled to begin at:',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            if (scheduleDateTime != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                '${scheduleDateTime.day}/${scheduleDateTime.month}/${scheduleDateTime.year} at ${scheduleDateTime.hour == 0 ? 12 : (scheduleDateTime.hour > 12 ? scheduleDateTime.hour - 12 : scheduleDateTime.hour)}:${scheduleDateTime.minute.toString().padLeft(2, '0')} ${scheduleDateTime.hour >= 12 ? 'PM' : 'AM'}',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+            const SizedBox(height: 16),
+            const Text(
+              'You can enter the room now and wait for the debate to begin.',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _navigateToRoom(room);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Enter Room'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
 }

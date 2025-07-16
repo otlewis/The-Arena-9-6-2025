@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/appwrite_service.dart';
+import '../core/logging/app_logger.dart';
 
 class CreateDiscussionRoomScreen extends StatefulWidget {
   const CreateDiscussionRoomScreen({super.key});
@@ -8,23 +10,30 @@ class CreateDiscussionRoomScreen extends StatefulWidget {
 }
 
 class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen> {
+  final AppwriteService _appwriteService = AppwriteService();
+  
   // Form controllers
   final TextEditingController _roomNameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _userNameController = TextEditingController();
   final TextEditingController _customCategoryController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   
   // State variables
   String _selectedCategory = 'Religion';
   String _selectedDebateStyle = 'Discussion';
+  bool _showCustomCategory = false;
+  bool _isCreating = false;
   bool _isPrivate = false;
   bool _isScheduled = false;
-  bool _showCustomCategory = false;
   DateTime _scheduledDate = DateTime.now().add(const Duration(hours: 1));
   
   // Purple theme colors
   static const Color primaryPurple = Color(0xFF8B5CF6);
   static const Color lightPurple = Color(0xFFF3F4F6);
+  static const Color darkGray = Color(0xFF333333);
+  static const Color mediumGray = Color(0xFF666666);
+  static const Color lightBorder = Color(0xFFDDDDDD);
   
   // Categories with priority order
   final List<String> _categories = [
@@ -50,95 +59,157 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
       'description': 'Open conversation and exchange of ideas'
     },
     {
-      'id': 'Debate', 
+      'id': 'Debate',
       'name': 'Debate',
-      'description': 'Structured argument with opposing sides'
+      'description': 'Structured argument with opposing viewpoints'
     },
     {
       'id': 'Take',
       'name': 'Take',
-      'description': 'Hot takes and quick opinions (First Take style)'
-    }
+      'description': 'Share your perspective on a topic'
+    },
   ];
-  
+
   @override
   void dispose() {
     _roomNameController.dispose();
     _descriptionController.dispose();
     _userNameController.dispose();
     _customCategoryController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
-  
-  String _generateRoomId() {
-    return 'room_${DateTime.now().millisecondsSinceEpoch}';
-  }
-  
-  String _generateUserId() {
-    return 'user_${DateTime.now().millisecondsSinceEpoch % 100000}';
-  }
-  
-  void _createRoom() {
-    // Validation
-    if (_roomNameController.text.trim().isEmpty || _userNameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter both a room name and your name'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
+
+  // Check if form is valid
+  bool get _isFormValid {
+    final basicValid = _roomNameController.text.trim().isNotEmpty && 
+                      _userNameController.text.trim().isNotEmpty;
+    
+    // If private room, password is required
+    if (_isPrivate) {
+      return basicValid && _passwordController.text.trim().isNotEmpty;
     }
     
-    // Get final category
-    String finalCategory = _selectedCategory;
-    if (_selectedCategory == 'Custom' && _customCategoryController.text.trim().isNotEmpty) {
-      finalCategory = _customCategoryController.text.trim();
-    }
+    return basicValid;
+  }
+
+  // Create room function
+  Future<void> _createRoom() async {
+    if (!_isFormValid || _isCreating) return;
     
-    // Create room data
-    final roomData = {
-      'id': _generateRoomId(),
-      'name': _roomNameController.text.trim(),
-      'description': _descriptionController.text.trim(),
-      'category': finalCategory,
-      'debateStyle': _selectedDebateStyle,
-      'isPrivate': _isPrivate,
-      'isScheduled': _isScheduled,
-      'scheduledDate': _isScheduled ? _scheduledDate : null,
-      'moderator': _userNameController.text.trim(),
-      'moderatorId': _generateUserId(),
-      'createdAt': DateTime.now(),
-    };
+    // Prevent multiple concurrent operations
+    if (!mounted) return;
     
-    debugPrint('Creating room: $roomData');
+    setState(() {
+      _isCreating = true;
+    });
     
-    if (_isScheduled) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('🎉 Room scheduled successfully!'),
-          backgroundColor: Colors.green,
-        ),
+    try {
+      // Get current user
+      final currentUser = await _appwriteService.getCurrentUser();
+      if (currentUser == null) {
+        _showSnackBar('Please log in to create a room');
+        return;
+      }
+      
+      // Get final category
+      final finalCategory = _selectedCategory == 'Custom' 
+          ? _customCategoryController.text.trim().isNotEmpty 
+              ? _customCategoryController.text.trim()
+              : 'Custom'
+          : _selectedCategory;
+      
+      AppLogger().info('Creating debate discussion room...');
+      
+      // Debug the scheduled date being sent
+      if (_isScheduled) {
+        AppLogger().info('Creating scheduled room with date: $_scheduledDate');
+        AppLogger().info('Current time: ${DateTime.now()}');
+        AppLogger().info('Time difference: ${_scheduledDate.difference(DateTime.now()).inMinutes} minutes');
+        AppLogger().info('Is scheduled date in future: ${_scheduledDate.isAfter(DateTime.now())}');
+        AppLogger().info('Scheduled date UTC: ${_scheduledDate.toUtc()}');
+        AppLogger().info('Scheduled date ISO8601: ${_scheduledDate.toIso8601String()}');
+      }
+      
+      // Create room using the correct method for Debates & Discussions
+      final roomId = await _appwriteService.createDebateDiscussionRoom(
+        name: _roomNameController.text.trim(),
+        description: _descriptionController.text.trim(),
+        category: finalCategory,
+        debateStyle: _selectedDebateStyle,
+        createdBy: currentUser.$id,
+        isPrivate: _isPrivate,
+        password: _isPrivate ? _passwordController.text.trim() : null,
+        isScheduled: _isScheduled,
+        scheduledDate: _isScheduled ? _scheduledDate : null,
       );
-      Navigator.of(context).pop();
-    } else {
-      // Navigate to room (you would implement this navigation)
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('🚀 ${roomData['debateStyle']} room "${roomData['name']}" created!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      Navigator.of(context).pop(roomData);
+      
+      AppLogger().info('Room created successfully with ID: $roomId');
+      
+      // Show success message
+      _showSnackBar('Room created successfully!');
+      
+      // Add a small delay to ensure database operation completes
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Use post-frame callback to ensure safe navigation
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            try {
+              Navigator.of(context).pop();
+            } catch (e) {
+              AppLogger().error('Navigation error: $e');
+              // If navigation fails, try alternative approach
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted) {
+                  try {
+                    Navigator.of(context).pop();
+                  } catch (e) {
+                    AppLogger().error('Secondary navigation error: $e');
+                  }
+                }
+              });
+            }
+          }
+        });
+      }
+      
+    } catch (e) {
+      AppLogger().error('Error creating room: $e');
+      _showSnackBar('Error creating room: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCreating = false;
+        });
+      }
     }
   }
-  
+
+  // Show snack bar
+  void _showSnackBar(String message) {
+    if (mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      });
+    }
+  }
+
+  // Show date picker for scheduling
   Future<void> _selectDateTime() async {
     final date = await showDatePicker(
       context: context,
       initialDate: _scheduledDate,
       firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 30)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
     );
     
     if (date != null && mounted) {
@@ -147,11 +218,11 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
         initialTime: TimeOfDay.fromDateTime(_scheduledDate),
       );
       
-      if (time != null && mounted) {
+      if (time != null) {
         setState(() {
           _scheduledDate = DateTime(
             date.year,
-            date.month, 
+            date.month,
             date.day,
             time.hour,
             time.minute,
@@ -160,507 +231,402 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
       }
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
-    final isFormValid = _roomNameController.text.trim().isNotEmpty && 
-                       _userNameController.text.trim().isNotEmpty;
-    
     return Scaffold(
       backgroundColor: lightPurple,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        title: const Text('Create Discussion Room'),
+        backgroundColor: Colors.white,
+        foregroundColor: darkGray,
         elevation: 0,
-        leading: TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text(
-            'Cancel',
-            style: TextStyle(color: primaryPurple, fontSize: 16),
-          ),
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Create Room',
-          style: TextStyle(
-            color: Colors.black87,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        centerTitle: true,
         actions: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: ElevatedButton(
-              onPressed: isFormValid ? _createRoom : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isFormValid ? primaryPurple : Colors.grey,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              ),
-              child: const Text(
-                'Create',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-              ),
-            ),
+          TextButton(
+            onPressed: (_isFormValid && !_isCreating) ? _createRoom : null,
+            child: _isCreating 
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(
+                    'Create',
+                    style: TextStyle(
+                      color: (_isFormValid && !_isCreating) ? primaryPurple : Colors.grey,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
           ),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildRoomInformationSection(),
-            const SizedBox(height: 20),
-            _buildDebateStyleSection(),
-            const SizedBox(height: 20),
-            _buildCategorySection(),
-            const SizedBox(height: 20),
-            _buildRoomSettingsSection(),
+            _buildFormSection(
+              title: 'Room Information',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildInputLabel('Your Name*'),
+                  _buildTextInput(
+                    controller: _userNameController,
+                    placeholder: 'Enter your name',
+                    maxLength: 30,
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  _buildInputLabel('Room Name*'),
+                  _buildTextInput(
+                    controller: _roomNameController,
+                    placeholder: 'Give your room a name',
+                    maxLength: 50,
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  _buildInputLabel('Description'),
+                  _buildTextInput(
+                    controller: _descriptionController,
+                    placeholder: 'What\'s this room about?',
+                    maxLength: 200,
+                    maxLines: 3,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            _buildFormSection(
+              title: 'Debate Style',
+              child: Column(
+                children: _debateStyles.map((style) {
+                  final isSelected = _selectedDebateStyle == style['id'];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          _selectedDebateStyle = style['id']!;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: isSelected ? primaryPurple.withValues(alpha: 0.1) : Colors.transparent,
+                          border: Border.all(
+                            color: isSelected ? primaryPurple : lightBorder,
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isSelected ? primaryPurple : Colors.grey,
+                                  width: 2,
+                                ),
+                                color: isSelected ? primaryPurple : Colors.transparent,
+                              ),
+                              child: isSelected
+                                  ? const Icon(Icons.check, color: Colors.white, size: 14)
+                                  : null,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    style['name']!,
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: isSelected ? primaryPurple : darkGray,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    style['description']!,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            _buildFormSection(
+              title: 'Category',
+              child: Column(
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _categories.map((category) {
+                      final isSelected = _selectedCategory == category;
+                      return InkWell(
+                        onTap: () {
+                          setState(() {
+                            _selectedCategory = category;
+                            _showCustomCategory = category == 'Custom';
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected ? primaryPurple : Colors.white,
+                            border: Border.all(
+                              color: isSelected ? primaryPurple : lightBorder,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            category,
+                            style: TextStyle(
+                              color: isSelected ? Colors.white : mediumGray,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  if (_showCustomCategory) ...[
+                    const SizedBox(height: 16),
+                    _buildTextInput(
+                      controller: _customCategoryController,
+                      placeholder: 'Enter custom category',
+                      maxLength: 20,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            _buildFormSection(
+              title: 'Room Settings',
+              child: Column(
+                children: [
+                  _buildSwitchRow(
+                    title: 'Private Room',
+                    description: 'Require password to join',
+                    value: _isPrivate,
+                    onChanged: (value) {
+                      setState(() {
+                        _isPrivate = value;
+                      });
+                    },
+                  ),
+                  
+                  if (_isPrivate) ...[
+                    const SizedBox(height: 16),
+                    _buildInputLabel('Room Password*'),
+                    _buildTextInput(
+                      controller: _passwordController,
+                      placeholder: 'Enter room password',
+                      maxLength: 20,
+                    ),
+                  ],
+                  
+                  const SizedBox(height: 16),
+                  
+                  _buildSwitchRow(
+                    title: 'Schedule for Later',
+                    description: 'Create a scheduled room',
+                    value: _isScheduled,
+                    onChanged: (value) {
+                      setState(() {
+                        _isScheduled = value;
+                      });
+                    },
+                  ),
+                  
+                  if (_isScheduled) ...[
+                    const SizedBox(height: 16),
+                    _buildInputLabel('Select Date and Time'),
+                    GestureDetector(
+                      onTap: _selectDateTime,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: lightPurple,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: lightBorder),
+                        ),
+                        child: Text(
+                          '${_scheduledDate.day}/${_scheduledDate.month}/${_scheduledDate.year} at ${_scheduledDate.hour.toString().padLeft(2, '0')}:${_scheduledDate.minute.toString().padLeft(2, '0')}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: darkGray,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Tap to change date and time',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
-  
-  Widget _buildRoomInformationSection() {
+
+  Widget _buildFormSection({required String title, required Widget child}) {
     return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
             offset: const Offset(0, 2),
+            blurRadius: 4,
           ),
         ],
       ),
-      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Room Information',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 20),
-          
-          const Text(
-            'Your Name*',
-            style: TextStyle(fontSize: 16, color: Colors.black54),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _userNameController,
-            maxLength: 30,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              hintText: 'Enter your name',
-              filled: true,
-              fillColor: lightPurple,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: primaryPurple),
-              ),
-              counterText: '',
-            ),
-          ),
-          const SizedBox(height: 20),
-          
-          const Text(
-            'Room Name*',
-            style: TextStyle(fontSize: 16, color: Colors.black54),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _roomNameController,
-            maxLength: 50,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              hintText: 'Give your room a name',
-              filled: true,
-              fillColor: lightPurple,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: primaryPurple),
-              ),
-            ),
-          ),
           Text(
-            '${_roomNameController.text.length}/50',
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
-            textAlign: TextAlign.right,
-          ),
-          const SizedBox(height: 20),
-          
-          const Text(
-            'Description',
-            style: TextStyle(fontSize: 16, color: Colors.black54),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _descriptionController,
-            maxLength: 200,
-            maxLines: 4,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              hintText: 'What\'s this room about?',
-              filled: true,
-              fillColor: lightPurple,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: primaryPurple),
-              ),
+            title,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: darkGray,
             ),
           ),
-          Text(
-            '${_descriptionController.text.length}/200',
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
-            textAlign: TextAlign.right,
-          ),
+          const SizedBox(height: 16),
+          child,
         ],
       ),
     );
   }
-  
-  Widget _buildDebateStyleSection() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Debate Style',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 15),
-          
-          Column(
-            children: _debateStyles.map((style) {
-              final isSelected = _selectedDebateStyle == style['id'];
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                child: InkWell(
-                  onTap: () {
-                    setState(() {
-                      _selectedDebateStyle = style['id']!;
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isSelected ? primaryPurple.withValues(alpha: 0.1) : lightPurple,
-                      border: Border.all(
-                        color: isSelected ? primaryPurple : Colors.grey.shade300,
-                        width: 2,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                          color: isSelected ? primaryPurple : Colors.grey,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                style['name']!,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: isSelected ? primaryPurple : Colors.black87,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                style['description']!,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
+
+  Widget _buildInputLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: mediumGray,
+        ),
       ),
     );
   }
-  
-  Widget _buildCategorySection() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+
+  Widget _buildTextInput({
+    required TextEditingController controller,
+    required String placeholder,
+    int maxLength = 100,
+    int maxLines = 1,
+  }) {
+    return TextField(
+      controller: controller,
+      maxLength: maxLength,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        hintText: placeholder,
+        filled: true,
+        fillColor: lightPurple,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: lightBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: lightBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: primaryPurple),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        counterText: '',
       ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Category',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 15),
-          
-          SizedBox(
-            height: 40,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: _categories.length,
-              itemBuilder: (context, index) {
-                final category = _categories[index];
-                final isSelected = _selectedCategory == category;
-                
-                return Container(
-                  margin: const EdgeInsets.only(right: 10),
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _selectedCategory = category;
-                        _showCustomCategory = category == 'Custom';
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected ? primaryPurple : lightPurple,
-                        border: Border.all(
-                          color: isSelected ? primaryPurple : Colors.grey.shade300,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        category,
-                        style: TextStyle(
-                          color: isSelected ? Colors.white : Colors.black54,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          
-          if (_showCustomCategory) ...[
-            const SizedBox(height: 15),
-            const Text(
-              'Custom Category',
-              style: TextStyle(fontSize: 16, color: Colors.black54),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _customCategoryController,
-              maxLength: 20,
-              decoration: InputDecoration(
-                hintText: 'Enter custom category',
-                filled: true,
-                fillColor: lightPurple,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: primaryPurple),
-                ),
-                counterText: '',
-              ),
-            ),
-          ],
-        ],
-      ),
+      style: const TextStyle(fontSize: 16),
+      onChanged: (_) => setState(() {}),
     );
   }
-  
-  Widget _buildRoomSettingsSection() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Room Settings',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 20),
-          
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+  Widget _buildSwitchRow({
+    required String title,
+    required String description,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Private Room',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Only people with the link can join',
-                      style: TextStyle(fontSize: 14, color: Colors.black54),
-                    ),
-                  ],
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: darkGray,
                 ),
               ),
-              Switch(
-                value: _isPrivate,
-                onChanged: (value) {
-                  setState(() {
-                    _isPrivate = value;
-                  });
-                },
-                activeColor: primaryPurple,
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: mediumGray,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Schedule for Later',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Create a scheduled room',
-                      style: TextStyle(fontSize: 14, color: Colors.black54),
-                    ),
-                  ],
-                ),
-              ),
-              Switch(
-                value: _isScheduled,
-                onChanged: (value) {
-                  setState(() {
-                    _isScheduled = value;
-                  });
-                },
-                activeColor: primaryPurple,
-              ),
-            ],
-          ),
-          
-          if (_isScheduled) ...[
-            const SizedBox(height: 20),
-            const Text(
-              'Select Date and Time',
-              style: TextStyle(fontSize: 16, color: Colors.black54),
-            ),
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: _selectDateTime,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: lightPurple,
-                  border: Border.all(color: Colors.grey.shade300),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.calendar_today, color: primaryPurple),
-                    const SizedBox(width: 12),
-                    Text(
-                      '${_scheduledDate.day}/${_scheduledDate.month}/${_scheduledDate.year} at ${_scheduledDate.hour.toString().padLeft(2, '0')}:${_scheduledDate.minute.toString().padLeft(2, '0')}',
-                      style: const TextStyle(fontSize: 16, color: Colors.black87),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
+        ),
+        Switch(
+          value: value,
+          onChanged: onChanged,
+          activeColor: primaryPurple,
+          activeTrackColor: primaryPurple.withValues(alpha: 0.5),
+          inactiveThumbColor: const Color(0xFFF4F3F4),
+          inactiveTrackColor: const Color(0xFF767577),
+        ),
+      ],
     );
   }
 }

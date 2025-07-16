@@ -97,98 +97,242 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
   }
 
   void _navigateToCreateRoom() async {
-    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => const CreateDiscussionRoomScreen(),
       ),
     );
     
-    if (result != null) {
-      await _createRoomInDatabase(result);
+    // Refresh the room list after returning from create screen
+    _loadRooms();
+  }
+
+
+  void _joinRoom(Map<String, dynamic> roomData) async {
+    // Debug room data
+    AppLogger().debug('🏁 Starting room join process');
+    AppLogger().debug('🏁 Room data: ${roomData.toString()}');
+    AppLogger().debug('🏁 Room ID: ${roomData['id']}');
+    AppLogger().debug('🏁 Room Name: ${roomData['name']}');
+    
+    // Get current user
+    final currentUser = await _appwrite.getCurrentUser();
+    if (currentUser == null) {
+      _showSnackBar('Please log in to join rooms');
+      return;
+    }
+    
+    // Check if room is scheduled and its current status
+    final isScheduled = roomData['isScheduled'] as bool? ?? false;
+    final isLive = roomData['isLive'] as bool? ?? false;
+    final scheduledDate = roomData['scheduledDate'];
+    final moderatorId = roomData['moderatorId'] as String? ?? roomData['createdBy'] as String?;
+    final isCurrentUserModerator = currentUser.$id == moderatorId;
+    
+    AppLogger().debug('🏁 Is room scheduled: $isScheduled');
+    AppLogger().debug('🏁 Is room live: $isLive');
+    AppLogger().debug('🏁 Scheduled date: $scheduledDate');
+    AppLogger().debug('🏁 Current user ID: ${currentUser.$id}');
+    AppLogger().debug('🏁 Moderator ID: $moderatorId');
+    AppLogger().debug('🏁 Created by: ${roomData['createdBy']}');
+    AppLogger().debug('🏁 Is current user moderator: $isCurrentUserModerator');
+    
+    // Handle scheduled room logic - show info but allow entry
+    if (isScheduled && !isLive) {
+      AppLogger().debug('🏁 Room is scheduled, showing schedule info and allowing entry');
+      _showScheduledRoomInfoDialog(roomData);
+      return;
+    } else if (isScheduled && isLive) {
+      AppLogger().debug('🏁 Room was scheduled but is now live - allowing all users to join');
+    }
+    
+    // Check if room is private
+    final isPrivate = roomData['isPrivate'] as bool? ?? false;
+    AppLogger().debug('🏁 Is room private: $isPrivate');
+    
+    if (isPrivate) {
+      AppLogger().debug('🏁 Showing password dialog for private room');
+      _showPasswordDialog(roomData);
+    } else {
+      AppLogger().debug('🏁 Room is public, navigating directly');
+      _navigateToRoom(roomData);
     }
   }
 
-  Future<void> _createRoomInDatabase(Map<String, dynamic> roomData) async {
-    try {
-      // Show loading indicator
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🚀 Creating room...'),
-            backgroundColor: primaryPurple,
-            duration: Duration(seconds: 2),
+  void _showPasswordDialog(Map<String, dynamic> roomData) {
+    final passwordController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Private Room'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('This room requires a password to enter.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Password',
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => _validateAndJoin(roomData, passwordController.text),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
           ),
-        );
-      }
+          ElevatedButton(
+            onPressed: () => _validateAndJoin(roomData, passwordController.text),
+            child: const Text('Join'),
+          ),
+        ],
+      ),
+    );
+  }
 
-      // Get current user
-      final currentUser = await _appwrite.getCurrentUser();
-      if (currentUser == null) {
-        throw Exception('Not authenticated');
-      }
+  Future<void> _validateAndJoin(Map<String, dynamic> roomData, String enteredPassword) async {
+    if (enteredPassword.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a password'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
-      // Create room in database
-      final roomId = await _appwrite.createDebateDiscussionRoom(
-        name: roomData['name'] ?? 'Untitled Room',
-        description: roomData['description'] ?? '',
-        category: roomData['category'] ?? 'General',
-        debateStyle: roomData['debateStyle'] ?? 'Discussion',
-        createdBy: currentUser.$id,
-        isPrivate: roomData['isPrivate'] ?? false,
-        isScheduled: roomData['isScheduled'] ?? false,
-        scheduledDate: roomData['isScheduled'] == true ? roomData['scheduledDate'] : null,
+    try {
+      AppLogger().debug('🔐 Validating password for room: ${roomData['id']}');
+      AppLogger().debug('🔐 Entered password: ${enteredPassword.trim()}');
+      
+      final isValid = await _appwrite.validateDebateDiscussionRoomPassword(
+        roomId: roomData['id'] ?? '',
+        enteredPassword: enteredPassword.trim(),
       );
 
-      AppLogger().debug('Created room with ID: $roomId');
+      AppLogger().debug('🔐 Password validation result: $isValid');
 
-      if (mounted) {
+      if (!mounted) return;
+
+      if (isValid) {
+        AppLogger().debug('🔐 Password correct, navigating to room');
+        Navigator.of(context).pop(); // Close password dialog
+        _navigateToRoom(roomData);
+      } else {
+        AppLogger().debug('🔐 Password incorrect');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✅ Room created successfully!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-
-        // If it's a live room (not scheduled), navigate to it
-        if (!(roomData['isScheduled'] ?? false)) {
-          // Create properly structured room data for joining
-          final joinRoomData = {
-            'id': roomId,
-            'name': roomData['name'] ?? 'Untitled Room',
-            'moderator': currentUser.name,
-            'description': roomData['description'] ?? '',
-            'category': roomData['category'] ?? 'General',
-            'debateStyle': roomData['debateStyle'] ?? 'Discussion',
-          };
-          
-          // Small delay to show success message and ensure room is created
-          Future.delayed(const Duration(milliseconds: 1500), () {
-            _joinRoom(joinRoomData);
-          });
-        }
-      }
-
-      // Real-time will automatically refresh the list
-    } catch (e) {
-      AppLogger().error('Error creating room: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Error creating room: $e'),
+            content: Text('Incorrect password. Please try again.'),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
           ),
         );
       }
+    } catch (e) {
+      AppLogger().error('🔐 Error validating password: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error validating password: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
-  void _joinRoom(Map<String, dynamic> roomData) {
-    // Debug room data
-    AppLogger().debug('Joining room with data: ${roomData.toString()}');
-    AppLogger().debug('Room ID: ${roomData['id']}');
-    AppLogger().debug('Room Name: ${roomData['name']}');
+
+  void _showScheduledRoomInfoDialog(Map<String, dynamic> roomData) {
+    final scheduledDate = roomData['scheduledDate'] as String?;
+    DateTime? scheduleDateTime;
+    
+    if (scheduledDate != null) {
+      try {
+        scheduleDateTime = DateTime.parse(scheduledDate);
+      } catch (e) {
+        AppLogger().error('Error parsing scheduled date: $e');
+      }
+    }
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Scheduled Debate'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.schedule,
+              color: Colors.orange,
+              size: 48,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'This debate is scheduled to begin at:',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            if (scheduleDateTime != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                '${scheduleDateTime.day}/${scheduleDateTime.month}/${scheduleDateTime.year} at ${scheduleDateTime.hour == 0 ? 12 : (scheduleDateTime.hour > 12 ? scheduleDateTime.hour - 12 : scheduleDateTime.hour)}:${scheduleDateTime.minute.toString().padLeft(2, '0')} ${scheduleDateTime.hour >= 12 ? 'PM' : 'AM'}',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+            const SizedBox(height: 16),
+            const Text(
+              'You can enter the room now and wait for the debate to begin.',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _navigateToRoom(roomData);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Enter Room'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToRoom(Map<String, dynamic> roomData) {
+    AppLogger().debug('🚀 Navigating to room: ${roomData['name']}');
+    AppLogger().debug('🚀 Room ID: ${roomData['id']}');
+    AppLogger().debug('🚀 Room data: $roomData');
+    
+    if (!mounted) {
+      AppLogger().debug('🚀 Widget not mounted, skipping navigation');
+      return;
+    }
     
     // Show joining message
     ScaffoldMessenger.of(context).showSnackBar(
@@ -199,19 +343,29 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
       ),
     );
     
-    // Navigate to the actual debates & discussions screen with room data
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => DebatesDiscussionsScreen(
-            roomId: roomData['id'] ?? '',
-            roomName: roomData['name'] ?? 'Debate Room',
-            moderatorName: roomData['moderator'] ?? 'Unknown',
-          ),
+    // Navigate immediately to the actual debates & discussions screen with room data
+    AppLogger().debug('🚀 Pushing to DebatesDiscussionsScreen');
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => DebatesDiscussionsScreen(
+          roomId: roomData['id'] ?? '',
+          roomName: roomData['name'] ?? 'Debate Room',
+          moderatorName: roomData['moderator'] ?? 'Unknown',
+        ),
+      ),
+    );
+  }
+
+  void _showSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
         ),
       );
-    });
+    }
   }
   
 
@@ -363,6 +517,13 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
     final moderatorName = moderatorProfile?['name'] ?? 'Unknown Moderator';
     final moderatorAvatar = moderatorProfile?['avatar'];
 
+    // Debug room data to see what we're getting
+    AppLogger().debug('🏗️ Adapting room data: ${roomData.toString()}');
+    AppLogger().debug('🏗️ isScheduled: ${roomData['isScheduled']}');
+    AppLogger().debug('🏗️ scheduledDate: ${roomData['scheduledDate']}');
+    AppLogger().debug('🏗️ moderatorId: ${roomData['moderatorId']}');
+    AppLogger().debug('🏗️ createdBy: ${roomData['createdBy']}');
+
     return {
       'id': roomData['id'],
       'name': roomData['name'] ?? 'Untitled Room',
@@ -374,6 +535,10 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
       'participantCount': roomData['participantCount'] ?? 0,
       'isLive': roomData['status'] == 'active',
       'isPrivate': roomData['isPrivate'] ?? false,
+      'isScheduled': roomData['isScheduled'] ?? false,
+      'scheduledDate': roomData['scheduledDate'],
+      'moderatorId': roomData['moderatorId'],
+      'createdBy': roomData['createdBy'],
       'createdAt': roomData['createdAt'],
     };
   }

@@ -79,10 +79,43 @@ class DiscussionRoomCard extends StatelessWidget {
     final participantCount = roomData['participantCount'] ?? 0;
     final isLive = roomData['isLive'] ?? false;
     final isPrivate = roomData['isPrivate'] ?? false;
+    final isScheduled = roomData['isScheduled'] ?? false;
+    final scheduledDate = roomData['scheduledDate'];
     final moderatorAvatar = roomData['moderatorAvatar'];
+    
+    // Format scheduled date for display
+    String? formattedScheduledDate;
+    if (isScheduled && scheduledDate != null) {
+      try {
+        // Parse the scheduled date - it's stored as UTC but represents local time
+        final dateTime = DateTime.parse(scheduledDate.toString());
+        
+        // Debug timezone conversion
+        debugPrint('=== TIMEZONE DEBUG ===');
+        debugPrint('Raw scheduled date: $scheduledDate');
+        debugPrint('Parsed datetime: $dateTime');
+        debugPrint('Parsed as UTC: ${dateTime.toUtc()}');
+        debugPrint('Parsed as local: ${dateTime.toLocal()}');
+        debugPrint('Current time: ${DateTime.now()}');
+        debugPrint('Current time UTC: ${DateTime.now().toUtc()}');
+        debugPrint('System timezone offset: ${DateTime.now().timeZoneOffset}');
+        
+        // Format to 12-hour time
+        final hour12 = dateTime.hour == 0 ? 12 : (dateTime.hour > 12 ? dateTime.hour - 12 : dateTime.hour);
+        final amPm = dateTime.hour >= 12 ? 'PM' : 'AM';
+        formattedScheduledDate = '${dateTime.day}/${dateTime.month}/${dateTime.year} $hour12:${dateTime.minute.toString().padLeft(2, '0')} $amPm';
+        
+        debugPrint('Formatted time: $formattedScheduledDate');
+        debugPrint('=== END TIMEZONE DEBUG ===');
+      } catch (e) {
+        debugPrint('Error parsing scheduled date: $e');
+        debugPrint('Original value: $scheduledDate');
+      }
+    }
     
     // Debug print to check data
     debugPrint('Room Card - Moderator: $moderatorName, Avatar: $moderatorAvatar');
+    debugPrint('Room Card - Scheduled: $isScheduled, Date: $formattedScheduledDate');
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -99,7 +132,7 @@ class DiscussionRoomCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header with live indicator and privacy icon
+                // Header with live indicator, scheduled time, and privacy icon
                 Row(
                   children: [
                     if (isLive) ...[
@@ -117,6 +150,34 @@ class DiscussionRoomCard extends StatelessWidget {
                             Text(
                               'LIVE',
                               style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ] else if (isScheduled) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.orange,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.schedule,
+                              color: Colors.white,
+                              size: 12,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              formattedScheduledDate ?? 'SCHEDULED',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
