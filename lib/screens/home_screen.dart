@@ -12,6 +12,7 @@ import '../services/challenge_messaging_service.dart';
 import '../services/theme_service.dart';
 import '../widgets/arena_role_notification_modal.dart';
 import '../widgets/animated_fade_in.dart';
+import '../widgets/instant_message_bell.dart';
 import 'package:get_it/get_it.dart';
 import '../core/logging/app_logger.dart';
 
@@ -122,27 +123,32 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
+      backgroundColor: _themeService.isDarkMode 
+          ? const Color(0xFF2D2D2D)
+          : const Color(0xFFE8E8E8),
       body: Column(
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  _buildFeatureGrid(),
-                ],
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    _buildFeatureGrid(),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
       ),
     );
   }
 
   Widget _buildHeader() {
     return Container(
-      color: Colors.grey[50],
+      color: _themeService.isDarkMode 
+          ? const Color(0xFF2D2D2D)
+          : const Color(0xFFE8E8E8),
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
@@ -176,7 +182,36 @@ class _HomeScreenState extends State<HomeScreen> {
                     const Spacer(),
                     AnimatedScaleIn(
                       delay: const Duration(milliseconds: 300),
-                      child: _buildHeaderIcon(LucideIcons.bell, () {}),
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: _themeService.isDarkMode 
+                              ? const Color(0xFF3A3A3A)
+                              : const Color(0xFFF0F0F3),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: _themeService.isDarkMode 
+                                  ? Colors.white.withValues(alpha: 0.03)
+                                  : Colors.white.withValues(alpha: 0.7),
+                              offset: const Offset(-4, -4),
+                              blurRadius: 8,
+                            ),
+                            BoxShadow(
+                              color: _themeService.isDarkMode 
+                                  ? Colors.black.withValues(alpha: 0.5)
+                                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                              offset: const Offset(4, 4),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                        child: const InstantMessageBell(
+                          iconColor: Color(0xFFDC2626),
+                          iconSize: 24,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     AnimatedScaleIn(
@@ -201,20 +236,37 @@ class _HomeScreenState extends State<HomeScreen> {
                           width: 44,
                           height: 44,
                           decoration: BoxDecoration(
+                            color: _themeService.isDarkMode 
+                                ? const Color(0xFF3A3A3A)
+                                : const Color(0xFFF0F0F3),
                             shape: BoxShape.circle,
-                            color: Colors.black,
-                            border: Border.all(color: const Color(0xFF8B5CF6), width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: _themeService.isDarkMode 
+                                    ? Colors.white.withValues(alpha: 0.03)
+                                    : Colors.white.withValues(alpha: 0.7),
+                                offset: const Offset(-4, -4),
+                                blurRadius: 8,
+                              ),
+                              BoxShadow(
+                                color: _themeService.isDarkMode 
+                                    ? Colors.black.withValues(alpha: 0.5)
+                                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                                offset: const Offset(4, 4),
+                                blurRadius: 8,
+                              ),
+                            ],
                           ),
-                          child: _currentUserProfile?.avatar != null
-                              ? ClipOval(
-                                  child: Image.network(
+                          child: ClipOval(
+                            child: _currentUserProfile?.avatar != null
+                                ? Image.network(
                                     _currentUserProfile!.avatar!,
                                     fit: BoxFit.cover,
                                     errorBuilder: (context, error, stackTrace) =>
                                         _buildProfileInitials(),
-                                  ),
-                                )
-                              : _buildProfileInitials(),
+                                  )
+                                : _buildProfileInitials(),
+                          ),
                         ),
                       ),
                     ),
@@ -222,14 +274,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Welcome card
+              // Welcome card with Neumorphic design and scarlet outline
               AnimatedFadeIn(
                 delay: const Duration(milliseconds: 600),
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: _themeService.isDarkMode 
+                        ? const Color(0xFF3A3A3A)
+                        : const Color(0xFFF0F0F3),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: const Color(0xFFFF2400).withValues(alpha: 0.3),
@@ -237,52 +291,94 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.grey.withValues(alpha: 0.1),
-                        spreadRadius: 1,
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
+                        color: _themeService.isDarkMode 
+                            ? Colors.white.withValues(alpha: 0.03)
+                            : Colors.white.withValues(alpha: 0.8),
+                        offset: const Offset(-8, -8),
+                        blurRadius: 16,
+                      ),
+                      BoxShadow(
+                        color: _themeService.isDarkMode 
+                            ? Colors.black.withValues(alpha: 0.5)
+                            : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                        offset: const Offset(8, 8),
+                        blurRadius: 16,
                       ),
                     ],
                   ),
                   child: Column(
                     children: [
-                      // Judge's gavel icon
-                      const AnimatedScaleIn(
-                        delay: Duration(milliseconds: 800),
+                      // Arena logo with neumorphic circle - smaller
+                      AnimatedScaleIn(
+                        delay: const Duration(milliseconds: 800),
                         curve: Curves.elasticOut,
-                        child: Icon(
-                          Icons.gavel,
-                          size: 48,
-                          color: Color(0xFF8B5CF6),
+                        child: Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: _themeService.isDarkMode 
+                                ? const Color(0xFF3A3A3A)
+                                : const Color(0xFFF0F0F3),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: _themeService.isDarkMode 
+                                    ? Colors.white.withValues(alpha: 0.03)
+                                    : Colors.white.withValues(alpha: 0.7),
+                                offset: const Offset(-6, -6),
+                                blurRadius: 12,
+                              ),
+                              BoxShadow(
+                                color: _themeService.isDarkMode 
+                                    ? Colors.black.withValues(alpha: 0.5)
+                                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                                offset: const Offset(6, 6),
+                                blurRadius: 12,
+                              ),
+                            ],
+                          ),
+                          child: Image.asset(
+                            'assets/images/logo.png',
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(
+                                Icons.gavel,
+                                size: 40,
+                                color: Color(0xFF8B5CF6),
+                              );
+                            },
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       const AnimatedFadeIn(
                         delay: Duration(milliseconds: 1000),
                         child: Text(
                           'Welcome to The Arena',
                           style: TextStyle(
-                            fontSize: 20,
+                            fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF8B5CF6),
                           ),
                           textAlign: TextAlign.center,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       const AnimatedFadeIn(
                         delay: Duration(milliseconds: 1100),
                         child: Text(
                           'Where Debate is Royalty',
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: 14,
                             color: Color(0xFFFF2400),
                             fontStyle: FontStyle.italic,
                           ),
                           textAlign: TextAlign.center,
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
                       // Stats row
                       AnimatedSlideIn(
                         delay: const Duration(milliseconds: 1200),
@@ -332,20 +428,38 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Widget _buildHeaderIcon(IconData icon, VoidCallback onTap) {
+  Widget _buildHeaderIcon(IconData icon, VoidCallback onTap, {Color? iconColor}) {
+    final color = iconColor ?? const Color(0xFF8B5CF6);
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: 44,
         height: 44,
         decoration: BoxDecoration(
+          color: _themeService.isDarkMode 
+              ? const Color(0xFF3A3A3A)
+              : const Color(0xFFF0F0F3),
           shape: BoxShape.circle,
-          border: Border.all(color: const Color(0xFF8B5CF6), width: 2),
-          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: _themeService.isDarkMode 
+                  ? Colors.white.withValues(alpha: 0.03)
+                  : Colors.white.withValues(alpha: 0.7),
+              offset: const Offset(-4, -4),
+              blurRadius: 8,
+            ),
+            BoxShadow(
+              color: _themeService.isDarkMode 
+                  ? Colors.black.withValues(alpha: 0.5)
+                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+              offset: const Offset(4, 4),
+              blurRadius: 8,
+            ),
+          ],
         ),
         child: Icon(
           icon,
-          color: const Color(0xFF8B5CF6),
+          color: color,
           size: 24,
         ),
       ),
@@ -366,25 +480,54 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildStatColumn(String value, String label) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF8B5CF6),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode 
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E8E8),
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.6)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+            offset: const Offset(3, 3),
+            blurRadius: 6,
+            spreadRadius: -2,
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey[600],
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.02)
+                : Colors.white.withValues(alpha: 0.8),
+            offset: const Offset(-3, -3),
+            blurRadius: 6,
+            spreadRadius: -2,
           ),
-        ),
-      ],
+        ],
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF8B5CF6),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: _themeService.isDarkMode 
+                  ? Colors.white54
+                  : Colors.grey[600],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -399,21 +542,21 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: AnimatedScaleIn(
                 delay: const Duration(milliseconds: 1400),
-                child: _buildFeatureCard('assets/icons/TheArena.jpg', '', () => _navigateToArena()),
+                child: _buildFeatureCard('TheArena', 'The Arena', () => _navigateToArena()),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: AnimatedScaleIn(
                 delay: const Duration(milliseconds: 1500),
-                child: _buildFeatureCard('assets/icons/FindUsers.png', '', () => _navigateToFindUsers()),
+                child: _buildFeatureCard('FindUsers', 'Find Users', () => _navigateToFindUsers()),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: AnimatedScaleIn(
                 delay: const Duration(milliseconds: 1600),
-                child: _buildFeatureCard('assets/icons/OpenDiscussons.png', '', () => _navigateToCreateOpen()),
+                child: _buildFeatureCard('OpenDiscussions', 'Open Discussions', () => _navigateToCreateOpen()),
               ),
             ),
           ],
@@ -425,21 +568,21 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: AnimatedScaleIn(
                 delay: const Duration(milliseconds: 1700),
-                child: _buildFeatureCard('assets/icons/Debates&Discussions.png', '', () => _navigateToDebatesDiscussions()),
+                child: _buildFeatureCard('DebateTakeDiscuss', 'Debate, Take, Discuss', () => _navigateToDebatesDiscussions()),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: AnimatedScaleIn(
                 delay: const Duration(milliseconds: 1800),
-                child: _buildFeatureCard('assets/icons/DebateClubs.png', '', () => _navigateToDebateClubs()),
+                child: _buildFeatureCard('DebateClubs', 'Debate Clubs', () => _navigateToDebateClubs()),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: AnimatedScaleIn(
                 delay: const Duration(milliseconds: 1900),
-                child: _buildFeatureCard('assets/icons/Rankings.png', '', () => _showComingSoon()),
+                child: _buildFeatureCard('Rankings', 'Rankings', () => _showComingSoon()),
               ),
             ),
           ],
@@ -448,69 +591,119 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildFeatureCard(String imagePath, String title, VoidCallback onTap) {
+  Widget _buildFeatureCard(String feature, String title, VoidCallback onTap) {
+    // Map of feature icons to actual assets or Icons
+    final iconMap = {
+      'TheArena': Icons.gavel, // Use gavel icon for Arena
+      'FindUsers': 'assets/icons/find.png',
+      'OpenDiscussions': 'assets/icons/opendiscussions.png',
+      'DebateTakeDiscuss': 'assets/icons/debatetakesdiscuss.png',
+      'DebateClubs': 'assets/icons/debate clubs.png',
+      'Rankings': 'assets/icons/rank1.png',
+    };
+    
+    final iconAsset = iconMap[feature];
+    
     return AspectRatio(
       aspectRatio: 1.0,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF8B5CF6), width: 2),
-        ),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: Stack(
-              children: [
-                // Background image
-                Positioned.fill(
-                  child: Image.asset(
-                    imagePath,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      color: const Color(0xFF8B5CF6),
-                      child: const Icon(
-                        LucideIcons.image,
-                        size: 32,
-                        color: Colors.white,
-                      ),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            color: _themeService.isDarkMode 
+                ? const Color(0xFF3A3A3A)
+                : const Color(0xFFF0F0F3),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFFFF2400).withValues(alpha: 0.2),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _themeService.isDarkMode 
+                    ? Colors.white.withValues(alpha: 0.03)
+                    : Colors.white.withValues(alpha: 0.7),
+                offset: const Offset(-6, -6),
+                blurRadius: 12,
+              ),
+              BoxShadow(
+                color: _themeService.isDarkMode 
+                    ? Colors.black.withValues(alpha: 0.5)
+                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                offset: const Offset(6, 6),
+                blurRadius: 12,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: _themeService.isDarkMode 
+                      ? const Color(0xFF2D2D2D)
+                      : const Color(0xFFE8E8E8),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: _themeService.isDarkMode 
+                          ? Colors.black.withValues(alpha: 0.6)
+                          : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                      offset: const Offset(3, 3),
+                      blurRadius: 6,
+                      spreadRadius: -2,
                     ),
+                    BoxShadow(
+                      color: _themeService.isDarkMode 
+                          ? Colors.white.withValues(alpha: 0.02)
+                          : Colors.white.withValues(alpha: 0.8),
+                      offset: const Offset(-3, -3),
+                      blurRadius: 6,
+                      spreadRadius: -2,
+                    ),
+                  ],
+                ),
+                child: iconAsset == Icons.gavel
+                  ? const Icon(
+                      Icons.gavel,
+                      size: 32,
+                      color: Color(0xFF8B5CF6),
+                    )
+                  : Image.asset(
+                      iconAsset as String,
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.category_rounded,
+                          size: 32,
+                          color: Color(0xFF8B5CF6),
+                        );
+                      },
+                    ),
+              ),
+              const SizedBox(height: 12),
+              if (title.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _themeService.isDarkMode 
+                          ? Colors.white70
+                          : Colors.black87,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                // Title overlay at bottom
-                if (title.isNotEmpty)
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withValues(alpha: 0.7),
-                          ],
-                        ),
-                      ),
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            ],
           ),
         ),
       ),
@@ -551,3 +744,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+

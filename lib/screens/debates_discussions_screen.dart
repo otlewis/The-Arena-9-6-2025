@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:appwrite/appwrite.dart';
 import '../services/agora_service.dart';
 import '../services/appwrite_service.dart';
 import '../services/firebase_gift_service.dart';
+import '../services/instant_messaging_service.dart';
 // import '../services/chat_service.dart'; // Removed with new chat system
 import '../models/user_profile.dart';
 import '../models/gift.dart';
@@ -11,6 +13,7 @@ import '../models/timer_state.dart';
 import '../widgets/animated_fade_in.dart';
 import '../widgets/appwrite_timer_widget.dart';
 import '../widgets/live_chat_widget.dart';
+import '../widgets/user_profile_modal.dart';
 import '../models/chat_message.dart';
 import '../core/logging/app_logger.dart';
 
@@ -34,6 +37,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   final AgoraService _agoraService = AgoraService();
   final AppwriteService _appwrite = AppwriteService();
   final FirebaseGiftService _giftService = FirebaseGiftService();
+  final InstantMessagingService _imService = InstantMessagingService();
   // final ChatService _chatService = ChatService(); // Removed with new chat system
   
   // Room data
@@ -66,12 +70,15 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   // Real-time subscriptions - separate instances for reliability
   RealtimeSubscription? _participantsSubscription;
   RealtimeSubscription? _roomSubscription;
+  StreamSubscription? _unreadMessagesSubscription; // Instant messages subscription
+  int _unreadMessageCount = 0; // Track unread instant messages
 
   @override
   void initState() {
     super.initState();
     _initializeRoom();
     _loadGiftData();
+    _initializeInstantMessaging();
   }
 
   @override
@@ -79,12 +86,62 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     _isDisposing = true;
     _participantsSubscription?.close();
     _roomSubscription?.close();
+    _unreadMessagesSubscription?.cancel();
     // Don't await _leaveRoom() in dispose as it's synchronous
     // Just call it without awaiting to start the process
     _leaveRoom().catchError((error) {
       AppLogger().error('Error during disposal: $error');
     });
     super.dispose();
+  }
+
+  void _showUserProfileModal(UserProfile userProfile) {
+    if (_isDisposing || !mounted) return;
+    
+    // Determine user role based on their current status
+    String? userRole;
+    if (userProfile.id == _moderator?.id) {
+      userRole = 'moderator';
+    } else if (_speakerPanelists.any((speaker) => speaker.id == userProfile.id)) {
+      userRole = 'speaker';
+    } else if (_audienceMembers.any((member) => member.id == userProfile.id)) {
+      userRole = 'audience';
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => UserProfileModal(
+        userProfile: userProfile,
+        userRole: userRole,
+        currentUser: _currentUser,
+        onClose: () {
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
+        },
+      ),
+    );
+  }
+
+  Future<void> _initializeInstantMessaging() async {
+    try {
+      await _imService.initialize();
+      
+      // Subscribe to unread message count
+      _unreadMessagesSubscription = _imService
+          .getUnreadCountStream()
+          .listen((count) {
+        if (mounted && !_isDisposing) {
+          AppLogger().debug('📱 Debates: Unread count updated to $count');
+          setState(() => _unreadMessageCount = count);
+        }
+      });
+      
+      AppLogger().debug('📱 Instant messaging initialized in debates room');
+    } catch (e) {
+      AppLogger().error('❌ Failed to initialize instant messaging: $e');
+    }
   }
 
   Future<void> _initializeRoom() async {
@@ -967,6 +1024,55 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                   size: 14,
                 ),
               ],
+              // Instant Message notification bell
+              const SizedBox(width: 16),
+              GestureDetector(
+                onTap: () {
+                  // This will trigger the FloatingIMWidget to show
+                  AppLogger().debug('📱 Message notification bell tapped');
+                },
+                child: Stack(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Icon(
+                        LucideIcons.bell,
+                        color: Color(0xFF8B5CF6),
+                        size: 20,
+                      ),
+                    ),
+                    // Unread message badge
+                    if (_unreadMessageCount > 0)
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: Container(
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 1),
+                          ),
+                          child: Center(
+                            child: Text(
+                              _unreadMessageCount > 9 ? '9+' : '$_unreadMessageCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
               if (_isCurrentUserModerator) ...[ 
                 const SizedBox(width: 16),
                 GestureDetector(
@@ -1201,17 +1307,19 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
 
   Widget _buildVideoTile(UserProfile participant, {bool isModerator = false, bool showControls = false}) {
     return AnimatedFadeIn(
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.grey[800],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isModerator ? const Color(0xFF8B5CF6) : Colors.grey[700]!,
-            width: isModerator ? 2 : 1,
+      child: GestureDetector(
+        onTap: () => _showUserProfileModal(participant),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[800],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isModerator ? const Color(0xFF8B5CF6) : Colors.grey[700]!,
+              width: isModerator ? 2 : 1,
+            ),
           ),
-        ),
-        child: Stack(
-          children: [
+          child: Stack(
+            children: [
             // Video placeholder
             Container(
               width: double.infinity,
@@ -1325,6 +1433,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 
@@ -1454,20 +1563,22 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     final avatarSize = screenWidth < 360 ? 36.0 : 42.0;
     final fontSize = screenWidth < 360 ? 9.0 : 10.0;
     
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey[800]?.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.zero, // No border radius for flush look
-        border: Border.all(
-          color: Colors.grey[700]!,
-          width: 0.5,
+    return GestureDetector(
+      onTap: () => _showUserProfileModal(member),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.grey[800]?.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.zero, // No border radius for flush look
+          border: Border.all(
+            color: Colors.grey[700]!,
+            width: 0.5,
+          ),
         ),
-      ),
-      padding: EdgeInsets.zero, // No padding
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
+        padding: EdgeInsets.zero, // No padding
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
           Stack(
             alignment: Alignment.center,
             children: [
@@ -1506,6 +1617,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -3028,4 +3140,17 @@ Join the conversation now in the Arena app!
       ),
     );
   }
+
+  // void _showUserProfile(UserProfile userProfile, String? userRole) {
+  //   showDialog(
+  //     context: context,
+  //     barrierColor: Colors.transparent,
+  //     builder: (context) => UserProfileModal(
+  //       userProfile: userProfile,
+  //       userRole: userRole,
+  //       currentUser: _currentUser,
+  //       onClose: () => Navigator.of(context).pop(),
+  //     ),
+  //   );
+  // }
 }

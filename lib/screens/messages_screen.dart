@@ -5,6 +5,7 @@ import '../widgets/user_avatar.dart';
 import '../main.dart' show getIt;
 import 'dart:async';
 import '../core/logging/app_logger.dart';
+import '../services/theme_service.dart';
 
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({super.key});
@@ -17,6 +18,7 @@ class _MessagesScreenState extends State<MessagesScreen>
     with SingleTickerProviderStateMixin {
   late final ChallengeMessagingService _messagingService;
   late TabController _tabController;
+  final ThemeService _themeService = ThemeService();
   
   // Colors matching app theme
   static const Color scarletRed = Color(0xFFFF2400);
@@ -62,41 +64,110 @@ class _MessagesScreenState extends State<MessagesScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _themeService.isDarkMode 
+          ? const Color(0xFF2D2D2D)
+          : const Color(0xFFE8E8E8),
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Messages',
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: deepPurple,
+            color: _themeService.isDarkMode ? Colors.white : deepPurple,
           ),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: _themeService.isDarkMode 
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E8E8),
         elevation: 0,
         actions: [
-          IconButton(
-            onPressed: () => _messagingService.refresh(),
-            icon: const Icon(Icons.refresh, color: deepPurple),
-            tooltip: 'Refresh messages',
+          _buildNeumorphicIcon(
+            icon: Icons.search,
+            onTap: () {},
           ),
+          const SizedBox(width: 8),
+          _buildNeumorphicIcon(
+            icon: Icons.refresh,
+            onTap: () => _messagingService.refresh(),
+          ),
+          const SizedBox(width: 12),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: deepPurple,
-          unselectedLabelColor: Colors.grey,
-          indicatorColor: scarletRed,
-          tabs: const [
-            Tab(icon: Icon(Icons.flash_on), text: 'Challenges'),
-            Tab(icon: Icon(Icons.send), text: 'Sent'),
-            Tab(icon: Icon(Icons.history), text: 'History'),
-          ],
-        ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
-          _buildChallengesTab(),
-          _buildSentTab(),
-          _buildHistoryTab(),
+          // Tab bar container
+          Container(
+            margin: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _themeService.isDarkMode 
+                  ? const Color(0xFF3A3A3A)
+                  : const Color(0xFFF0F0F3),
+              borderRadius: BorderRadius.circular(25),
+              boxShadow: [
+                BoxShadow(
+                  color: _themeService.isDarkMode 
+                      ? Colors.white.withValues(alpha: 0.03)
+                      : Colors.white.withValues(alpha: 0.8),
+                  offset: const Offset(-4, -4),
+                  blurRadius: 8,
+                ),
+                BoxShadow(
+                  color: _themeService.isDarkMode 
+                      ? Colors.black.withValues(alpha: 0.5)
+                      : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                  offset: const Offset(4, 4),
+                  blurRadius: 8,
+                ),
+              ],
+            ),
+            child: TabBar(
+              controller: _tabController,
+              labelColor: accentPurple,
+              unselectedLabelColor: _themeService.isDarkMode 
+                  ? Colors.white54
+                  : Colors.grey,
+              indicatorSize: TabBarIndicatorSize.tab,
+              indicator: BoxDecoration(
+                borderRadius: BorderRadius.circular(25),
+                color: _themeService.isDarkMode 
+                    ? const Color(0xFF2D2D2D)
+                    : const Color(0xFFE8E8E8),
+                boxShadow: [
+                  BoxShadow(
+                    color: _themeService.isDarkMode 
+                        ? Colors.black.withValues(alpha: 0.6)
+                        : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                    offset: const Offset(2, 2),
+                    blurRadius: 4,
+                    spreadRadius: -1,
+                  ),
+                  BoxShadow(
+                    color: _themeService.isDarkMode 
+                        ? Colors.white.withValues(alpha: 0.02)
+                        : Colors.white.withValues(alpha: 0.8),
+                    offset: const Offset(-2, -2),
+                    blurRadius: 4,
+                    spreadRadius: -1,
+                  ),
+                ],
+              ),
+              tabs: const [
+                Tab(icon: Icon(Icons.flash_on), text: 'Challenges'),
+                Tab(icon: Icon(Icons.send), text: 'Sent'),
+                Tab(icon: Icon(Icons.history), text: 'History'),
+              ],
+            ),
+          ),
+          // Tab view content
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildChallengesTab(),
+                _buildSentTab(),
+                _buildHistoryTab(),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -210,10 +281,38 @@ class _MessagesScreenState extends State<MessagesScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            icon,
-            size: 80,
-            color: Colors.grey[300],
+          Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              color: _themeService.isDarkMode 
+                  ? const Color(0xFF3A3A3A)
+                  : const Color(0xFFF0F0F3),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: _themeService.isDarkMode 
+                      ? Colors.white.withValues(alpha: 0.03)
+                      : Colors.white.withValues(alpha: 0.7),
+                  offset: const Offset(-8, -8),
+                  blurRadius: 16,
+                ),
+                BoxShadow(
+                  color: _themeService.isDarkMode 
+                      ? Colors.black.withValues(alpha: 0.5)
+                      : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                  offset: const Offset(8, 8),
+                  blurRadius: 16,
+                ),
+              ],
+            ),
+            child: Icon(
+              icon,
+              size: 60,
+              color: _themeService.isDarkMode 
+                  ? Colors.white24
+                  : Colors.grey[400],
+            ),
           ),
           const SizedBox(height: 24),
           Text(
@@ -221,7 +320,9 @@ class _MessagesScreenState extends State<MessagesScreen>
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w600,
-              color: Colors.grey[600],
+              color: _themeService.isDarkMode 
+                  ? Colors.white70
+                  : Colors.grey[700],
             ),
           ),
           const SizedBox(height: 8),
@@ -229,7 +330,9 @@ class _MessagesScreenState extends State<MessagesScreen>
             subtitle,
             style: TextStyle(
               fontSize: 16,
-              color: Colors.grey[500],
+              color: _themeService.isDarkMode 
+                  ? Colors.white54
+                  : Colors.grey[600],
               height: 1.4,
             ),
             textAlign: TextAlign.center,
@@ -244,23 +347,41 @@ class _MessagesScreenState extends State<MessagesScreen>
     final isExpiringSoon = challenge.expiresAt.difference(DateTime.now()).inHours < 2;
     final isDismissed = challenge.isDismissed;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: isDismissed ? 1 : 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16, left: 16, right: 16),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode 
+            ? const Color(0xFF3A3A3A)
+            : const Color(0xFFF0F0F3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
           color: isDismissed 
-              ? Colors.grey.shade300
+              ? Colors.grey.withValues(alpha: 0.2)
               : isExpiringSoon 
-                  ? Colors.orange.shade300
+                  ? Colors.orange.withValues(alpha: 0.3)
                   : scarletRed.withValues(alpha: 0.2),
-          width: isDismissed ? 1 : 2,
+          width: 1.5,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.white.withValues(alpha: 0.8),
+            offset: const Offset(-6, -6),
+            blurRadius: 12,
+          ),
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.5)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+            offset: const Offset(6, 6),
+            blurRadius: 12,
+          ),
+        ],
       ),
       child: InkWell(
         onTap: () => _showChallengeModal(challenge),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -355,11 +476,28 @@ class _MessagesScreenState extends State<MessagesScreen>
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: isDismissed ? Colors.grey[50] : lightScarlet,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isDismissed ? Colors.grey[200]! : scarletRed.withValues(alpha: 0.2),
-                  ),
+                  color: _themeService.isDarkMode 
+                      ? const Color(0xFF2D2D2D)
+                      : const Color(0xFFE8E8E8),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _themeService.isDarkMode 
+                          ? Colors.black.withValues(alpha: 0.6)
+                          : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                      offset: const Offset(3, 3),
+                      blurRadius: 6,
+                      spreadRadius: -2,
+                    ),
+                    BoxShadow(
+                      color: _themeService.isDarkMode 
+                          ? Colors.white.withValues(alpha: 0.02)
+                          : Colors.white.withValues(alpha: 0.8),
+                      offset: const Offset(-3, -3),
+                      blurRadius: 6,
+                      spreadRadius: -2,
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -450,41 +588,32 @@ class _MessagesScreenState extends State<MessagesScreen>
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton.icon(
+                    child: _buildNeumorphicButton(
                       onPressed: () => _respondToChallenge(challenge, 'declined'),
-                      icon: const Icon(Icons.close, size: 16),
-                      label: const Text('Decline'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: isDismissed ? Colors.grey[600] : Colors.grey[700],
-                        side: BorderSide(color: isDismissed ? Colors.grey[300]! : Colors.grey[400]!),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
+                      icon: Icons.close,
+                      label: 'Decline',
+                      color: Colors.grey,
+                      isDisabled: isDismissed,
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: ElevatedButton.icon(
+                    child: _buildNeumorphicButton(
                       onPressed: () => _showChallengeModal(challenge),
-                      icon: const Icon(Icons.visibility, size: 16),
-                      label: const Text('View'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isDismissed ? Colors.grey[400] : deepPurple,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
+                      icon: Icons.visibility,
+                      label: 'View',
+                      color: deepPurple,
+                      isDisabled: isDismissed,
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: ElevatedButton.icon(
+                    child: _buildNeumorphicButton(
                       onPressed: () => _respondToChallenge(challenge, 'accepted'),
-                      icon: const Icon(Icons.flash_on, size: 16),
-                      label: const Text('Accept'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isDismissed ? Colors.grey[500] : scarletRed,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
+                      icon: Icons.flash_on,
+                      label: 'Accept',
+                      color: scarletRed,
+                      isDisabled: isDismissed,
                     ),
                   ),
                 ],
@@ -806,12 +935,29 @@ class _MessagesScreenState extends State<MessagesScreen>
 
 
   Widget _buildDeclinedNotificationCard(ChallengeMessage notification) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode 
+            ? const Color(0xFF3A3A3A)
+            : const Color(0xFFF0F0F3),
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey[300]!, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.white.withValues(alpha: 0.7),
+            offset: const Offset(-4, -4),
+            blurRadius: 8,
+          ),
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.5)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+            offset: const Offset(4, 4),
+            blurRadius: 8,
+          ),
+        ],
       ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -845,7 +991,107 @@ class _MessagesScreenState extends State<MessagesScreen>
                 ],
               ),
             ),
-            const Icon(Icons.info_outline, color: Colors.grey),
+            Icon(Icons.info_outline, color: _themeService.isDarkMode ? Colors.white54 : Colors.grey),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNeumorphicIcon({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: _themeService.isDarkMode 
+              ? const Color(0xFF3A3A3A)
+              : const Color(0xFFF0F0F3),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: _themeService.isDarkMode 
+                  ? Colors.white.withValues(alpha: 0.03)
+                  : Colors.white.withValues(alpha: 0.7),
+              offset: const Offset(-3, -3),
+              blurRadius: 6,
+            ),
+            BoxShadow(
+              color: _themeService.isDarkMode 
+                  ? Colors.black.withValues(alpha: 0.5)
+                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+              offset: const Offset(3, 3),
+              blurRadius: 6,
+            ),
+          ],
+        ),
+        child: Icon(
+          icon,
+          size: 20,
+          color: _themeService.isDarkMode ? Colors.white70 : deepPurple,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNeumorphicButton({
+    required VoidCallback onPressed,
+    required IconData icon,
+    required String label,
+    required Color color,
+    bool isDisabled = false,
+  }) {
+    return GestureDetector(
+      onTap: isDisabled ? null : onPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: _themeService.isDarkMode 
+              ? const Color(0xFF3A3A3A)
+              : const Color(0xFFF0F0F3),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: isDisabled ? [] : [
+            BoxShadow(
+              color: _themeService.isDarkMode 
+                  ? Colors.white.withValues(alpha: 0.03)
+                  : Colors.white.withValues(alpha: 0.7),
+              offset: const Offset(-3, -3),
+              blurRadius: 6,
+            ),
+            BoxShadow(
+              color: _themeService.isDarkMode 
+                  ? Colors.black.withValues(alpha: 0.5)
+                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+              offset: const Offset(3, 3),
+              blurRadius: 6,
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isDisabled 
+                  ? (_themeService.isDarkMode ? Colors.white24 : Colors.grey)
+                  : color,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: isDisabled 
+                    ? (_themeService.isDarkMode ? Colors.white24 : Colors.grey)
+                    : color,
+              ),
+            ),
           ],
         ),
       ),

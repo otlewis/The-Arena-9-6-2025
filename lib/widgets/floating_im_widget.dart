@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/instant_message.dart';
 import '../models/user_profile.dart';
-import '../services/instant_messaging_service.dart';
+import '../services/agora_instant_messaging_service.dart';
 import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
+import 'modern_chat_interface.dart';
 
 /// Floating instant messaging widget that appears globally
 class FloatingIMWidget extends StatefulWidget {
@@ -21,41 +22,44 @@ class FloatingIMWidget extends StatefulWidget {
 }
 
 class _FloatingIMWidgetState extends State<FloatingIMWidget>
-    with SingleTickerProviderStateMixin {
-  final InstantMessagingService _imService = InstantMessagingService();
+    with TickerProviderStateMixin {
+  final AgoraInstantMessagingService _imService = AgoraInstantMessagingService();
   final AppwriteService _appwriteService = AppwriteService();
   
   // Animation controllers
   late AnimationController _animationController;
-  late Animation<double> _scaleAnimation;
+  late AnimationController _pulseController;
   late Animation<double> _rotateAnimation;
+  late Animation<double> _pulseAnimation;
   
   // State variables
   bool _isExpanded = false;
-  bool _showConversations = true;
-  String? _activeConversationId;
   UserProfile? _currentUser;
-  UserProfile? _activeRecipient;
+  bool _isVisible = true; // Allow users to hide the widget
+  bool _showNotificationPulse = false; // Pulse animation for new messages
+  
+  // Position variables for draggable functionality
+  double _buttonX = 20;
+  double _buttonY = 150;
   
   // Streams
   StreamSubscription<List<Conversation>>? _conversationsSubscription;
-  StreamSubscription<List<InstantMessage>>? _messagesSubscription;
   StreamSubscription<int>? _unreadCountSubscription;
   
   // Data
   List<Conversation> _conversations = [];
-  List<InstantMessage> _messages = [];
   int _unreadCount = 0;
   
-  // Controllers
-  final TextEditingController _messageController = TextEditingController();
-  final ScrollController _messagesScrollController = ScrollController();
-  final FocusNode _messageFocusNode = FocusNode();
+  // Notification cooldown
+  DateTime? _lastNotificationTime;
+  
   
   // Search
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   List<UserProfile> _searchResults = [];
   bool _isSearching = false;
+  bool _isSearchLoading = false;
   
   @override
   void initState() {
@@ -70,13 +74,10 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
       vsync: this,
     );
     
-    _scaleAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutBack,
-    ));
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    );
     
     _rotateAnimation = Tween<double>(
       begin: 0.0,
@@ -85,15 +86,25 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
       parent: _animationController,
       curve: Curves.easeInOut,
     ));
+    
+    _pulseAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.3,
+    ).animate(CurvedAnimation(
+      parent: _pulseController,
+      curve: Curves.easeInOut,
+    ));
   }
 
   Future<void> _initializeIM() async {
     try {
       // Get current user
       final user = await _appwriteService.getCurrentUser();
-      if (user != null) {
+      if (user != null && mounted) {
         final userProfile = await _appwriteService.getUserProfile(user.$id);
-        setState(() => _currentUser = userProfile);
+        if (mounted) {
+          setState(() => _currentUser = userProfile);
+        }
       }
       
       // Initialize IM service
@@ -103,136 +114,297 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
       _conversationsSubscription = _imService
           .getConversationsStream()
           .listen((conversations) {
-        setState(() => _conversations = conversations);
+        if (mounted) {
+          setState(() => _conversations = conversations);
+        }
       });
       
       // Subscribe to unread count
       _unreadCountSubscription = _imService
           .getUnreadCountStream()
           .listen((count) {
-        setState(() => _unreadCount = count);
+        if (mounted) {
+          final previousCount = _unreadCount;
+          setState(() => _unreadCount = count);
+          
+          AppLogger().info('📱 FloatingIM: Unread count updated from $previousCount to $count');
+          
+          // If we have new unread messages, trigger pulse animation
+          if (count > previousCount && count > 0) {
+            final now = DateTime.now();
+            // Only trigger notification if it's been more than 2 seconds since last notification
+            if (_lastNotificationTime == null || 
+                now.difference(_lastNotificationTime!).inSeconds >= 2) {
+              AppLogger().info('📱 FloatingIM: Triggering new message notification');
+              _lastNotificationTime = now;
+              _triggerNewMessageNotification();
+            } else {
+              AppLogger().info('📱 FloatingIM: Skipping notification due to cooldown');
+            }
+          }
+        }
       });
     } catch (e) {
       AppLogger().error('Failed to initialize floating IM: $e');
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        widget.child,
-        Positioned(
-          bottom: MediaQuery.of(context).padding.bottom + 80,
-          right: 20,
-          child: _buildFloatingButton(),
-        ),
-        if (_isExpanded) _buildExpandedView(),
-      ],
-    );
+  void _triggerNewMessageNotification() {
+    if (!mounted) return;
+    
+    setState(() => _showNotificationPulse = true);
+    
+    // Start pulse animation
+    _pulseController.repeat(reverse: true);
+    
+    // NO AUTO-OPENING - Let users decide if they want to view the message
+    // This gives users control over their conversation flow
+    
+    // Stop pulse after 5 seconds
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted) {
+        _pulseController.stop();
+        setState(() => _showNotificationPulse = false);
+      }
+    });
+    
+    AppLogger().info('💬 New message notification triggered - showing banner only (no auto-open)');
   }
 
-  Widget _buildFloatingButton() {
-    return GestureDetector(
-      onTap: _toggleExpanded,
-      child: Container(
-        width: 60,
-        height: 60,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: const LinearGradient(
-            colors: [Color(0xFF8B5CF6), Color(0xFF6366F1)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF8B5CF6).withValues(alpha: 0.4),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            RotationTransition(
-              turns: _rotateAnimation,
-              child: Icon(
-                _isExpanded ? Icons.close : Icons.chat_bubble,
-                color: Colors.white,
-                size: 28,
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: Stack(
+        children: [
+          widget.child,
+          if (_isVisible) ...[
+            Positioned(
+              bottom: _buttonY,
+              right: _buttonX,
+              child: RepaintBoundary(
+                child: Draggable(
+                  feedback: _buildFloatingButton(),
+                  childWhenDragging: Container(), // Hide original during drag
+                  onDragEnd: (details) {
+                    setState(() {
+                      // Calculate new position relative to screen edges
+                      final screenWidth = MediaQuery.of(context).size.width;
+                      final screenHeight = MediaQuery.of(context).size.height;
+                      
+                      // Convert global position to bottom-right coordinates
+                      _buttonX = screenWidth - details.offset.dx - 120; // 120 is button width
+                      _buttonY = screenHeight - details.offset.dy - 120; // 120 is button height
+                      
+                      // Ensure button stays within screen bounds
+                      _buttonX = _buttonX.clamp(20.0, screenWidth - 140);
+                      _buttonY = _buttonY.clamp(100.0, screenHeight - 200);
+                    });
+                  },
+                  child: _buildFloatingButton(),
+                ),
               ),
             ),
-            if (_unreadCount > 0 && !_isExpanded)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
-                  child: Center(
-                    child: Text(
-                      _unreadCount > 9 ? '9+' : '$_unreadCount',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
+          ],
+          // Show restore button when hidden
+          if (!_isVisible)
+            Positioned(
+              bottom: 20,
+              right: 20,
+              child: RepaintBoundary(
+                child: GestureDetector(
+                  onTap: () => setState(() => _isVisible = true),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: _unreadCount > 0 
+                        ? const Color(0xFF8B5CF6) 
+                        : Colors.grey[700],
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: _unreadCount > 0 
+                            ? const Color(0xFF8B5CF6).withValues(alpha: 0.4)
+                            : Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: _unreadCount > 0
+                        ? Text(
+                            _unreadCount > 9 ? '9+' : '$_unreadCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.message,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                     ),
                   ),
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
 
-  Widget _buildExpandedView() {
-    return Positioned(
-      bottom: MediaQuery.of(context).padding.bottom + 150,
-      right: 20,
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        alignment: Alignment.bottomRight,
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
-            width: MediaQuery.of(context).size.width * 0.9,
-            height: MediaQuery.of(context).size.height * 0.7,
-            constraints: const BoxConstraints(
-              maxWidth: 350,
-              maxHeight: 500,
-            ),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.4),
-                  blurRadius: 16,
-                  offset: const Offset(0, 8),
+  Widget _buildFloatingButton() {
+    return Stack(
+      children: [
+        GestureDetector(
+          onTap: _toggleExpanded,
+          behavior: HitTestBehavior.deferToChild,
+          child: AnimatedBuilder(
+            animation: _showNotificationPulse ? _pulseAnimation : _animationController,
+            builder: (context, child) {
+              return Transform.scale(
+                scale: _showNotificationPulse ? _pulseAnimation.value : 1.0,
+                child: Container(
+                  width: 160,
+                  height: 160,
+                  decoration: _isExpanded ? BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF8B5CF6), Color(0xFF6366F1)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.4),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ) : const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.transparent,
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      RotationTransition(
+                        turns: _rotateAnimation,
+                        child: _isExpanded 
+                          ? const Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 23,
+                            )
+                          : Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                // Scarlet background
+                                Icon(
+                                  Icons.chat_bubble_rounded,
+                                  color: Color(0xFFFF2400), // Scarlet red background
+                                  size: 48,
+                                ),
+                                // Purple lines inside
+                                Icon(
+                                  Icons.chat_bubble_outline_rounded, // Outline version for purple lines
+                                  color: Color(0xFF8B5CF6), // Purple lines inside
+                                  size: 48,
+                                ),
+                              ],
+                            ),
+                      ),
+                      if (_unreadCount > 0 && !_isExpanded)
+                        Positioned(
+                          top: 20,
+                          right: 20,
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: Center(
+                              child: Text(
+                                _unreadCount > 9 ? '9+' : '$_unreadCount',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-            child: Column(
-              children: [
-                _buildHeader(),
-                Expanded(
-                  child: _showConversations
-                      ? _buildConversationsList()
-                      : _buildChatView(),
-                ),
-              ],
-            ),
+              );
+            },
           ),
         ),
+        // Hide button (only show when not expanded)
+        if (!_isExpanded)
+          Positioned(
+            top: 15,
+            right: 15,
+            child: GestureDetector(
+              onTap: () {
+                setState(() => _isVisible = false);
+              },
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: Colors.grey[800],
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1),
+                ),
+                child: const Icon(
+                  Icons.close,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildConversationsBottomSheet() {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.85,
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+      ),
+      child: Column(
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 8),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey[600],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          _buildHeader(),
+          Expanded(
+            child: _buildConversationsList(),
+          ),
+        ],
       ),
     );
   }
@@ -253,32 +425,28 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
       ),
       child: Row(
         children: [
-          if (!_showConversations)
-            IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: _backToConversations,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
           const SizedBox(width: 8),
-          Expanded(
+          const Expanded(
             child: Text(
-              _showConversations
-                  ? 'Messages'
-                  : _activeRecipient?.name ?? 'Chat',
-              style: const TextStyle(
+              'Messages',
+              style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
             ),
           ),
-          if (_showConversations)
-            IconButton(
-              icon: const Icon(Icons.person_add, color: Colors.white),
-              onPressed: () => setState(() => _isSearching = true),
-              tooltip: 'Start new conversation',
-            ),
+          IconButton(
+            icon: const Icon(Icons.person_add, color: Colors.white),
+            onPressed: () {
+              setState(() => _isSearching = true);
+              // Ensure keyboard appears after the widget rebuilds
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _searchFocusNode.requestFocus();
+              });
+            },
+            tooltip: 'Start new conversation',
+          ),
         ],
       ),
     );
@@ -289,41 +457,72 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
       return _buildUserSearch();
     }
 
-    if (_conversations.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey[600]),
-            const SizedBox(height: 16),
-            Text(
-              'No conversations yet',
-              style: TextStyle(color: Colors.grey[400], fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            ElevatedButton.icon(
-              onPressed: () => setState(() => _isSearching = true),
-              icon: const Icon(Icons.person_add),
-              label: const Text('Start a conversation'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF8B5CF6),
-                foregroundColor: Colors.white,
+    return Column(
+      children: [
+        // Search bar always visible
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: InkWell(
+            onTap: () {
+              setState(() => _isSearching = true);
+              // Ensure keyboard appears after the widget rebuilds
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _searchFocusNode.requestFocus();
+              });
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A2A2A),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.search, color: Colors.grey[500], size: 20),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Search for users...',
+                    style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(8),
-      itemCount: _conversations.length,
-      itemBuilder: (context, index) {
-        final conversation = _conversations[index];
-        final otherUser = conversation.participants.values.first;
         
-        return _buildConversationTile(conversation, otherUser);
-      },
+        // Conversations list
+        Expanded(
+          child: _conversations.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey[600]),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No conversations yet',
+                      style: TextStyle(color: Colors.grey[400], fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Search for users above to start chatting',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                    ),
+                  ],
+                ),
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.all(8),
+                itemCount: _conversations.length,
+                itemBuilder: (context, index) {
+                  final conversation = _conversations[index];
+                  final otherUser = conversation.participants.values.first;
+                  
+                  return _buildConversationTile(conversation, otherUser);
+                },
+              ),
+        ),
+      ],
     );
   }
 
@@ -340,91 +539,22 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                // Avatar
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF8B5CF6),
-                    image: otherUser.avatar != null
-                        ? DecorationImage(
-                            image: NetworkImage(otherUser.avatar!),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
-                  ),
-                  child: otherUser.avatar == null
-                      ? Center(
-                          child: Text(
-                            otherUser.username[0].toUpperCase(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        )
-                      : null,
+                // Optimized Avatar
+                _ConversationAvatar(
+                  user: otherUser,
+                  size: 48,
                 ),
                 const SizedBox(width: 12),
                 // Content
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              otherUser.username,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            _formatLastMessageTime(conversation.lastMessageTime),
-                            style: TextStyle(
-                              color: Colors.grey[500],
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        conversation.lastMessage ?? '',
-                        style: TextStyle(
-                          color: Colors.grey[400],
-                          fontSize: 14,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                  child: _ConversationContent(
+                    conversation: conversation,
+                    otherUser: otherUser,
                   ),
                 ),
                 // Unread badge
                 if (conversation.unreadCount > 0)
-                  Container(
-                    margin: const EdgeInsets.only(left: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${conversation.unreadCount}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
+                  _UnreadBadge(count: conversation.unreadCount),
               ],
             ),
           ),
@@ -441,21 +571,37 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
           padding: const EdgeInsets.all(16),
           child: TextField(
             controller: _searchController,
+            focusNode: _searchFocusNode,
+            autofocus: true,
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
-              hintText: 'Search users...',
+              hintText: 'Search by username...',
               hintStyle: TextStyle(color: Colors.grey[500]),
               prefixIcon: const Icon(Icons.search, color: Colors.grey),
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.close, color: Colors.grey),
-                onPressed: () {
-                  setState(() {
-                    _isSearching = false;
-                    _searchController.clear();
-                    _searchResults.clear();
-                  });
-                },
-              ),
+              suffixIcon: _isSearchLoading 
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFF8B5CF6),
+                      ),
+                    ),
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.close, color: Colors.grey),
+                    onPressed: () {
+                      _searchFocusNode.unfocus(); // Dismiss keyboard
+                      setState(() {
+                        _isSearching = false;
+                        _searchController.clear();
+                        _searchResults.clear();
+                        _isSearchLoading = false;
+                      });
+                    },
+                  ),
               filled: true,
               fillColor: const Color(0xFF2A2A2A),
               border: OutlineInputBorder(
@@ -466,16 +612,54 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
             onChanged: _performUserSearch,
           ),
         ),
-        // Search results
+        // Search results or empty state
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _searchResults.length,
-            itemBuilder: (context, index) {
-              final user = _searchResults[index];
-              return _buildUserSearchTile(user);
-            },
-          ),
+          child: _searchController.text.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.person_search, size: 64, color: Colors.grey[600]),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Search for users to start messaging',
+                      style: TextStyle(color: Colors.grey[400], fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Type a username above',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                    ),
+                  ],
+                ),
+              )
+            : _searchResults.isEmpty && !_isSearchLoading
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.search_off, size: 64, color: Colors.grey[600]),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No users found',
+                        style: TextStyle(color: Colors.grey[400], fontSize: 16),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Try a different search term',
+                        style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: _searchResults.length,
+                  itemBuilder: (context, index) {
+                    final user = _searchResults[index];
+                    return _buildUserSearchTile(user);
+                  },
+                ),
         ),
       ],
     );
@@ -494,32 +678,10 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                // Avatar
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF8B5CF6),
-                    image: user.avatar != null
-                        ? DecorationImage(
-                            image: NetworkImage(user.avatar!),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
-                  ),
-                  child: user.avatar == null
-                      ? Center(
-                          child: Text(
-                            user.name[0].toUpperCase(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        )
-                      : null,
+                // Optimized Avatar for search
+                _SearchUserAvatar(
+                  user: user,
+                  size: 40,
                 ),
                 const SizedBox(width: 12),
                 // Username
@@ -540,233 +702,192 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
     );
   }
 
-  Widget _buildChatView() {
-    return Column(
-      children: [
-        // Messages list
-        Expanded(
-          child: _messages.isEmpty
-              ? Center(
-                  child: Text(
-                    'Start a conversation!',
-                    style: TextStyle(color: Colors.grey[500]),
-                  ),
-                )
-              : ListView.builder(
-                  controller: _messagesScrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _messages.length,
-                  itemBuilder: (context, index) {
-                    final message = _messages[index];
-                    final isMe = message.senderId == _currentUser?.id;
-                    return _buildMessageBubble(message, isMe);
-                  },
-                ),
-        ),
-        // Message input
-        _buildMessageInput(),
-      ],
-    );
-  }
-
-  Widget _buildMessageBubble(InstantMessage message, bool isMe) {
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.7,
-        ),
-        decoration: BoxDecoration(
-          color: isMe ? const Color(0xFF8B5CF6) : const Color(0xFF3A3A3A),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              message.content,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _formatMessageTime(message.timestamp),
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
-                fontSize: 11,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMessageInput() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2A2A2A),
-        border: Border(
-          top: BorderSide(color: Colors.grey[800]!),
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _messageController,
-              focusNode: _messageFocusNode,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-              maxLines: 1,
-              decoration: InputDecoration(
-                hintText: 'Type a message...',
-                hintStyle: TextStyle(color: Colors.grey[500], fontSize: 14),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-              ),
-              onSubmitted: (_) => _sendMessage(),
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            onPressed: _sendMessage,
-            icon: const Icon(Icons.send, color: Color(0xFF8B5CF6)),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-          ),
-        ],
-      ),
-    );
-  }
 
   void _toggleExpanded() {
-    setState(() => _isExpanded = !_isExpanded);
-    
     if (_isExpanded) {
-      _animationController.forward();
+      // If currently expanded (bottom sheet is showing), close it
+      Navigator.of(context).pop();
+      setState(() => _isExpanded = false);
     } else {
-      _animationController.reverse();
+      // Show bottom sheet with conversations
+      showConversationsBottomSheet();
     }
     
     HapticFeedback.lightImpact();
   }
+  
+  void showConversationsBottomSheet() {
+    setState(() => _isExpanded = true);
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _buildConversationsBottomSheet(),
+    ).then((_) {
+      // Reset state when bottom sheet is dismissed
+      if (mounted) {
+        setState(() => _isExpanded = false);
+      }
+    });
+  }
 
   void _openConversation(Conversation conversation, UserInfo otherUser) async {
-    setState(() {
-      _showConversations = false;
-      _activeConversationId = conversation.id;
-      _activeRecipient = UserProfile(
-        id: otherUser.id,
-        name: otherUser.username,
-        email: '',
-        avatar: otherUser.avatar,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-    });
+    // Close the current bottom sheet first
+    Navigator.of(context).pop();
+    setState(() => _isExpanded = false);
+    
+    // Convert UserInfo to UserProfile for the bottom sheet
+    final otherUserProfile = UserProfile(
+      id: otherUser.id,
+      name: otherUser.username,
+      email: '',
+      avatar: otherUser.avatar,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
 
-    // Subscribe to messages
-    _messagesSubscription?.cancel();
-    _messagesSubscription = _imService
-        .getMessagesStream(conversation.id)
-        .listen((messages) {
-      setState(() => _messages = messages);
-      _scrollToBottom();
-    });
+    // Show the new modern chat interface
+    if (_currentUser != null && mounted) {
+      showModernChatInterface(
+        context,
+        currentUser: _currentUser!,
+        otherUser: otherUserProfile,
+      );
+    }
 
     // Mark messages as read
     await _imService.markMessagesAsRead(conversation.id);
   }
 
-  void _backToConversations() {
-    setState(() {
-      _showConversations = true;
-      _activeConversationId = null;
-      _activeRecipient = null;
-      _messages.clear();
-    });
-    
-    _messagesSubscription?.cancel();
-  }
 
+  Timer? _searchDebouncer;
+  
   void _performUserSearch(String query) async {
-    if (query.isEmpty) {
-      setState(() => _searchResults.clear());
+    // Cancel previous timer
+    _searchDebouncer?.cancel();
+    
+    if (query.trim().isEmpty) {
+      setState(() {
+        _searchResults.clear();
+        _isSearchLoading = false;
+      });
       return;
     }
-
-    final results = await _imService.searchUsers(query);
-    setState(() => _searchResults = results);
+    
+    // Show loading state
+    setState(() => _isSearchLoading = true);
+    
+    // Debounce the search
+    _searchDebouncer = Timer(const Duration(milliseconds: 300), () async {
+      try {
+        AppLogger().info('🔍 Searching for users: $query');
+        final results = await _imService.searchUsers(query);
+        
+        if (mounted) {
+          setState(() {
+            _searchResults = results;
+            _isSearchLoading = false;
+          });
+          
+          AppLogger().info('🔍 Found ${results.length} users matching "$query"');
+        }
+      } catch (e) {
+        AppLogger().error('Failed to search users: $e');
+        if (mounted) {
+          setState(() {
+            _searchResults = [];
+            _isSearchLoading = false;
+          });
+        }
+      }
+    });
   }
 
   void _startNewConversation(UserProfile user) {
+    // Close the current bottom sheet first
+    Navigator.of(context).pop();
     setState(() {
+      _isExpanded = false;
       _isSearching = false;
       _searchController.clear();
       _searchResults.clear();
-      _showConversations = false;
-      _activeRecipient = user;
-      _activeConversationId = InstantMessageAppwrite.generateConversationId(
-        _currentUser!.id,
-        user.id,
-      );
     });
 
-    // Subscribe to messages
-    _messagesSubscription?.cancel();
-    _messagesSubscription = _imService
-        .getMessagesStream(_activeConversationId!)
-        .listen((messages) {
-      setState(() => _messages = messages);
-      _scrollToBottom();
-    });
-  }
-
-  Future<void> _sendMessage() async {
-    final content = _messageController.text.trim();
-    if (content.isEmpty || _currentUser == null || _activeRecipient == null) {
-      return;
-    }
-
-    _messageController.clear();
-
-    try {
-      await _imService.sendMessage(
-        receiverId: _activeRecipient!.id,
-        content: content,
-        sender: _currentUser!,
+    // Show the new modern chat interface
+    if (_currentUser != null && mounted) {
+      showModernChatInterface(
+        context,
+        currentUser: _currentUser!,
+        otherUser: user,
       );
-      
-      HapticFeedback.lightImpact();
-    } catch (e) {
-      AppLogger().error('Failed to send message: $e');
-      
-      // Show error
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to send message: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
     }
   }
 
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_messagesScrollController.hasClients) {
-        _messagesScrollController.animateTo(
-          _messagesScrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
+  @override
+  void dispose() {
+    _animationController.dispose();
+    _pulseController.dispose();
+    _conversationsSubscription?.cancel();
+    _unreadCountSubscription?.cancel();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _searchDebouncer?.cancel();
+    super.dispose();
   }
+}
 
+/// Optimized conversation avatar widget
+class _ConversationAvatar extends StatelessWidget {
+  final UserInfo user;
+  final double size;
+  
+  const _ConversationAvatar({
+    required this.user,
+    required this.size,
+  });
+  
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFF8B5CF6),
+        image: user.avatar != null
+            ? DecorationImage(
+                image: NetworkImage(user.avatar!),
+                fit: BoxFit.cover,
+              )
+            : null,
+      ),
+      child: user.avatar == null
+          ? Center(
+              child: Text(
+                user.username[0].toUpperCase(),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: size * 0.4,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            )
+          : null,
+    );
+  }
+}
+
+/// Optimized conversation content widget
+class _ConversationContent extends StatelessWidget {
+  final Conversation conversation;
+  final UserInfo otherUser;
+  
+  const _ConversationContent({
+    required this.conversation,
+    required this.otherUser,
+  });
+  
   String _formatLastMessageTime(DateTime time) {
     final now = DateTime.now();
     final difference = now.difference(time);
@@ -781,26 +902,112 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
       return 'now';
     }
   }
-
-  String _formatMessageTime(DateTime time) {
-    final hour = time.hour;
-    final minute = time.minute.toString().padLeft(2, '0');
-    final period = hour >= 12 ? 'PM' : 'AM';
-    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
-    
-    return '$displayHour:$minute $period';
-  }
-
+  
   @override
-  void dispose() {
-    _animationController.dispose();
-    _conversationsSubscription?.cancel();
-    _messagesSubscription?.cancel();
-    _unreadCountSubscription?.cancel();
-    _messageController.dispose();
-    _searchController.dispose();
-    _messagesScrollController.dispose();
-    _messageFocusNode.dispose();
-    super.dispose();
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                otherUser.username,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Text(
+              _formatLastMessageTime(conversation.lastMessageTime),
+              style: TextStyle(
+                color: Colors.grey[500],
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          conversation.lastMessage ?? '',
+          style: TextStyle(
+            color: Colors.grey[400],
+            fontSize: 14,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+}
+
+/// Optimized unread badge widget
+class _UnreadBadge extends StatelessWidget {
+  final int count;
+  
+  const _UnreadBadge({required this.count});
+  
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(left: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.red,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        '$count',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+}
+
+/// Optimized search user avatar widget
+class _SearchUserAvatar extends StatelessWidget {
+  final UserProfile user;
+  final double size;
+  
+  const _SearchUserAvatar({
+    required this.user,
+    required this.size,
+  });
+  
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFF8B5CF6),
+        image: user.avatar != null
+            ? DecorationImage(
+                image: NetworkImage(user.avatar!),
+                fit: BoxFit.cover,
+              )
+            : null,
+      ),
+      child: user.avatar == null
+          ? Center(
+              child: Text(
+                user.name[0].toUpperCase(),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: size * 0.45,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            )
+          : null,
+    );
   }
 }
