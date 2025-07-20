@@ -526,12 +526,12 @@ class ArenaNotifier extends StateNotifier<ArenaState> {
       
       await appwrite.databases.createDocument(
         databaseId: 'arena_db',
-        collectionId: 'arena_messages',
+        collectionId: 'messages',
         documentId: 'unique()',
         data: {
           'roomId': roomId,
-          'userId': currentUser.$id,
-          'userName': currentUser.name,
+          'senderId': currentUser.$id,
+          'senderName': currentUser.name,
           'content': content,
           'timestamp': DateTime.now().toIso8601String(),
           'type': 'user',

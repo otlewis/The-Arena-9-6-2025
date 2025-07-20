@@ -1,27 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:appwrite/appwrite.dart';
-import '../models/arena_state.dart';
-import '../providers/arena_provider.dart';
-import '../../../core/providers/app_providers.dart';
-import '../../../widgets/user_avatar.dart';
-import '../../../services/appwrite_service.dart';
+import '../widgets/user_avatar.dart';
+import '../services/appwrite_service.dart';
+import '../core/providers/app_providers.dart';
 
-class ArenaChatPanel extends ConsumerStatefulWidget {
-  const ArenaChatPanel({super.key, required this.roomId});
+class RoomChatPanel extends ConsumerStatefulWidget {
+  const RoomChatPanel({
+    super.key, 
+    required this.roomId,
+    required this.roomType,
+    this.participantCount = 0,
+  });
 
   final String roomId;
+  final String roomType; // 'open_discussion' or 'debate_discussion'
+  final int participantCount;
 
   @override
-  ConsumerState<ArenaChatPanel> createState() => _ArenaChatPanelState();
+  ConsumerState<RoomChatPanel> createState() => _RoomChatPanelState();
 }
 
-class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
+class _RoomChatPanelState extends ConsumerState<RoomChatPanel> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final AppwriteService _appwrite = AppwriteService();
   bool _isTyping = false;
-  List<ChatMessage> _messages = [];
+  List<RoomChatMessage> _messages = [];
   bool _isLoadingMessages = true;
   RealtimeSubscription? _messageSubscription;
   final Map<String, String?> _userAvatars = {}; // Cache for user avatars
@@ -53,7 +58,7 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
         ],
       );
 
-      final messages = response.documents.map((doc) => ChatMessage(
+      final messages = response.documents.map((doc) => RoomChatMessage(
         id: doc.$id,
         userId: doc.data['senderId'] ?? '',
         userName: doc.data['senderName'] ?? 'Unknown',
@@ -89,7 +94,7 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
         if (response.events.contains('databases.arena_db.collections.messages.documents.*.create')) {
           final doc = response.payload;
           if (doc['roomId'] == widget.roomId) {
-            final newMessage = ChatMessage(
+            final newMessage = RoomChatMessage(
               id: doc['\$id'],
               userId: doc['senderId'] ?? '',
               userName: doc['senderName'] ?? 'Unknown',
@@ -150,20 +155,10 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final arenaState = ref.watch(arenaProvider(widget.roomId));
-
-    if (arenaState.isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    
-    if (arenaState.error != null) {
-      return _buildErrorState(context, arenaState.error!);
-    }
-    
-    return _buildChatPanel(context, ref, arenaState);
+    return _buildChatPanel(context, ref);
   }
 
-  Widget _buildChatPanel(BuildContext context, WidgetRef ref, ArenaState state) {
+  Widget _buildChatPanel(BuildContext context, WidgetRef ref) {
     return GestureDetector(
       onTap: () {
         // Dismiss keyboard when tapping outside input field
@@ -195,13 +190,13 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
           ),
           child: Column(
             children: [
-              _buildChatHeader(state),
+              _buildChatHeader(),
               const Divider(height: 1),
               Expanded(
-                child: _buildMessagesList(state),
+                child: _buildMessagesList(),
               ),
               const Divider(height: 1),
-              _buildMessageInput(ref, state),
+              _buildMessageInput(ref),
             ],
           ),
         ),
@@ -209,16 +204,16 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
     );
   }
 
-  Widget _buildChatHeader(ArenaState state) {
+  Widget _buildChatHeader() {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
           const Icon(Icons.chat_bubble_outline),
           const SizedBox(width: 8),
-          const Text(
-            'Arena Chat',
-            style: TextStyle(
+          Text(
+            widget.roomType == 'open_discussion' ? 'Open Chat' : 'Room Chat',
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -245,7 +240,7 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
               ],
             ),
             child: Text(
-              '${state.participants.length} participant${state.participants.length == 1 ? '' : 's'}',
+              '${widget.participantCount} participant${widget.participantCount == 1 ? '' : 's'}',
               style: const TextStyle(
                 fontSize: 12,
                 color: Colors.grey,
@@ -257,7 +252,7 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
     );
   }
 
-  Widget _buildMessagesList(ArenaState state) {
+  Widget _buildMessagesList() {
     if (_isLoadingMessages) {
       return const Center(
         child: CircularProgressIndicator(),
@@ -312,22 +307,19 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
         itemCount: _messages.length,
         itemBuilder: (context, index) => _buildMessageItem(
           message: _messages[index],
-          state: state,
         ),
       ),
     );
   }
 
   Widget _buildMessageItem({
-    required ChatMessage message,
-    required ArenaState state,
+    required RoomChatMessage message,
   }) {
     final currentUserId = ref.read(currentUserIdProvider);
     final isOwnMessage = message.userId == currentUserId;
-    final participant = state.participants[message.userId];
     
-    // Get avatar URL from participant data or cached user data
-    String? avatarUrl = participant?.avatar ?? _userAvatars[message.userId];
+    // Get avatar URL from cached user data
+    String? avatarUrl = _userAvatars[message.userId];
     
     // If no avatar cached, fetch it asynchronously
     if (!_userAvatars.containsKey(message.userId)) {
@@ -436,10 +428,10 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
                   if (!isOwnMessage)
                     Text(
                       message.userName,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: _getRoleColor(participant?.role),
+                        color: Colors.grey,
                       ),
                     ),
                   if (!isOwnMessage) const SizedBox(height: 2),
@@ -475,9 +467,7 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
     );
   }
 
-  Widget _buildMessageInput(WidgetRef ref, ArenaState state) {
-    final canSendMessage = _canUserSendMessage(ref, state);
-
+  Widget _buildMessageInput(WidgetRef ref) {
     return Container(
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -503,11 +493,8 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
               ),
               child: TextField(
               controller: _messageController,
-              enabled: canSendMessage,
               decoration: InputDecoration(
-                hintText: canSendMessage 
-                    ? 'Type a message...' 
-                    : 'Chat disabled during this phase',
+                hintText: 'Type a message...',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(24),
                   borderSide: BorderSide.none,
@@ -538,7 +525,7 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
               ),
               maxLines: null,
               textInputAction: TextInputAction.send,
-              onSubmitted: canSendMessage ? (_) => _sendMessage(ref) : null,
+              onSubmitted: (_) => _sendMessage(ref),
               onChanged: (value) {
                 setState(() {
                   _isTyping = value.isNotEmpty;
@@ -551,16 +538,16 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
           Container(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: canSendMessage && _isTyping ? Colors.blue.shade600 : Colors.grey.shade100,
+              color: _isTyping ? Colors.blue.shade600 : Colors.grey.shade100,
               boxShadow: [
                 BoxShadow(
-                  color: canSendMessage && _isTyping ? Colors.blue.shade800 : Colors.grey.shade400,
+                  color: _isTyping ? Colors.blue.shade800 : Colors.grey.shade400,
                   offset: const Offset(2, 2),
                   blurRadius: 4,
                   spreadRadius: 0,
                 ),
                 BoxShadow(
-                  color: canSendMessage && _isTyping ? Colors.blue.shade400 : Colors.white,
+                  color: _isTyping ? Colors.blue.shade400 : Colors.white,
                   offset: const Offset(-2, -2),
                   blurRadius: 4,
                   spreadRadius: 0,
@@ -568,76 +555,16 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
               ],
             ),
             child: IconButton(
-              onPressed: canSendMessage && _isTyping ? () => _sendMessage(ref) : null,
+              onPressed: _isTyping ? () => _sendMessage(ref) : null,
               icon: Icon(
                 Icons.send,
-                color: canSendMessage && _isTyping ? Colors.white : Colors.grey.shade600,
+                color: _isTyping ? Colors.white : Colors.grey.shade600,
               ),
             ),
           ),
         ],
       ),
     );
-  }
-
-  Widget _buildErrorState(BuildContext context, String error) {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.white,
-            offset: Offset(-8, -8),
-            blurRadius: 16,
-            spreadRadius: 0,
-          ),
-          BoxShadow(
-            color: Colors.grey,
-            offset: Offset(8, 8),
-            blurRadius: 16,
-            spreadRadius: 0,
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            const Icon(Icons.chat_bubble_outline, color: Colors.grey, size: 48),
-            const SizedBox(height: 16),
-            const Text(
-              'Chat Unavailable',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Unable to load chat: ${error.toString()}',
-              style: const TextStyle(color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  bool _canUserSendMessage(WidgetRef ref, ArenaState state) {
-    final currentUserId = ref.read(currentUserIdProvider);
-    
-    // Allow messaging during preparation and judging phases
-    if (state.currentPhase == DebatePhase.preDebate ||
-        state.currentPhase == DebatePhase.judging) {
-      return true;
-    }
-    
-    // During debate phases, only allow judges and moderators to send messages
-    final participant = state.participants[currentUserId];
-    return participant?.role == ArenaRole.judge1 || 
-           participant?.role == ArenaRole.judge2 ||
-           participant?.role == ArenaRole.judge3 ||
-           participant?.role == ArenaRole.moderator;
   }
 
   String _getInitials(String name) {
@@ -649,25 +576,6 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
     }
     
     return name[0].toUpperCase();
-  }
-
-  Color _getRoleColor(ArenaRole? role) {
-    switch (role) {
-      case ArenaRole.affirmative:
-        return Colors.blue;
-      case ArenaRole.negative:
-        return Colors.red;
-      case ArenaRole.moderator:
-        return Colors.purple;
-      case ArenaRole.judge1:
-      case ArenaRole.judge2:
-      case ArenaRole.judge3:
-        return Colors.orange;
-      case ArenaRole.audience:
-        return Colors.grey;
-      default:
-        return Colors.grey;
-    }
   }
 
   String _formatTime(DateTime timestamp) {
@@ -702,8 +610,22 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
     }
 
     try {
-      // Send message through provider
-      await ref.read(arenaProvider(widget.roomId).notifier).sendMessage(content);
+      final currentUser = await _appwrite.account.get();
+      
+      await _appwrite.databases.createDocument(
+        databaseId: 'arena_db',
+        collectionId: 'messages',
+        documentId: 'unique()',
+        data: {
+          'roomId': widget.roomId,
+          'senderId': currentUser.$id,
+          'senderName': currentUser.name,
+          'content': content,
+          'timestamp': DateTime.now().toIso8601String(),
+          'type': 'user',
+        },
+      );
+      
       _messageController.clear();
       setState(() {
         _isTyping = false;
@@ -722,8 +644,8 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
   }
 }
 
-// Chat message model
-class ChatMessage {
+// Room chat message model
+class RoomChatMessage {
   final String id;
   final String userId;
   final String userName;
@@ -731,7 +653,7 @@ class ChatMessage {
   final DateTime timestamp;
   final MessageType type;
 
-  ChatMessage({
+  RoomChatMessage({
     required this.id,
     required this.userId,
     required this.userName,

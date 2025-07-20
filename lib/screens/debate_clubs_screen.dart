@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../services/appwrite_service.dart';
 import '../screens/user_profile_screen.dart';
 import 'club_details_screen.dart';
+import '../widgets/challenge_bell.dart';
 import 'package:appwrite/models.dart' as models;
 import '../core/logging/app_logger.dart';
 
@@ -76,7 +77,9 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
       try {
         user = await _appwrite.getCurrentUser();
       } catch (e) {
-        if (e.toString().contains('general_unauthorized_scope') || e.toString().contains('missing scope')) {
+        if (e.toString().contains('general_unauthorized_scope') || 
+            e.toString().contains('missing scope') ||
+            e.toString().contains('user_unauthorized')) {
           // User is not logged in - this is normal, continue as guest
           AppLogger().info('User not authenticated - loading clubs as guest');
           user = null;
@@ -87,30 +90,46 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
       
       _currentUserId = user?.$id;
       
-      if (_currentUserId != null) {
-        // Load clubs and user memberships in parallel
-        final results = await Future.wait([
-          _appwrite.getDebateClubs(),
-          _appwrite.getUserMemberships(_currentUserId!),
-        ]);
+      // Try to load clubs (handle unauthorized access gracefully)
+      try {
+        if (_currentUserId != null) {
+          // Load clubs and user memberships in parallel
+          final results = await Future.wait([
+            _appwrite.getDebateClubs(),
+            _appwrite.getUserMemberships(_currentUserId!),
+          ]);
+          
+          setState(() {
+            _clubs = results[0];
+            _userMemberships = results[1];
+          });
+        } else {
+          // Just load clubs if no user is logged in
+          final clubs = await _appwrite.getDebateClubs();
+          setState(() {
+            _clubs = clubs;
+          });
+        }
         
-        setState(() {
-          _clubs = results[0];
-          _userMemberships = results[1];
-        });
-      } else {
-        // Just load clubs if no user is logged in
-        final clubs = await _appwrite.getDebateClubs();
-        setState(() {
-          _clubs = clubs;
-        });
+        // Load president names for all clubs
+        await _loadPresidentNames();
+        
+        // Load club members for all clubs
+        await _loadClubMembers();
+        
+      } catch (e) {
+        if (e.toString().contains('user_unauthorized') || 
+            e.toString().contains('general_unauthorized_scope')) {
+          // Handle unauthorized access - show empty state with login prompt
+          AppLogger().info('User unauthorized to view debate clubs - showing login prompt');
+          setState(() {
+            _clubs = [];
+            _userMemberships = [];
+          });
+        } else {
+          rethrow; // Re-throw unexpected errors
+        }
       }
-      
-      // Load president names for all clubs
-      await _loadPresidentNames();
-      
-      // Load club members for all clubs
-      await _loadClubMembers();
       
       setState(() => _isLoading = false);
     } catch (e) {
@@ -152,6 +171,16 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
   Future<void> _loadClubMembers() async {
     final Map<String, List<Map<String, dynamic>>> clubMembers = {};
     
+    // Skip loading members if user is not authenticated or clubs list is empty
+    if (_currentUserId == null || _clubs.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _clubMembers = clubMembers;
+        });
+      }
+      return;
+    }
+    
     for (final club in _clubs) {
       final clubId = club['id']?.toString();
       if (clubId != null && clubId.isNotEmpty) {
@@ -189,8 +218,14 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
           clubMembers[clubId] = memberProfiles;
           AppLogger().debug('Loaded ${memberProfiles.length} member profiles for club: ${club['name']}');
         } catch (e) {
-          AppLogger().debug('Error loading members for club $clubId: $e');
-          clubMembers[clubId] = [];
+          if (e.toString().contains('user_unauthorized') || 
+              e.toString().contains('general_unauthorized_scope')) {
+            AppLogger().debug('Unauthorized to load members for club $clubId - skipping');
+            clubMembers[clubId] = [];
+          } else {
+            AppLogger().debug('Error loading members for club $clubId: $e');
+            clubMembers[clubId] = [];
+          }
         }
       }
     }
@@ -228,10 +263,32 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
         clubId: clubId,
       );
       _loadData(); // Refresh the data
-    } catch (e) {
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error joining club: $e')),
+          const SnackBar(
+            content: Text('✅ Successfully joined the club!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        String errorMessage = 'Error joining club';
+        
+        if (e.toString().contains('user_unauthorized')) {
+          errorMessage = 'You do not have permission to join clubs. Please check your account status.';
+        } else if (e.toString().contains('general_unauthorized_scope')) {
+          errorMessage = 'Authentication required. Please sign in again.';
+        } else {
+          errorMessage = 'Error joining club: ${e.toString().contains('AppwriteException') ? e.toString().split(',').first.split(':').last.trim() : e.toString()}';
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -244,10 +301,32 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
     try {
       await _appwrite.deleteMembership(membershipId);
       _loadData(); // Refresh the data
-    } catch (e) {
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error leaving club: $e')),
+          const SnackBar(
+            content: Text('✅ Successfully left the club'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        String errorMessage = 'Error leaving club';
+        
+        if (e.toString().contains('user_unauthorized')) {
+          errorMessage = 'You do not have permission to leave this club.';
+        } else if (e.toString().contains('general_unauthorized_scope')) {
+          errorMessage = 'Authentication required. Please sign in again.';
+        } else {
+          errorMessage = 'Error leaving club: ${e.toString().contains('AppwriteException') ? e.toString().split(',').first.split(':').last.trim() : e.toString()}';
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -281,10 +360,32 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
       if (!mounted) return;
       Navigator.pop(context); // Close the create modal
       _loadData();
+      
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Debate club created successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
       if (mounted) {
+        String errorMessage = 'Error creating club';
+        
+        if (e.toString().contains('user_unauthorized')) {
+          errorMessage = 'You do not have permission to create clubs. Please check your account status.';
+        } else if (e.toString().contains('general_unauthorized_scope')) {
+          errorMessage = 'Authentication required. Please sign in again.';
+        } else {
+          errorMessage = 'Error creating club: ${e.toString().contains('AppwriteException') ? e.toString().split(',').first.split(':').last.trim() : e.toString()}';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating club: $e')),
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
         );
       }
     }
@@ -507,7 +608,7 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
     final String clubId = club['id']?.toString() ?? '';
     final bool isMember = clubId.isNotEmpty ? _isUserMember(clubId) : false;
     final bool isPresident = clubId.isNotEmpty ? _isUserClubPresident(clubId) : false;
-    final memberCount = club['memberCount'] ?? 0;
+    final memberCount = _clubMembers[clubId]?.length ?? 0;
     final createdBy = club['createdBy']?.toString() ?? '';
     final presidentName = createdBy.isNotEmpty ? (_presidentNames[createdBy] ?? 'Loading...') : 'Unknown';
 
@@ -984,6 +1085,8 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
+          const ChallengeBell(iconColor: Color(0xFF6B46C1)),
+          const SizedBox(width: 8),
           if (_currentUserId != null)
             IconButton(
               icon: const Icon(Icons.add, color: scarletRed),
@@ -1017,13 +1120,13 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
                       children: [
                         const SizedBox(height: 40),
                         Icon(
-                          Icons.group_outlined,
+                          _currentUserId == null ? Icons.login : Icons.group_outlined,
                           size: 64,
                           color: Colors.grey[400],
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'No clubs yet',
+                          _currentUserId == null ? 'Sign in required' : 'No clubs yet',
                           style: TextStyle(
                             fontSize: 18,
                             color: Colors.grey[600],
@@ -1032,10 +1135,13 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Be the first to create a debate club!',
+                          _currentUserId == null 
+                              ? 'Please sign in to view and join debate clubs'
+                              : 'Be the first to create a debate club!',
                           style: TextStyle(
                             color: Colors.grey[500],
                           ),
+                          textAlign: TextAlign.center,
                         ),
                         if (_currentUserId != null) ...[
                           const SizedBox(height: 20),

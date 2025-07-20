@@ -5,16 +5,18 @@ import 'package:appwrite/appwrite.dart';
 import '../services/agora_service.dart';
 import '../services/appwrite_service.dart';
 import '../services/firebase_gift_service.dart';
-import '../services/instant_messaging_service.dart';
+import '../services/agora_instant_messaging_service.dart';
 // import '../services/chat_service.dart'; // Removed with new chat system
 import '../models/user_profile.dart';
 import '../models/gift.dart';
 import '../models/timer_state.dart';
 import '../widgets/animated_fade_in.dart';
 import '../widgets/appwrite_timer_widget.dart';
-import '../widgets/live_chat_widget.dart';
+import '../widgets/room_chat_panel.dart';
 import '../widgets/user_profile_modal.dart';
-import '../models/chat_message.dart';
+import '../widgets/instant_message_bell.dart';
+import '../widgets/challenge_bell.dart';
+import '../widgets/floating_im_widget.dart';
 import '../core/logging/app_logger.dart';
 
 class DebatesDiscussionsScreen extends StatefulWidget {
@@ -37,7 +39,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   final AgoraService _agoraService = AgoraService();
   final AppwriteService _appwrite = AppwriteService();
   final FirebaseGiftService _giftService = FirebaseGiftService();
-  final InstantMessagingService _imService = InstantMessagingService();
+  final AgoraInstantMessagingService _imService = AgoraInstantMessagingService();
   // final ChatService _chatService = ChatService(); // Removed with new chat system
   
   // Room data
@@ -71,7 +73,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   RealtimeSubscription? _participantsSubscription;
   RealtimeSubscription? _roomSubscription;
   StreamSubscription? _unreadMessagesSubscription; // Instant messages subscription
-  int _unreadMessageCount = 0; // Track unread instant messages
 
   @override
   void initState() {
@@ -134,7 +135,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           .listen((count) {
         if (mounted && !_isDisposing) {
           AppLogger().debug('📱 Debates: Unread count updated to $count');
-          setState(() => _unreadMessageCount = count);
         }
       });
       
@@ -949,18 +949,20 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       );
     }
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildRoomTitleSection(),
-            Expanded(
-              child: _buildVideoGrid(),
-            ),
-            _buildControlsBar(),
-          ],
+    return FloatingIMWidget(
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(),
+              _buildRoomTitleSection(),
+              Expanded(
+                child: _buildVideoGrid(),
+              ),
+              _buildControlsBar(),
+            ],
+          ),
         ),
       ),
     );
@@ -1000,6 +1002,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             showConnectionStatus: false,
           ),
           const SizedBox(width: 16),
+          const ChallengeBell(iconColor: Colors.white),
+          const SizedBox(width: 16),
           Row(
             children: [
               const Icon(
@@ -1024,54 +1028,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                   size: 14,
                 ),
               ],
-              // Instant Message notification bell
               const SizedBox(width: 16),
-              GestureDetector(
-                onTap: () {
-                  // This will trigger the FloatingIMWidget to show
-                  AppLogger().debug('📱 Message notification bell tapped');
-                },
-                child: Stack(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Icon(
-                        LucideIcons.bell,
-                        color: Color(0xFF8B5CF6),
-                        size: 20,
-                      ),
-                    ),
-                    // Unread message badge
-                    if (_unreadMessageCount > 0)
-                      Positioned(
-                        top: 0,
-                        right: 0,
-                        child: Container(
-                          width: 16,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 1),
-                          ),
-                          child: Center(
-                            child: Text(
-                              _unreadMessageCount > 9 ? '9+' : '$_unreadMessageCount',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+              // Instant Message Bell
+              const InstantMessageBell(
+                iconColor: Color(0xFF8B5CF6),
+                iconSize: 20,
               ),
               if (_isCurrentUserModerator) ...[ 
                 const SizedBox(width: 16),
@@ -1702,30 +1663,15 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         initialChildSize: 0.9,
         minChildSize: 0.5,
         maxChildSize: 0.95,
-        builder: (context, scrollController) => Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: LiveChatWidget(
-            chatRoomId: widget.roomId,
-            roomType: ChatRoomType.debatesDiscussions,
-            currentUser: _currentUser!,
-            userRole: _getCurrentUserRole(),
-            isVisible: true,
-            onToggleVisibility: () => Navigator.pop(context),
-          ),
+        builder: (context, scrollController) => RoomChatPanel(
+          roomId: widget.roomId,
+          roomType: 'debate_discussion',
+          participantCount: _speakerPanelists.length + _audienceMembers.length,
         ),
       ),
     );
   }
 
-  /// Get current user role for chat
-  String _getCurrentUserRole() {
-    if (_isCurrentUserModerator) return 'moderator';
-    if (_isCurrentUserSpeaker) return 'speaker';
-    return 'participant';
-  }
 
   void _showModeratorTools() {
     showModalBottomSheet(

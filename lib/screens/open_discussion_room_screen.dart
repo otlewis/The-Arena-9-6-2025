@@ -4,12 +4,17 @@ import '../models/timer_state.dart' as timer_models;
 import '../services/agora_service.dart';
 import '../services/appwrite_service.dart';
 import '../services/firebase_gift_service.dart';
+import '../services/agora_instant_messaging_service.dart';
 // import '../services/chat_service.dart'; // Removed with new chat system
 import '../widgets/user_avatar.dart';
-import '../widgets/live_chat_widget.dart';
-import '../models/chat_message.dart';
+import '../widgets/room_chat_panel.dart';
+import '../widgets/user_profile_modal.dart';
+import '../widgets/instant_message_bell.dart';
+import '../widgets/challenge_bell.dart';
+import '../widgets/floating_im_widget.dart';
 import '../widgets/appwrite_timer_widget.dart';
 import '../constants/appwrite.dart';
+import '../core/logging/app_logger.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
@@ -30,6 +35,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   final AgoraService _agoraService = AgoraService();
   final AppwriteService _appwriteService = AppwriteService();
   final FirebaseGiftService _firebaseGiftService = FirebaseGiftService();
+  final AgoraInstantMessagingService _imService = AgoraInstantMessagingService();
   // final ChatService _chatService = ChatService(); // Removed with new chat system
   
   bool _isMuted = true;
@@ -43,6 +49,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   final List<Map<String, dynamic>> _participants = []; // Real participants from Appwrite
   final Map<String, UserProfile> _userProfiles = {}; // Cache of user profiles
   StreamSubscription? _realtimeSubscription; // Real-time subscription
+  StreamSubscription? _unreadMessagesSubscription; // Instant messages subscription
   int _currentUserCoinBalance = 0; // Firebase coin balance (separate from Appwrite profile)
   final Set<String> _handsRaised = {}; // Track users with hands raised
   int _reconnectAttempts = 0; // Track reconnection attempts
@@ -71,12 +78,14 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     super.initState();
     _initializeAudioPlayer();
     _initializeRoom();
+    _initializeInstantMessaging();
   }
 
   @override
   void dispose() {
     debugPrint('🧹 Disposing OpenDiscussionRoomScreen');
     _realtimeSubscription?.cancel();
+    _unreadMessagesSubscription?.cancel();
     _speakingTimer?.cancel();
     _fallbackRefreshTimer?.cancel();
     _audioPlayer.dispose();
@@ -92,6 +101,25 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       debugPrint('🎵 Audio player initialized successfully');
     } catch (e) {
       debugPrint('❌ Error initializing audio player: $e');
+    }
+  }
+
+  Future<void> _initializeInstantMessaging() async {
+    try {
+      await _imService.initialize();
+      
+      // Subscribe to unread message count
+      _unreadMessagesSubscription = _imService
+          .getUnreadCountStream()
+          .listen((count) {
+        if (mounted) {
+          debugPrint('📱 OpenDiscussion: Unread count updated to $count');
+        }
+      });
+      
+      debugPrint('📱 Instant messaging initialized in room');
+    } catch (e) {
+      debugPrint('❌ Failed to initialize instant messaging: $e');
     }
   }
 
@@ -785,20 +813,25 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         initialChildSize: 0.9,
         minChildSize: 0.5,
         maxChildSize: 0.95,
-        builder: (context, scrollController) => Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: LiveChatWidget(
-            chatRoomId: widget.room.id,
-            roomType: ChatRoomType.openDiscussion,
-            currentUser: currentUser,
-            userRole: _getCurrentUserRole(),
-            isVisible: true,
-            onToggleVisibility: () => Navigator.pop(context),
-          ),
+        builder: (context, scrollController) => RoomChatPanel(
+          roomId: widget.room.id,
+          roomType: 'open_discussion',
+          participantCount: _participants.length,
         ),
+      ),
+    );
+  }
+
+  void _showUserProfile(UserProfile userProfile, String? userRole) {
+    final currentUser = _getCurrentUserProfile();
+    showDialog(
+      context: context,
+      barrierColor: Colors.transparent,
+      builder: (context) => UserProfileModal(
+        userProfile: userProfile,
+        userRole: userRole,
+        currentUser: currentUser,
+        onClose: () => Navigator.of(context).pop(),
       ),
     );
   }
@@ -809,21 +842,6 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     return _userProfiles[_currentAppwriteUserId!];
   }
 
-  /// Get current user role for chat
-  String _getCurrentUserRole() {
-    if (_userParticipation == null) return 'participant';
-    
-    final role = _userParticipation!['role'] as String?;
-    switch (role) {
-      case 'moderator':
-        return 'moderator';
-      case 'speaker':
-        return 'speaker';
-      case 'audience':
-      default:
-        return 'participant';
-    }
-  }
 
   // Moderation methods
   Future<void> _promoteToSpeaker(String userId) async {
@@ -1103,64 +1121,66 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Main room interface
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.white,
-                  scarletRed.withValues(alpha: 0.05),
-                  accentPurple.withValues(alpha: 0.1),
-                ],
+    return FloatingIMWidget(
+      child: Scaffold(
+        body: Stack(
+          children: [
+            // Main room interface
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.white,
+                    scarletRed.withValues(alpha: 0.05),
+                    accentPurple.withValues(alpha: 0.1),
+                  ],
+                ),
               ),
-            ),
-            child: SafeArea(
-              child: Column(
-                children: [
-                  // Header with room info and controls
-                  _buildHeader(),
-                  
-                  // Main content area
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Moderator section
-                          _buildModeratorSection(),
-                          
-                          const SizedBox(height: 24),
-                          
-                          // Speaker's panel
-                          _buildSpeakersPanel(),
-                          
-                          const SizedBox(height: 24),
-                          
-                          // Audience section
-                          _buildAudienceSection(),
-                          
-                          // Extra bottom padding for Android and chat button
-                          const SizedBox(height: 80),
-                        ],
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    // Header with room info and controls
+                    _buildHeader(),
+                    
+                    // Main content area
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Moderator section
+                            _buildModeratorSection(),
+                            
+                            const SizedBox(height: 24),
+                            
+                            // Speaker's panel
+                            _buildSpeakersPanel(),
+                            
+                            const SizedBox(height: 24),
+                            
+                            // Audience section
+                            _buildAudienceSection(),
+                            
+                            // Extra bottom padding for Android and chat button
+                            const SizedBox(height: 80),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  
-                  // Bottom controls
-                  _buildBottomControls(),
-                ],
+                    
+                    // Bottom controls
+                    _buildBottomControls(),
+                  ],
+                ),
               ),
             ),
-          ),
-          
-          // Chat now handled via modal bottom sheet in _toggleChat()
-        ],
+            
+            // Chat now handled via modal bottom sheet in _toggleChat()
+          ],
+        ),
       ),
     );
   }
@@ -1190,10 +1210,10 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
           GestureDetector(
             onTap: _leaveRoom,
             child: Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: scarletRed.withValues(alpha: 0.1),
-                borderRadius: const BorderRadius.all(Radius.circular(8)),
+                borderRadius: const BorderRadius.all(Radius.circular(6)),
                 border: Border.all(
                   color: scarletRed.withValues(alpha: 0.3),
                 ),
@@ -1201,90 +1221,91 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               child: const Icon(
                 Icons.exit_to_app,
                 color: scarletRed,
-                size: 18,
+                size: 16,
               ),
             ),
           ),
+          
+          const SizedBox(width: 8),
           
           // Room info (left side)
           Expanded(
             flex: 3,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.room.title,
-                    style: const TextStyle(
-                      color: deepPurple,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.room.title,
+                  style: const TextStyle(
+                    color: deepPurple,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Row(
+                  children: [
+                    // Connection status indicator
+                    Container(
+                      width: 4,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: _isConnecting 
+                          ? Colors.orange 
+                          : _agoraService.isJoined 
+                            ? Colors.green 
+                            : Colors.red,
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Row(
-                    children: [
-                      // Connection status indicator
-                      Container(
-                        width: 5,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: _isConnecting 
-                            ? Colors.orange 
-                            : _agoraService.isJoined 
-                              ? Colors.green 
-                              : Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          _isConnecting
-                            ? 'Connecting...'
-                            : _agoraService.isJoined
-                              ? '${_remoteUsers.length + 1} in voice'
-                              : 'Disconnected',
-                          style: const TextStyle(
-                            color: accentPurple,
-                            fontSize: 10,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      
-                      // Realtime sync status
-                      const SizedBox(width: 4),
-                      Container(
-                        width: 4,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: _isRealtimeHealthy ? Colors.green : Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 2),
-                      Text(
-                        _isRealtimeHealthy ? 'sync' : 'offline',
-                        style: TextStyle(
-                          color: _isRealtimeHealthy ? Colors.green : Colors.red,
+                    const SizedBox(width: 2),
+                    Flexible(
+                      child: Text(
+                        _isConnecting
+                          ? 'Connecting...'
+                          : _agoraService.isJoined
+                            ? '${_remoteUsers.length + 1} in voice'
+                            : 'Disconnected',
+                        style: const TextStyle(
+                          color: accentPurple,
                           fontSize: 8,
-                          fontWeight: FontWeight.w500,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                    
+                    // Realtime sync status
+                    const SizedBox(width: 2),
+                    Container(
+                      width: 3,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: _isRealtimeHealthy ? Colors.green : Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 1),
+                    Text(
+                      _isRealtimeHealthy ? 'sync' : 'offline',
+                      style: TextStyle(
+                        color: _isRealtimeHealthy ? Colors.green : Colors.red,
+                        fontSize: 6,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
           
+          const SizedBox(width: 4),
+          
           // Centered Timer
           Expanded(
-            flex: 2,
+            flex: 3,
             child: Center(
               child: AppwriteTimerWidget(
                 roomId: widget.room.id,
@@ -1298,16 +1319,18 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
             ),
           ),
           
+          const SizedBox(width: 2),
+          
           // Right side controls
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               // Room count icon
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
                 decoration: BoxDecoration(
                   color: accentPurple.withValues(alpha: 0.1),
-                  borderRadius: const BorderRadius.all(Radius.circular(10)),
+                  borderRadius: const BorderRadius.all(Radius.circular(4)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1315,19 +1338,35 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                     const Icon(
                       Icons.people,
                       color: accentPurple,
-                      size: 12,
+                      size: 8,
                     ),
-                    const SizedBox(width: 2),
+                    const SizedBox(width: 1),
                     Text(
                       '${_participants.length}',
                       style: const TextStyle(
                         color: accentPurple,
-                        fontSize: 10,
+                        fontSize: 7,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
+              ),
+              
+              const SizedBox(width: 4),
+              
+              // Instant Message Bell
+              const InstantMessageBell(
+                iconColor: Color(0xFF8B5CF6),
+                iconSize: 16,
+              ),
+              
+              const SizedBox(width: 4),
+              
+              // Challenge Bell
+              const ChallengeBell(
+                iconColor: Color(0xFFFF2400),
+                iconSize: 16,
               ),
               
               const SizedBox(width: 4),
@@ -1564,33 +1603,81 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       displayName = name;
     }
     
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Stack(
-          children: [
-            Container(
-              width: size,
-              height: size,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: (isSpeaking ? scarletRed : accentPurple).withValues(alpha: 0.2),
-                    blurRadius: isSpeaking ? 8 : 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+    return GestureDetector(
+      onTap: () async {
+        UserProfile? profileToShow = userProfile;
+        
+        // If profile isn't loaded, load it now
+        if (profileToShow == null && !isCurrentUser) {
+          try {
+            AppLogger().debug('👤 Loading profile for user: $userId');
+            profileToShow = await _appwriteService.getUserProfile(userId);
+            if (profileToShow != null) {
+              setState(() {
+                _userProfiles[userId] = profileToShow!;
+              });
+            }
+          } catch (e) {
+            AppLogger().error('❌ Failed to load user profile: $e');
+          }
+        }
+        
+        // Show profile if we have it (either was already loaded or just loaded)
+        if (profileToShow != null) {
+          String? role;
+          if (showModerator) {
+            role = 'moderator';
+          } else if (_handsRaised.contains(userId)) {
+            role = 'pending';
+          } else {
+            // Determine if user is speaker or audience
+            final participant = _participants.firstWhere(
+              (p) => p['userId'] == userId,
+              orElse: () => <String, dynamic>{},
+            );
+            role = participant['role'] ?? 'audience';
+          }
+          AppLogger().debug('👤 Showing profile for ${profileToShow.name} with role: $role');
+          _showUserProfile(profileToShow, role);
+        } else {
+          // Show a message if profile couldn't be loaded
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Unable to load user profile'),
+                duration: Duration(seconds: 2),
               ),
-              child: UserAvatarStatus(
-                avatarUrl: userProfile?.avatar,
-                initials: userProfile?.initials ?? 
-                    (isCurrentUser ? 'YOU' : userId.substring(0, 2).toUpperCase()),
-                radius: size / 2,
-                isOnline: true, // Could be enhanced with real online status
-                isSpeaking: isSpeaking,
+            );
+          }
+        }
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            children: [
+              Container(
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: (isSpeaking ? scarletRed : accentPurple).withValues(alpha: 0.2),
+                      blurRadius: isSpeaking ? 8 : 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: UserAvatarStatus(
+                  avatarUrl: userProfile?.avatar,
+                  initials: userProfile?.initials ?? 
+                      (isCurrentUser ? 'YOU' : userId.substring(0, 2).toUpperCase()),
+                  radius: size / 2,
+                  isOnline: true, // Could be enhanced with real online status
+                  isSpeaking: isSpeaking,
+                ),
               ),
-            ),
             
             // Moderator crown or hand raised indicator
             if (showModerator)
@@ -1704,6 +1791,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
           ),
         ),
       ],
+    ),
     );
   }
 
