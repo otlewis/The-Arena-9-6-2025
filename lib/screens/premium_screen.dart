@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../examples/notification_system_demo.dart';
+import '../services/theme_service.dart';
 
 /// Premium store screen for subscriptions, coins, and other premium features
 class PremiumScreen extends StatefulWidget {
@@ -10,13 +10,41 @@ class PremiumScreen extends StatefulWidget {
 }
 
 class _PremiumScreenState extends State<PremiumScreen> {
+  final ThemeService _themeService = ThemeService();
+  
+  // Colors matching app theme
+  static const Color scarletRed = Color(0xFFFF2400);
+  static const Color accentPurple = Color(0xFF8B5CF6);
+  static const Color deepPurple = Color(0xFF6B46C1);
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _themeService.isDarkMode 
+          ? const Color(0xFF2D2D2D)
+          : const Color(0xFFE8E8E8),
       appBar: AppBar(
-        title: const Text('Premium Store'),
-        backgroundColor: Colors.orange,
-        foregroundColor: Colors.white,
+        title: Text(
+          'Premium Store',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: _themeService.isDarkMode ? Colors.white : deepPurple,
+          ),
+        ),
+        backgroundColor: _themeService.isDarkMode 
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E8E8),
+        elevation: 0,
+        iconTheme: IconThemeData(
+          color: _themeService.isDarkMode ? Colors.white70 : scarletRed,
+        ),
+        actions: [
+          _buildNeumorphicIcon(
+            icon: Icons.info_outline,
+            onTap: () => _showComingSoonDialog(),
+          ),
+          const SizedBox(width: 12),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -29,31 +57,203 @@ class _PremiumScreenState extends State<PremiumScreen> {
               icon: Icons.diamond,
               color: Colors.orange,
               children: [
+                // Pricing Info Banner
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.orange.withValues(alpha: 0.1),
+                        Colors.purple.withValues(alpha: 0.1),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.orange.withValues(alpha: 0.3),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _themeService.isDarkMode 
+                            ? Colors.white.withValues(alpha: 0.03)
+                            : Colors.white.withValues(alpha: 0.8),
+                        offset: const Offset(-6, -6),
+                        blurRadius: 12,
+                      ),
+                      BoxShadow(
+                        color: _themeService.isDarkMode 
+                            ? Colors.black.withValues(alpha: 0.5)
+                            : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                        offset: const Offset(6, 6),
+                        blurRadius: 12,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(
+                        Icons.celebration,
+                        color: Colors.orange,
+                        size: 32,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '🎉 Special Launch Offer!',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: _themeService.isDarkMode ? Colors.white : Colors.orange,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Column(
+                        children: [
+                          RichText(
+                            textAlign: TextAlign.center,
+                            text: TextSpan(
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: _themeService.isDarkMode ? Colors.white70 : Colors.black87,
+                              ),
+                              children: const [
+                                TextSpan(
+                                  text: '🎤 Audio-Only: ',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                TextSpan(text: 'Enjoy '),
+                                TextSpan(
+                                  text: '14 days free',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                                TextSpan(text: ', then '),
+                                TextSpan(
+                                  text: '\$4.99',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.orange,
+                                  ),
+                                ),
+                                TextSpan(text: ' for 1st month, then '),
+                                TextSpan(
+                                  text: '\$9.99',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.purple,
+                                  ),
+                                ),
+                                TextSpan(text: '/month'),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          RichText(
+                            textAlign: TextAlign.center,
+                            text: TextSpan(
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: _themeService.isDarkMode ? Colors.white70 : Colors.black87,
+                              ),
+                              children: const [
+                                TextSpan(
+                                  text: '📹 Video: ',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                TextSpan(text: 'Enjoy '),
+                                TextSpan(
+                                  text: '14 days free',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                                TextSpan(text: ', then '),
+                                TextSpan(
+                                  text: '\$9.99',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue,
+                                  ),
+                                ),
+                                TextSpan(text: ' for 1st month, then '),
+                                TextSpan(
+                                  text: '\$14.99',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                                TextSpan(text: '/month'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
                 _buildSubscriptionCard(
-                  title: 'Arena Pro Monthly',
+                  title: 'Arena Pro Audio-Only',
                   price: '\$9.99/month',
                   features: [
+                    '🎤 Audio-only debates',
                     'Unlimited debate challenges',
                     'Priority arena access',
                     'Advanced analytics',
                     'Custom debate topics',
                     'No ads',
                   ],
-                  color: Colors.blue,
+                  color: Colors.purple,
                 ),
                 const SizedBox(height: 12),
                 _buildSubscriptionCard(
-                  title: 'Arena Pro Yearly',
+                  title: 'Arena Pro Video',
+                  price: '\$14.99/month',
+                  features: [
+                    '📹 Video + Audio debates',
+                    'All audio-only features',
+                    'HD video streaming',
+                    'Screen sharing capabilities',
+                    'Video recording & replay',
+                    'Premium video quality',
+                  ],
+                  color: Colors.red,
+                  isPopular: true,
+                ),
+                const SizedBox(height: 12),
+                _buildSubscriptionCard(
+                  title: 'Arena Pro Audio Yearly',
                   price: '\$99.99/year',
                   features: [
-                    'All monthly features',
+                    '🎤 Audio-only debates',
+                    'All monthly audio features',
                     '2 months free',
                     'Exclusive tournaments',
                     'VIP support',
                     'Early access to new features',
                   ],
-                  color: Colors.purple,
-                  isPopular: true,
+                  color: Colors.blue,
+                ),
+                const SizedBox(height: 12),
+                _buildSubscriptionCard(
+                  title: 'Arena Pro Video Yearly',
+                  price: '\$149.99/year',
+                  features: [
+                    '📹 Video + Audio debates',
+                    'All monthly video features',
+                    '2 months free',
+                    'Exclusive video tournaments',
+                    'Priority VIP support',
+                    'Beta video features access',
+                  ],
+                  color: Colors.orange,
                 ),
               ],
             ),
@@ -82,32 +282,6 @@ class _PremiumScreenState extends State<PremiumScreen> {
               ],
             ),
             
-            const SizedBox(height: 32),
-            
-            // Temporary: Notification Demo Access
-            _buildSection(
-              title: 'Developer Features',
-              icon: Icons.bug_report,
-              color: Colors.green,
-              children: [
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.notifications, color: Colors.blue),
-                    title: const Text('Notification System Demo'),
-                    subtitle: const Text('Test the new notification features'),
-                    trailing: const Icon(Icons.arrow_forward_ios),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const NotificationSystemDemo(),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
           ],
         ),
       ),
@@ -120,25 +294,85 @@ class _PremiumScreenState extends State<PremiumScreen> {
     required Color color,
     required List<Widget> children,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(width: 12),
-            Text(
-              title,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-          ],
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode 
+            ? const Color(0xFF3A3A3A)
+            : const Color(0xFFF0F0F3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: scarletRed.withValues(alpha: 0.2),
+          width: 1.5,
         ),
-        const SizedBox(height: 16),
-        ...children,
-      ],
+        boxShadow: [
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.white.withValues(alpha: 0.8),
+            offset: const Offset(-8, -8),
+            blurRadius: 16,
+          ),
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.5)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+            offset: const Offset(8, 8),
+            blurRadius: 16,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: _themeService.isDarkMode 
+                      ? const Color(0xFF2D2D2D)
+                      : const Color(0xFFE8E8E8),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: _themeService.isDarkMode 
+                          ? Colors.black.withValues(alpha: 0.6)
+                          : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                      offset: const Offset(3, 3),
+                      blurRadius: 6,
+                      spreadRadius: -2,
+                    ),
+                    BoxShadow(
+                      color: _themeService.isDarkMode 
+                          ? Colors.white.withValues(alpha: 0.02)
+                          : Colors.white.withValues(alpha: 0.8),
+                      offset: const Offset(-3, -3),
+                      blurRadius: 6,
+                      spreadRadius: -2,
+                    ),
+                  ],
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: _themeService.isDarkMode ? Colors.white : color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          ...children,
+        ],
+      ),
     );
   }
 
@@ -153,83 +387,133 @@ class _PremiumScreenState extends State<PremiumScreen> {
       children: [
         Container(
           width: double.infinity,
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
+            color: _themeService.isDarkMode 
+                ? const Color(0xFF2D2D2D)
+                : const Color(0xFFE8E8E8),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: isPopular ? color : Colors.grey.shade300,
-              width: isPopular ? 2 : 1,
+              color: isPopular ? color.withValues(alpha: 0.6) : scarletRed.withValues(alpha: 0.2),
+              width: isPopular ? 2 : 1.5,
             ),
-            borderRadius: BorderRadius.circular(12),
-            color: isPopular ? color.withValues(alpha: 0.05) : null,
+            boxShadow: [
+              BoxShadow(
+                color: _themeService.isDarkMode 
+                    ? Colors.white.withValues(alpha: 0.03)
+                    : Colors.white.withValues(alpha: 0.8),
+                offset: const Offset(-6, -6),
+                blurRadius: 12,
+              ),
+              BoxShadow(
+                color: _themeService.isDarkMode 
+                    ? Colors.black.withValues(alpha: 0.5)
+                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                offset: const Offset(6, 6),
+                blurRadius: 12,
+              ),
+            ],
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
                       title,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: _themeService.isDarkMode ? Colors.white : color,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: _themeService.isDarkMode 
+                          ? const Color(0xFF3A3A3A)
+                          : const Color(0xFFF0F0F3),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: color.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      price,
+                      style: TextStyle(
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: color,
                       ),
                     ),
-                    Text(
-                      price,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: color,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ...features.map((feature) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: color, width: 1),
+                      ),
+                      child: Icon(Icons.check, color: color, size: 12),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        feature,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: _themeService.isDarkMode ? Colors.white70 : Colors.black87,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                ...features.map((feature) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Row(
-                    children: [
-                      Icon(Icons.check, color: color, size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(feature)),
-                    ],
-                  ),
-                )),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      _showPurchaseDialog(title, price);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: color,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: const Text('Subscribe'),
-                  ),
-                ),
-              ],
-            ),
+              )),
+              const SizedBox(height: 20),
+              _buildNeumorphicButton(
+                text: 'Subscribe',
+                color: color,
+                onPressed: () => _showPurchaseDialog(title, price),
+              ),
+            ],
           ),
         ),
         if (isPopular)
           Positioned(
-            top: -1,
+            top: -2,
             right: 20,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: color,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.3),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: const Text(
                 'POPULAR',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 12,
+                  fontSize: 10,
                   fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
                 ),
               ),
             ),
@@ -258,30 +542,83 @@ class _PremiumScreenState extends State<PremiumScreen> {
       itemCount: coinPackages.length,
       itemBuilder: (context, index) {
         final package = coinPackages[index];
-        return Card(
-          elevation: 2,
-          child: InkWell(
-            onTap: () => _showPurchaseDialog(
-              '${package['coins']} Arena Coins',
-              package['price']!,
+        return GestureDetector(
+          onTap: () => _showPurchaseDialog(
+            '${package['coins']} Arena Coins',
+            package['price']!,
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: _themeService.isDarkMode 
+                  ? const Color(0xFF2D2D2D)
+                  : const Color(0xFFE8E8E8),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: scarletRed.withValues(alpha: 0.2),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: _themeService.isDarkMode 
+                      ? Colors.white.withValues(alpha: 0.03)
+                      : Colors.white.withValues(alpha: 0.8),
+                  offset: const Offset(-6, -6),
+                  blurRadius: 12,
+                ),
+                BoxShadow(
+                  color: _themeService.isDarkMode 
+                      ? Colors.black.withValues(alpha: 0.5)
+                      : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                  offset: const Offset(6, 6),
+                  blurRadius: 12,
+                ),
+              ],
             ),
-            borderRadius: BorderRadius.circular(8),
             child: Padding(
               padding: const EdgeInsets.all(8),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
-                    Icons.monetization_on,
-                    color: Colors.amber,
-                    size: 28,
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: _themeService.isDarkMode 
+                          ? const Color(0xFF3A3A3A)
+                          : const Color(0xFFF0F0F3),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: _themeService.isDarkMode 
+                              ? Colors.black.withValues(alpha: 0.6)
+                              : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                          offset: const Offset(2, 2),
+                          blurRadius: 4,
+                          spreadRadius: -1,
+                        ),
+                        BoxShadow(
+                          color: _themeService.isDarkMode 
+                              ? Colors.white.withValues(alpha: 0.02)
+                              : Colors.white.withValues(alpha: 0.8),
+                          offset: const Offset(-2, -2),
+                          blurRadius: 4,
+                          spreadRadius: -1,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.monetization_on,
+                      color: Colors.amber,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     package['coins']!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 15,
+                      color: _themeService.isDarkMode ? Colors.white : Colors.black87,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -337,27 +674,80 @@ class _PremiumScreenState extends State<PremiumScreen> {
       itemCount: gifts.length,
       itemBuilder: (context, index) {
         final gift = gifts[index];
-        return Card(
-          elevation: 2,
-          child: InkWell(
-            onTap: () => _showGiftInfo(gift['name'] as String),
-            borderRadius: BorderRadius.circular(8),
+        return GestureDetector(
+          onTap: () => _showGiftInfo(gift['name'] as String),
+          child: Container(
+            decoration: BoxDecoration(
+              color: _themeService.isDarkMode 
+                  ? const Color(0xFF2D2D2D)
+                  : const Color(0xFFE8E8E8),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: scarletRed.withValues(alpha: 0.2),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: _themeService.isDarkMode 
+                      ? Colors.white.withValues(alpha: 0.03)
+                      : Colors.white.withValues(alpha: 0.8),
+                  offset: const Offset(-6, -6),
+                  blurRadius: 12,
+                ),
+                BoxShadow(
+                  color: _themeService.isDarkMode 
+                      ? Colors.black.withValues(alpha: 0.5)
+                      : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                  offset: const Offset(6, 6),
+                  blurRadius: 12,
+                ),
+              ],
+            ),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    gift['icon'] as IconData,
-                    color: Colors.pink,
-                    size: 32,
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: _themeService.isDarkMode 
+                          ? const Color(0xFF3A3A3A)
+                          : const Color(0xFFF0F0F3),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: _themeService.isDarkMode 
+                              ? Colors.black.withValues(alpha: 0.6)
+                              : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                          offset: const Offset(3, 3),
+                          blurRadius: 6,
+                          spreadRadius: -2,
+                        ),
+                        BoxShadow(
+                          color: _themeService.isDarkMode 
+                              ? Colors.white.withValues(alpha: 0.02)
+                              : Colors.white.withValues(alpha: 0.8),
+                          offset: const Offset(-3, -3),
+                          blurRadius: 6,
+                          spreadRadius: -2,
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      gift['icon'] as IconData,
+                      color: Colors.pink,
+                      size: 24,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     gift['name'] as String,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
+                      color: _themeService.isDarkMode ? Colors.white : Colors.black87,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -380,22 +770,83 @@ class _PremiumScreenState extends State<PremiumScreen> {
   void _showPurchaseDialog(String item, String price) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Purchase $item'),
-        content: Text('Would you like to purchase $item for $price?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: _themeService.isDarkMode 
+                ? const Color(0xFF2D2D2D)
+                : const Color(0xFFE8E8E8),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: scarletRed.withValues(alpha: 0.2),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _themeService.isDarkMode 
+                    ? Colors.white.withValues(alpha: 0.03)
+                    : Colors.white.withValues(alpha: 0.8),
+                offset: const Offset(-8, -8),
+                blurRadius: 16,
+              ),
+              BoxShadow(
+                color: _themeService.isDarkMode 
+                    ? Colors.black.withValues(alpha: 0.5)
+                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                offset: const Offset(8, 8),
+                blurRadius: 16,
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _showComingSoonDialog();
-            },
-            child: const Text('Buy Now'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Purchase $item',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: _themeService.isDarkMode ? Colors.white : deepPurple,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Would you like to purchase $item for $price?',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: _themeService.isDarkMode ? Colors.white70 : Colors.black87,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildNeumorphicButton(
+                      text: 'Cancel',
+                      color: Colors.grey[600]!,
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildNeumorphicButton(
+                      text: 'Buy Now',
+                      color: scarletRed,
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _showComingSoonDialog();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -403,15 +854,66 @@ class _PremiumScreenState extends State<PremiumScreen> {
   void _showGiftInfo(String giftName) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(giftName),
-        content: Text('Send $giftName to other users during debates to show appreciation!'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Got it'),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: _themeService.isDarkMode 
+                ? const Color(0xFF2D2D2D)
+                : const Color(0xFFE8E8E8),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: scarletRed.withValues(alpha: 0.2),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _themeService.isDarkMode 
+                    ? Colors.white.withValues(alpha: 0.03)
+                    : Colors.white.withValues(alpha: 0.8),
+                offset: const Offset(-8, -8),
+                blurRadius: 16,
+              ),
+              BoxShadow(
+                color: _themeService.isDarkMode 
+                    ? Colors.black.withValues(alpha: 0.5)
+                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                offset: const Offset(8, 8),
+                blurRadius: 16,
+              ),
+            ],
           ),
-        ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                giftName,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: _themeService.isDarkMode ? Colors.white : deepPurple,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Send $giftName to other users during debates to show appreciation!',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: _themeService.isDarkMode ? Colors.white70 : Colors.black87,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              _buildNeumorphicButton(
+                text: 'Got it',
+                color: accentPurple,
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -419,15 +921,185 @@ class _PremiumScreenState extends State<PremiumScreen> {
   void _showComingSoonDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Coming Soon!'),
-        content: const Text('Payment integration is coming soon. Stay tuned!'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: _themeService.isDarkMode 
+                ? const Color(0xFF2D2D2D)
+                : const Color(0xFFE8E8E8),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: scarletRed.withValues(alpha: 0.2),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _themeService.isDarkMode 
+                    ? Colors.white.withValues(alpha: 0.03)
+                    : Colors.white.withValues(alpha: 0.8),
+                offset: const Offset(-8, -8),
+                blurRadius: 16,
+              ),
+              BoxShadow(
+                color: _themeService.isDarkMode 
+                    ? Colors.black.withValues(alpha: 0.5)
+                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                offset: const Offset(8, 8),
+                blurRadius: 16,
+              ),
+            ],
           ),
-        ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: _themeService.isDarkMode 
+                      ? const Color(0xFF3A3A3A)
+                      : const Color(0xFFF0F0F3),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: _themeService.isDarkMode 
+                          ? Colors.black.withValues(alpha: 0.6)
+                          : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                      offset: const Offset(3, 3),
+                      blurRadius: 6,
+                      spreadRadius: -2,
+                    ),
+                    BoxShadow(
+                      color: _themeService.isDarkMode 
+                          ? Colors.white.withValues(alpha: 0.02)
+                          : Colors.white.withValues(alpha: 0.8),
+                      offset: const Offset(-3, -3),
+                      blurRadius: 6,
+                      spreadRadius: -2,
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.schedule, color: Colors.orange, size: 24),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Coming Soon!',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: _themeService.isDarkMode ? Colors.white : deepPurple,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Payment integration is coming soon. Stay tuned!',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: _themeService.isDarkMode ? Colors.white70 : Colors.black87,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              _buildNeumorphicButton(
+                text: 'OK',
+                color: accentPurple,
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNeumorphicIcon({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: _themeService.isDarkMode 
+              ? const Color(0xFF3A3A3A)
+              : const Color(0xFFF0F0F3),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: _themeService.isDarkMode 
+                  ? Colors.white.withValues(alpha: 0.03)
+                  : Colors.white.withValues(alpha: 0.7),
+              offset: const Offset(-3, -3),
+              blurRadius: 6,
+            ),
+            BoxShadow(
+              color: _themeService.isDarkMode 
+                  ? Colors.black.withValues(alpha: 0.5)
+                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+              offset: const Offset(3, 3),
+              blurRadius: 6,
+            ),
+          ],
+        ),
+        child: Icon(
+          icon,
+          size: 20,
+          color: _themeService.isDarkMode ? Colors.white70 : accentPurple,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNeumorphicButton({
+    required String text,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: _themeService.isDarkMode 
+              ? const Color(0xFF3A3A3A)
+              : const Color(0xFFF0F0F3),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: color.withValues(alpha: 0.3),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: _themeService.isDarkMode 
+                  ? Colors.white.withValues(alpha: 0.03)
+                  : Colors.white.withValues(alpha: 0.7),
+              offset: const Offset(-4, -4),
+              blurRadius: 8,
+            ),
+            BoxShadow(
+              color: _themeService.isDarkMode 
+                  ? Colors.black.withValues(alpha: 0.5)
+                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+              offset: const Offset(4, 4),
+              blurRadius: 8,
+            ),
+          ],
+        ),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
       ),
     );
   }

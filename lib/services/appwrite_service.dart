@@ -156,6 +156,19 @@ class AppwriteService {
     }
   }
 
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await account.createRecovery(
+        email: email,
+        url: '${AppwriteConstants.endpoint}/password-reset', // This should be your app's reset URL
+      );
+      AppLogger().info('Password reset email sent to: $email');
+    } catch (e) {
+      AppLogger().error('Error sending password reset email: $e');
+      rethrow;
+    }
+  }
+
   // User Methods
   Future<models.User?> getCurrentUser() async {
     AppLogger().debug('========== getCurrentUser START ==========');
@@ -489,11 +502,7 @@ class AppwriteService {
           'name': name,
           'description': description,
           'createdBy': createdBy,
-          'memberCount': 1, // Creator is first member
-          'isPublic': true,
-          'category': 'General',
-          'createdAt': DateTime.now().toIso8601String(),
-          'updatedAt': DateTime.now().toIso8601String(),
+          'createdAt': DateTime.now().toIso8601String(), // Required custom field
         },
       );
       
@@ -741,6 +750,50 @@ class AppwriteService {
           'isFeatured': false,
         },
       );
+
+      // Create initial room participant entry for the creator as moderator
+      await joinRoom(
+        roomId: response.$id,
+        userId: createdBy,
+        role: 'moderator',
+      );
+      
+      return response.$id;
+    } catch (e) {
+      AppLogger().error('Error creating room: $e');
+      rethrow;
+    }
+  }
+
+  Future<String> createDiscussionRoom({
+    required String title,
+    required String description,
+    required String createdBy,
+    required String status, // 'active', 'scheduled'
+    required bool isPrivate,
+    List<String>? tags,
+    int maxParticipants = 999999,
+  }) async {
+    try {
+      final response = await databases.createDocument(
+        databaseId: 'arena_db',
+        collectionId: AppwriteConstants.roomsCollection,
+        documentId: ID.unique(),
+        data: {
+          'title': title,
+          'description': description,
+          'type': 'discussion',
+          'status': status,
+          'createdBy': createdBy,
+          'isPublic': !isPrivate,
+          'maxParticipants': maxParticipants,
+          'participants': [],
+          'moderatorId': createdBy,
+          'settings': '{}',
+          'tags': tags ?? [],
+          'isFeatured': false,
+        },
+      );
       
       // Create initial room participant entry for the creator as moderator
       await joinRoom(
@@ -762,7 +815,11 @@ class AppwriteService {
         databaseId: 'arena_db',
         collectionId: AppwriteConstants.roomsCollection,
         queries: [
-          Query.equal('status', 'active'),
+          Query.equal('type', 'discussion'),
+          Query.or([
+            Query.equal('status', 'active'),
+            Query.equal('status', 'scheduled'),
+          ]),
           Query.limit(50),
           Query.orderDesc('\$createdAt'),
         ],
@@ -1486,6 +1543,7 @@ class AppwriteService {
     required String debateStyle,
     required String createdBy,
     bool isPrivate = false,
+    String? password,
     bool isScheduled = false,
     DateTime? scheduledDate,
   }) async {
@@ -1503,6 +1561,7 @@ class AppwriteService {
           'moderatorId': createdBy,
           'status': isScheduled ? 'scheduled' : 'active',
           'isPrivate': isPrivate,
+          'password': password,
           'isScheduled': isScheduled,
           'scheduledDate': scheduledDate?.toIso8601String(),
           'maxParticipants': 999999, // Effectively unlimited
@@ -1619,6 +1678,50 @@ class AppwriteService {
     } catch (e) {
       AppLogger().error('Error getting debate discussion room: $e');
       rethrow;
+    }
+  }
+
+  Future<bool> validateDebateDiscussionRoomPassword({
+    required String roomId,
+    required String enteredPassword,
+  }) async {
+    try {
+      AppLogger().debug('🔐 Fetching room document for ID: $roomId');
+      
+      final room = await databases.getDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionRoomsCollection,
+        documentId: roomId,
+      );
+      
+      AppLogger().debug('🔐 Room data: ${room.data}');
+      
+      final roomPassword = room.data['password'] as String?;
+      final isPrivate = room.data['isPrivate'] as bool? ?? false;
+      
+      AppLogger().debug('🔐 Room password: $roomPassword');
+      AppLogger().debug('🔐 Is private: $isPrivate');
+      AppLogger().debug('🔐 Entered password: $enteredPassword');
+      
+      // If room is not private, no password needed
+      if (!isPrivate) {
+        AppLogger().debug('🔐 Room is not private, allowing access');
+        return true;
+      }
+      
+      // If room is private but has no password set, allow access (shouldn't happen)
+      if (roomPassword == null || roomPassword.isEmpty) {
+        AppLogger().debug('🔐 Room is private but has no password, allowing access');
+        return true;
+      }
+      
+      // Check if entered password matches room password
+      final isValid = enteredPassword == roomPassword;
+      AppLogger().debug('🔐 Password match result: $isValid');
+      return isValid;
+    } catch (e) {
+      AppLogger().error('🔐 Error validating room password: $e');
+      return false;
     }
   }
 
@@ -2564,6 +2667,24 @@ class AppwriteService {
     }
   }
 
+  /// Update arena room status (e.g., from 'scheduled' to 'waiting')
+  Future<void> updateArenaRoomStatus(String roomId, String newStatus) async {
+    try {
+      await databases.updateDocument(
+        databaseId: 'arena_db',
+        collectionId: 'arena_rooms',
+        documentId: roomId,
+        data: {
+          'status': newStatus,
+        },
+      );
+      AppLogger().info('Updated arena room $roomId status to $newStatus');
+    } catch (e) {
+      AppLogger().error('Error updating arena room status: $e');
+      rethrow;
+    }
+  }
+
   Future<void> updateArenaJudgingEnabled(String roomId, bool judgingEnabled) async {
     try {
       await databases.updateDocument(
@@ -2629,27 +2750,126 @@ class AppwriteService {
 
   Future<List<UserProfile>> searchUsers(String query, {int limit = 50}) async {
     try {
-      final response = await databases.listDocuments(
-        databaseId: 'arena_db',
-        collectionId: 'users',
-        queries: [
-          Query.equal('isPublicProfile', true),
-          Query.search('name', query),
-          Query.limit(limit),
-          Query.orderDesc('reputation'),
-        ],
-      );
-
-      return response.documents.map((doc) {
+      AppLogger().info('🔍 AppwriteService: Searching users with query: "$query"');
+      
+      // Try multiple search strategies
+      late models.DocumentList response;
+      bool needsManualFilter = false;
+      
+      try {
+        // First try: Search by name field (requires index)
+        AppLogger().debug('🔍 Trying search by name field');
+        response = await databases.listDocuments(
+          databaseId: 'arena_db',
+          collectionId: 'users',
+          queries: [
+            Query.search('name', query),
+            Query.limit(limit),
+            Query.orderDesc('reputation'),
+          ],
+        );
+      } catch (e) {
+        AppLogger().warning('🔍 Search by name failed: $e, trying alternative approach');
+        
+        // Fallback: Search using contains pattern
+        try {
+          response = await databases.listDocuments(
+            databaseId: 'arena_db',
+            collectionId: 'users',
+            queries: [
+              Query.contains('name', query),
+              Query.limit(limit),
+              Query.orderDesc('reputation'),
+            ],
+          );
+        } catch (e2) {
+          AppLogger().warning('🔍 Contains search failed: $e2, trying simple list');
+          
+          // Last resort: Get all users and filter manually
+          needsManualFilter = true;
+          try {
+            response = await databases.listDocuments(
+              databaseId: 'arena_db',
+              collectionId: 'users',
+              queries: [
+                Query.limit(limit),
+                Query.orderDesc('reputation'),
+              ],
+            );
+          } catch (e3) {
+            AppLogger().warning('🔍 Order by reputation failed: $e3, using simple list');
+            // Ultra-simple fallback
+            response = await databases.listDocuments(
+              databaseId: 'arena_db',
+              collectionId: 'users',
+              queries: [Query.limit(limit)],
+            );
+          }
+        }
+      }
+      
+      AppLogger().info('🔍 AppwriteService: Found ${response.documents.length} users from database');
+      
+      var users = response.documents.map((doc) {
         final userData = Map<String, dynamic>.from(doc.data);
         userData['id'] = doc.$id;
         userData['createdAt'] = doc.$createdAt;
         userData['updatedAt'] = doc.$updatedAt;
-        return UserProfile.fromMap(userData);
+        final userProfile = UserProfile.fromMap(userData);
+        AppLogger().debug('🔍 User found: ${userProfile.name} (${userProfile.id})');
+        return userProfile;
       }).toList();
+      
+      // If we had to fall back to listing all users, filter manually
+      if (needsManualFilter && users.isNotEmpty) {
+        final queryLower = query.toLowerCase();
+        users = users.where((user) => 
+          user.name.toLowerCase().contains(queryLower)
+        ).toList();
+        AppLogger().info('🔍 After manual filtering: ${users.length} users match "$query"');
+      }
+      
+      AppLogger().info('🔍 AppwriteService: Returning ${users.length} users');
+      return users;
     } catch (e) {
-      AppLogger().error('Error searching users: $e');
+      AppLogger().error('❌ AppwriteService: Error searching users: $e');
       return [];
+    }
+  }
+
+  // Debug method to test user search functionality
+  Future<void> debugUserSearch() async {
+    try {
+      AppLogger().info('🔧 DEBUG: Testing user search functionality');
+      
+      // Test 1: List all users (no search)
+      final allUsers = await databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'users',
+        queries: [Query.limit(10)],
+      );
+      AppLogger().info('🔧 DEBUG: Found ${allUsers.documents.length} total users');
+      
+      // Show first few users for debugging
+      for (int i = 0; i < allUsers.documents.length && i < 3; i++) {
+        final doc = allUsers.documents[i];
+        final name = doc.data['name'] ?? 'No name';
+        AppLogger().info('🔧 DEBUG: User $i: $name (${doc.$id})');
+      }
+      
+      // Test 2: Try a simple search if we have users
+      if (allUsers.documents.isNotEmpty) {
+        final firstUserName = allUsers.documents.first.data['name'] ?? '';
+        if (firstUserName.isNotEmpty && firstUserName.length > 2) {
+          final searchQuery = firstUserName.substring(0, 2);
+          AppLogger().info('🔧 DEBUG: Testing search with "$searchQuery"');
+          final searchResults = await searchUsers(searchQuery);
+          AppLogger().info('🔧 DEBUG: Search returned ${searchResults.length} results');
+        }
+      }
+      
+    } catch (e) {
+      AppLogger().error('🔧 DEBUG: Error in debug search: $e');
     }
   }
 
@@ -2969,7 +3189,7 @@ class AppwriteService {
     required String creatorId,
     required String topic,
     String? description,
-    int maxParticipants = 8, // moderator + 2 debaters + 3 judges + 2 audience
+    int maxParticipants = 1000, // Allow unlimited participants (high limit)
   }) async {
     try {
       // Enhanced duplicate prevention - check for recent rooms by the same creator
@@ -3188,6 +3408,55 @@ class AppwriteService {
     }
   }
 
+  /// Create a scheduled arena room that doesn't start immediately
+  Future<String> createScheduledArenaRoom({
+    required String creatorId,
+    required String topic,
+    String? description,
+    required DateTime scheduledTime,
+  }) async {
+    try {
+      // Use Appwrite's guaranteed unique ID
+      final roomId = 'scheduled_${ID.unique()}';
+      
+      AppLogger().info('Creating scheduled arena room with ID: $roomId for time: $scheduledTime');
+      
+      await databases.createDocument(
+        databaseId: 'arena_db',
+        collectionId: 'arena_rooms',
+        documentId: roomId,
+        data: {
+          'challengeId': '', // Empty for manual rooms
+          'challengerId': '', // Empty for manual rooms
+          'challengedId': '', // Empty for manual rooms
+          'topic': topic,
+          'description': description ?? '',
+          'status': 'scheduled', // scheduled status - not waiting yet
+          'startedAt': null,
+          'endedAt': null,
+          'winner': null,
+          'judgingComplete': false,
+          'judgingEnabled': false,
+          'totalJudges': 0,
+          'judgesSubmitted': 0,
+        },
+      );
+      
+      // Assign creator as moderator
+      await assignArenaRole(
+        roomId: roomId,
+        userId: creatorId,
+        role: 'moderator',
+      );
+      
+      AppLogger().info('Scheduled arena room created: $roomId for $scheduledTime');
+      return roomId;
+    } catch (e) {
+      AppLogger().error('Error creating scheduled Arena room: $e');
+      rethrow;
+    }
+  }
+
   /// Simple arena room creation method with enhanced duplicate prevention
   Future<String> createSimpleArenaRoom({
     required String creatorId,
@@ -3327,7 +3596,7 @@ class AppwriteService {
         roomData['participants'] = participants.documents.map((p) => Map<String, dynamic>.from(p.data)).toList().cast<Map<String, dynamic>>();
         
         // Only include rooms that aren't full (using default max of 8 since field doesn't exist)
-        const maxParticipants = 8;
+        const maxParticipants = 1000; // Allow unlimited participants
         if (participants.documents.length < maxParticipants) {
           joinableRooms.add(roomData);
         }
