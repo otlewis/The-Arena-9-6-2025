@@ -26,6 +26,7 @@ import 'core/startup/app_startup_optimizer.dart';
 import 'core/cache/smart_cache_manager.dart';
 import 'core/agora/optimized_agora_service.dart';
 import 'core/navigation/optimized_navigation.dart';
+import 'package:mcp_toolkit/mcp_toolkit.dart';
 
 // Service locator instance
 final getIt = GetIt.instance;
@@ -75,6 +76,13 @@ void main() async {
   // Ensure Flutter bindings are initialized in the same zone as runApp
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
+    
+    // Initialize MCP Toolkit for Flutter development tools
+    if (kDebugMode) {
+      MCPToolkitBinding.instance
+        ..initialize()
+        ..initializeFlutterToolkit();
+    }
     
     // Initialize core services first
     setupServiceLocator();
@@ -152,10 +160,15 @@ void main() async {
       if (kDebugMode) rethrow;
     }
   }, (error, stack) {
+    // Handle MCP Toolkit errors
+    if (kDebugMode) {
+      MCPToolkitBinding.instance.handleZoneError(error, stack);
+    }
+    
     // Create a basic logger for zone errors if main logger fails
     if (kDebugMode) {
-      print('Zone error: $error');
-      print('Stack: $stack');
+      debugPrint('Zone error: $error');
+      debugPrint('Stack: $stack');
     }
     
     // Handle known issues gracefully
@@ -507,17 +520,25 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
     
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: themeService.isDarkMode 
-              ? [
-                  const Color(0xFF6B46C1).withValues(alpha: 0.9), // Purple in dark mode
-                  const Color(0xFF8B5CF6).withValues(alpha: 0.9),
-                ]
-              : [
-                  const Color(0xFFFF2400), // Pure scarlet in light mode
-                  const Color(0xFFDC2626), // Darker scarlet
-                ],
-        ),
+        color: themeService.isDarkMode 
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E8E8),
+        boxShadow: [
+          BoxShadow(
+            color: themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.white.withValues(alpha: 0.8),
+            offset: const Offset(0, -4),
+            blurRadius: 12,
+          ),
+          BoxShadow(
+            color: themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.6)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+            offset: const Offset(0, 4),
+            blurRadius: 12,
+          ),
+        ],
       ),
       child: BottomNavigationBar(
         currentIndex: navState.currentIndex,
@@ -525,56 +546,141 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
           ref.read(navigationProvider.notifier).setCurrentIndex(index);
         },
         backgroundColor: Colors.transparent,
-        selectedItemColor: Colors.white,
-        unselectedItemColor: Colors.white60,
+        selectedItemColor: const Color(0xFF8B5CF6),
+        unselectedItemColor: themeService.isDarkMode 
+            ? Colors.white54
+            : Colors.grey[600],
         elevation: 0,
         type: BottomNavigationBarType.fixed,
         items: [
           BottomNavigationBarItem(
-            icon: Stack(
-              children: [
-                const Icon(Icons.message),
-                if (navState.pendingChallengeCount > 0)
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFF2400),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 16,
-                        minHeight: 16,
-                      ),
-                      child: Text(
-                        navState.pendingChallengeCount.toString(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-              ],
+            icon: _buildNeumorphicNavIcon(
+              Icons.bolt,
+              isSelected: navState.currentIndex == 0,
+              themeService: themeService,
+              badgeCount: navState.pendingChallengeCount,
             ),
-            label: 'Messages',
+            label: 'Challenges',
           ),
           BottomNavigationBarItem(
-            icon: Icon(navState.isAuthenticated ? Icons.home : Icons.login),
+            icon: _buildNeumorphicNavIcon(
+              navState.isAuthenticated ? Icons.home_rounded : Icons.login,
+              isSelected: navState.currentIndex == 1,
+              themeService: themeService,
+            ),
             label: navState.isAuthenticated ? 'Home' : 'Login',
           ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.diamond),
+          BottomNavigationBarItem(
+            icon: _buildNeumorphicNavIcon(
+              Icons.workspace_premium_rounded,
+              isSelected: navState.currentIndex == 2,
+              themeService: themeService,
+            ),
             label: 'Premium',
           ),
           BottomNavigationBarItem(
-            icon: Icon(navState.isAuthenticated ? Icons.person : Icons.login),
+            icon: _buildNeumorphicNavIcon(
+              navState.isAuthenticated ? Icons.person_rounded : Icons.login,
+              isSelected: navState.currentIndex == 3,
+              themeService: themeService,
+            ),
             label: navState.isAuthenticated ? 'Profile' : 'Login',
           ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildNeumorphicNavIcon(
+    IconData iconData, {
+    required bool isSelected,
+    required ThemeService themeService,
+    int? badgeCount,
+  }) {
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: themeService.isDarkMode 
+            ? const Color(0xFF3A3A3A)
+            : const Color(0xFFF0F0F3),
+        shape: BoxShape.circle,
+        boxShadow: isSelected ? [
+          BoxShadow(
+            color: themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.05)
+                : Colors.white.withValues(alpha: 0.9),
+            offset: const Offset(-3, -3),
+            blurRadius: 6,
+          ),
+          BoxShadow(
+            color: themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.6)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.4),
+            offset: const Offset(3, 3),
+            blurRadius: 6,
+          ),
+        ] : [
+          BoxShadow(
+            color: themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.4)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+            offset: const Offset(2, 2),
+            blurRadius: 4,
+            spreadRadius: -1,
+          ),
+          BoxShadow(
+            color: themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.02)
+                : Colors.white.withValues(alpha: 0.7),
+            offset: const Offset(-2, -2),
+            blurRadius: 4,
+            spreadRadius: -1,
+          ),
+        ],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(
+            iconData,
+            size: 24,
+            color: isSelected 
+                ? const Color(0xFF8B5CF6)
+                : (themeService.isDarkMode ? Colors.white54 : Colors.grey[600]),
+          ),
+          if (badgeCount != null && badgeCount > 0)
+            Positioned(
+              right: 8,
+              top: 8,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF2400),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFF2400).withValues(alpha: 0.4),
+                      blurRadius: 4,
+                      offset: const Offset(1, 1),
+                    ),
+                  ],
+                ),
+                constraints: const BoxConstraints(
+                  minWidth: 16,
+                  minHeight: 16,
+                ),
+                child: Text(
+                  badgeCount.toString(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
         ],
       ),
     );

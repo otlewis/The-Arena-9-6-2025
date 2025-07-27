@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import '../widgets/user_avatar.dart';
 import '../services/challenge_messaging_service.dart';
-import '../features/arena/screens/arena_screen_modular.dart';
+import '../screens/arena_screen.dart';
 import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
 
@@ -143,7 +143,7 @@ class _ChallengeModalState extends State<ChallengeModal>
             child: const Icon(
               Icons.close,
               color: Colors.white,
-              size: 24,
+              size: 23,
             ),
           ),
         ],
@@ -429,7 +429,7 @@ class _ChallengeModalState extends State<ChallengeModal>
           if (mounted) {
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(
-                builder: (context) => ArenaScreenModular(
+                builder: (context) => ArenaScreen(
                   roomId: roomId!,
                   challengeId: widget.challenge['id'],
                   topic: topic,

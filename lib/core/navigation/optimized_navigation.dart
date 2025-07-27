@@ -11,7 +11,7 @@ import '../../services/challenge_messaging_service.dart';
 import '../../services/sound_service.dart';
 import '../../widgets/challenge_modal.dart';
 import '../../widgets/arena_role_notification_modal.dart';
-import '../../widgets/floating_im_widget.dart';
+import '../../widgets/messaging_modal_system.dart';
 import '../../core/logging/app_logger.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../core/notifications/widgets/notification_banner.dart';
@@ -318,7 +318,7 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
       _ensureBottomNavigationVisible();
     });
     
-    return FloatingIMWidget(
+    return MessagingModalSystem(
       child: Scaffold(
         body: Stack(
           children: [
@@ -352,36 +352,97 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
     final themeService = ThemeService();
     
     return Container(
+      margin: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: themeService.isDarkMode 
-              ? [
-                  const Color(0xFF6B46C1).withValues(alpha: 0.9), // Purple in dark mode
-                  const Color(0xFF8B5CF6).withValues(alpha: 0.9),
-                ]
-              : [
-                  const Color(0xFFFF2400), // Pure scarlet in light mode
-                  const Color(0xFFDC2626), // Darker scarlet
-                ],
-        ),
+        color: themeService.isDarkMode 
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E8E8),
+        borderRadius: BorderRadius.circular(25),
+        boxShadow: [
+          // Light shadow (top-left)
+          BoxShadow(
+            color: themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.05)
+                : Colors.white.withValues(alpha: 0.8),
+            offset: const Offset(-8, -8),
+            blurRadius: 16,
+            spreadRadius: 0,
+          ),
+          // Dark shadow (bottom-right)
+          BoxShadow(
+            color: themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.4)
+                : Colors.black.withValues(alpha: 0.15),
+            offset: const Offset(8, 8),
+            blurRadius: 16,
+            spreadRadius: 0,
+          ),
+        ],
       ),
-      child: BottomNavigationBar(
-        currentIndex: navState.currentIndex,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(25),
+        child: BottomNavigationBar(
+        currentIndex: navState.currentIndex == 0 ? 1 : navState.currentIndex,
         onTap: (index) {
-          // Instant navigation - no rebuild needed
-          ref.read(navigationProvider.notifier).setCurrentIndex(index);
+          // Special handling for messages tab (index 0) - open modal instead
+          if (index == 0) {
+            context.openMessagingModal();
+          } else {
+            // Instant navigation - no rebuild needed
+            ref.read(navigationProvider.notifier).setCurrentIndex(index);
+          }
         },
         backgroundColor: Colors.transparent,
-        selectedItemColor: Colors.white,
-        unselectedItemColor: Colors.white60,
+        selectedItemColor: themeService.isDarkMode 
+            ? const Color(0xFF8B5CF6)
+            : const Color(0xFF6B46C1),
+        unselectedItemColor: themeService.isDarkMode 
+            ? Colors.white54
+            : Colors.black54,
         elevation: 0,
         type: BottomNavigationBarType.fixed,
         items: [
           BottomNavigationBarItem(
             icon: Stack(
               children: [
-                const Icon(Icons.message),
-                if (navState.pendingChallengeCount > 0)
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: themeService.isDarkMode 
+                        ? const Color(0xFF3A3A3A)
+                        : const Color(0xFFF0F0F3),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      // Light shadow (top-left) - very subtle
+                      BoxShadow(
+                        color: themeService.isDarkMode 
+                            ? Colors.white.withValues(alpha: 0.03)
+                            : Colors.white.withValues(alpha: 0.7),
+                        offset: const Offset(-6, -6),
+                        blurRadius: 12,
+                        spreadRadius: 0,
+                      ),
+                      // Dark shadow (bottom-right) - soft
+                      BoxShadow(
+                        color: themeService.isDarkMode 
+                            ? Colors.black.withValues(alpha: 0.5)
+                            : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                        offset: const Offset(6, 6),
+                        blurRadius: 12,
+                        spreadRadius: 0,
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.bolt,
+                      size: 28,
+                      color: themeService.isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                  ),
+                ),
+                if (context.unreadMessageCount > 0)
                   Positioned(
                     right: 0,
                     top: 0,
@@ -396,7 +457,7 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
                         minHeight: 16,
                       ),
                       child: Text(
-                        navState.pendingChallengeCount.toString(),
+                        context.unreadMessageCount > 9 ? '9+' : context.unreadMessageCount.toString(),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10,
@@ -408,21 +469,128 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
                   ),
               ],
             ),
-            label: 'Messages',
+            label: 'Challenges',
           ),
           BottomNavigationBarItem(
-            icon: Icon(navState.isAuthenticated ? Icons.home : Icons.login),
+            icon: navState.isAuthenticated 
+              ? Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: themeService.isDarkMode 
+                        ? const Color(0xFF3A3A3A)
+                        : const Color(0xFFF0F0F3),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: themeService.isDarkMode 
+                            ? Colors.white.withValues(alpha: 0.03)
+                            : Colors.white.withValues(alpha: 0.7),
+                        offset: const Offset(-6, -6),
+                        blurRadius: 12,
+                      ),
+                      BoxShadow(
+                        color: themeService.isDarkMode 
+                            ? Colors.black.withValues(alpha: 0.5)
+                            : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                        offset: const Offset(6, 6),
+                        blurRadius: 12,
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.home_outlined,
+                      size: 28,
+                      color: navState.currentIndex == 1 
+                          ? const Color(0xFF8B5CF6)
+                          : (themeService.isDarkMode ? Colors.grey[400] : Colors.grey[600]),
+                    ),
+                  ),
+                )
+              : const Icon(Icons.login),
             label: navState.isAuthenticated ? 'Home' : 'Login',
           ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.diamond),
+          BottomNavigationBarItem(
+            icon: Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: themeService.isDarkMode 
+                    ? const Color(0xFF3A3A3A)
+                    : const Color(0xFFF0F0F3),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: themeService.isDarkMode 
+                        ? Colors.white.withValues(alpha: 0.03)
+                        : Colors.white.withValues(alpha: 0.7),
+                    offset: const Offset(-6, -6),
+                    blurRadius: 12,
+                  ),
+                  BoxShadow(
+                    color: themeService.isDarkMode 
+                        ? Colors.black.withValues(alpha: 0.5)
+                        : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                    offset: const Offset(6, 6),
+                    blurRadius: 12,
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.diamond_outlined,
+                  size: 28,
+                  color: navState.currentIndex == 2 
+                      ? const Color(0xFF8B5CF6)
+                      : (themeService.isDarkMode ? Colors.grey[400] : Colors.grey[600]),
+                ),
+              ),
+            ),
             label: 'Premium',
           ),
           BottomNavigationBarItem(
-            icon: Icon(navState.isAuthenticated ? Icons.person : Icons.login),
+            icon: navState.isAuthenticated 
+              ? Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: themeService.isDarkMode 
+                        ? const Color(0xFF3A3A3A)
+                        : const Color(0xFFF0F0F3),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: themeService.isDarkMode 
+                            ? Colors.white.withValues(alpha: 0.03)
+                            : Colors.white.withValues(alpha: 0.7),
+                        offset: const Offset(-6, -6),
+                        blurRadius: 12,
+                      ),
+                      BoxShadow(
+                        color: themeService.isDarkMode 
+                            ? Colors.black.withValues(alpha: 0.5)
+                            : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                        offset: const Offset(6, 6),
+                        blurRadius: 12,
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.person_outline_rounded,
+                      size: 28,
+                      color: navState.currentIndex == 3 
+                          ? const Color(0xFF8B5CF6)
+                          : (themeService.isDarkMode ? Colors.grey[400] : Colors.grey[600]),
+                    ),
+                  ),
+                )
+              : const Icon(Icons.login),
             label: navState.isAuthenticated ? 'Profile' : 'Login',
           ),
         ],
+        ),
       ),
     );
   }

@@ -13,8 +13,11 @@ import '../services/theme_service.dart';
 import '../widgets/arena_role_notification_modal.dart';
 import '../widgets/animated_fade_in.dart';
 import '../widgets/instant_message_bell.dart';
+import '../widgets/challenge_bell.dart';
 import 'package:get_it/get_it.dart';
 import '../core/logging/app_logger.dart';
+// import 'mediasfu_test_screen.dart'; // Unused import
+import 'arena_webrtc_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -141,6 +144,21 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          // Go DIRECTLY to Arena test room - NO options
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ArenaWebRTCScreen(),
+            ),
+          );
+        },
+        backgroundColor: Colors.orange,
+        icon: const Icon(Icons.bolt),
+        label: const Text('ARENA CALL'),
+        tooltip: 'Enter Arena Test Room',
+      ),
     );
   }
 
@@ -209,6 +227,40 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         child: const InstantMessageBell(
                           iconColor: Color(0xFFDC2626),
+                          iconSize: 24,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    AnimatedScaleIn(
+                      delay: const Duration(milliseconds: 350),
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: _themeService.isDarkMode 
+                              ? const Color(0xFF3A3A3A)
+                              : const Color(0xFFF0F0F3),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: _themeService.isDarkMode 
+                                  ? Colors.white.withValues(alpha: 0.03)
+                                  : Colors.white.withValues(alpha: 0.7),
+                              offset: const Offset(-4, -4),
+                              blurRadius: 8,
+                            ),
+                            BoxShadow(
+                              color: _themeService.isDarkMode 
+                                  ? Colors.black.withValues(alpha: 0.5)
+                                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                              offset: const Offset(4, 4),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                        child: const ChallengeBell(
+                          iconColor: Color(0xFF8B5CF6),
                           iconSize: 24,
                         ),
                       ),
@@ -580,10 +632,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: AnimatedScaleIn(
-                delay: const Duration(milliseconds: 1900),
-                child: _buildFeatureCard('Rankings', 'Rankings', () => _showComingSoon()),
-              ),
+              child: Container(), // Empty space to balance the row
             ),
           ],
         ),
@@ -599,7 +648,8 @@ class _HomeScreenState extends State<HomeScreen> {
       'OpenDiscussions': 'assets/icons/opendiscussions.png',
       'DebateTakeDiscuss': 'assets/icons/debatetakesdiscuss.png',
       'DebateClubs': 'assets/icons/debate clubs.png',
-      'Rankings': 'assets/icons/rank1.png',
+      'WebRTCTest': Icons.video_call, // Video call icon for WebRTC test
+      'SimpleConference': Icons.video_camera_front, // Camera icon for Simple Conference
     };
     
     final iconAsset = iconMap[feature];
@@ -665,25 +715,31 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
-                child: iconAsset == Icons.gavel
-                  ? const Icon(
-                      Icons.gavel,
+                child: iconAsset is IconData
+                  ? Icon(
+                      iconAsset,
                       size: 32,
-                      color: Color(0xFF8B5CF6),
+                      color: const Color(0xFF8B5CF6),
                     )
-                  : Image.asset(
-                      iconAsset as String,
-                      width: 40,
-                      height: 40,
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Icon(
-                          Icons.category_rounded,
-                          size: 32,
-                          color: Color(0xFF8B5CF6),
-                        );
-                      },
-                    ),
+                  : iconAsset is String
+                    ? Image.asset(
+                        iconAsset,
+                        width: 40,
+                        height: 40,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.category_rounded,
+                            size: 32,
+                            color: Color(0xFF8B5CF6),
+                          );
+                        },
+                      )
+                    : const Icon(
+                        Icons.category_rounded,
+                        size: 32,
+                        color: Color(0xFF8B5CF6),
+                      ),
               ),
               const SizedBox(height: 12),
               if (title.isNotEmpty)
@@ -735,13 +791,6 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(context, MaterialPageRoute(builder: (context) => const DiscussionsRoomListScreen()));
   }
 
-  void _showComingSoon() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Coming Soon'),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
+
 }
 
