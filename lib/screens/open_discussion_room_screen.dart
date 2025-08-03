@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import '../models/timer_state.dart' as timer_models;
-import '../services/agora_service.dart';
+import '../services/websocket_webrtc_service.dart';
 import '../services/appwrite_service.dart';
 import '../services/firebase_gift_service.dart';
-import '../services/agora_instant_messaging_service.dart';
-// import '../services/chat_service.dart'; // Removed with new chat system
 import '../widgets/user_avatar.dart';
-import '../widgets/room_chat_panel.dart';
 import '../widgets/user_profile_modal.dart';
 import '../widgets/instant_message_bell.dart';
 import '../widgets/challenge_bell.dart';
-import '../widgets/floating_im_widget.dart';
 import '../widgets/appwrite_timer_widget.dart';
+import '../widgets/mattermost_chat_widget.dart';
+import '../models/discussion_chat_message.dart';
 import '../constants/appwrite.dart';
 import '../core/logging/app_logger.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 class OpenDiscussionRoomScreen extends StatefulWidget {
   final Room room;
@@ -32,18 +32,32 @@ class OpenDiscussionRoomScreen extends StatefulWidget {
 }
 
 class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
-  final AgoraService _agoraService = AgoraService();
   final AppwriteService _appwriteService = AppwriteService();
   final FirebaseGiftService _firebaseGiftService = FirebaseGiftService();
-  final AgoraInstantMessagingService _imService = AgoraInstantMessagingService();
-  // final ChatService _chatService = ChatService(); // Removed with new chat system
+  // final SimpleWebRTCService _audioService = SimpleWebRTCService();
+  // Using WebSocketWebRTCService for Open Discussion (was connecting successfully)
+  final WebSocketWebRTCService _audioService = WebSocketWebRTCService();
   
-  bool _isMuted = true;
+  // Wrapper properties for WebSocketWebRTCService compatibility
+  bool get _audioServiceIsMuted => _isMuted;
+  int get _audioServiceConnectedPeersCount => 0; // WebSocket doesn't track this
+  
+  Future<void> _audioServiceToggleMute() async {
+    // WebSocketWebRTCService doesn't have built-in mute, handle locally
+    if (_localStream != null) {
+      final audioTracks = _localStream!.getAudioTracks();
+      for (final track in audioTracks) {
+        track.enabled = _isMuted; // Toggle
+      }
+      if (mounted) {
+        setState(() {
+          _isMuted = !_isMuted;
+        });
+      }
+    }
+  }
+  
   bool _isHandRaised = false;
-  bool _isConnecting = false;
-  bool _isSpeakerphoneEnabled = true; // Track speakerphone state
-  final Set<int> _remoteUsers = {};
-  final Set<int> _speakingUsers = {}; // Track who is currently speaking
   String? _currentAppwriteUserId; // Current user's Appwrite ID
   Map<String, dynamic>? _userParticipation; // Current user's room participation data
   final List<Map<String, dynamic>> _participants = []; // Real participants from Appwrite
@@ -67,6 +81,17 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _thirtySecondChimePlayed = false; // Track if 30-sec chime already played
   
+  // Audio state
+  bool _isAudioConnected = false;
+  bool _isAudioConnecting = false;
+  bool _isMuted = false;
+  // Video state removed - audio-only for now
+  
+  // Audio stream management for SimpleMediaSoupService
+  final Map<String, RTCVideoRenderer> _remoteAudioRenderers = {};
+  final Map<String, MediaStream> _remoteStreams = {};
+  MediaStream? _localStream;
+  
   // Scarlet and Purple theme colors (matching app theme)
   static const Color scarletRed = Color(0xFFFF2400);
   static const Color lightScarlet = Color(0xFFFFF1F0);
@@ -79,18 +104,43 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     _initializeAudioPlayer();
     _initializeRoom();
     _initializeInstantMessaging();
+    _initializeAudio();
   }
+
 
   @override
   void dispose() {
     debugPrint('🧹 Disposing OpenDiscussionRoomScreen');
+    
+    // Remove audio service listener
+    // WebSocketWebRTCService doesn't have listeners
+    // _audioService.removeListener(_onAudioServiceChanged);
+    
     _realtimeSubscription?.cancel();
     _unreadMessagesSubscription?.cancel();
     _speakingTimer?.cancel();
     _fallbackRefreshTimer?.cancel();
     _audioPlayer.dispose();
+    _audioService.disconnect();
+    
+    // Clean up audio renderers
+    for (var renderer in _remoteAudioRenderers.values) {
+      renderer.srcObject = null;
+      renderer.dispose();
+    }
+    _remoteAudioRenderers.clear();
+    _remoteStreams.clear();
+    
+    // Clear audio service callbacks to prevent setState after dispose
+    _audioService.onConnected = null;
+    _audioService.onError = null;
+    _audioService.onDisconnected = null;
+    _audioService.onLocalStream = null;
+    _audioService.onRemoteStream = null;
+    _audioService.onPeerJoined = null;
+    _audioService.onPeerLeft = null;
+    
     _leaveRoomData();
-    _agoraService.dispose();
     super.dispose();
   }
 
@@ -104,23 +154,209 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     }
   }
 
+  Future<void> _createAudioRenderer(String peerId, MediaStream stream) async {
+    try {
+      // Create and initialize audio renderer if it doesn't exist
+      if (!_remoteAudioRenderers.containsKey(peerId)) {
+        final renderer = RTCVideoRenderer();
+        await renderer.initialize();
+        
+        debugPrint("🎧 Initialized audio renderer for $peerId");
+        
+        _remoteAudioRenderers[peerId] = renderer;
+      }
+      
+      // Assign the stream to the renderer
+      _remoteAudioRenderers[peerId]!.srcObject = stream;
+      debugPrint("🔊 Audio stream assigned to renderer for $peerId");
+      
+      // For debugging - check audio tracks
+      final audioTracks = stream.getAudioTracks();
+      debugPrint("🎵 Stream has ${audioTracks.length} audio tracks");
+      for (var track in audioTracks) {
+        debugPrint("🎵 Audio track: id=${track.id}, enabled=${track.enabled}, kind=${track.kind}");
+      }
+      
+    } catch (e) {
+      debugPrint("❌ Failed to create audio renderer for $peerId: $e");
+    }
+  }
+
+  void _resumeWebAudioContext() async {
+    if (kIsWeb) {
+      try {
+        // On web, audio context is suspended by default and needs user interaction
+        debugPrint('🔊 [Web] Ensuring audio context is resumed for WebRTC playback');
+        
+        // Force update the UI to ensure audio renderers are properly mounted
+        if (mounted) {
+          setState(() {
+            // This triggers a rebuild which can help with audio renderer mounting
+          });
+        }
+        
+        // For each audio renderer, ensure the stream is properly assigned
+        for (var entry in _remoteAudioRenderers.entries) {
+          final peerId = entry.key;
+          final renderer = entry.value;
+          if (_remoteStreams.containsKey(peerId)) {
+            renderer.srcObject = _remoteStreams[peerId];
+            debugPrint('🔊 [Web] Re-assigned stream to renderer for $peerId');
+          }
+        }
+        
+      } catch (e) {
+        debugPrint('⚠️ [Web] Audio context warning: $e');
+      }
+    }
+  }
+
   Future<void> _initializeInstantMessaging() async {
     try {
-      await _imService.initialize();
-      
-      // Subscribe to unread message count
-      _unreadMessagesSubscription = _imService
-          .getUnreadCountStream()
-          .listen((count) {
-        if (mounted) {
-          debugPrint('📱 OpenDiscussion: Unread count updated to $count');
-        }
-      });
-      
-      debugPrint('📱 Instant messaging initialized in room');
+      // Instant messaging disabled (Agora removed)
+      AppLogger().debug('📱 Instant messaging disabled in open discussion (Agora removed)');
     } catch (e) {
       debugPrint('❌ Failed to initialize instant messaging: $e');
     }
+  }
+
+  Future<void> _initializeAudio() async {
+    debugPrint('🎤 Initializing WebRTC audio for Open Discussion room');
+    
+    // Set up audio service callbacks
+    _audioService.onConnected = () {
+      debugPrint('🔄 [OpenDiscussion] onConnected callback triggered');
+      
+      // Always update audio state for functionality
+      _isAudioConnected = true;
+      _isAudioConnecting = false;
+      _isMuted = _audioServiceIsMuted;
+      
+      if (mounted) {
+        setState(() {
+          _isAudioConnected = true;
+          _isAudioConnecting = false;
+          _isMuted = _audioServiceIsMuted; // Sync mute state
+        });
+        debugPrint('✅ [OpenDiscussion] Audio connected - UI updated (connected: $_isAudioConnected, connecting: $_isAudioConnecting)');
+      } else {
+        debugPrint('✅ [OpenDiscussion] Audio connected - state updated (widget not mounted, UI not updated)');
+      }
+    };
+    
+    _audioService.onDisconnected = () {
+      if (mounted) {
+        setState(() {
+          _isAudioConnected = false;
+          _isAudioConnecting = false;
+        });
+        debugPrint('📡 Audio disconnected from Open Discussion room');
+      }
+    };
+    
+    _audioService.onError = (error) {
+      if (mounted) {
+        setState(() {
+          _isAudioConnecting = false;
+        });
+        debugPrint('❌ Audio error: $error');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Audio connection error: $error'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    };
+    
+    // Listen to audio service changes for peer count updates
+    // WebSocketWebRTCService doesn't have listeners
+    // _audioService.addListener(_onAudioServiceChanged);
+    
+    // Handle remote audio streams
+    _audioService.onRemoteStream = (peerId, stream, userId, role) async {
+      debugPrint('🎵 [OpenDiscussion] Received remote audio stream from peer: $peerId');
+      debugPrint('🎵 [OpenDiscussion] Audio tracks in stream: ${stream.getAudioTracks().length}');
+      
+      // Create audio renderer for this peer (always do this for audio functionality)
+      await _createAudioRenderer(peerId, stream);
+      
+      // Enable audio tracks for playback (always do this for audio)
+      final audioTracks = stream.getAudioTracks();
+      for (var track in audioTracks) {
+        track.enabled = true;
+        debugPrint('🔊 [OpenDiscussion] Enabled audio track from $peerId: ${track.id}');
+      }
+      
+      // For web: Ensure audio context is resumed (browser autoplay policy)
+      if (kIsWeb) {
+        _resumeWebAudioContext();
+      }
+      
+      if (mounted) {
+        setState(() {
+          _remoteStreams[peerId] = stream;
+          _isAudioConnected = true; // Ensure connected state when we receive audio
+          _isAudioConnecting = false;
+        });
+      } else {
+        // Still store streams even if not mounted for audio functionality
+        _remoteStreams[peerId] = stream;
+        _isAudioConnected = true;
+        _isAudioConnecting = false;
+      }
+      
+      debugPrint('✅ [OpenDiscussion] Audio stream from $peerId is now active and rendering');
+      debugPrint('🎤 [OpenDiscussion] Remote streams count: ${_remoteStreams.length}');
+    };
+    
+    // Handle local audio stream
+    _audioService.onLocalStream = (stream) {
+      debugPrint('🎤 Received local audio stream');
+      debugPrint('🎤 Local audio tracks: ${stream.getAudioTracks().length}');
+      
+      // Always store local stream for audio functionality
+      _localStream = stream;
+      _isMuted = _audioServiceIsMuted;
+      
+      if (mounted) {
+        setState(() {
+          _localStream = stream;
+          _isMuted = _audioServiceIsMuted;
+        });
+      }
+    };
+    
+    // Handle peer events
+    _audioService.onPeerJoined = (peerId, userId, role) {
+      debugPrint('👤 Peer joined audio: $peerId');
+      if (mounted) {
+        setState(() {
+          // Trigger UI update to show new peer count
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('A participant joined the audio'),
+            duration: Duration(seconds: 2),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    };
+    
+    _audioService.onPeerLeft = (peerId) {
+      debugPrint('👋 Peer left audio: $peerId');
+      if (mounted) {
+        setState(() {
+          _remoteStreams.remove(peerId);
+          // Trigger UI update to show updated peer count
+          _remoteAudioRenderers[peerId]?.srcObject = null;
+          _remoteAudioRenderers[peerId]?.dispose();
+          _remoteAudioRenderers.remove(peerId);
+        });
+      }
+    };
   }
 
   Future<void> _initializeRoom() async {
@@ -151,8 +387,8 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         // Set up real-time subscription for participant changes
         _setupRealtimeSubscription();
         
-        // Initialize Agora voice
-        await _initializeAgora();
+        // Auto-connect to audio if user is speaker or moderator (after participants are loaded)
+        await _checkAndAutoConnectAudio();
       }
     } catch (e) {
       debugPrint('Error initializing room: $e');
@@ -249,6 +485,21 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         debugPrint('📊 Speakers: ${_speakers.length}, Audience: ${_audience.length}, Moderator: ${_moderator != null ? 1 : 0}');
         debugPrint('🎭 Current user role: ${_userParticipation?['role']}');
         
+        // Check for audio connection after setting user participation
+        final userRole = _userParticipation?['role'];
+        if (userRole == 'speaker' || userRole == 'moderator') {
+          debugPrint('🎤 User role detected as $userRole, checking audio connection...');
+          debugPrint('🔍 Current audio state: connecting=$_isAudioConnecting, connected=$_isAudioConnected');
+          
+          // Only connect if not already connected or connecting
+          if (!_isAudioConnected && !_isAudioConnecting) {
+            debugPrint('🎤 Starting new audio connection...');
+            _connectToAudio();
+          } else {
+            debugPrint('🎤 Audio already connected/connecting, skipping...');
+          }
+        }
+        
         // Debug: Print all participants with their roles
         debugPrint('👥 DEBUG: All participants list:');
         for (int i = 0; i < _participants.length; i++) {
@@ -259,7 +510,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         // Load hand raises from participant metadata
         await _loadHandRaisesFromParticipants();
         
-        setState(() {});
+        if (mounted) {
+          setState(() {});
+        }
       }
     } catch (e) {
       debugPrint('❌ Error loading room participants: $e');
@@ -269,9 +522,11 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   void _setupRealtimeSubscription() {
     if (_reconnectAttempts >= _maxReconnectAttempts) {
       debugPrint('❌ Maximum realtime reconnection attempts reached. Operating in offline mode.');
-      setState(() {
-        _isRealtimeHealthy = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isRealtimeHealthy = false;
+        });
+      }
       _startFallbackRefresh(); // Start fallback refresh when max attempts reached
       return;
     }
@@ -308,7 +563,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               debugPrint('🔄 Refreshing participants for room update');
               
               // Update realtime health status
-              if (!_isRealtimeHealthy) {
+              if (!_isRealtimeHealthy && mounted) {
                 setState(() {
                   _isRealtimeHealthy = true;
                 });
@@ -333,9 +588,11 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
           debugPrint('❌ Room participant subscription error: $error');
           _reconnectAttempts++;
           
-          setState(() {
-            _isRealtimeHealthy = false;
-          });
+          if (mounted) {
+            setState(() {
+              _isRealtimeHealthy = false;
+            });
+          }
           
           // Exponential backoff: 2^attempt seconds (2, 4, 8, 16, 32)
           final delaySeconds = 2 << _reconnectAttempts.clamp(0, 5);
@@ -357,9 +614,11 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         },
         onDone: () {
           debugPrint('⚠️ Room participant subscription closed');
-          setState(() {
-            _isRealtimeHealthy = false;
-          });
+          if (mounted) {
+            setState(() {
+              _isRealtimeHealthy = false;
+            });
+          }
           
           // Start fallback refresh when realtime connection is unhealthy
           _startFallbackRefresh();
@@ -371,9 +630,11 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       debugPrint('❌ Error setting up real-time subscription: $e');
       _reconnectAttempts++;
       
-      setState(() {
-        _isRealtimeHealthy = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isRealtimeHealthy = false;
+        });
+      }
       
       // Exponential backoff for setup errors too
       final delaySeconds = 2 << _reconnectAttempts.clamp(0, 5);
@@ -394,7 +655,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   Future<void> _loadUserProfile(String userId) async {
     try {
       final profile = await _appwriteService.getUserProfile(userId);
-      if (profile != null) {
+      if (profile != null && mounted) {
         setState(() {
           _userProfiles[userId] = profile;
         });
@@ -418,97 +679,24 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       final balance = await _firebaseGiftService.getUserCoinBalance(_currentAppwriteUserId!);
       debugPrint('🎁 DEBUG: Firebase returned balance: $balance');
       
-      setState(() {
-        _currentUserCoinBalance = balance;
-      });
+      if (mounted) {
+        setState(() {
+          _currentUserCoinBalance = balance;
+        });
+      }
       debugPrint('✅ Firebase: Loaded coin balance: $balance for user $_currentAppwriteUserId');
     } catch (e) {
       debugPrint('❌ Firebase: Error loading coin balance: $e');
       // Set default 100 coins if Firebase fails
-      setState(() {
-        _currentUserCoinBalance = 100;
-      });
+      if (mounted) {
+        setState(() {
+          _currentUserCoinBalance = 100;
+        });
+      }
       debugPrint('🎁 DEBUG: Set default 100 coins due to Firebase error');
     }
   }
 
-  Future<void> _initializeAgora() async {
-    try {
-      setState(() => _isConnecting = true);
-      
-      // Initialize Agora
-      await _agoraService.initialize();
-      
-      // Set up callbacks
-      _agoraService.onUserJoined = (uid) {
-        setState(() {
-          _remoteUsers.add(uid);
-        });
-        debugPrint('🎙️ User $uid joined the voice channel. Total in voice: ${_remoteUsers.length + 1}');
-      };
-      
-      _agoraService.onUserLeft = (uid) {
-        setState(() {
-          _remoteUsers.remove(uid);
-          _speakingUsers.remove(uid);
-        });
-        debugPrint('🎙️ User $uid left the voice channel. Total in voice: ${_remoteUsers.length + 1}');
-      };
-      
-      _agoraService.onUserMuteAudio = (uid, muted) {
-        setState(() {
-          if (muted) {
-            _speakingUsers.remove(uid);
-          } else {
-            _speakingUsers.add(uid);
-          }
-        });
-        debugPrint('User $uid ${muted ? 'muted' : 'unmuted'}');
-      };
-      
-      _agoraService.onJoinChannel = (joined) {
-        setState(() => _isConnecting = false);
-        if (joined && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Connected to voice room!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      };
-      
-      // Join the channel as audience initially (even if moderator)
-      await _agoraService.joinChannel();
-      
-      // If user is moderator, automatically become speaker
-      if (_userParticipation?['role'] == 'moderator') {
-        await Future.delayed(const Duration(milliseconds: 500)); // Small delay
-        await _agoraService.switchToSpeaker();
-        setState(() {
-          _isMuted = false; // Moderator starts unmuted
-        });
-      }
-      
-    } catch (e) {
-      setState(() => _isConnecting = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error connecting to voice room: $e'),
-            backgroundColor: scarletRed,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _toggleMute() async {
-    if (_agoraService.isBroadcaster) {
-      await _agoraService.muteLocalAudio(_isMuted);
-      setState(() => _isMuted = !_isMuted);
-    }
-  }
 
 
 
@@ -536,10 +724,12 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
 
       debugPrint('🕐 Received timer update from moderator: ${newSpeakingTime}s');
 
-      setState(() {
-        _speakingTime = newSpeakingTime;
-        _thirtySecondChimePlayed = false; // Reset chime for new timer state
-      });
+      if (mounted) {
+        setState(() {
+          _speakingTime = newSpeakingTime;
+          _thirtySecondChimePlayed = false; // Reset chime for new timer state
+        });
+      }
 
     } catch (e) {
       debugPrint('❌ Error handling timer update: $e');
@@ -554,23 +744,27 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       }
       
       if (_speakingTime > 0) {
-        setState(() {
-          _speakingTime--;
-          
-          // Play chime at 30 seconds remaining (only once)
-          if (_speakingTime == 30 && !_thirtySecondChimePlayed) {
-            _thirtySecondChimePlayed = true;
-            _playChimeSound();
-          }
-        });
+        if (mounted) {
+          setState(() {
+            _speakingTime--;
+            
+            // Play chime at 30 seconds remaining (only once)
+            if (_speakingTime == 30 && !_thirtySecondChimePlayed) {
+              _thirtySecondChimePlayed = true;
+              _playChimeSound();
+            }
+          });
+        }
         
       } else {
         // Timer reached zero
         timer.cancel();
         _playBuzzerSound();
         
-        setState(() {
-        });
+        if (mounted) {
+          setState(() {
+          });
+        }
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -602,10 +796,12 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
 
       debugPrint('🕐 Loading initial timer state: ${speakingTime}s, running: $isRunning, paused: $isPaused');
 
-      setState(() {
-        _speakingTime = speakingTime;
-        _thirtySecondChimePlayed = false;
-      });
+      if (mounted) {
+        setState(() {
+          _speakingTime = speakingTime;
+          _thirtySecondChimePlayed = false;
+        });
+      }
 
       // Start timer if it should be running
       if (isRunning && !isPaused) {
@@ -617,20 +813,6 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     }
   }
 
-  Future<void> _toggleSpeakerphone() async {
-    await _agoraService.setEnableSpeakerphone(!_isSpeakerphoneEnabled);
-    setState(() => _isSpeakerphoneEnabled = !_isSpeakerphoneEnabled);
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_isSpeakerphoneEnabled ? 'Speakerphone enabled' : 'Speakerphone disabled'),
-          backgroundColor: _isSpeakerphoneEnabled ? Colors.green : Colors.orange,
-          duration: const Duration(seconds: 1),
-        ),
-      );
-    }
-  }
 
   // Load hand raises from participant metadata (no database collection needed)
   Future<void> _loadHandRaisesFromParticipants() async {
@@ -651,39 +833,15 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         }
       }
       
-      // Check for mute requests for current user
-      if (userId == _currentAppwriteUserId) {
-        final muteRequested = metadata['muteRequested'] as bool? ?? false;
-        if (muteRequested && !_isMuted) {
-          // Auto-mute current user when moderator requests it
-          debugPrint('🔇 Received mute request from moderator, auto-muting...');
-          await _toggleMute();
-          
-          // Clear the mute request after complying
-          await _appwriteService.updateParticipantMetadata(
-            roomId: widget.room.id,
-            userId: _currentAppwriteUserId!,
-            metadata: {'muteRequested': false},
-          );
-          
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Muted by moderator'),
-                backgroundColor: Colors.orange,
-                duration: Duration(seconds: 2),
-              ),
-            );
-          }
-        }
-      }
     }
     
-    setState(() {
-      _handsRaised.clear();
-      _handsRaised.addAll(newHandsRaised);
-      _isHandRaised = _handsRaised.contains(_currentAppwriteUserId);
-    });
+    if (mounted) {
+      setState(() {
+        _handsRaised.clear();
+        _handsRaised.addAll(newHandsRaised);
+        _isHandRaised = _handsRaised.contains(_currentAppwriteUserId);
+      });
+    }
     
     debugPrint('✋ Loaded ${_handsRaised.length} hand raises from participants');
   }
@@ -740,14 +898,16 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         metadata: {'handRaised': newHandRaiseState},
       );
       
-      setState(() {
-        _isHandRaised = newHandRaiseState;
-        if (newHandRaiseState) {
-          _handsRaised.add(_currentAppwriteUserId!);
-        } else {
-          _handsRaised.remove(_currentAppwriteUserId!);
-        }
-      });
+      if (mounted) {
+        setState(() {
+          _isHandRaised = newHandRaiseState;
+          if (newHandRaiseState) {
+            _handsRaised.add(_currentAppwriteUserId!);
+          } else {
+            _handsRaised.remove(_currentAppwriteUserId!);
+          }
+        });
+      }
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -778,6 +938,696 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     }
   }
 
+  Future<void> _checkAndAutoConnectAudio() async {
+    final userRole = _userParticipation?['role'];
+    debugPrint('🎤 Checking auto-audio: userRole=$userRole, participation=$_userParticipation');
+    
+    // In Open Discussion rooms, ALL users (audience, speaker, moderator) can connect to audio
+    debugPrint('🎤 Open Discussion room - connecting audio for all users (role: $userRole)');
+    
+    // Only connect if not already connected or connecting
+    if (!_isAudioConnected && !_isAudioConnecting) {
+      debugPrint('🎤 Starting audio connection for all users...');
+      await _connectToAudio();
+    } else {
+      debugPrint('🎤 Audio already connected/connecting, skipping...');
+    }
+  }
+
+  Future<void> _connectToAudio() async {
+    debugPrint('🔄 _connectToAudio called - connecting: $_isAudioConnecting, connected: $_isAudioConnected');
+    
+    // Don't connect if already connected
+    if (_isAudioConnected) {
+      debugPrint('✅ Audio already connected, skipping connection attempt');
+      return;
+    }
+    
+    // Don't allow multiple concurrent connection attempts
+    if (_isAudioConnecting) {
+      debugPrint('⏭️ Audio connection already in progress, skipping');
+      return;
+    }
+    
+    debugPrint('🎤 Starting audio connection to Open Discussion room...');
+    if (mounted) {
+      setState(() {
+        _isAudioConnected = false;
+        _isAudioConnecting = true;
+      });
+    }
+
+    try {
+      // Connect to audio using the working SimpleMediaSoupService with audio-only mode
+      debugPrint('🎤 Connecting to audio service for Open Discussion');
+      debugPrint('🎤 Room ID: ${widget.room.id}');
+      debugPrint('🎤 User ID: $_currentAppwriteUserId');
+      
+      final audioRoomId = 'open-discussion-${widget.room.id}';
+      final userId = _currentAppwriteUserId ?? 'guest-${DateTime.now().millisecondsSinceEpoch % 10000}';
+      final userRole = _userParticipation?['role'] ?? 'speaker'; // Force speaker role for audio access
+      
+      debugPrint('🎤 Audio connection details:');
+      debugPrint('🎤 Server: 172.236.109.9:3006 (Linode WebSocket WebRTC server)');
+      debugPrint('🎤 Room ID: $audioRoomId');
+      debugPrint('🎤 User ID: $userId');
+      debugPrint('🎤 User Role: $userRole');
+      
+      // Add timeout to prevent getting stuck
+      await _audioService.connect(
+        '172.236.109.9:3006', // Linode server WebSocket WebRTC
+        audioRoomId, // Room ID specific to this discussion
+        userId, // User ID
+        audioOnly: true, // Audio-only for stability
+        role: userRole, // Pass the user's role (now works for all users)
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          debugPrint('❌ Audio connection timeout after 30 seconds');
+          throw Exception('Audio connection timeout. Please check your microphone permissions and try again.');
+        },
+      );
+      
+      // Wait a bit for connection to stabilize
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Start muted by default
+      _isMuted = true;
+      await _audioServiceToggleMute();
+      
+      // Force UI update to show connected state
+      if (mounted) {
+        setState(() {
+          _isAudioConnected = true;
+          _isAudioConnecting = false;
+          _isMuted = _audioServiceIsMuted;
+        });
+      }
+      
+      debugPrint('🎤 Successfully connected to Open Discussion audio - UI state updated');
+      
+    } catch (e) {
+      debugPrint('❌ Error connecting to audio: $e');
+      if (mounted) {
+        setState(() {
+          _isAudioConnecting = false;
+          _isAudioConnected = false;
+        });
+        
+        String errorMessage = e.toString();
+        if (errorMessage.contains('Permission denied') || 
+            errorMessage.contains('NotAllowedError') ||
+            errorMessage.contains('Microphone permission denied')) {
+          errorMessage = 'Microphone permission required. Please allow microphone access and try again.';
+        } else if (errorMessage.contains('timeout')) {
+          errorMessage = 'Connection timeout. Check microphone permissions or try again.';
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to connect to audio: $errorMessage'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: () => _connectToAudio(),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _forceResetAudioConnection() async {
+    debugPrint('🔄 Force resetting audio connection...');
+    
+    try {
+      // Force disconnect from audio service
+      await _audioService.disconnect();
+      
+      // Reset all audio state
+      if (mounted) {
+        setState(() {
+          _isAudioConnected = false;
+          _isAudioConnecting = false;
+          _isMuted = false;
+        });
+      }
+      
+      // Clear audio renderers
+      for (var renderer in _remoteAudioRenderers.values) {
+        renderer.srcObject = null;
+        renderer.dispose();
+      }
+      _remoteAudioRenderers.clear();
+      _remoteStreams.clear();
+      _localStream = null;
+      
+      debugPrint('✅ Audio connection reset complete');
+      
+      // Wait a bit before allowing new connections
+      await Future.delayed(const Duration(milliseconds: 1000));
+      
+    } catch (e) {
+      debugPrint('⚠️ Error during audio reset: $e');
+    }
+  }
+
+  /*
+  // OLD WEBRTC METHODS - COMMENTED OUT TO FIX COMPILATION
+  // All functionality moved to SimpleMediaSoupService
+  
+  Future<void> _getUserMedia() async {
+    try {
+      final Map<String, dynamic> mediaConstraints = {
+        'audio': {
+          'echoCancellation': true,
+          'noiseSuppression': false, // Disable to preserve audio volume
+          'autoGainControl': true,
+          'googEchoCancellation': true,
+          'googAutoGainControl': true,
+          'googNoiseSuppression': false,
+          'googHighpassFilter': false,
+          'googAudioMirroring': false,
+        },
+        'video': false,
+      };
+
+      _localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+      debugPrint("🎤 Got audio stream: ${_localStream?.getAudioTracks().length} tracks");
+      
+      // Ensure local audio tracks are enabled for transmission
+      final audioTracks = _localStream!.getAudioTracks();
+      for (var track in audioTracks) {
+        track.enabled = true; // Will be controlled by mute/unmute
+        debugPrint("🎙️ Enabled local audio track: ${track.id}");
+      }
+      
+    } catch (e) {
+      debugPrint("❌ Failed to get microphone: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> _connectToWebRTCServer() async {
+    // DISABLED: WebRTC P2P connection - using MediaSoup SFU instead
+    debugPrint('🔌 WebRTC P2P connection disabled - using MediaSoup SFU via SimpleMediaSoupService');
+    return;
+    
+    /*
+    try {
+      debugPrint('🔌 Creating socket connection to WebRTC server...');
+      // DISABLED: WebRTC socket conflicts with MediaSoup PollingOnlySocketIO
+      // _socket = io.io('http://172.236.109.9:3000', 
+      //   io.OptionBuilder()
+      //     .setTransports(['websocket', 'polling'])
+      //     .disableAutoConnect()
+      //     .setTimeout(15000)
+      //     .enableForceNew()
+      //     .build()
+      // );
+      debugPrint('✅ Socket created, setting up event handlers...');
+
+      _socket!.on('connect', (_) {
+        debugPrint("🔌 Connected to WebRTC server");
+        
+        _socket!.emit('join-room', {
+          'roomId': widget.room.id,
+          'userId': _currentAppwriteUserId ?? 'guest',
+          'userName': _userProfiles[_currentAppwriteUserId]?.name ?? 'Guest',
+          'roomType': 'open-discussion',
+          'isModerator': _userParticipation?['role'] == 'moderator',
+        });
+      });
+
+      _socket!.on('disconnect', (_) {
+        debugPrint("🔌 Disconnected from WebRTC server");
+        if (mounted) {
+          setState(() {
+            _isAudioConnected = false;
+          });
+        }
+      });
+
+      _socket!.on('connect_error', (error) {
+        debugPrint("❌ WebRTC connection error: $error");
+        if (mounted) {
+          setState(() {
+            _isAudioConnecting = false;
+          });
+          // Show user-friendly error message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Audio connection failed. Retrying...'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      });
+
+      _socket!.on('connect_timeout', (_) {
+        debugPrint("❌ Socket connection timeout");
+        if (mounted) {
+          setState(() {
+            _isAudioConnecting = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Audio connection timeout. Please check your connection.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      });
+
+      _socket!.on('reconnect', (attemptNumber) {
+        debugPrint("🔄 Socket reconnected after $attemptNumber attempts");
+        if (mounted) {
+          setState(() {
+            _isAudioConnected = true;
+            _isAudioConnecting = false;
+          });
+        }
+      });
+
+      _socket!.on('reconnect_error', (error) {
+        debugPrint("❌ Socket reconnection error: $error");
+      });
+
+      _socket!.on('reconnect_failed', (_) {
+        debugPrint("❌ Socket reconnection failed after all attempts");
+        if (mounted) {
+          setState(() {
+            _isAudioConnecting = false;
+            _isAudioConnected = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Audio connection lost. Please try reconnecting manually.'),
+              backgroundColor: Colors.red,
+              action: SnackBarAction(
+                label: 'Retry',
+                onPressed: () => _connectToAudio(),
+              ),
+            ),
+          );
+        }
+      });
+
+      // Handle room events
+      _socket!.on('joined-room', (data) => _handleWebRTCMessage(data));
+      _socket!.on('participant-joined', (data) => _handleWebRTCMessage({...data, 'type': 'participant-joined'}));
+      _socket!.on('participant-left', (data) => _handleWebRTCMessage({...data, 'type': 'participant-left'}));
+      
+      // Handle WebRTC signaling
+      _socket!.on('offer', (data) => _handleWebRTCMessage({...data, 'type': 'offer'}));
+      _socket!.on('answer', (data) => _handleWebRTCMessage({...data, 'type': 'answer'}));
+      _socket!.on('ice-candidate', (data) => _handleWebRTCMessage({...data, 'type': 'ice-candidate'}));
+
+      debugPrint('🚀 Initiating socket connection...');
+      _socket!.connect();
+      debugPrint('✅ Socket connection initiated');
+      
+    } catch (e) {
+      debugPrint("❌ Failed to connect to WebRTC server: $e");
+      rethrow;
+    }
+    */
+  }
+
+  void _handleWebRTCMessage(Map<String, dynamic> data) {
+    debugPrint("📨 WebRTC message: $data");
+    
+    // Log current WebRTC room state
+    if (data.containsKey('participants')) {
+      final participants = data['participants'] as List;
+      debugPrint("🎯 WebRTC room now has ${participants.length} participants:");
+      for (var participant in participants) {
+        debugPrint("  - ${participant['userName']} (${participant['userId']})");
+      }
+    }
+    
+    // Handle WebRTC signaling and room events
+    switch (data['type']) {
+      case 'participant-joined':
+        debugPrint("🎉 New participant joined WebRTC: ${data['userId']} (${data['userName'] ?? 'Unknown'})");
+        _createOffer(data['userId']);
+        break;
+        
+      case 'participant-left':
+        final userId = data['userId'];
+        
+        // Clean up audio renderer
+        final renderer = _remoteAudioRenderers.remove(userId);
+        if (renderer != null) {
+          renderer.srcObject = null;
+          renderer.dispose();
+          debugPrint("🎧 Disposed audio renderer for $userId");
+        }
+        
+        // Clean up streams and peer connections
+        _remoteStreams.remove(userId);
+        _peerConnections[userId]?.close();
+        _peerConnections.remove(userId);
+        break;
+        
+      case 'offer':
+        _handleOffer(data['offer'], data['userId']);
+        break;
+        
+      case 'answer':
+        _handleAnswer(data['answer'], data['userId']);
+        break;
+        
+      case 'ice-candidate':
+        _handleIceCandidate(data['candidate'], data['userId']);
+        break;
+    }
+  }
+
+  Future<void> _createOffer(String targetUserId) async {
+    // DISABLED: WebRTC P2P - using MediaSoup SFU instead
+    return;
+    /*
+    try {
+      final pc = await _createPeerConnection(targetUserId);
+      
+      RTCSessionDescription offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      
+      _socket?.emit('offer', {
+        'offer': offer.toMap(),
+        'roomId': widget.room.id,
+        'userId': _currentAppwriteUserId ?? 'guest',
+        'targetUserId': targetUserId,
+      });
+      
+      debugPrint("📤 Sent offer to $targetUserId");
+    } catch (e) {
+      debugPrint("❌ Failed to create offer: $e");
+    }
+    */
+  }
+
+  Future<RTCPeerConnection> _createPeerConnection(String peerId) async {
+    try {
+      final Map<String, dynamic> configuration = {
+        'iceServers': _iceServers,
+        'sdpSemantics': 'unified-plan',
+      };
+
+      final Map<String, dynamic> constraints = {
+        'mandatory': {},
+        'optional': [
+          {'DtlsSrtpKeyAgreement': true},
+        ]
+      };
+
+      final pc = await createPeerConnection(configuration, constraints);
+
+      if (_localStream != null) {
+        for (var track in _localStream!.getTracks()) {
+          await pc.addTrack(track, _localStream!);
+        }
+      }
+
+      pc.onIceCandidate = (RTCIceCandidate candidate) {
+        _socket?.emit('ice-candidate', {
+          'candidate': candidate.toMap(),
+          'roomId': widget.room.id,
+          'userId': _currentAppwriteUserId ?? 'guest',
+          'targetUserId': peerId,
+        });
+      };
+
+      pc.onTrack = (RTCTrackEvent event) {
+        debugPrint("🎧 Remote audio track added from $peerId");
+        debugPrint("📊 Track kind: ${event.track.kind}, streams: ${event.streams.length}");
+        
+        if (event.streams.isNotEmpty && mounted) {
+          final stream = event.streams[0];
+          debugPrint("🎵 Remote stream ID: ${stream.id}, audio tracks: ${stream.getAudioTracks().length}");
+          
+          // Create audio renderer for this peer if it doesn't exist
+          _createAudioRenderer(peerId, stream);
+          
+          setState(() {
+            _remoteStreams[peerId] = stream;
+          });
+          
+          // CRITICAL: Enable audio playback for the remote stream
+          final audioTracks = stream.getAudioTracks();
+          for (var track in audioTracks) {
+            track.enabled = true;
+            // Set maximum volume for better audio clarity
+            try {
+              // Enable the track and ensure it's not muted
+              track.enabled = true;
+              debugPrint("🔊 Enabled audio playback for track ${track.id} from $peerId");
+              debugPrint("🎤 Track settings: enabled=${track.enabled}, muted=${track.muted}");
+            } catch (e) {
+              debugPrint("⚠️ Could not set audio track properties: $e");
+            }
+          }
+          
+          debugPrint("🎧 Audio renderer created and stream assigned for $peerId");
+          debugPrint("🎯 Total audio renderers: ${_remoteAudioRenderers.length}");
+          
+          // Play a brief audio confirmation (like a "ringing" to confirm audio is working)
+          _playAudioConfirmation();
+          
+          debugPrint("🎯 Total remote streams now: ${_remoteStreams.length}");
+        }
+      };
+
+      _peerConnections[peerId] = pc;
+      return pc;
+      
+    } catch (e) {
+      debugPrint("❌ Failed to create peer connection for $peerId: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> _createAudioRenderer(String peerId, MediaStream stream) async {
+    try {
+      // Create and initialize audio renderer if it doesn't exist
+      if (!_remoteAudioRenderers.containsKey(peerId)) {
+        final renderer = RTCVideoRenderer();
+        await renderer.initialize();
+        
+        debugPrint("🎧 Initialized audio renderer for $peerId");
+        
+        _remoteAudioRenderers[peerId] = renderer;
+      }
+      
+      // Assign the stream to the renderer
+      _remoteAudioRenderers[peerId]!.srcObject = stream;
+      debugPrint("🔊 Audio stream assigned to renderer for $peerId");
+      
+      // For debugging - check audio tracks
+      final audioTracks = stream.getAudioTracks();
+      debugPrint("🎵 Stream has ${audioTracks.length} audio tracks");
+      for (var track in audioTracks) {
+        debugPrint("🎵 Audio track: id=${track.id}, enabled=${track.enabled}, kind=${track.kind}");
+      }
+      
+    } catch (e) {
+      debugPrint("❌ Failed to create audio renderer for $peerId: $e");
+    }
+  }
+
+  void _playAudioConfirmation() {
+    try {
+      // Simple audio feedback to confirm WebRTC audio is working
+      // This will help the user know when audio connections are established
+      debugPrint("🔔 Audio connection confirmed - audio rendering active");
+      
+      // Optional: Could play a brief system sound here if needed
+      // SystemSound.play(SystemSoundType.click);
+      
+    } catch (e) {
+      debugPrint("❌ Audio confirmation error: $e");
+    }
+  }
+
+  Future<void> _handleOffer(Map<String, dynamic> offerMap, String fromUserId) async {
+    // DISABLED: WebRTC P2P - using MediaSoup SFU instead
+    return;
+    /*
+    try {
+      final pc = await _createPeerConnection(fromUserId);
+      
+      RTCSessionDescription offer = RTCSessionDescription(
+        offerMap['sdp'],
+        offerMap['type'],
+      );
+      
+      await pc.setRemoteDescription(offer);
+      
+      RTCSessionDescription answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      
+      _socket?.emit('answer', {
+        'answer': answer.toMap(),
+        'roomId': widget.room.id,
+        'userId': _currentAppwriteUserId ?? 'guest',
+        'targetUserId': fromUserId,
+      });
+      
+      debugPrint("📤 Sent answer to $fromUserId");
+    } catch (e) {
+      debugPrint("❌ Failed to handle offer: $e");
+    }
+    */
+  }
+
+  Future<void> _handleAnswer(Map<String, dynamic> answerMap, String fromUserId) async {
+    try {
+      final pc = _peerConnections[fromUserId];
+      if (pc == null) {
+        debugPrint("❌ No peer connection found for $fromUserId");
+        return;
+      }
+      
+      // Check if we're in the correct state to receive an answer
+      final state = await pc.getConnectionState();
+      debugPrint("🔍 Peer connection state for $fromUserId: $state");
+      
+      // Only set remote description if we're in the right state
+      if (pc.signalingState == RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
+        RTCSessionDescription answer = RTCSessionDescription(
+          answerMap['sdp'],
+          answerMap['type'],
+        );
+        
+        await pc.setRemoteDescription(answer);
+        debugPrint("📥 Received answer from $fromUserId");
+      } else {
+        debugPrint("⚠️ Ignoring answer from $fromUserId - wrong signaling state: ${pc.signalingState}");
+      }
+    } catch (e) {
+      debugPrint("❌ Failed to handle answer: $e");
+    }
+  }
+
+  Future<void> _handleIceCandidate(Map<String, dynamic> candidateMap, String fromUserId) async {
+    try {
+      final pc = _peerConnections[fromUserId];
+      if (pc == null) return;
+      
+      RTCIceCandidate candidate = RTCIceCandidate(
+        candidateMap['candidate'],
+        candidateMap['sdpMid'],
+        candidateMap['sdpMLineIndex'],
+      );
+      
+      await pc.addCandidate(candidate);
+      debugPrint("🧊 Added ICE candidate from $fromUserId");
+    } catch (e) {
+      debugPrint("❌ Failed to handle ICE candidate: $e");
+    }
+  }
+
+  Future<void> _toggleMute() async {
+    if (_isAudioConnected) {
+      await _audioServiceToggleMute();
+      if (mounted) {
+        setState(() {
+          _isMuted = _audioServiceIsMuted;
+        });
+      }
+      debugPrint("🔇 Audio ${_isMuted ? 'muted' : 'unmuted'}");
+    }
+  }
+
+  Future<void> _configureAudioRouting() async {
+    try {
+      // Configure audio session for proper playback
+      debugPrint("🔊 Configuring audio routing for WebRTC playback");
+      
+      // For Flutter WebRTC, audio should play automatically through system speakers/earpiece
+      // The important part is ensuring remote tracks are enabled (done in onTrack)
+      
+    } catch (e) {
+      debugPrint("⚠️ Could not configure audio routing: $e");
+    }
+  }
+
+  Future<void> _cleanupWebRTC() async {
+    try {
+      // DISABLED: WebRTC socket cleanup - using MediaSoup instead
+      /*
+      if (_socket != null) {
+        _socket!.off('connect');
+        _socket!.off('disconnect');
+        _socket!.off('connect_error');
+        _socket!.off('connect_timeout');
+        _socket!.off('reconnect');
+        _socket!.off('reconnect_error');
+        _socket!.off('reconnect_failed');
+        _socket!.off('joined-room');
+        _socket!.off('participant-joined');
+        _socket!.off('participant-left');
+        _socket!.off('offer');
+        _socket!.off('answer');
+        _socket!.off('ice-candidate');
+        _socket!.disconnect();
+        _socket!.dispose();
+        _socket = null;
+      }
+      */
+      
+      for (var pc in _peerConnections.values) {
+        await pc.close();
+      }
+      _peerConnections.clear();
+      
+      // Dispose audio renderers first
+      for (var renderer in _remoteAudioRenderers.values) {
+        renderer.srcObject = null;
+        await renderer.dispose();
+      }
+      _remoteAudioRenderers.clear();
+      debugPrint("🎧 Disposed all audio renderers");
+      
+      for (var stream in _remoteStreams.values) {
+        stream.getTracks().forEach((track) {
+          track.stop();
+        });
+        stream.dispose();
+      }
+      _remoteStreams.clear();
+      
+      if (_localStream != null) {
+        _localStream!.getTracks().forEach((track) {
+          track.stop();
+        });
+        _localStream!.dispose();
+        _localStream = null;
+      }
+    } catch (e) {
+      debugPrint("❌ WebRTC cleanup error: $e");
+    }
+  }
+  */
+  // END OF OLD WEBRTC METHODS
+
+  Future<void> _toggleMute() async {
+    if (_isAudioConnected) {
+      await _audioServiceToggleMute();
+      if (mounted) {
+        setState(() {
+          _isMuted = _audioServiceIsMuted;
+        });
+      }
+      debugPrint("🔇 Audio ${_isMuted ? 'muted' : 'unmuted'}");
+    }
+  }
+  
+  // Video toggle removed - audio-only for now
+  // Future video update will re-add this functionality
+
   Future<void> _leaveRoomData() async {
     try {
       if (_currentAppwriteUserId != null) {
@@ -793,7 +1643,6 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   }
 
   Future<void> _leaveRoom() async {
-    await _agoraService.leaveChannel();
     await _leaveRoomData();
     if (mounted) {
       Navigator.pop(context);
@@ -804,20 +1653,35 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     final currentUser = _getCurrentUserProfile();
     if (currentUser == null) return;
     
+    // Convert participants to chat participants format
+    final chatParticipants = _participants.map((p) {
+      final userProfile = _userProfiles[p['userId']];
+      return ChatParticipant(
+        userId: p['userId'],
+        username: userProfile?.name ?? 'Unknown User',
+        role: p['role'],
+        avatar: userProfile?.avatar,
+        isOnline: true,
+        joinedAt: DateTime.now(),
+      );
+    }).toList();
+    
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.9,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        builder: (context, scrollController) => RoomChatPanel(
-          roomId: widget.room.id,
-          roomType: 'open_discussion',
-          participantCount: _participants.length,
-        ),
+      enableDrag: true,
+      isDismissible: true,
+      builder: (context) => MattermostChatWidget(
+        currentUserId: _currentAppwriteUserId!,
+        currentUser: currentUser,
+        roomId: widget.room.id,
+        participants: chatParticipants,
+        onClose: () {
+          // Dismiss keyboard first, then close modal
+          FocusScope.of(context).unfocus();
+          Navigator.of(context).pop();
+        },
       ),
     );
   }
@@ -860,17 +1724,26 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       );
       
       // Remove from hands raised if they were raising hand
-      setState(() {
-        _handsRaised.remove(userId);
-      });
-      
-      // If this is the current user being promoted, switch their Agora role
-      if (userId == _currentAppwriteUserId) {
-        await _agoraService.switchToSpeaker();
+      if (mounted) {
         setState(() {
-          _isMuted = false; // Start unmuted when becoming speaker
-          _isHandRaised = false; // Lower hand since they're now a speaker
+          _handsRaised.remove(userId);
         });
+      }
+      
+      // If this is the current user being promoted, update state and auto-connect audio
+      if (userId == _currentAppwriteUserId) {
+        if (mounted) {
+          setState(() {
+            _isHandRaised = false; // Lower hand since they're now a speaker
+          });
+        }
+        // Auto-connect to audio when promoted to speaker
+        if (!_isAudioConnected && !_isAudioConnecting) {
+          debugPrint('🎤 Promoted to speaker, connecting to audio...');
+          _connectToAudio();
+        } else {
+          debugPrint('🎤 Promoted to speaker, but audio already connected/connecting');
+        }
       }
       
       // Reload participants to reflect changes
@@ -908,12 +1781,19 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         newRole: 'audience',
       );
       
-      // If this is the current user being demoted, switch their Agora role
+      // If this is the current user being demoted, disconnect audio and become audience
       if (userId == _currentAppwriteUserId) {
-        await _agoraService.switchToAudience();
-        setState(() {
-          _isMuted = true; // Mute when becoming audience
-        });
+        // Disconnect audio since audience members can't use mic
+        if (_isAudioConnected) {
+          await _audioService.disconnect();
+          if (mounted) {
+            setState(() {
+              _isAudioConnected = false;
+              _isAudioConnecting = false;
+              _isMuted = false;
+            });
+          }
+        }
       }
       
       // Reload participants to reflect changes
@@ -993,93 +1873,6 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     }
   }
 
-  Future<void> _muteAllParticipants() async {
-    try {
-      if (!_isCurrentUserModerator) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Only moderators can mute all participants'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
-      // Show confirmation dialog
-      final shouldMuteAll = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Mute All Participants'),
-          content: const Text('This will request all participants (except moderators) to mute themselves. Are you sure?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: TextButton.styleFrom(foregroundColor: Colors.orange),
-              child: const Text('Mute All'),
-            ),
-          ],
-        ),
-      );
-
-      if (shouldMuteAll != true) return;
-
-      // Set mute signal in metadata for all non-moderator participants
-      final muteAllTasks = <Future>[];
-      for (final participant in _participants) {
-        final userId = participant['userId'];
-        final role = participant['role'];
-        
-        // Don't mute moderators
-        if (role != 'moderator' && userId != null) {
-          muteAllTasks.add(
-            _appwriteService.updateParticipantMetadata(
-              roomId: widget.room.id,
-              userId: userId,
-              metadata: {
-                'muteRequested': true,
-                'muteRequestedAt': DateTime.now().toIso8601String(),
-                'muteRequestedBy': _currentAppwriteUserId,
-              },
-            ),
-          );
-        }
-      }
-
-      // Execute all mute requests in parallel
-      await Future.wait(muteAllTasks);
-
-      // Auto-mute current user if they're not a moderator
-      if (!_isCurrentUserModerator && !_isMuted) {
-        await _toggleMute();
-      }
-
-      debugPrint('🔇 Moderator requested mute all participants');
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Mute request sent to ${muteAllTasks.length} participants'),
-            backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('❌ Error muting all participants: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to mute all participants: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 
   // Get users who are currently speakers (broadcasters) from Appwrite data - EXCLUDING moderators
   List<Map<String, dynamic>> get _speakers {
@@ -1090,13 +1883,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
 
   // Get users who are audience (non-speakers) from Appwrite data
   List<Map<String, dynamic>> get _audience {
-    final audienceList = _participants.where((p) => p['role'] == 'audience').toList();
-    debugPrint('👥 DEBUG: _audience getter called. Total participants: ${_participants.length}');
-    debugPrint('👥 DEBUG: Audience members found: ${audienceList.length}');
-    for (final p in _participants) {
-      debugPrint('👥 DEBUG: Participant ${p['userId']} has role: ${p['role']}');
-    }
-    return audienceList;
+    return _participants.where((p) => p['role'] == 'audience').toList();
   }
 
   // Get the moderator specifically
@@ -1118,11 +1905,13 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     final isRoomCreator = _currentAppwriteUserId == widget.room.createdBy;
     return isModerator || isRoomCreator;
   }
+  
+  // Role getters removed - audio-only implementation
+  // Future video update will re-add role-based video permissions
 
   @override
   Widget build(BuildContext context) {
-    return FloatingIMWidget(
-      child: Scaffold(
+    return Scaffold(
         body: Stack(
           children: [
             // Main room interface
@@ -1178,10 +1967,26 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               ),
             ),
             
-            // Chat now handled via modal bottom sheet in _toggleChat()
+            // Hidden audio renderers - required for WebRTC audio playback
+            ..._remoteAudioRenderers.entries.map((entry) => 
+              Positioned(
+                left: -1000, // Hide off-screen
+                child: SizedBox(
+                  width: 1,
+                  height: 1,
+                  child: RTCVideoView(
+                    entry.value,
+                    objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+                    mirror: false,
+                    filterQuality: FilterQuality.none,
+                  ),
+                ),
+              ),
+            ).toList(),
+            
+            // Chat now handled via Mattermost-inspired widget in _toggleChat()
           ],
         ),
-      ),
     );
   }
 
@@ -1246,27 +2051,19 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                 ),
                 Row(
                   children: [
-                    // Connection status indicator
+                    // Room participants count
                     Container(
                       width: 4,
                       height: 4,
-                      decoration: BoxDecoration(
-                        color: _isConnecting 
-                          ? Colors.orange 
-                          : _agoraService.isJoined 
-                            ? Colors.green 
-                            : Colors.red,
+                      decoration: const BoxDecoration(
+                        color: Colors.green,
                         shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 2),
                     Flexible(
                       child: Text(
-                        _isConnecting
-                          ? 'Connecting...'
-                          : _agoraService.isJoined
-                            ? '${_remoteUsers.length + 1} in voice'
-                            : 'Disconnected',
+                        '${_participants.length} in room (${_remoteStreams.length + (_isAudioConnected ? 1 : 0)} audio)',
                         style: const TextStyle(
                           color: accentPurple,
                           fontSize: 8,
@@ -1445,7 +2242,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
             userId: moderator['userId'],
             name: moderator['userId'] == _currentAppwriteUserId ? 'You' : 'Moderator',
             size: 80,
-            isSpeaking: !_isMuted && _isCurrentUserModerator, // Moderator speaking if unmuted
+            isSpeaking: false, // No voice functionality
             showModerator: true,
           ),
         ),
@@ -1496,6 +2293,8 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                           final speaker = _speakers[i * 4 + j];
                           final isCurrentUser = speaker['userId'] == _currentAppwriteUserId;
                           final userProfile = _userProfiles[speaker['userId']];
+                          final hasAudio = isCurrentUser ? _isAudioConnected : false; // For now, only track local audio
+                          final isSpeakerMuted = isCurrentUser ? _isMuted : false; // Can't know remote mute state
                           
                           return _buildUserAvatar(
                             userId: speaker['userId'],
@@ -1503,9 +2302,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                               ? 'You' 
                               : userProfile?.displayName ?? 'Speaker',
                             size: 60,
-                            isSpeaking: isCurrentUser 
-                              ? (!_isMuted && _agoraService.isBroadcaster)
-                              : false, // For now, only show current user as speaking
+                            isSpeaking: hasAudio && !isSpeakerMuted,
                           );
                         },
                       ),
@@ -1853,26 +2650,24 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           // Status text
-          if (_agoraService.isJoined) ...[
-            Text(
-              _isCurrentUserModerator
-                ? '👑 You are the moderator${_isMuted ? ' (muted)' : ' (live)'}'
-                : _agoraService.isBroadcaster
-                  ? '🎙️ You are a speaker${_isMuted ? ' (muted)' : ' (live)'}'
-                  : '👂 You are listening${_isHandRaised ? ' • Hand raised' : ''}',
-              style: TextStyle(
-                color: _isCurrentUserModerator
-                  ? (_isMuted ? Colors.orange : Colors.green)
-                  : _agoraService.isBroadcaster
-                    ? (_isMuted ? scarletRed : Colors.green)
-                    : accentPurple,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-              textAlign: TextAlign.center,
+          Text(
+            _isCurrentUserModerator
+              ? '👑 You are the moderator • Mic access enabled'
+              : _userParticipation?['role'] == 'speaker'
+                ? '🎙️ You are a speaker • Mic access enabled'
+                : '👂 You are in the audience • Raise hand for mic access${_isHandRaised ? ' • Hand raised' : ''}',
+            style: TextStyle(
+              color: _isCurrentUserModerator
+                ? Colors.green
+                : _userParticipation?['role'] == 'speaker'
+                  ? Colors.green
+                  : accentPurple,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
             ),
-            const SizedBox(height: 12),
-          ],
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
           
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -1885,13 +2680,40 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                 onTap: _toggleChat,
               ),
               
-              // Speakerphone toggle
-              _buildControlButton(
-                icon: _isSpeakerphoneEnabled ? Icons.volume_up : Icons.volume_down,
-                label: _isSpeakerphoneEnabled ? 'Speaker' : 'Earpiece',
-                color: _isSpeakerphoneEnabled ? Colors.green : Colors.orange,
-                onTap: _toggleSpeakerphone,
-              ),
+              // Audio toggle with role-based access (only speakers and moderators)
+              if (_userParticipation?['role'] == 'speaker' || _userParticipation?['role'] == 'moderator')
+                _buildControlButton(
+                  icon: _isAudioConnected 
+                    ? (_isMuted ? Icons.volume_off : Icons.volume_up)
+                    : (_isAudioConnecting ? Icons.hourglass_empty : Icons.speaker),
+                  label: _isAudioConnected 
+                    ? (_isMuted ? 'Unmuted Audio ($_audioServiceConnectedPeersCount peers)' : 'Audio On ($_audioServiceConnectedPeersCount peers)')
+                    : (_isAudioConnecting ? 'Connecting...' : 'Join Audio'),
+                  color: _isAudioConnected 
+                    ? (_isMuted ? Colors.red : Colors.green)
+                    : (_isAudioConnecting ? Colors.orange : Colors.blue),
+                  onTap: _isAudioConnected 
+                    ? () => _toggleMute() 
+                    : (_isAudioConnecting ? () => _forceResetAudioConnection() : () => _connectToAudio()),
+                )
+              else
+                // Show disabled audio for audience members
+                _buildControlButton(
+                  icon: Icons.volume_off,
+                  label: 'Audio (Speakers Only)',
+                  color: Colors.grey,
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Only speakers and moderators can use audio. Raise your hand to become a speaker!'),
+                        backgroundColor: Colors.orange,
+                        duration: Duration(seconds: 3),
+                      ),
+                    );
+                  },
+                ),
+              
+              // Video removed for future update - audio-only for now
               
               // Raise hand
               _buildControlButton(
@@ -1912,20 +2734,38 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                 color: Colors.amber,
                 onTap: _showGiftModal,
               ),
-              
-              // Mute/Unmute
-              _buildControlButton(
-                icon: _isMuted ? Icons.mic_off : Icons.mic,
-                label: _isMuted ? 'Unmute' : 'Mute',
-                color: _isMuted ? accentPurple : scarletRed,
-                onTap: _toggleMute,
-              ),
             ],
           ),
+          
+          // Web-specific audio enable button
+          if (kIsWeb && _remoteStreams.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: TextButton.icon(
+                onPressed: () {
+                  _resumeWebAudioContext();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('🔊 Audio enabled for web browser'),
+                      backgroundColor: Colors.green,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.volume_up, size: 16),
+                label: const Text('Enable Audio', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.blue,
+                  backgroundColor: Colors.blue.withValues(alpha: 0.1),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
+
 
   Widget _buildControlButton({
     required IconData icon,
@@ -2885,18 +3725,6 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         const SizedBox(height: 15),
         Row(
           children: [
-            Expanded(
-              child: _buildActionButton(
-                icon: Icons.volume_off,
-                label: 'Mute All',
-                color: Colors.orange,
-                onTap: () {
-                  Navigator.pop(context);
-                  _muteAllParticipants();
-                },
-              ),
-            ),
-            const SizedBox(width: 15),
             Expanded(
               child: _buildActionButton(
                 icon: Icons.close,
