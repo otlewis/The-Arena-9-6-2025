@@ -314,7 +314,8 @@ class WebSocketWebRTCService {
       
       // Handle ICE candidates
       peerConnection.onIceCandidate = (candidate) {
-        if (candidate.candidate != null) {
+        if (candidate.candidate != null && _isConnected) {
+          // Only send ICE candidates if WebSocket is connected
           // Reduce logging noise - only log first few candidates
           if (_remotePeerConnections.length <= 2) {
             debugPrint('🧊 Sending ICE candidate to $peerId');
@@ -328,6 +329,9 @@ class WebSocketWebRTCService {
               'to': peerId,
             }
           });
+        } else if (candidate.candidate != null && !_isConnected) {
+          // Silently skip if not connected (reduce log spam)
+          debugPrint('🧊 Skipping ICE candidate - WebSocket disconnected');
         }
       };
       
