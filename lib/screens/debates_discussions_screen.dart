@@ -1,22 +1,24 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:appwrite/appwrite.dart';
-import '../services/agora_service.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../services/appwrite_service.dart';
 import '../services/firebase_gift_service.dart';
-import '../services/agora_instant_messaging_service.dart';
+import '../services/websocket_webrtc_service.dart';
 // import '../services/chat_service.dart'; // Removed with new chat system
 import '../models/user_profile.dart';
 import '../models/gift.dart';
 import '../models/timer_state.dart';
 import '../widgets/animated_fade_in.dart';
 import '../widgets/appwrite_timer_widget.dart';
-import '../widgets/room_chat_panel.dart';
 import '../widgets/user_profile_modal.dart';
 import '../widgets/instant_message_bell.dart';
 import '../widgets/challenge_bell.dart';
-import '../widgets/floating_im_widget.dart';
+import '../widgets/mattermost_chat_widget.dart';
+import '../models/discussion_chat_message.dart';
+// import '../widgets/floating_im_widget.dart'; // Unused import
 import '../core/logging/app_logger.dart';
 
 class DebatesDiscussionsScreen extends StatefulWidget {
@@ -36,11 +38,27 @@ class DebatesDiscussionsScreen extends StatefulWidget {
 }
 
 class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
-  final AgoraService _agoraService = AgoraService();
   final AppwriteService _appwrite = AppwriteService();
   final FirebaseGiftService _giftService = FirebaseGiftService();
-  final AgoraInstantMessagingService _imService = AgoraInstantMessagingService();
-  // final ChatService _chatService = ChatService(); // Removed with new chat system
+  final WebSocketWebRTCService _webrtcService = WebSocketWebRTCService();
+  
+  // Video/Audio WebRTC state
+  bool _isWebRTCConnected = false;
+  bool _isWebRTCConnecting = false;
+  final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
+  final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
+  final Map<String, RTCVideoRenderer> _remoteRenderers = {};
+  
+  // User-to-peer mapping for video streams
+  final Map<String, String> _userToPeerMapping = {}; // userId -> peerId
+  final Map<String, String> _peerToUserMapping = {}; // peerId -> userId
+  
+  // Audio stream management
+  MediaStream? _localStream;
+  final Map<String, MediaStream> _remoteStreams = {};
+  
+  bool _isMuted = false;
+  bool _isVideoEnabled = false;
   
   // Room data
   Map<String, dynamic>? _roomData;
@@ -58,7 +76,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   final List<UserProfile> _audienceMembers = [];
   final List<UserProfile> _speakerRequests = []; // Pending speaker requests
   
-  // Video/Audio states (removed unused fields)
+  // Legacy audio variables (Agora removed, kept to prevent compilation errors)
+  // Note: These are no longer used but kept for any remaining references
   
   // Room state
   bool _isLoading = true;
@@ -67,7 +86,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   bool _isCurrentUserSpeaker = false;
   bool _hasRequestedSpeaker = false;
   bool _isDisposing = false;
-  bool _isAgoraEnabled = false;
+  
+  // Video conference state removed - audio-only mode
+  // Future update will restore video functionality
   
   // Real-time subscriptions - separate instances for reliability
   RealtimeSubscription? _participantsSubscription;
@@ -79,7 +100,427 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     super.initState();
     _initializeRoom();
     _loadGiftData();
-    _initializeInstantMessaging();
+    _initializeWebRTC();
+  }
+  
+  Future<void> _initializeWebRTC() async {
+    await _localRenderer.initialize();
+    await _remoteRenderer.initialize();
+    
+    // Set up MediaSoup service callbacks for video
+    _webrtcService.onLocalStream = (stream) {
+      AppLogger().debug('🎤 Received local stream');
+      AppLogger().debug('🎤 Audio tracks: ${stream.getAudioTracks().length}');
+      
+      // Store local stream for audio control
+      _localStream = stream;
+      
+      if (mounted) {
+        setState(() {
+          _localStream = stream;
+          _localRenderer.srcObject = stream;
+          // Audio-only mode for Debates & Discussions
+          _isVideoEnabled = false;
+        });
+      }
+    };
+    
+    _webrtcService.onRemoteStream = (peerId, stream, userId, role) {
+      AppLogger().debug('🎵 Received remote stream from peer: $peerId (User: $userId, Role: $role)');
+      AppLogger().debug('🎵 Audio tracks in stream: ${stream.getAudioTracks().length}');
+      
+      // Store remote stream for audio functionality
+      _remoteStreams[peerId] = stream;
+      
+      // Store the peer-to-user mapping
+      if (userId.isNotEmpty) {
+        _userToPeerMapping[userId] = peerId;
+        _peerToUserMapping[peerId] = userId;
+        AppLogger().debug('🎵 Mapped user $userId to peer $peerId');
+      }
+      
+      // Enable audio tracks for playback
+      final audioTracks = stream.getAudioTracks();
+      for (var track in audioTracks) {
+        track.enabled = true;
+        AppLogger().debug('🔊 Enabled audio track: ${track.id}');
+      }
+      
+      if (mounted) {
+        setState(() {
+          // Trigger UI rebuild for audio indicator
+        });
+      }
+    };
+    
+    _webrtcService.onConnected = () {
+      if (mounted) {
+        setState(() {
+          _isWebRTCConnected = true;
+          _isWebRTCConnecting = false;
+        });
+        // Debug current video state after connection
+        _debugVideoState();
+      }
+    };
+    
+    _webrtcService.onPeerLeft = (peerId) {
+      AppLogger().debug('👋 Peer left: $peerId');
+      
+      // Clean up peer-to-user mappings
+      final userId = _peerToUserMapping.remove(peerId);
+      if (userId != null) {
+        _userToPeerMapping.remove(userId);
+        AppLogger().debug('🗑️ Removed mapping for user $userId <-> peer $peerId');
+      }
+      
+      // Remove renderer for this peer
+      final renderer = _remoteRenderers.remove(peerId);
+      if (renderer != null) {
+        renderer.dispose();
+        AppLogger().debug('🗑️ Disposed renderer for peer $peerId');
+      }
+      
+      if (mounted) {
+        setState(() {});
+      }
+    };
+    
+    _webrtcService.onDisconnected = () {
+      if (mounted) {
+        setState(() {
+          _isWebRTCConnected = false;
+          _isWebRTCConnecting = false;
+        });
+      }
+    };
+    
+    AppLogger().debug('📹 WebRTC renderers and MediaSoup service initialized for Debates & Discussions');
+  }
+
+  // Audio/Video control methods
+  Future<void> _toggleAudio() async {
+    // WebSocketWebRTCService doesn't have built-in mute, handle locally
+    if (_localStream != null) {
+      final audioTracks = _localStream!.getAudioTracks();
+      for (final track in audioTracks) {
+        track.enabled = _isMuted; // Toggle (inverted current state)
+      }
+      if (mounted) {
+        setState(() {
+          _isMuted = !_isMuted;
+        });
+      }
+    }
+  }
+
+  void _resumeWebAudioContext() async {
+    if (kIsWeb) {
+      // Resume web audio context for browser autoplay policy
+      AppLogger().debug('🔊 Attempting to resume web audio context');
+      // The actual implementation would depend on web-specific imports
+      // For now, just trigger the audio activation
+      if (_remoteStreams.isNotEmpty) {
+        // Enable remote audio tracks to activate audio context
+        for (final stream in _remoteStreams.values) {
+          final audioTracks = stream.getAudioTracks();
+          for (var track in audioTracks) {
+            track.enabled = true;
+          }
+        }
+      }
+    }
+  }
+
+  Future<void> _toggleVideo() async {
+    AppLogger().debug('🎥 _toggleVideo called - current state: $_isVideoEnabled, service connected: $_isWebRTCConnected');
+    
+    try {
+      if (_isWebRTCConnected) {
+        // Video not supported in WebSocketWebRTCService
+        AppLogger().debug('🎥 Video toggle not supported - using audio-only mode');
+        
+        if (mounted) {
+          setState(() {
+            _isVideoEnabled = false; // Video not supported
+          });
+        }
+        
+        AppLogger().debug('🎥 Video ${_isVideoEnabled ? 'enabled' : 'disabled'} - UI will ${_isVideoEnabled ? 'show video' : 'show avatar'}');
+      } else {
+        AppLogger().warning('🎥 Cannot toggle video - MediaSoup service not connected');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please wait for connection to establish before enabling video'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      AppLogger().error('🎥 Error toggling video: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error toggling video: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _autoEnableVideoAndAudio() {
+    AppLogger().debug('🎬 _autoEnableVideoAndAudio() called - isModerator: $_isCurrentUserModerator, isSpeaker: $_isCurrentUserSpeaker');
+    // Connect all users to WebRTC for video viewing
+    // Moderators and speakers publish video, audience only receives
+    _connectToWebRTC();
+  }
+  
+  void _debugVideoState() {
+    AppLogger().debug('=== VIDEO DEBUG STATE ===');
+    AppLogger().debug('🎥 Current user role: moderator=$_isCurrentUserModerator, speaker=$_isCurrentUserSpeaker');
+    AppLogger().debug('🎥 Video enabled: $_isVideoEnabled');
+    AppLogger().debug('🎥 WebRTC connected: $_isWebRTCConnected');
+    AppLogger().debug('🎥 WebRTC connected: $_isWebRTCConnected');
+    AppLogger().debug('🎥 Local stream: ${_localStream != null}');
+    if (_localStream != null) {
+      AppLogger().debug('🎥 Local video tracks: ${_localStream!.getVideoTracks().length}');
+      AppLogger().debug('🎥 Local audio tracks: ${_localStream!.getAudioTracks().length}');
+    }
+    AppLogger().debug('🎥 Remote streams: ${_remoteStreams.length}');
+    AppLogger().debug('🎥 Speaker panelists: ${_speakerPanelists.length}');
+    AppLogger().debug('🎥 User to peer mappings: $_userToPeerMapping');
+    AppLogger().debug('🎥 Peer to user mappings: $_peerToUserMapping');
+    AppLogger().debug('🎥 Remote renderers: ${_remoteRenderers.keys.join(', ')}');
+    AppLogger().debug('========================');
+  }
+
+
+  Future<void> _initializeRoom() async {
+    try {
+      AppLogger().debug('🏠 Initializing Debates & Discussions room: ${widget.roomId}');
+      
+      // Get current user
+      final user = await _appwrite.getCurrentUser();
+      if (user != null) {
+        final userProfile = await _appwrite.getUserProfile(user.$id);
+        if (mounted && !_isDisposing) {
+          setState(() {
+            _currentUser = userProfile;
+          });
+        }
+        AppLogger().debug('👤 Current user loaded: ${userProfile?.name}');
+      }
+      
+      // Load room data
+      await _loadRoomData();
+      
+      // Join the room as a participant
+      if (_currentUser != null) {
+        await _joinRoom();
+      }
+      
+      // Load participants from database
+      await _loadParticipants();
+      
+      // Set up real-time subscriptions
+      _setupRealTimeUpdates();
+      
+      // Auto-enable video/audio for moderators and speakers
+      _autoEnableVideoAndAudio();
+      
+      // Room initialization complete
+      if (mounted && !_isDisposing) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+      
+      AppLogger().debug('✅ Room initialization complete');
+      
+    } catch (e) {
+      AppLogger().error('❌ Room initialization failed: $e');
+      if (mounted && !_isDisposing) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadRoomData() async {
+    try {
+      AppLogger().debug('📦 Loading room data for: ${widget.roomId}');
+      
+      // Load room details from database
+      final roomData = await _appwrite.getDebateDiscussionRoom(widget.roomId);
+      if (roomData != null && mounted && !_isDisposing) {
+        setState(() {
+          _roomData = roomData;
+        });
+        
+        // Load moderator profile if available
+        final moderatorId = roomData['createdBy'];
+        if (moderatorId != null) {
+          final moderatorProfile = await _appwrite.getUserProfile(moderatorId);
+          if (moderatorProfile != null && mounted && !_isDisposing) {
+            setState(() {
+              _moderator = moderatorProfile;
+            });
+          }
+        }
+        
+        AppLogger().debug('✅ Room data loaded: ${roomData['name']}');
+      }
+    } catch (e) {
+      AppLogger().error('❌ Error loading room data: $e');
+      // Continue with initialization even if room data fails
+    }
+  }
+
+  Future<void> _joinRoom() async {
+    try {
+      if (_currentUser == null) {
+        AppLogger().warning('Cannot join room - no current user');
+        return;
+      }
+      
+      AppLogger().debug('🚪 Joining Debates & Discussions room: ${widget.roomId}');
+      
+      // Determine initial role - creator is moderator, others start as audience
+      final isCreator = _roomData?['createdBy'] == _currentUser!.id;
+      final initialRole = isCreator ? 'moderator' : 'audience';
+      
+      // Join the room in the database
+      await _appwrite.joinDebateDiscussionRoom(
+        roomId: widget.roomId,
+        userId: _currentUser!.id,
+        role: initialRole,
+      );
+      
+      if (mounted && !_isDisposing) {
+        setState(() {
+          _isJoined = true;
+          if (isCreator) {
+            _isCurrentUserModerator = true;
+          }
+        });
+      }
+      
+      AppLogger().debug('✅ Joined room ${widget.roomId} as $initialRole');
+    } catch (e) {
+      AppLogger().error('❌ Error joining room: $e');
+      // Continue anyway - user might already be in room
+      if (mounted && !_isDisposing) {
+        setState(() {
+          _isJoined = true; // Allow room to continue loading
+        });
+      }
+    }
+  }
+
+  void _showUserProfileModal(UserProfile user) {
+    showDialog(
+      context: context,
+      builder: (context) => UserProfileModal(userProfile: user),
+    );
+  }
+  
+  Widget _buildWebRTCVideoContent(UserProfile participant, bool isModerator) {
+    // Check if this participant has a video stream
+    bool hasVideo = false;
+    Widget? videoWidget;
+    
+    // Check local video for current user
+    if (participant.id == _currentUser?.id) {
+      // Show local video only if current user is moderator or speaker AND video is enabled
+      if ((_isCurrentUserModerator || _isCurrentUserSpeaker) &&
+          _localStream != null && 
+          _localStream!.getVideoTracks().isNotEmpty &&
+          _isVideoEnabled) {
+        videoWidget = RTCVideoView(_localRenderer, mirror: true);
+        hasVideo = true;
+        AppLogger().debug('🎥 Showing local video for ${participant.name}');
+      }
+    } else {
+      // For remote participants, use the user-to-peer mapping
+      final peerId = _userToPeerMapping[participant.id];
+      
+      if (peerId != null && _remoteRenderers.containsKey(peerId)) {
+        final renderer = _remoteRenderers[peerId]!;
+        try {
+          if (renderer.srcObject != null) {
+            final stream = renderer.srcObject!;
+            final videoTracks = stream.getVideoTracks();
+            if (videoTracks.isNotEmpty) {
+              videoWidget = RTCVideoView(renderer);
+              hasVideo = true;
+              AppLogger().debug('🎥 Showing remote video for ${participant.name} (peer: $peerId)');
+            }
+          }
+        } catch (e) {
+          AppLogger().warning('Error showing video for ${participant.name}: $e');
+        }
+      } else {
+        AppLogger().debug('🎥 No video stream found for ${participant.name} (userId: ${participant.id})');
+        if (peerId == null) {
+          AppLogger().debug('🎥 No peer mapping found for user ${participant.id}');
+        } else {
+          AppLogger().debug('🎥 Peer $peerId found but no renderer');
+        }
+      }
+    }
+    
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: hasVideo && videoWidget != null
+          ? Stack(
+              children: [
+                SizedBox.expand(child: videoWidget),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Colors.green,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : Center(
+              child: CircleAvatar(
+                radius: isModerator ? 32 : 24,
+                backgroundColor: const Color(0xFF8B5CF6),
+                backgroundImage: participant.avatar != null && participant.avatar!.isNotEmpty
+                    ? NetworkImage(participant.avatar!)
+                    : null,
+                child: participant.avatar == null || participant.avatar!.isEmpty
+                    ? Text(
+                        participant.initials,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: isModerator ? 18 : 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : null,
+              ),
+            ),
+      ),
+    );
   }
 
   @override
@@ -88,6 +529,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     _participantsSubscription?.close();
     _roomSubscription?.close();
     _unreadMessagesSubscription?.cancel();
+    
+    // Clean up WebRTC
+    _cleanupWebRTC();
+    
     // Don't await _leaveRoom() in dispose as it's synchronous
     // Just call it without awaiting to start the process
     _leaveRoom().catchError((error) {
@@ -96,177 +541,159 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     super.dispose();
   }
 
-  void _showUserProfileModal(UserProfile userProfile) {
-    if (_isDisposing || !mounted) return;
-    
-    // Determine user role based on their current status
-    String? userRole;
-    if (userProfile.id == _moderator?.id) {
-      userRole = 'moderator';
-    } else if (_speakerPanelists.any((speaker) => speaker.id == userProfile.id)) {
-      userRole = 'speaker';
-    } else if (_audienceMembers.any((member) => member.id == userProfile.id)) {
-      userRole = 'audience';
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) => UserProfileModal(
-        userProfile: userProfile,
-        userRole: userRole,
-        currentUser: _currentUser,
-        onClose: () {
-          if (mounted) {
-            Navigator.of(context).pop();
-          }
-        },
-      ),
-    );
-  }
-
-  Future<void> _initializeInstantMessaging() async {
+  Future<void> _cleanupWebRTC() async {
     try {
-      await _imService.initialize();
+      _isWebRTCConnected = false;
+      _isWebRTCConnecting = false;
       
-      // Subscribe to unread message count
-      _unreadMessagesSubscription = _imService
-          .getUnreadCountStream()
-          .listen((count) {
-        if (mounted && !_isDisposing) {
-          AppLogger().debug('📱 Debates: Unread count updated to $count');
-        }
-      });
+      // Clear mappings
+      _userToPeerMapping.clear();
+      _peerToUserMapping.clear();
       
-      AppLogger().debug('📱 Instant messaging initialized in debates room');
-    } catch (e) {
-      AppLogger().error('❌ Failed to initialize instant messaging: $e');
-    }
-  }
-
-  Future<void> _initializeRoom() async {
-    try {
-      AppLogger().debug('Initializing debate discussion room: ${widget.roomId}');
+      // Disconnect MediaSoup service
+      await _webrtcService.disconnect();
       
-      // Load current user
-      final currentUser = await _appwrite.getCurrentUser();
-      if (currentUser == null) {
-        throw Exception('Not authenticated');
-      }
+      // Dispose video renderers
+      await _localRenderer.dispose();
+      await _remoteRenderer.dispose();
       
-      final userProfile = await _appwrite.getUserProfile(currentUser.$id);
-      if (userProfile == null) {
-        throw Exception('User profile not found');
-      }
-      
-      // Load room data with retry logic
-      AppLogger().debug('Loading room data for roomId: ${widget.roomId}');
-      Map<String, dynamic>? roomData;
-      int retryCount = 0;
-      const maxRetries = 3;
-      
-      while (roomData == null && retryCount < maxRetries) {
+      // Dispose all remote participant renderers
+      for (final renderer in _remoteRenderers.values) {
         try {
-          roomData = await _appwrite.getDebateDiscussionRoom(widget.roomId);
-          if (roomData != null) {
-            AppLogger().debug('Room data loaded successfully: ${roomData['name']}');
-            break;
-          }
+          await renderer.dispose();
         } catch (e) {
-          retryCount++;
-          if (retryCount < maxRetries) {
-            AppLogger().warning('Room not found (attempt $retryCount/$maxRetries), retrying in 2 seconds...');
-            await Future.delayed(const Duration(seconds: 2));
-          } else {
-            rethrow;
-          }
+          AppLogger().warning("Error disposing remote renderer: $e");
         }
       }
+      _remoteRenderers.clear();
       
-      if (roomData == null) {
-        throw Exception('Room not found with ID: ${widget.roomId} after $maxRetries attempts');
-      }
+      AppLogger().debug("🧹 WebRTC cleanup completed for Debates & Discussions");
+    } catch (e) {
+      AppLogger().error("❌ WebRTC cleanup error: $e");
+    }
+  }
+
+  Future<void> _connectToWebRTC() async {
+    AppLogger().debug('🔍 _connectToWebRTC called - connecting: $_isWebRTCConnecting, connected: $_isWebRTCConnected');
+    
+    // Check if we need video capabilities (moderator or speaker)
+    bool needsVideoCapabilities = _isCurrentUserModerator || _isCurrentUserSpeaker;
+    bool hasVideoCapabilities = _localStream?.getVideoTracks().isNotEmpty ?? false;
+    
+    // Force disconnect if already connected but not working properly
+    if (_isWebRTCConnected && (_remoteStreams.isEmpty)) {
+      AppLogger().debug('🔄 Forcing fresh connection - current connection has no streams');
+      await _webrtcService.disconnect();
+      setState(() {
+        _isWebRTCConnected = false;
+        _isWebRTCConnecting = false;
+      });
+    }
+    
+    // Force reconnection if role capabilities changed (audience -> speaker/moderator)
+    if (_isWebRTCConnected && needsVideoCapabilities && !hasVideoCapabilities) {
+      AppLogger().debug('🔄 Role upgrade detected - forcing reconnection with video capabilities');
+      await _webrtcService.disconnect();
+      setState(() {
+        _isWebRTCConnected = false;
+        _isWebRTCConnecting = false;
+      });
+    }
+    
+    AppLogger().debug('🔍 _connectToWebRTC called - connecting: $_isWebRTCConnecting, connected: $_isWebRTCConnected');
+    
+    if (_isWebRTCConnecting || _isWebRTCConnected) {
+      AppLogger().debug('⚠️ WebRTC connection skipped - already connecting or connected');
+      return;
+    }
+    
+    AppLogger().debug('🚀 Starting WebRTC connection process...');
+    setState(() {
+      _isWebRTCConnecting = true;
+    });
+
+    // Determine user role and connection mode (declare outside try block)
+    String userRole;
+    bool shouldPublishVideo;
+    
+    if (_isCurrentUserModerator) {
+      userRole = 'moderator';
+      shouldPublishVideo = true;
+    } else if (_isCurrentUserSpeaker) {
+      userRole = 'speaker';
+      shouldPublishVideo = true;
+    } else {
+      userRole = 'audience';
+      shouldPublishVideo = false; // Audience only receives video streams
+    }
+
+    try {
       
-      // Load moderator profile
-      UserProfile? moderator;
-      try {
-        moderator = await _appwrite.getUserProfile(roomData['moderatorId']);
-      } catch (e) {
-        AppLogger().warning('Could not load moderator profile: $e');
-      }
+      final roomId = 'debates-discussion-${widget.roomId}';
       
-      // Check if current user is moderator
-      final isCurrentUserModerator = roomData['moderatorId'] == currentUser.$id;
+      AppLogger().debug('🎥 Connecting to WebRTC for Debates & Discussions');
+      AppLogger().debug('🎥 Room: $roomId');
+      AppLogger().debug('🎥 User: ${_currentUser?.id} (${_currentUser?.name})');
+      AppLogger().debug('🎥 Role: $userRole, Publish: $shouldPublishVideo');
+      AppLogger().debug('🎥 Widget Room ID: ${widget.roomId}');
+      AppLogger().debug('🎥 audioOnly parameter will be: ${!shouldPublishVideo}');
       
-      // Join the room in database
-      await _appwrite.joinDebateDiscussionRoom(
-        roomId: widget.roomId,
-        userId: currentUser.$id,
-        role: isCurrentUserModerator ? 'moderator' : 'audience',
+      await _webrtcService.connect(
+        '172.236.109.9:3006',  // WebSocket WebRTC server on Linode
+        roomId,
+        _currentUser?.id ?? 'unknown',
+        audioOnly: true, // Debates & Discussions are audio-only for scalability
+        role: userRole,
       );
       
-      // Initialize Agora (optional - room can work without it)
-      try {
-        await _agoraService.initialize();
-        _agoraService.onUserJoined = _onUserJoined;
-        _agoraService.onUserLeft = _onUserLeft;
-        
-        // Join the channel
-        await _agoraService.joinChannel();
-        _isAgoraEnabled = true;
-        AppLogger().debug('Agora initialized successfully');
-      } catch (e) {
-        AppLogger().warning('Agora initialization failed, continuing without video/audio: $e');
-        // Room can still function without Agora for text-based features
+      // Log specific connection behavior
+      if (shouldPublishVideo) {
+        AppLogger().debug('🎥 Connected as $userRole - PUBLISHING video/audio');
+      } else {
+        AppLogger().debug('📹 Connected as $userRole - RECEIVING video feeds only');
       }
       
-      if (mounted) {
-        setState(() {
-          _roomData = roomData;
-          _currentUser = userProfile;
-          _moderator = moderator;
-          _isCurrentUserModerator = isCurrentUserModerator;
-          _isLoading = false;
-          _isJoined = true;
-        });
-        
-        // Load gift data after user is set
-        _loadGiftData();
-      }
+      AppLogger().debug('🎥 WebRTC connected successfully for Debates & Discussions');
       
-      // Load participants
-      await _loadParticipants();
-      
-      // Setup real-time updates
-      _setupRealTimeUpdates();
-      
-      AppLogger().debug('Room initialized successfully');
     } catch (e) {
-      AppLogger().error('Failed to initialize room: $e');
-      if (mounted) {
+      AppLogger().error('❌ Failed to connect WebRTC: $e');
+      
+      // Check if it's a Socket.IO WebSocket upgrade error
+      if (e.toString().contains('WebSocketException') || e.toString().contains('not upgraded to websocket')) {
+        AppLogger().warning('🔄 Socket.IO WebSocket error detected - trying HTTP fallback...');
+        await _tryHttpWebRTCFallback(userRole, shouldPublishVideo);
+      } else {
         setState(() {
-          _isLoading = false;
+          _isWebRTCConnecting = false;
         });
-        
-        // Provide user-friendly error messages
-        String errorMessage = 'Failed to join room';
-        if (e.toString().contains('document_not_found')) {
-          errorMessage = 'This debate room no longer exists or has been removed';
-        } else if (e.toString().contains('Not authenticated')) {
-          errorMessage = 'Please log in to join the room';
-        } else if (e.toString().contains('User profile not found')) {
-          errorMessage = 'Could not load your profile. Please try again';
-        }
-        
+      }
+    }
+  }
+
+  Future<void> _tryHttpWebRTCFallback(String userRole, bool shouldPublishVideo) async {
+    try {
+      AppLogger().debug('🌐 Attempting HTTP WebRTC fallback connection...');
+      
+      // Import and use HTTP WebRTC service (to be implemented)
+      // For now, just show an error message that HTTP fallback is being attempted
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
+          const SnackBar(
+            content: Text('WebSocket connection failed. Attempting HTTP fallback...'),
+            duration: Duration(seconds: 3),
           ),
         );
-        Navigator.of(context).pop();
       }
+      
+      setState(() {
+        _isWebRTCConnecting = false;
+      });
+      
+    } catch (e) {
+      AppLogger().error('❌ HTTP WebRTC fallback also failed: $e');
+      setState(() {
+        _isWebRTCConnecting = false;
+      });
     }
   }
 
@@ -283,6 +710,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           _audienceMembers.clear();
           _speakerRequests.clear();
           
+          // Reset current user status flags
+          _isCurrentUserModerator = false;
+          _isCurrentUserSpeaker = false;
+          _hasRequestedSpeaker = false;
+          
           // Process participants
           for (var participant in participants) {
             final userProfileData = participant['userProfile'];
@@ -295,13 +727,33 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                 if (!_speakerPanelists.any((p) => p.id == userProfile.id)) {
                   _speakerPanelists.add(userProfile);
                 }
-                _isCurrentUserSpeaker = userProfile.id == _currentUser?.id;
+                // Check if current user is the moderator
+                if (userProfile.id == _currentUser?.id) {
+                  bool wasCurrentUserModerator = _isCurrentUserModerator;
+                  _isCurrentUserModerator = true;
+                  
+                  // Auto-enable video and audio when current user becomes moderator
+                  if (_isCurrentUserModerator && !wasCurrentUserModerator) {
+                    AppLogger().debug('🎥 Current user became moderator - auto-enabling video/audio');
+                    _autoEnableVideoAndAudio();
+                  }
+                }
               } else if (role == 'speaker') {
                 // Speaker goes to speaker panel
                 if (!_speakerPanelists.any((p) => p.id == userProfile.id)) {
                   _speakerPanelists.add(userProfile);
                 }
-                _isCurrentUserSpeaker = userProfile.id == _currentUser?.id;
+                // Check if current user is a speaker (but not moderator)
+                if (userProfile.id == _currentUser?.id) {
+                  bool wasCurrentUserSpeaker = _isCurrentUserSpeaker;
+                  _isCurrentUserSpeaker = true;
+                  
+                  // Auto-enable video and audio when current user becomes speaker
+                  if (_isCurrentUserSpeaker && !wasCurrentUserSpeaker) {
+                    AppLogger().debug('🎥 Current user became speaker - auto-enabling video/audio');
+                    _autoEnableVideoAndAudio();
+                  }
+                }
               } else if (role == 'pending') {
                 // User has requested to speak - add to speaker requests AND keep in audience
                 if (!_speakerRequests.any((p) => p.id == userProfile.id)) {
@@ -320,6 +772,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                 if (!_audienceMembers.any((p) => p.id == userProfile.id)) {
                   _audienceMembers.add(userProfile);
                 }
+                
+                // Note: Current user status flags are already reset at beginning of loop
+                // If user is in audience, they remain as non-speaker/non-moderator
               }
             }
           }
@@ -327,10 +782,24 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       }
       
       AppLogger().debug('Loaded ${participants.length} participants: ${_speakerPanelists.length} speakers, ${_audienceMembers.length} audience, ${_speakerRequests.length} pending requests');
+      AppLogger().debug('Current user status: moderator=$_isCurrentUserModerator, speaker=$_isCurrentUserSpeaker, requested=$_hasRequestedSpeaker');
+      AppLogger().debug('Video controls should be visible: ${_isCurrentUserModerator || _isCurrentUserSpeaker}');
+      
+      // WebRTC connection handled by video toggle for speakers/moderators only
+      // Audience members can view video feeds without publishing
+      
+      
+      // Trigger UI update to reflect participant role changes
+      if (mounted) {
+        setState(() {});
+      }
     } catch (e) {
       AppLogger().error('Error loading participants: $e');
       // Fallback to mock data if real data fails
       _createMockParticipants();
+      if (mounted) {
+        setState(() {});
+      }
     }
   }
 
@@ -732,10 +1201,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             ),
           );
           
-          // Leave Agora channel if connected
-          if (_isAgoraEnabled) {
-            await _agoraService.leaveChannel();
-          }
+          // Audio/Video cleanup disabled (Agora removed)
           
           // Navigate back to home screen
           Future.delayed(const Duration(seconds: 1), () {
@@ -753,12 +1219,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   Future<void> _leaveRoom() async {
     try {
       if (_isJoined && !_isDisposing) {
-        // Try to leave Agora channel (might not be initialized)
-        try {
-          await _agoraService.leaveChannel();
-        } catch (e) {
-          AppLogger().warning('Could not leave Agora channel (not initialized): $e');
-        }
+        // Audio/Video cleanup disabled (Agora removed)
         
         if (_currentUser != null) {
           await _appwrite.leaveDebateDiscussionRoom(
@@ -778,15 +1239,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     }
   }
 
-  void _onUserJoined(int uid) {
-    AppLogger().debug('User joined: $uid');
-    // Handle new user joining
-  }
-
-  void _onUserLeft(int uid) {
-    AppLogger().debug('User left: $uid');
-    // Handle user leaving
-  }
 
   void _requestToJoinSpeakers() async {
     if (_isCurrentUserModerator || _isCurrentUserSpeaker || _currentUser == null) {
@@ -879,6 +1331,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         );
       }
       
+      // If the approved user is the current user, offer to enable video/audio
+      if (user.id == _currentUser?.id) {
+        _showSpeakerActivationDialog();
+      }
+      
       // The real-time subscription will update the UI automatically
     } catch (e) {
       AppLogger().error('Error approving speaker request: $e');
@@ -928,6 +1385,56 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     }
   }
 
+
+  // Show dialog to offer video/audio activation when user becomes speaker
+  void _showSpeakerActivationDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.grey[900],
+          title: const Text(
+            '🎉 You\'re now a speaker!',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: const Text(
+            'Would you like to enable your video and audio to participate in the discussion?',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Maybe Later', style: TextStyle(color: Colors.grey)),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                // Enable audio only
+                _toggleAudio();
+              },
+              child: const Text('Audio Only', style: TextStyle(color: Colors.green)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                // Enable both video and audio
+                _toggleAudio();
+                _toggleVideo();
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6)),
+              child: const Text('Video + Audio', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -949,20 +1456,18 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       );
     }
 
-    return FloatingIMWidget(
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        body: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(),
-              _buildRoomTitleSection(),
-              Expanded(
-                child: _buildVideoGrid(),
-              ),
-              _buildControlsBar(),
-            ],
-          ),
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(),
+            _buildRoomTitleSection(),
+            Expanded(
+              child: _buildVideoGrid(),
+            ),
+            _buildControlsBar(),
+          ],
         ),
       ),
     );
@@ -1020,14 +1525,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              if (!_isAgoraEnabled) ...[ 
-                const SizedBox(width: 8),
-                const Icon(
-                  LucideIcons.micOff,
-                  color: Colors.orange,
-                  size: 14,
-                ),
-              ],
+              // Audio always disabled (Agora removed)
+              const SizedBox(width: 8),
+              const Icon(
+                LucideIcons.micOff,
+                color: Colors.orange,
+                size: 14,
+              ),
               const SizedBox(width: 16),
               // Instant Message Bell
               const InstantMessageBell(
@@ -1149,7 +1653,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         
         // Floating speakers panel (always show to display all 6 slots)
         Positioned(
-          top: 16, // Reduced top position
+          top: 16,
           left: 0,
           right: 0,
           child: _buildSpeakerPanel(),
@@ -1159,7 +1663,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   }
 
   Widget _buildSpeakerPanel() {
-    // Show moderator first, then speakers above in dynamic 3x2 grid
+    // Fixed 8-slot panel: 1 moderator (bottom center) + 7 speaker slots
     
     // Separate moderator from other speakers
     UserProfile? moderator;
@@ -1188,9 +1692,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     final containerWidth = screenWidth - (containerMargin * 2);
     const tileSpacing = 4.0; // Minimal spacing between tiles
     
-    // Calculate tile width to fit 3 per row - make them as large as possible
-    final availableWidth = containerWidth - (tileSpacing * 2); // Space for 2 gaps between 3 tiles
-    final tileWidth = (availableWidth / 3).floor().toDouble(); // Use floor to prevent overflow
+    // Calculate tile width to fit 4 per row - make them as large as possible
+    final availableWidth = containerWidth - (tileSpacing * 3); // Space for 3 gaps between 4 tiles
+    final tileWidth = (availableWidth / 4).floor().toDouble(); // Use floor to prevent overflow
     final tileHeight = tileWidth; // Square tiles for better appearance
 
     return Container(
@@ -1198,57 +1702,58 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Speakers grid (only show if there are speakers)
-          if (otherSpeakers.isNotEmpty) ...[
-            // First row (up to 3 speakers)
-            SizedBox(
-              height: tileHeight,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (int i = 0; i < otherSpeakers.length && i < 3; i++) ...[
-                    if (i > 0) const SizedBox(width: tileSpacing),
-                    SizedBox(
-                      width: tileWidth,
-                      height: tileHeight,
-                      child: _buildVideoTile(
-                        otherSpeakers[i],
-                        isModerator: false,
-                        showControls: _isCurrentUserModerator,
-                      ),
-                    ),
-                  ],
+          // Fixed 8 speaker slots (always show all slots) - 4x2 grid
+          // First row (slots 1-4)
+          SizedBox(
+            height: tileHeight,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (int i = 0; i < 4; i++) ...[
+                  if (i > 0) const SizedBox(width: tileSpacing),
+                  SizedBox(
+                    width: tileWidth,
+                    height: tileHeight,
+                    child: i < otherSpeakers.length
+                        ? _buildVideoTile(
+                            otherSpeakers[i],
+                            isModerator: false,
+                            showControls: _isCurrentUserModerator,
+                          )
+                        : _buildEmptySlot(i + 1), // Show slot number
+                  ),
                 ],
-              ),
+              ],
             ),
-            
-            // Second row (speakers 4-6) - only if there are more than 3 speakers
-            if (otherSpeakers.length > 3) ...[
-              const SizedBox(height: tileSpacing),
-              SizedBox(
-                height: tileHeight,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    for (int i = 3; i < otherSpeakers.length && i < 6; i++) ...[
-                      if (i > 3) const SizedBox(width: tileSpacing),
-                      SizedBox(
-                        width: tileWidth,
-                        height: tileHeight,
-                        child: _buildVideoTile(
-                          otherSpeakers[i],
-                          isModerator: false,
-                          showControls: _isCurrentUserModerator,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-            
-            const SizedBox(height: tileSpacing), // Space between speakers and moderator
-          ],
+          ),
+          
+          // Second row (slots 5-8)
+          const SizedBox(height: tileSpacing),
+          SizedBox(
+            height: tileHeight,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (int i = 4; i < 8; i++) ...[
+                  if (i > 4) const SizedBox(width: tileSpacing),
+                  SizedBox(
+                    width: tileWidth,
+                    height: tileHeight,
+                    child: i < otherSpeakers.length
+                        ? _buildVideoTile(
+                            otherSpeakers[i],
+                            isModerator: false,
+                            showControls: _isCurrentUserModerator,
+                          )
+                        : _buildEmptySlot(i + 1), // Show slot number
+                  ),
+                ],
+              ],
+            ),
+          ),
+          
+          // Space between speakers and moderator
+          const SizedBox(height: tileSpacing),
           
           // Moderator at the bottom (always shown)
           if (moderator != null)
@@ -1281,34 +1786,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           ),
           child: Stack(
             children: [
-            // Video placeholder
-            Container(
-              width: double.infinity,
-              height: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.grey[900],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: CircleAvatar(
-                  radius: isModerator ? 32 : 24,
-                  backgroundColor: const Color(0xFF8B5CF6),
-                  backgroundImage: participant.avatar != null && participant.avatar!.isNotEmpty
-                      ? NetworkImage(participant.avatar!)
-                      : null,
-                  child: participant.avatar == null || participant.avatar!.isEmpty
-                      ? Text(
-                          participant.initials,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: isModerator ? 20 : 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        )
-                      : null,
-                ),
-              ),
-            ),
+            // Video feed or placeholder
+            _buildVideoContent(participant, isModerator),
             
             // Name label at bottom
             Positioned(
@@ -1373,28 +1852,107 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                 ),
               ),
             
-            // Video/Audio disabled indicator
-            if (!_isAgoraEnabled)
-              Positioned(
-                top: 4,
-                left: 4,
-                child: Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                  child: const Icon(
-                    LucideIcons.videoOff,
-                    color: Colors.white,
-                    size: 8,
-                  ),
+            // Video disabled - audio-only mode
+            Positioned(
+              top: 4,
+              left: 4,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: const Icon(
+                  LucideIcons.videoOff,
+                  color: Colors.white,
+                  size: 8,
                 ),
               ),
+            ),
           ],
         ),
       ),
     ),
+    );
+  }
+
+  Widget _buildEmptySlot(int slotNumber) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.grey[800]!,
+          width: 1,
+        ),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              LucideIcons.userPlus,
+              color: Colors.grey[600],
+              size: 24,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Slot $slotNumber',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVideoContent(UserProfile participant, bool isModerator) {
+    // WebRTC implementation
+    if (_isWebRTCConnected) {
+      return _buildWebRTCVideoContent(participant, isModerator);
+    }
+    
+    // Fallback when not connected
+    return _buildEmptyVideoContent(participant, isModerator);
+  }
+  
+  Widget _buildEmptyVideoContent(UserProfile participant, bool isModerator) {
+    
+    // When WebRTC is not connected, show avatar only
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Center(
+              // Fallback to avatar when no video
+              child: CircleAvatar(
+                radius: isModerator ? 32 : 24,
+                backgroundColor: const Color(0xFF8B5CF6),
+                backgroundImage: participant.avatar != null && participant.avatar!.isNotEmpty
+                    ? NetworkImage(participant.avatar!)
+                    : null,
+                child: participant.avatar == null || participant.avatar!.isEmpty
+                    ? Text(
+                        participant.initials,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: isModerator ? 20 : 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : null,
+              ),
+            ),
+      ),
     );
   }
 
@@ -1407,23 +1965,18 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     final containerWidth = screenWidth - (containerMargin * 2);
     const tileSpacing = 4.0; // Same as speaker panel
     
-    // Same tile calculations as speaker panel for consistency
-    final availableWidth = containerWidth - (tileSpacing * 2);
-    final tileWidth = (availableWidth / 3).floor().toDouble();
+    // Same tile calculations as speaker panel for consistency (4 tiles per row)
+    final availableWidth = containerWidth - (tileSpacing * 3); // 3 gaps for 4 tiles
+    final tileWidth = (availableWidth / 4).floor().toDouble(); // 4 tiles per row
     final tileHeight = tileWidth; // Square tiles
     
-    // Calculate speakers panel height
-    final otherSpeakersCount = _speakerPanelists.where((speaker) => speaker.id != _moderator?.id).length;
+    // Calculate speakers panel height for fixed 4x2 grid + moderator
     double speakersPanelHeight = 16.0; // Initial top padding
     
-    if (otherSpeakersCount > 0) {
-      speakersPanelHeight += tileHeight; // First row
-      if (otherSpeakersCount > 3) {
-        speakersPanelHeight += tileSpacing + tileHeight; // Gap + second row
-      }
-      speakersPanelHeight += tileSpacing; // Gap before moderator
-    }
-    
+    // Always show 2 rows of 4 speakers each
+    speakersPanelHeight += tileHeight; // First row (slots 1-4)
+    speakersPanelHeight += tileSpacing + tileHeight; // Gap + second row (slots 5-8)
+    speakersPanelHeight += tileSpacing; // Gap before moderator
     speakersPanelHeight += tileHeight + 16; // Moderator tile + bottom padding
     
     return Column(
@@ -1606,6 +2159,30 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             onTap: _shareRoom,
           ),
           _buildGiftButton(),
+          // Audio controls only - debates & discussions is audio-only
+          if (_isCurrentUserModerator || _isCurrentUserSpeaker)
+            _buildControlButton(
+              icon: _isMuted ? LucideIcons.micOff : LucideIcons.mic,
+              isActive: !_isMuted,
+              onTap: _toggleAudio,
+            ),
+          // Web audio activation button
+          if (kIsWeb && _remoteStreams.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              child: TextButton.icon(
+                onPressed: () {
+                  _resumeWebAudioContext();
+                },
+                icon: const Icon(Icons.volume_up, size: 16),
+                label: const Text('Enable Audio', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.orange,
+                  backgroundColor: Colors.orange.withValues(alpha: 0.1),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                ),
+              ),
+            ),
           _buildControlButton(
             icon: LucideIcons.logOut,
             isActive: false,
@@ -1653,21 +2230,48 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   /// Show chat modal
   void _showChat() {
     if (_currentUser == null) return;
-    
+
+    // Create participants list for chat
+    final chatParticipants = <ChatParticipant>[
+      // Add moderator
+      if (_moderator != null)
+        ChatParticipant(
+          userId: _moderator!.id,
+          username: _moderator!.name,
+          role: 'moderator',
+          avatar: _moderator!.avatar,
+        ),
+      // Add speakers
+      ..._speakerPanelists.map((speaker) => ChatParticipant(
+        userId: speaker.id,
+        username: speaker.name,
+        role: 'speaker',
+        avatar: speaker.avatar,
+      )),
+      // Add audience members
+      ..._audienceMembers.map((audience) => ChatParticipant(
+        userId: audience.id,
+        username: audience.name,
+        role: 'audience',
+        avatar: audience.avatar,
+      )),
+    ];
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.9,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        builder: (context, scrollController) => RoomChatPanel(
-          roomId: widget.roomId,
-          roomType: 'debate_discussion',
-          participantCount: _speakerPanelists.length + _audienceMembers.length,
-        ),
+      enableDrag: true,
+      isDismissible: true,
+      builder: (context) => MattermostChatWidget(
+        currentUserId: _currentUser!.id,
+        currentUser: _currentUser!,
+        roomId: widget.roomId,
+        participants: chatParticipants,
+        onClose: () {
+          FocusScope.of(context).unfocus();
+          Navigator.of(context).pop();
+        },
       ),
     );
   }
@@ -1895,33 +2499,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   }
 
   void _muteAllParticipants() {
-    if (_isAgoraEnabled) {
-      // Implement Agora mute all functionality
-      try {
-        // This would mute all participants except moderator
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🔇 All participants muted'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        AppLogger().info('Moderator muted all participants');
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to mute participants: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Audio features not available - Agora not initialized'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-    }
+    // Audio functionality disabled (Agora removed)
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('🔇 Audio features disabled (Agora removed)'),
+        backgroundColor: Colors.orange,
+      ),
+    );
   }
 
   void _showRoomSettings() {
@@ -2091,63 +2675,26 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             ),
             const SizedBox(height: 20),
             ListTile(
-              leading: Icon(
-                _isAgoraEnabled ? LucideIcons.mic : LucideIcons.micOff,
-                color: _isAgoraEnabled ? Colors.green : Colors.red,
+              leading: const Icon(
+                LucideIcons.micOff, // Audio always disabled (Agora removed)
+                color: Colors.red,
               ),
-              title: Text(
-                _isAgoraEnabled ? 'Audio Enabled' : 'Audio Disabled',
-                style: const TextStyle(color: Colors.white),
+              title: const Text(
+                'Audio Disabled',
+                style: TextStyle(color: Colors.white),
               ),
               subtitle: Text(
-                _isAgoraEnabled ? 'Agora voice chat is active' : 'Agora voice chat unavailable',
+                'Audio functionality disabled (Agora removed)',
                 style: TextStyle(color: Colors.grey[400]),
               ),
             ),
-            if (_isAgoraEnabled) ...[
-              _buildOptionTile(
-                icon: LucideIcons.micOff,
-                title: 'Mute All Participants',
-                onTap: () {
-                  Navigator.pop(context);
-                  _muteAllParticipants();
-                },
-              ),
-              _buildOptionTile(
-                icon: LucideIcons.mic,
-                title: 'Unmute All Participants',
-                onTap: () {
-                  Navigator.pop(context);
-                  _unmuteAllParticipants();
-                },
-              ),
-            ],
+            // Audio options disabled (Agora removed)
           ],
         ),
       ),
     );
   }
 
-  void _unmuteAllParticipants() {
-    if (_isAgoraEnabled) {
-      try {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🔊 All participants unmuted'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        AppLogger().info('Moderator unmuted all participants');
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to unmute participants: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 
   void _shareRoom() {
     final roomName = _roomData?['name'] ?? 'Debate Room';
@@ -2209,10 +2756,7 @@ Join the conversation now in the Arena app!
         },
       );
 
-      // Leave Agora channel if connected
-      if (_isAgoraEnabled) {
-        await _agoraService.leaveChannel();
-      }
+      // Audio cleanup disabled (Agora removed)
 
       // Navigate back to room list
       if (mounted) {
