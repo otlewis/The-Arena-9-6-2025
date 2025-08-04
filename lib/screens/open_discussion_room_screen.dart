@@ -18,6 +18,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:audio_session/audio_session.dart' as audio_session;
 
 class OpenDiscussionRoomScreen extends StatefulWidget {
   final Room room;
@@ -56,6 +57,18 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       }
     }
   }
+
+  Future<void> _toggleMute() async {
+    if (_isAudioConnected) {
+      await _audioServiceToggleMute();
+      if (mounted) {
+        setState(() {
+          _isMuted = _audioServiceIsMuted;
+        });
+      }
+      debugPrint("🔇 Audio ${_isMuted ? 'muted' : 'unmuted'}");
+    }
+  }
   
   bool _isHandRaised = false;
   String? _currentAppwriteUserId; // Current user's Appwrite ID
@@ -85,6 +98,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   bool _isAudioConnected = false;
   bool _isAudioConnecting = false;
   bool _isMuted = false;
+  String? _previousUserRole; // Track previous role to detect role changes
   // Video state removed - audio-only for now
   
   // Audio stream management for SimpleMediaSoupService
@@ -97,6 +111,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   static const Color lightScarlet = Color(0xFFFFF1F0);
   static const Color accentPurple = Color(0xFF8B5CF6);
   static const Color deepPurple = Color(0xFF6B46C1);
+  static const Color darkGray = Color(0xFF2D2D2D);
   
   @override
   void initState() {
@@ -485,18 +500,36 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         debugPrint('📊 Speakers: ${_speakers.length}, Audience: ${_audience.length}, Moderator: ${_moderator != null ? 1 : 0}');
         debugPrint('🎭 Current user role: ${_userParticipation?['role']}');
         
-        // Check for audio connection after setting user participation
+        // Check for role changes and handle audio connection appropriately
         final userRole = _userParticipation?['role'];
+        final previousRole = _previousUserRole; // Store previous role to detect changes
+        _previousUserRole = userRole; // Update previous role for next comparison
+        
+        debugPrint('🎭 Role change detection: previous=$previousRole, current=$userRole');
+        
         if (userRole == 'speaker' || userRole == 'moderator') {
           debugPrint('🎤 User role detected as $userRole, checking audio connection...');
           debugPrint('🔍 Current audio state: connecting=$_isAudioConnecting, connected=$_isAudioConnected');
           
-          // Only connect if not already connected or connecting
-          if (!_isAudioConnected && !_isAudioConnecting) {
+          // Check if we need to reinitialize audio for speaker role
+          // This happens when user was connected as audience and is now promoted to speaker
+          if (_isAudioConnected && userRole == 'speaker' && previousRole == 'audience') {
+            debugPrint('🔄 User promoted from audience to speaker - reinitializing audio with microphone access...');
+            await _reinitializeAudioForSpeaker();
+          } else if (!_isAudioConnected && !_isAudioConnecting) {
             debugPrint('🎤 Starting new audio connection...');
             _connectToAudio();
           } else {
             debugPrint('🎤 Audio already connected/connecting, skipping...');
+          }
+        } else if (userRole == 'audience') {
+          // Handle demotion from speaker/moderator to audience
+          if (_isAudioConnected && (previousRole == 'speaker' || previousRole == 'moderator')) {
+            debugPrint('🔽 User demoted from $previousRole to audience - reinitializing as receive-only...');
+            await _reinitializeAudioForAudience();
+          } else if (!_isAudioConnected && !_isAudioConnecting) {
+            debugPrint('👂 Starting audience audio connection (receive-only)...');
+            _connectToAudio();
           }
         }
         
@@ -889,9 +922,32 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     if (_currentAppwriteUserId == null) return;
 
     try {
+      final currentRole = _userParticipation?['role'];
+      
+      // Handle speakers wanting to leave the panel
+      if (currentRole == 'speaker') {
+        // Show confirmation modal for leaving the panel
+        final shouldLeave = await _showLeavePanelConfirmation();
+        if (shouldLeave == true) {
+          debugPrint('🔽 Speaker confirmed leaving panel - moving back to audience...');
+          
+          // First update local state to ensure UI updates
+          setState(() {
+            _isHandRaised = false;
+            _handsRaised.remove(_currentAppwriteUserId!);
+          });
+          
+          // Use the same logic as moderator demotion
+          debugPrint('🔽 Speaker leaving panel - using moderator demotion logic');
+          await _demoteToAudience(_currentAppwriteUserId!);
+        }
+        return; // Exit - either they left or cancelled
+      }
+      
+      // Handle audience hand raise/lower
       final newHandRaiseState = !_isHandRaised;
       
-      // Update participant metadata (no separate collection needed)
+      // Normal hand raise/lower for audience members
       await _appwriteService.updateParticipantMetadata(
         roomId: widget.room.id,
         userId: _currentAppwriteUserId!,
@@ -954,6 +1010,137 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     }
   }
 
+  Future<void> _reinitializeAudioForSpeaker() async {
+    try {
+      debugPrint('🔄 Reinitializing audio connection for speaker role...');
+      
+      // Disconnect existing audio service if connected
+      if (_isAudioConnected) {
+        debugPrint('🔌 Disconnecting existing audio connection...');
+        await _audioService.disconnect();
+        if (mounted) {
+          setState(() {
+            _isAudioConnected = false;
+            _isAudioConnecting = false;
+          });
+        }
+      }
+      
+      // Brief delay to ensure cleanup
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Reconnect with speaker role
+      debugPrint('🎤 Reconnecting with speaker role...');
+      await _connectToAudio();
+      
+    } catch (e) {
+      debugPrint('❌ Error reinitializing audio for speaker: $e');
+      // Continue anyway - user can try manual connect
+    }
+  }
+
+  Future<void> _reinitializeAudioForAudience() async {
+    try {
+      debugPrint('🔽 Reinitializing audio connection for audience role (receive-only)...');
+      
+      // Disconnect existing audio service if connected
+      if (_isAudioConnected) {
+        debugPrint('🔌 Disconnecting existing audio connection...');
+        await _audioService.disconnect();
+        if (mounted) {
+          setState(() {
+            _isAudioConnected = false;
+            _isAudioConnecting = false;
+            _isMuted = true; // Force muted state for audience
+          });
+        }
+      }
+      
+      // Brief delay to ensure cleanup
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Reconnect with audience role (receive-only)
+      debugPrint('👂 Reconnecting with audience role (receive-only)...');
+      await _connectToAudio();
+      
+    } catch (e) {
+      debugPrint('❌ Error reinitializing audio for audience: $e');
+      // Continue anyway - connection should still work for listening
+    }
+  }
+
+  Future<bool?> _showLeavePanelConfirmation() async {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false, // User must tap a button
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: darkGray,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: accentPurple, width: 1),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Leave Speakers Panel?',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'You are about to move back to the audience. You will lose your speaking privileges and need to raise your hand again to return to the speakers panel.\n\nAre you sure you want to continue?',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 16,
+              height: 1.4,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false), // Cancel
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.grey.withValues(alpha: 0.2),
+                foregroundColor: Colors.white70,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text('Cancel'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true), // Confirm
+              style: TextButton.styleFrom(
+                backgroundColor: scarletRed,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text('Leave Panel'),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+
   Future<void> _connectToAudio() async {
     debugPrint('🔄 _connectToAudio called - connecting: $_isAudioConnecting, connected: $_isAudioConnected');
     
@@ -985,7 +1172,15 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       
       final audioRoomId = 'open-discussion-${widget.room.id}';
       final userId = _currentAppwriteUserId ?? 'guest-${DateTime.now().millisecondsSinceEpoch % 10000}';
-      final userRole = _userParticipation?['role'] ?? 'speaker'; // Force speaker role for audio access
+      
+      // Determine user role for audio connection (same logic as Debates & Discussions)
+      String userRole = 'audience'; // Default to audience
+      if (_userParticipation?['role'] == 'moderator') {
+        userRole = 'moderator';
+      } else if (_userParticipation?['role'] == 'speaker') {
+        userRole = 'speaker';
+      }
+      // All others remain as 'audience' for listen-only mode
       
       debugPrint('🎤 Audio connection details:');
       debugPrint('🎤 Server: 172.236.109.9:3006 (Linode WebSocket WebRTC server)');
@@ -1010,6 +1205,37 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       
       // Wait a bit for connection to stabilize
       await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Configure audio session for maximum speaker output
+      try {
+        final session = await audio_session.AudioSession.instance;
+        await session.configure(audio_session.AudioSessionConfiguration(
+          avAudioSessionCategory: audio_session.AVAudioSessionCategory.playAndRecord,
+          avAudioSessionCategoryOptions: audio_session.AVAudioSessionCategoryOptions.defaultToSpeaker |
+              audio_session.AVAudioSessionCategoryOptions.allowBluetooth |
+              audio_session.AVAudioSessionCategoryOptions.mixWithOthers,
+          avAudioSessionMode: audio_session.AVAudioSessionMode.videoChat,
+          avAudioSessionRouteSharingPolicy: audio_session.AVAudioSessionRouteSharingPolicy.defaultPolicy,
+          avAudioSessionSetActiveOptions: audio_session.AVAudioSessionSetActiveOptions.none,
+          androidAudioAttributes: const audio_session.AndroidAudioAttributes(
+            contentType: audio_session.AndroidAudioContentType.speech,
+            flags: audio_session.AndroidAudioFlags.audibilityEnforced,
+            usage: audio_session.AndroidAudioUsage.voiceCommunication,
+          ),
+          androidAudioFocusGainType: audio_session.AndroidAudioFocusGainType.gain,
+          androidWillPauseWhenDucked: false,
+        ));
+        
+        // Activate the audio session with high priority
+        await session.setActive(true);
+        
+        // Additional speaker enforcement (iOS will use defaultToSpeaker option above)
+        
+        debugPrint('🔊 Audio session configured for maximum speaker output');
+      } catch (e) {
+        debugPrint('❌ Failed to configure audio session: $e');
+        // Continue anyway - audio might still work
+      }
       
       // Start muted by default
       _isMuted = true;
@@ -1613,18 +1839,6 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   */
   // END OF OLD WEBRTC METHODS
 
-  Future<void> _toggleMute() async {
-    if (_isAudioConnected) {
-      await _audioServiceToggleMute();
-      if (mounted) {
-        setState(() {
-          _isMuted = _audioServiceIsMuted;
-        });
-      }
-      debugPrint("🔇 Audio ${_isMuted ? 'muted' : 'unmuted'}");
-    }
-  }
-  
   // Video toggle removed - audio-only for now
   // Future video update will re-add this functionality
 
@@ -1730,20 +1944,15 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         });
       }
       
-      // If this is the current user being promoted, update state and auto-connect audio
+      // If this is the current user being promoted, update state and reinitialize audio with speaker role
       if (userId == _currentAppwriteUserId) {
         if (mounted) {
           setState(() {
             _isHandRaised = false; // Lower hand since they're now a speaker
           });
         }
-        // Auto-connect to audio when promoted to speaker
-        if (!_isAudioConnected && !_isAudioConnecting) {
-          debugPrint('🎤 Promoted to speaker, connecting to audio...');
-          _connectToAudio();
-        } else {
-          debugPrint('🎤 Promoted to speaker, but audio already connected/connecting');
-        }
+        // Reinitialize WebRTC connection with speaker role to enable microphone
+        await _reinitializeAudioForSpeaker();
       }
       
       // Reload participants to reflect changes
@@ -1781,8 +1990,23 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         newRole: 'audience',
       );
       
+      // Clear hand raised state when demoting
+      await _appwriteService.updateParticipantMetadata(
+        roomId: widget.room.id,
+        userId: userId,
+        metadata: {'handRaised': false},
+      );
+      
       // If this is the current user being demoted, disconnect audio and become audience
       if (userId == _currentAppwriteUserId) {
+        // Update local state
+        if (mounted) {
+          setState(() {
+            _isHandRaised = false;
+            _handsRaised.remove(userId);
+          });
+        }
+        
         // Disconnect audio since audience members can't use mic
         if (_isAudioConnected) {
           await _audioService.disconnect();
@@ -1805,8 +2029,10 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('$userName moved to audience'),
-            backgroundColor: Colors.orange,
+            content: Text(userId == _currentAppwriteUserId 
+              ? 'You have been moved back to the audience' 
+              : '$userName moved to audience'),
+            backgroundColor: userId == _currentAppwriteUserId ? Colors.grey : Colors.orange,
           ),
         );
       }
@@ -2718,13 +2944,17 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               // Raise hand
               _buildControlButton(
                 icon: _isHandRaised ? Icons.back_hand : Icons.back_hand_outlined,
-                label: _userParticipation?['role'] == 'speaker' || _isCurrentUserModerator 
-                  ? (_isHandRaised ? 'Lower' : 'Lower') 
-                  : (_isHandRaised ? 'Lower' : 'Raise'),
-                color: _isHandRaised ? scarletRed : accentPurple,
+                label: _userParticipation?['role'] == 'moderator'
+                  ? 'Moderator' // Moderators can't use hand raise
+                  : _userParticipation?['role'] == 'speaker'
+                    ? 'Leave Panel' // Speakers can leave the panel
+                    : (_isHandRaised ? 'Lower' : 'Raise'), // Audience can raise/lower hand
+                color: _userParticipation?['role'] == 'speaker' 
+                  ? scarletRed // Red for leaving panel
+                  : _isHandRaised ? scarletRed : accentPurple,
                 onTap: _userParticipation?['role'] == 'moderator' 
-                  ? () {} // Moderators can't lower their hand, they're always speakers
-                  : _toggleHandRaise,
+                  ? () {} // Moderators can't use hand raise
+                  : _toggleHandRaise, // Speakers and audience can use this
               ),
               
               // Send Gift

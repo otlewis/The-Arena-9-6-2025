@@ -90,8 +90,9 @@ class WebSocketWebRTCService {
       // Wait for connection confirmation with timeout
       await _waitForConnectionSimple();
       
-      // Set up local media
-      await _setupLocalMedia(audioOnly: audioOnly);
+      // Set up local media - audience doesn't need microphone access
+      final shouldSetupAudio = role != 'audience';
+      await _setupLocalMedia(audioOnly: audioOnly, enableAudio: shouldSetupAudio, role: role);
       
       // Join room
       _sendMessage({
@@ -129,12 +130,20 @@ class WebSocketWebRTCService {
   }
   
   
-  Future<void> _setupLocalMedia({bool audioOnly = false}) async {
+  Future<void> _setupLocalMedia({bool audioOnly = false, bool enableAudio = true, String role = 'audience'}) async {
     try {
-      debugPrint('🎥 Setting up local media (audioOnly: $audioOnly)');
+      debugPrint('🎥 Setting up local media (audioOnly: $audioOnly, enableAudio: $enableAudio, role: $role)');
+      
+      if (!enableAudio && role == 'audience') {
+        debugPrint('👂 Audience member - skipping microphone access (receive-only mode)');
+        // Audience members don't need local media - they only receive audio
+        _localStream = null;
+        // Don't call onLocalStream for audience members
+        return;
+      }
       
       final constraints = {
-        'audio': true,
+        'audio': enableAudio,
         'video': audioOnly ? false : {
           'width': {'ideal': 640},
           'height': {'ideal': 480},
@@ -153,6 +162,12 @@ class WebSocketWebRTCService {
       
     } catch (e) {
       debugPrint('❌ Failed to get local media: $e');
+      // For audience members, continue without media rather than failing
+      if (role == 'audience') {
+        debugPrint('👂 Audience member - continuing without local media');
+        _localStream = null;
+        return;
+      }
       onError?.call('Failed to get local media: $e');
       rethrow;
     }

@@ -17,6 +17,7 @@ import '../main.dart' show ArenaApp, getIt;
 import '../core/logging/app_logger.dart';
 import '../services/websocket_webrtc_service.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:audio_session/audio_session.dart' as audio_session;
 import 'arena_modals.dart';
 import '../features/arena/dialogs/moderator_control_modal.dart' as moderator_controls;
 import '../features/arena/widgets/arena_app_bar.dart';
@@ -658,15 +659,63 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       AppLogger().debug('🎥 User: ${_currentUser?.id} (${_currentUser?.name})');
       AppLogger().debug('🎥 Role: $_userRole');
       
+      // Determine role for WebRTC connection (same logic as Debates & Discussions)
+      String webrtcRole = 'audience'; // Default to audience
+      
+      // Check if current user is room creator (auto-moderator)
+      if (_roomData != null && _currentUser?.id != null && _roomData!['createdBy'] == _currentUser!.id) {
+        webrtcRole = 'moderator';
+        AppLogger().debug('🎭 Room creator detected - using moderator role for WebRTC');
+      } else if (['affirmative', 'negative', 'affirmative2', 'negative2', 'moderator'].contains(_userRole)) {
+        webrtcRole = _userRole!;
+      } else if (['judge1', 'judge2', 'judge3'].contains(_userRole)) {
+        webrtcRole = 'judge';
+      }
+      // All others remain as 'audience' for listen-only mode
+      
+      AppLogger().debug('🎥 WebRTC Role: $webrtcRole (User Role: $_userRole)');
+      
       await _webrtcService.connect(
         '172.236.109.9:3006',  // Arena WebSocket WebRTC server on Linode
         widget.roomId,
         _currentUser?.id ?? 'unknown',
         audioOnly: true, // Arena audio-only for consistent experience
-        role: _userRole ?? 'audience',
+        role: webrtcRole,
       );
       
       AppLogger().debug('🎥 WebRTC connection initiated successfully');
+      
+      // Configure audio session for maximum speaker output
+      try {
+        final session = await audio_session.AudioSession.instance;
+        await session.configure(audio_session.AudioSessionConfiguration(
+          avAudioSessionCategory: audio_session.AVAudioSessionCategory.playAndRecord,
+          avAudioSessionCategoryOptions: audio_session.AVAudioSessionCategoryOptions.defaultToSpeaker |
+              audio_session.AVAudioSessionCategoryOptions.allowBluetooth |
+              audio_session.AVAudioSessionCategoryOptions.mixWithOthers,
+          avAudioSessionMode: audio_session.AVAudioSessionMode.videoChat,
+          avAudioSessionRouteSharingPolicy: audio_session.AVAudioSessionRouteSharingPolicy.defaultPolicy,
+          avAudioSessionSetActiveOptions: audio_session.AVAudioSessionSetActiveOptions.none,
+          androidAudioAttributes: const audio_session.AndroidAudioAttributes(
+            contentType: audio_session.AndroidAudioContentType.speech,
+            flags: audio_session.AndroidAudioFlags.audibilityEnforced,
+            usage: audio_session.AndroidAudioUsage.voiceCommunication,
+          ),
+          androidAudioFocusGainType: audio_session.AndroidAudioFocusGainType.gain,
+          androidWillPauseWhenDucked: false,
+        ));
+        
+        // Activate the audio session with high priority
+        await session.setActive(true);
+        
+        // Additional speaker enforcement (iOS will use defaultToSpeaker option above)
+        
+        AppLogger().debug('🔊 Audio session configured for maximum speaker output');
+      } catch (e) {
+        AppLogger().debug('❌ Failed to configure audio session: $e');
+        // Continue anyway - audio might still work
+      }
+      
     } catch (e) {
       AppLogger().error('❌ Failed to connect WebRTC: $e');
     }
@@ -889,6 +938,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
       await _loadParticipants();
       
+      // Auto-assign room creator as moderator if no moderator exists
+      await _ensureModeratorExists();
+      
       // Double-check that current user appears in audience if they should
       if (_currentUserId != null) {
         final currentUserInParticipants = _participants.values.any((p) => p?.id == _currentUserId);
@@ -994,6 +1046,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       if (currentUserParticipant.isNotEmpty) {
         _userRole = currentUserParticipant['role'];
         AppLogger().debug('👤 Current user role: $_userRole');
+        
+        // Immediately connect WebRTC for debaters to enable instant audio
+        final isDebater = ['affirmative', 'negative', 'affirmative2', 'negative2'].contains(_userRole);
+        if (isDebater && !_isWebRTCConnected) {
+          AppLogger().debug('🎥 DEBATER DETECTED: Connecting WebRTC immediately for peer-to-peer audio');
+          _connectToWebRTC();
+        }
       } else {
         AppLogger().warning('Current user not found in participants list');
       }
@@ -1007,12 +1066,53 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       AppLogger().info('Arena participants loaded successfully');
       
       // Connect to WebRTC after participants are loaded and user role is determined
+      // For debaters, connect immediately to enable peer-to-peer audio
       if (_userRole != null && !_isWebRTCConnected) {
-        AppLogger().debug('🎥 Initiating WebRTC connection for role: $_userRole');
-        await _connectToWebRTC();
+        final isDebater = ['affirmative', 'negative', 'affirmative2', 'negative2'].contains(_userRole);
+        final isImportantRole = ['moderator', 'judge1', 'judge2', 'judge3'].contains(_userRole);
+        
+        if (isDebater || isImportantRole) {
+          AppLogger().debug('🎥 Initiating immediate WebRTC connection for critical role: $_userRole');
+          await _connectToWebRTC();
+        } else {
+          AppLogger().debug('🎥 Initiating WebRTC connection for role: $_userRole');
+          await _connectToWebRTC();
+        }
       }
     } catch (e) {
       AppLogger().error('Error loading participants: $e');
+    }
+  }
+
+  /// Ensure room creator is assigned as moderator if no moderator exists
+  Future<void> _ensureModeratorExists() async {
+    try {
+      // Check if moderator already exists
+      if (_participants['moderator'] != null) {
+        AppLogger().debug('🎭 Moderator already assigned: ${_participants['moderator']?.name}');
+        return;
+      }
+      
+      // Check if current user is the room creator
+      if (_roomData != null && _currentUserId != null && _roomData!['createdBy'] == _currentUserId) {
+        AppLogger().info('🎭 Room creator detected - auto-assigning as moderator');
+        
+        // Assign current user as moderator
+        await _appwrite.assignArenaRole(
+          roomId: widget.roomId,
+          userId: _currentUserId!,
+          role: 'moderator',
+        );
+        
+        // Reload participants to reflect the change
+        await _loadParticipants();
+        
+        AppLogger().info('✅ Room creator successfully assigned as moderator');
+      } else {
+        AppLogger().debug('🎭 Current user is not room creator - moderator assignment skipped');
+      }
+    } catch (e) {
+      AppLogger().error('Error ensuring moderator exists: $e');
     }
   }
 
@@ -1170,6 +1270,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       for (var participant in participants) {
         if (participant['userId'] == _currentUserId) {
           _userRole = participant['role'];
+          
+          // Immediately connect WebRTC for debaters to enable instant audio
+          final isDebater = ['affirmative', 'negative', 'affirmative2', 'negative2'].contains(_userRole);
+          if (isDebater && !_isWebRTCConnected) {
+            AppLogger().debug('🎥 DEBATER DETECTED (iOS): Connecting WebRTC immediately for peer-to-peer audio');
+            _connectToWebRTC();
+          }
           break;
         }
       }
@@ -2273,89 +2380,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     );
   }
 
-
-  Widget _buildParticipantTile(UserProfile participant, {bool isMain = false, bool isSmall = false, bool isWinner = false}) {
-    final avatarSize = isMain ? 32.0 : isSmall ? 16.0 : 24.0; // Reduced sizes
-    final nameSize = isMain ? 12.0 : isSmall ? 9.0 : 10.0; // Reduced sizes
-    
-    return GestureDetector(
-      onTap: () {
-        // Determine the role of this participant by searching the _participants map
-        String? participantRole;
-        for (final entry in _participants.entries) {
-          if (entry.value?.id == participant.id) {
-            participantRole = entry.key;
-            break;
-          }
-        }
-        // Also check if they're in the audience
-        if (participantRole == null && _audience.any((user) => user.id == participant.id)) {
-          participantRole = 'audience';
-        }
-        
-        AppLogger().debug('🏛️ Arena Tile: Showing profile for ${participant.name} with role: $participantRole');
-        _showUserProfile(participant, participantRole);
-      },
-      child: Padding(
-        padding: const EdgeInsets.all(4), // Reduced from 8
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Crown for winner
-            if (isWinner && isMain) ...[
-              const Icon(
-                Icons.emoji_events,
-                color: Colors.amber,
-                size: 18, // Reduced from 24
-              ),
-              const SizedBox(height: 1), // Reduced from 2
-            ],
-            
-            // Avatar with special border for winner
-            Container(
-              decoration: isWinner ? BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.amber,
-                  width: 2, // Reduced from 3
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.amber.withValues(alpha: 0.3),
-                    blurRadius: 6, // Reduced from 8
-                    spreadRadius: 1, // Reduced from 2
-                  ),
-                ],
-              ) : null,
-              child: UserAvatar(
-                avatarUrl: participant.avatar,
-                initials: participant.name.isNotEmpty ? participant.name[0] : '?',
-                radius: avatarSize,
-              ),
-            ),
-            const SizedBox(height: 2), // Reduced from 4
-            Text(
-              participant.name,
-              style: TextStyle(
-                color: isWinner ? Colors.amber : Colors.white,
-                fontWeight: isWinner ? FontWeight.bold : FontWeight.w600,
-                fontSize: nameSize,
-                shadows: isWinner ? [
-                  Shadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 2,
-                  ),
-                ] : null,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildEmptyPosition(String text, {bool isSmall = false}) {
     return Padding(
