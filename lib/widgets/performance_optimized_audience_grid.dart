@@ -1,0 +1,915 @@
+// ignore_for_file: prefer_const_constructors
+import 'package:flutter/material.dart';
+import '../core/logging/app_logger.dart';
+
+/// High-performance audience grid optimized for Arena's needs
+class PerformanceOptimizedAudienceGrid extends StatefulWidget {
+  final List<Map<String, dynamic>> participants;
+  final Function(String userId)? onParticipantTap;
+  final String debugLabel;
+  
+  const PerformanceOptimizedAudienceGrid({
+    super.key,
+    required this.participants,
+    this.onParticipantTap,
+    this.debugLabel = 'AudienceGrid',
+  });
+
+  @override
+  State<PerformanceOptimizedAudienceGrid> createState() => _PerformanceOptimizedAudienceGridState();
+}
+
+class _PerformanceOptimizedAudienceGridState extends State<PerformanceOptimizedAudienceGrid> {
+  List<Map<String, dynamic>> _cachedParticipants = [];
+  List<Widget> _cachedWidgets = [];
+  
+  @override
+  void initState() {
+    super.initState();
+    _buildCachedWidgets();
+  }
+  
+  @override
+  void didUpdateWidget(PerformanceOptimizedAudienceGrid oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // Only rebuild if participants actually changed (with deep comparison)
+    if (_participantsEqual(_cachedParticipants, widget.participants)) {
+      return;
+    }
+    
+    AppLogger().debug('🔄 Rebuilding audience grid: ${widget.debugLabel}');
+    _buildCachedWidgets();
+  }
+  
+  /// Efficient deep comparison of participant lists
+  bool _participantsEqual(List<Map<String, dynamic>> a, List<Map<String, dynamic>> b) {
+    if (a.length != b.length) return false;
+    
+    for (int i = 0; i < a.length; i++) {
+      if (a[i]['userId'] != b[i]['userId'] || 
+          a[i]['name'] != b[i]['name'] ||
+          a[i]['role'] != b[i]['role']) {
+        return false;
+      }
+    }
+    return true;
+  }
+  
+  void _buildCachedWidgets() {
+    _cachedParticipants = List.from(widget.participants);
+    _cachedWidgets = widget.participants.map((participant) => 
+      _AudienceCard(
+        key: ValueKey(participant['userId'] ?? participant['id'] ?? DateTime.now().millisecondsSinceEpoch),
+        participant: participant,
+        onTap: widget.onParticipantTap,
+      )
+    ).toList();
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    if (widget.participants.isEmpty) {
+      return const Center(
+        child: Text(
+          'No participants yet',
+          style: TextStyle(color: Colors.grey, fontSize: 16),
+        ),
+      );
+    }
+    
+    final screenWidth = MediaQuery.of(context).size.width;
+    final crossAxisCount = screenWidth > 600 ? 5 : 4;
+    
+    // Use RepaintBoundary for better performance
+    return RepaintBoundary(
+      child: GridView.custom(
+        physics: const ClampingScrollPhysics(),
+        padding: const EdgeInsets.all(8),
+        cacheExtent: 500, // Optimize for scrolling
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
+          childAspectRatio: 0.8, // Adjusted for better proportions with name underneath
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+        ),
+        childrenDelegate: SliverChildBuilderDelegate(
+          (context, index) => RepaintBoundary(child: _cachedWidgets[index]),
+          childCount: _cachedWidgets.length,
+        ),
+      ),
+    );
+  }
+}
+
+/// Helper function to create stacked name display
+Widget _buildStackedNameDisplay(String name) {
+  if (name.isEmpty || name == 'Unknown') {
+    return Text(
+      'Unknown',
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+      ),
+      textAlign: TextAlign.center,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+  
+  final parts = name.split(' ');
+  
+  // Single name - just show it
+  if (parts.length == 1) {
+    return Text(
+      parts[0].length > 10 ? '${parts[0].substring(0, 10)}...' : parts[0],
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+      ),
+      textAlign: TextAlign.center,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+  
+  // Multiple names - stack first and last name
+  if (parts.length >= 2) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          parts[0].length > 10 ? '${parts[0].substring(0, 10)}...' : parts[0],
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            height: 1.1,
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        Text(
+          parts.last.length > 10 ? '${parts.last.substring(0, 10)}...' : parts.last,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            height: 1.1,
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+  
+  // Fallback
+  return Text(
+    name.length > 10 ? '${name.substring(0, 10)}...' : name,
+    style: const TextStyle(
+      color: Colors.white,
+      fontSize: 12,
+      fontWeight: FontWeight.w500,
+    ),
+    textAlign: TextAlign.center,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+  );
+}
+
+/// Helper function to create stacked name display for video tiles
+Widget _buildStackedNameDisplayForVideoTile(String name) {
+  if (name.isEmpty || name == 'Unknown') {
+    return Text(
+      'Unknown',
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        shadows: [
+          Shadow(
+            offset: Offset(0, 1),
+            blurRadius: 2,
+            color: Colors.black54,
+          ),
+        ],
+      ),
+      textAlign: TextAlign.center,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+  
+  final parts = name.split(' ');
+  
+  // Single name - just show it
+  if (parts.length == 1) {
+    return Text(
+      parts[0].length > 10 ? '${parts[0].substring(0, 10)}...' : parts[0],
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        shadows: [
+          Shadow(
+            offset: Offset(0, 1),
+            blurRadius: 2,
+            color: Colors.black54,
+          ),
+        ],
+      ),
+      textAlign: TextAlign.center,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+  
+  // Multiple names - stack first and last name
+  if (parts.length >= 2) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          parts[0].length > 8 ? '${parts[0].substring(0, 8)}...' : parts[0],
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            height: 1.1,
+            shadows: [
+              Shadow(
+                offset: Offset(0, 1),
+                blurRadius: 2,
+                color: Colors.black54,
+              ),
+            ],
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        Text(
+          parts.last.length > 8 ? '${parts.last.substring(0, 8)}...' : parts.last,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            height: 1.1,
+            shadows: [
+              Shadow(
+                offset: Offset(0, 1),
+                blurRadius: 2,
+                color: Colors.black54,
+              ),
+            ],
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+  
+  // Fallback
+  return Text(
+    name.length > 10 ? '${name.substring(0, 10)}...' : name,
+    style: const TextStyle(
+      color: Colors.white,
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      shadows: [
+        Shadow(
+          offset: Offset(0, 1),
+          blurRadius: 2,
+          color: Colors.black54,
+        ),
+      ],
+    ),
+    textAlign: TextAlign.center,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+  );
+}
+
+/// Helper function to create avatar text content from Map data - just first letter
+Widget _buildAvatarTextFromMap(Map<String, dynamic> data, double fontSize) {
+  final name = data['name'] ?? data['userName'] ?? '';
+  String letter;
+  
+  if (name.isEmpty) {
+    letter = 'U';
+  } else {
+    letter = name.substring(0, 1).toUpperCase();
+  }
+  
+  return Center(
+    child: Text(
+      letter,
+      style: TextStyle(
+        color: Colors.white,
+        fontSize: fontSize,
+        fontWeight: FontWeight.bold,
+      ),
+      textAlign: TextAlign.center,
+    ),
+  );
+}
+
+/// Clean audience card matching the design in the image
+class _AudienceCard extends StatelessWidget {
+  final Map<String, dynamic> participant;
+  final Function(String userId)? onTap;
+  
+  const _AudienceCard({
+    super.key,
+    required this.participant,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final userId = participant['userId'] ?? participant['id'] ?? '';
+    final name = participant['name'] ?? participant['userName'] ?? 'Unknown';
+    final avatarUrl = participant['avatarUrl'] ?? participant['avatar'] ?? '';
+    
+    return RepaintBoundary(
+      child: GestureDetector(
+        onTap: onTap != null ? () => onTap!(userId) : null,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Round profile picture
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.grey.withValues(alpha: 0.3),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(30),
+                child: avatarUrl.isNotEmpty
+                    ? Image.network(
+                        avatarUrl,
+                        width: 60,
+                        height: 60,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            Container(
+                          width: 60,
+                          height: 60,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF8B5CF6),
+                            shape: BoxShape.circle,
+                          ),
+                          child: _buildAvatarTextFromMap(participant, 20),
+                        ),
+                      )
+                    : Container(
+                        width: 60,
+                        height: 60,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF8B5CF6),
+                          shape: BoxShape.circle,
+                        ),
+                        child: _buildAvatarTextFromMap(participant, 20),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Name underneath
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: _buildStackedNameDisplay(name),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Optimized participant card with minimal rebuilds (legacy)
+// ignore: unused_element
+class _ParticipantCard extends StatelessWidget {
+  final Map<String, dynamic> participant;
+  final Function(String userId)? onTap;
+  
+  const _ParticipantCard({
+    super.key, // ignore: unused_element_parameter
+    required this.participant,
+    this.onTap, // ignore: unused_element_parameter
+  });
+  
+  @override
+  Widget build(BuildContext context) {
+    final userId = participant['userId'] ?? '';
+    final name = participant['name'] ?? participant['userName'] ?? 'Unknown';
+    final avatarUrl = participant['avatarUrl'] ?? participant['avatar'] ?? '';
+    final role = participant['role'] ?? 'audience';
+    
+    return RepaintBoundary(
+      child: GestureDetector(
+        onTap: onTap != null ? () => onTap!(userId) : null,
+        child: Container(
+          margin: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            color: _getRoleColor(role),
+            borderRadius: BorderRadius.circular(12),
+            border: role == 'speaker' 
+              ? Border.all(color: Colors.blue, width: 2)
+              : null,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _OptimizedAvatar(avatarUrl: avatarUrl),
+              const SizedBox(height: 4),
+              _OptimizedNameText(name: name),
+              if (role != 'audience') _RoleBadge(role: role),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
+  Color _getRoleColor(String role) {
+    switch (role) {
+      case 'moderator':
+        return Colors.red.withValues(alpha: 0.1);
+      case 'speaker':
+        return Colors.blue.withValues(alpha: 0.1);
+      case 'pending':
+        return Colors.orange.withValues(alpha: 0.1);
+      default:
+        return Colors.white;
+    }
+  }
+}
+
+/// Optimized avatar with caching
+class _OptimizedAvatar extends StatelessWidget {
+  final String avatarUrl;
+  final double size;
+  
+  const _OptimizedAvatar({required this.avatarUrl, this.size = 50}); // ignore: unused_element_parameter
+  
+  @override
+  Widget build(BuildContext context) {
+    
+    if (avatarUrl.isEmpty) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: const BoxDecoration(
+          color: Colors.grey,
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(
+          Icons.person,
+          color: Colors.white,
+          size: 28,
+        ),
+      );
+    }
+    
+    return ClipOval(
+      child: Image.network(
+        avatarUrl,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        cacheWidth: 80, // Reduce memory usage
+        cacheHeight: 80,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(
+            width: size,
+            height: size,
+            color: Colors.grey[300],
+            child: const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            width: size,
+            height: size,
+            decoration: const BoxDecoration(
+              color: Colors.grey,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.person, color: Colors.white, size: 24),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Optimized name text with truncation
+class _OptimizedNameText extends StatelessWidget {
+  final String name;
+  final double fontSize;
+  
+  const _OptimizedNameText({required this.name, this.fontSize = 10}); // ignore: unused_element_parameter
+  
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Text(
+        name,
+        style: TextStyle(
+          fontSize: fontSize,
+          fontWeight: FontWeight.w500,
+        ),
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+}
+
+/// Optimized role badge
+class _RoleBadge extends StatelessWidget {
+  final String role;
+  
+  const _RoleBadge({required this.role});
+  
+  @override
+  Widget build(BuildContext context) {
+    late final Color badgeColor;
+    late final IconData icon;
+    
+    switch (role) {
+      case 'moderator':
+        badgeColor = Colors.red;
+        icon = Icons.gavel;
+        break;
+      case 'speaker':
+        badgeColor = Colors.blue;
+        icon = Icons.mic;
+        break;
+      case 'pending':
+        badgeColor = Colors.orange;
+        icon = Icons.access_time;
+        break;
+      default:
+        badgeColor = Colors.grey;
+        icon = Icons.person;
+    }
+    
+    return Container(
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: badgeColor,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 8, color: Colors.white),
+          const SizedBox(width: 2),
+          Text(
+            role.toUpperCase(),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 6,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// High-performance floating speakers panel
+class PerformanceOptimizedSpeakersPanel extends StatefulWidget {
+  final List<Map<String, dynamic>> speakers;
+  final Map<String, dynamic>? moderator;
+  final Function(String userId)? onSpeakerTap;
+  
+  const PerformanceOptimizedSpeakersPanel({
+    super.key,
+    required this.speakers,
+    this.moderator,
+    this.onSpeakerTap,
+  });
+
+  @override
+  State<PerformanceOptimizedSpeakersPanel> createState() => _PerformanceOptimizedSpeakersPanelState();
+}
+
+class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimizedSpeakersPanel> {
+  List<Widget> _cachedSpeakerWidgets = [];
+  
+  @override
+  void initState() {
+    super.initState();
+    _buildCachedSpeakers();
+  }
+  
+  @override
+  void didUpdateWidget(PerformanceOptimizedSpeakersPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _buildCachedSpeakers();
+  }
+  
+  void _buildCachedSpeakers() {
+    // Build speakers only (not moderator) - fill to 8 slots for 4x2 grid
+    final speakersWithPlaceholders = <Map<String, dynamic>>[];
+    speakersWithPlaceholders.addAll(widget.speakers);
+    
+    // Fill remaining slots with empty placeholders (8 speaker slots total)
+    while (speakersWithPlaceholders.length < 8) {
+      speakersWithPlaceholders.add({'isEmpty': true, 'slotNumber': speakersWithPlaceholders.length + 1});
+    }
+    
+    _cachedSpeakerWidgets = speakersWithPlaceholders.map((speaker) => 
+      _VideoTile(
+        key: ValueKey(speaker['userId'] ?? speaker['isEmpty'] ?? DateTime.now().millisecondsSinceEpoch),
+        speaker: speaker,
+        onTap: widget.onSpeakerTap,
+        isModerator: false,
+      )
+    ).toList();
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    // Calculate larger tile dimensions based on screen width
+    final screenWidth = MediaQuery.of(context).size.width;
+    const containerMargin = 8.0; // Minimal margins to maximize space
+    final containerWidth = screenWidth - (containerMargin * 2);
+    const tileSpacing = 4.0; // Minimal spacing between tiles
+    
+    // Calculate tile width to fit 4 per row - make them larger and more prominent
+    final availableWidth = containerWidth - (tileSpacing * 3); // Space for 3 gaps between 4 tiles
+    final tileWidth = (availableWidth / 4).floor().toDouble(); // Use floor to prevent overflow
+    final tileHeight = tileWidth * 1.15; // Slightly taller for better proportion and visibility
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: containerMargin),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Fixed 8 speaker slots (always show all slots) - 4x2 grid
+          // First row (slots 1-4)
+          SizedBox(
+            height: tileHeight,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (int i = 0; i < 4; i++) ...[
+                  if (i > 0) const SizedBox(width: tileSpacing),
+                  SizedBox(
+                    width: tileWidth,
+                    height: tileHeight,
+                    child: _cachedSpeakerWidgets[i],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          
+          // Second row (slots 5-8)
+          const SizedBox(height: tileSpacing),
+          SizedBox(
+            height: tileHeight,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (int i = 4; i < 8; i++) ...[
+                  if (i > 4) const SizedBox(width: tileSpacing),
+                  SizedBox(
+                    width: tileWidth,
+                    height: tileHeight,
+                    child: _cachedSpeakerWidgets[i],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          
+          // Space between speakers and moderator
+          const SizedBox(height: tileSpacing),
+          
+          // Moderator at the bottom (always shown)
+          if (widget.moderator != null)
+            SizedBox(
+              width: tileWidth,
+              height: tileHeight,
+              child: _VideoTile(
+                speaker: {
+                  ...widget.moderator!,
+                  'role': 'moderator',
+                },
+                onTap: widget.onSpeakerTap,
+                isModerator: true,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Beautiful video tile matching the original design
+class _VideoTile extends StatelessWidget {
+  final Map<String, dynamic> speaker;
+  final Function(String userId)? onTap;
+  final bool isModerator;
+  
+  const _VideoTile({
+    super.key,
+    required this.speaker,
+    this.onTap,
+    this.isModerator = false,
+  });
+  
+  @override
+  Widget build(BuildContext context) {
+    if (speaker['isEmpty'] == true) {
+      return Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF2D2D2D),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: const Color(0xFF8B5CF6),
+            width: 2,
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.gavel,
+                color: Color(0xFF8B5CF6),
+                size: 32,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${speaker['slotNumber'] ?? ''}',
+                style: TextStyle(
+                  color: Colors.grey.withValues(alpha: 0.6),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    final userId = speaker['userId'] ?? '';
+    final name = speaker['name'] ?? speaker['userName'] ?? 'Unknown';
+    final avatarUrl = speaker['avatarUrl'] ?? speaker['avatar'] ?? '';
+    
+    // Beautiful gradient and styling for different roles
+    final isModeratorRole = isModerator || speaker['role'] == 'moderator';
+    
+    return RepaintBoundary(
+      child: GestureDetector(
+        onTap: onTap != null ? () => onTap!(userId) : null,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isModeratorRole
+                  ? [
+                      const Color(0xFF7C2D12), // Dark red-orange
+                      const Color(0xFF991B1B), // Deep red
+                    ]
+                  : [
+                      const Color(0xFF1E3A8A), // Dark blue
+                      const Color(0xFF3B82F6), // Bright blue
+                    ],
+            ),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isModeratorRole
+                  ? const Color(0xFFDC2626)  // Red border for moderator
+                  : const Color(0xFF3B82F6), // Blue border for speaker
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: (isModeratorRole 
+                    ? const Color(0xFFDC2626) 
+                    : const Color(0xFF3B82F6)).withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              // Main content
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Avatar - larger round profile pics with gavel fallback
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(30),
+                        child: avatarUrl.isNotEmpty
+                            ? Image.network(
+                                avatarUrl,
+                                width: 60,
+                                height: 60,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Container(
+                                  width: 60,
+                                  height: 60,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF8B5CF6),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: _buildAvatarTextFromMap(speaker, 20),
+                                ),
+                              )
+                            : Container(
+                                width: 60,
+                                height: 60,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF8B5CF6),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: _buildAvatarTextFromMap(speaker, 20),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    // Name - stacked for first/last
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: _buildStackedNameDisplayForVideoTile(name),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Role indicator
+              if (isModeratorRole)
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFDC2626),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white, width: 1),
+                    ),
+                    child: const Text(
+                      'MOD',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

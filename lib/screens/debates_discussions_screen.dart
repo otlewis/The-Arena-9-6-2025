@@ -4,22 +4,30 @@ import 'package:flutter/foundation.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:audio_session/audio_session.dart' as audio_session;
 import '../services/appwrite_service.dart';
 import '../services/firebase_gift_service.dart';
-import '../services/websocket_webrtc_service.dart';
+import '../services/livekit_service.dart';
+import '../services/livekit_token_service.dart';
 // import '../services/chat_service.dart'; // Removed with new chat system
 import '../models/user_profile.dart';
 import '../models/gift.dart';
 import '../models/timer_state.dart';
 import '../widgets/animated_fade_in.dart';
 import '../widgets/appwrite_timer_widget.dart';
-import '../widgets/user_profile_modal.dart';
+import '../widgets/user_profile_bottom_sheet.dart';
 import '../widgets/instant_message_bell.dart';
 import '../widgets/challenge_bell.dart';
 import '../widgets/mattermost_chat_widget.dart';
+import 'email_compose_screen.dart';
 import '../models/discussion_chat_message.dart';
 // import '../widgets/floating_im_widget.dart'; // Unused import
 import '../core/logging/app_logger.dart';
+import '../utils/performance_optimizations.dart';
+import '../utils/optimized_state_manager.dart';
+import '../utils/ultra_performance_mode.dart';
+import '../utils/extreme_performance_mode.dart';
+import '../widgets/performance_optimized_audience_grid.dart';
 
 class DebatesDiscussionsScreen extends StatefulWidget {
   final String roomId;
@@ -40,7 +48,7 @@ class DebatesDiscussionsScreen extends StatefulWidget {
 class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   final AppwriteService _appwrite = AppwriteService();
   final FirebaseGiftService _giftService = FirebaseGiftService();
-  final WebSocketWebRTCService _webrtcService = WebSocketWebRTCService();
+  final LiveKitService _webrtcService = LiveKitService();
   
   // Video/Audio WebRTC state
   bool _isWebRTCConnected = false;
@@ -76,6 +84,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   final List<UserProfile> _audienceMembers = [];
   final List<UserProfile> _speakerRequests = []; // Pending speaker requests
   
+  // Performance optimization - cache last participants to prevent unnecessary rebuilds
+  List<dynamic> _lastParticipants = [];
+  
   // Legacy audio variables (Agora removed, kept to prevent compilation errors)
   // Note: These are no longer used but kept for any remaining references
   
@@ -98,6 +109,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   @override
   void initState() {
     super.initState();
+    
+    // Enable ultra-performance mode for maximum FPS
+    UltraPerformanceMode.instance.enable();
+    
+    // Enable extreme performance mode for maximum possible performance
+    ExtremePerformanceMode.instance.enable();
+    
     _initializeRoom();
     _loadGiftData();
     _initializeWebRTC();
@@ -107,89 +125,59 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     await _localRenderer.initialize();
     await _remoteRenderer.initialize();
     
-    // Set up MediaSoup service callbacks for video
-    _webrtcService.onLocalStream = (stream) {
-      AppLogger().debug('🎤 Received local stream');
-      AppLogger().debug('🎤 Audio tracks: ${stream.getAudioTracks().length}');
-      
-      // Store local stream for audio control
-      _localStream = stream;
-      
-      if (mounted) {
-        setState(() {
-          _localStream = stream;
-          _localRenderer.srcObject = stream;
-          // Audio-only mode for Debates & Discussions
-          _isVideoEnabled = false;
-        });
-      }
-    };
-    
-    _webrtcService.onRemoteStream = (peerId, stream, userId, role) {
-      AppLogger().debug('🎵 Received remote stream from peer: $peerId (User: $userId, Role: $role)');
-      AppLogger().debug('🎵 Audio tracks in stream: ${stream.getAudioTracks().length}');
-      
-      // Store remote stream for audio functionality
-      _remoteStreams[peerId] = stream;
-      
-      // Store the peer-to-user mapping
-      if (userId.isNotEmpty) {
-        _userToPeerMapping[userId] = peerId;
-        _peerToUserMapping[peerId] = userId;
-        AppLogger().debug('🎵 Mapped user $userId to peer $peerId');
-      }
-      
-      // Enable audio tracks for playback
-      final audioTracks = stream.getAudioTracks();
-      for (var track in audioTracks) {
-        track.enabled = true;
-        AppLogger().debug('🔊 Enabled audio track: ${track.id}');
-      }
-      
-      if (mounted) {
-        setState(() {
-          // Trigger UI rebuild for audio indicator
-        });
-      }
-    };
-    
+    // Set up LiveKit service callbacks
     _webrtcService.onConnected = () {
+      AppLogger().debug('✅ LiveKit connected to Debates & Discussions room');
       if (mounted) {
         setState(() {
           _isWebRTCConnected = true;
           _isWebRTCConnecting = false;
         });
-        // Debug current video state after connection
         _debugVideoState();
       }
     };
     
-    _webrtcService.onPeerLeft = (peerId) {
-      AppLogger().debug('👋 Peer left: $peerId');
-      
-      // Clean up peer-to-user mappings
-      final userId = _peerToUserMapping.remove(peerId);
-      if (userId != null) {
-        _userToPeerMapping.remove(userId);
-        AppLogger().debug('🗑️ Removed mapping for user $userId <-> peer $peerId');
-      }
-      
-      // Remove renderer for this peer
-      final renderer = _remoteRenderers.remove(peerId);
-      if (renderer != null) {
-        renderer.dispose();
-        AppLogger().debug('🗑️ Disposed renderer for peer $peerId');
-      }
-      
+    _webrtcService.onParticipantConnected = (participant) {
+      AppLogger().debug('👤 LiveKit participant joined: ${participant.identity}');
       if (mounted) {
-        setState(() {});
+        setState(() {
+          // Trigger UI update for participant count
+        });
+      }
+    };
+    
+    _webrtcService.onParticipantDisconnected = (participant) {
+      AppLogger().debug('👋 LiveKit participant left: ${participant.identity}');
+      if (mounted) {
+        setState(() {
+          // Update UI for participant leaving
+        });
+      }
+    };
+    
+    _webrtcService.onTrackSubscribed = (publication, participant) {
+      AppLogger().debug('🎵 LiveKit track subscribed from ${participant.identity}');
+      if (mounted) {
+        setState(() {
+          // Handle new audio track
+        });
       }
     };
     
     _webrtcService.onDisconnected = () {
+      AppLogger().debug('📡 LiveKit disconnected from Debates & Discussions room');
       if (mounted) {
         setState(() {
           _isWebRTCConnected = false;
+          _isWebRTCConnecting = false;
+        });
+      }
+    };
+    
+    _webrtcService.onError = (error) {
+      AppLogger().debug('❌ LiveKit error: $error');
+      if (mounted) {
+        setState(() {
           _isWebRTCConnecting = false;
         });
       }
@@ -200,18 +188,14 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
 
   // Audio/Video control methods
   Future<void> _toggleAudio() async {
-    // WebSocketWebRTCService doesn't have built-in mute, handle locally
-    if (_localStream != null) {
-      final audioTracks = _localStream!.getAudioTracks();
-      for (final track in audioTracks) {
-        track.enabled = _isMuted; // Toggle (inverted current state)
-      }
-      if (mounted) {
-        setState(() {
-          _isMuted = !_isMuted;
-        });
-      }
+    // Use LiveKit's built-in mute functionality
+    await _webrtcService.toggleMute();
+    if (mounted) {
+      setState(() {
+        _isMuted = _webrtcService.isMuted;
+      });
     }
+    AppLogger().debug('🎤 Audio ${_webrtcService.isMuted ? 'muted' : 'unmuted'} via LiveKit');
   }
 
   void _resumeWebAudioContext() async {
@@ -237,8 +221,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     
     try {
       if (_isWebRTCConnected) {
-        // Video not supported in WebSocketWebRTCService
-        AppLogger().debug('🎥 Video toggle not supported - using audio-only mode');
+        // Video not supported in Debates & Discussions (audio-only mode)
+        AppLogger().debug('🎥 Video toggle not supported - Debates & Discussions are audio-only');
         
         if (mounted) {
           setState(() {
@@ -422,9 +406,49 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   }
 
   void _showUserProfileModal(UserProfile user) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => UserProfileModal(userProfile: user),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => UserProfileBottomSheet(
+        user: user,
+        onFollow: () {
+          // TODO: Implement follow functionality
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Following ${user.name}'),
+                backgroundColor: const Color(0xFF10B981),
+              ),
+            );
+          }
+        },
+        onChallenge: () {
+          // TODO: Implement challenge functionality
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Challenge sent to ${user.name}'),
+                backgroundColor: const Color(0xFFDC2626),
+              ),
+            );
+          }
+        },
+        onEmail: () {
+          if (mounted && _currentUser != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => EmailComposeScreen(
+                  currentUserId: _currentUser!.id,
+                  currentUsername: _currentUser!.name,
+                  recipient: user,
+                ),
+              ),
+            );
+          }
+        },
+      ),
     );
   }
   
@@ -508,14 +532,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                     ? NetworkImage(participant.avatar!)
                     : null,
                 child: participant.avatar == null || participant.avatar!.isEmpty
-                    ? Text(
-                        participant.initials,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: isModerator ? 18 : 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
+                    ? _buildAvatarText(participant, isModerator ? 18 : 14)
                     : null,
               ),
             ),
@@ -530,8 +547,22 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     _roomSubscription?.close();
     _unreadMessagesSubscription?.cancel();
     
+    // Clean up performance optimizations
+    PerformanceOptimizations.dispose();
+    
     // Clean up WebRTC
     _cleanupWebRTC();
+    
+    // Clean up performance optimizations
+    OptimizedStateManager.clearKey('participants_${widget.roomId}');
+    OptimizedParticipantManager.clearKey('audience_${widget.roomId}');
+    OptimizedParticipantManager.clearKey('speakers_${widget.roomId}');
+    
+    // Disable ultra-performance mode
+    UltraPerformanceMode.instance.disable();
+    
+    // Disable extreme performance mode
+    ExtremePerformanceMode.instance.disable();
     
     // Don't await _leaveRoom() in dispose as it's synchronous
     // Just call it without awaiting to start the process
@@ -631,19 +662,29 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       
       final roomId = 'debates-discussion-${widget.roomId}';
       
-      AppLogger().debug('🎥 Connecting to WebRTC for Debates & Discussions');
+      AppLogger().debug('🎥 Connecting to LiveKit for Debates & Discussions');
       AppLogger().debug('🎥 Room: $roomId');
       AppLogger().debug('🎥 User: ${_currentUser?.id} (${_currentUser?.name})');
       AppLogger().debug('🎥 Role: $userRole, Publish: $shouldPublishVideo');
       AppLogger().debug('🎥 Widget Room ID: ${widget.roomId}');
-      AppLogger().debug('🎥 audioOnly parameter will be: ${!shouldPublishVideo}');
+      
+      // Generate LiveKit token
+      final token = LiveKitTokenService.generateToken(
+        roomName: roomId,
+        identity: _currentUser?.id ?? 'unknown',
+        userRole: userRole,
+        roomType: 'debate_discussion',
+        userId: _currentUser?.id ?? 'unknown',
+        ttl: const Duration(hours: 2),
+      );
       
       await _webrtcService.connect(
-        '172.236.109.9:3006',  // WebSocket WebRTC server on Linode
-        roomId,
-        _currentUser?.id ?? 'unknown',
-        audioOnly: true, // Debates & Discussions are audio-only for scalability
-        role: userRole,
+        serverUrl: 'ws://172.236.109.9:7880', // LiveKit production server
+        roomName: roomId,
+        token: token,
+        userId: _currentUser?.id ?? 'unknown',
+        userRole: userRole,
+        roomType: 'debate_discussion',
       );
       
       // Log specific connection behavior
@@ -654,6 +695,37 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       }
       
       AppLogger().debug('🎥 WebRTC connected successfully for Debates & Discussions');
+      
+      // Configure audio session for maximum speaker output
+      try {
+        final session = await audio_session.AudioSession.instance;
+        await session.configure(audio_session.AudioSessionConfiguration(
+          avAudioSessionCategory: audio_session.AVAudioSessionCategory.playAndRecord,
+          avAudioSessionCategoryOptions: audio_session.AVAudioSessionCategoryOptions.defaultToSpeaker |
+              audio_session.AVAudioSessionCategoryOptions.allowBluetooth |
+              audio_session.AVAudioSessionCategoryOptions.mixWithOthers,
+          avAudioSessionMode: audio_session.AVAudioSessionMode.videoChat,
+          avAudioSessionRouteSharingPolicy: audio_session.AVAudioSessionRouteSharingPolicy.defaultPolicy,
+          avAudioSessionSetActiveOptions: audio_session.AVAudioSessionSetActiveOptions.none,
+          androidAudioAttributes: const audio_session.AndroidAudioAttributes(
+            contentType: audio_session.AndroidAudioContentType.speech,
+            flags: audio_session.AndroidAudioFlags.audibilityEnforced,
+            usage: audio_session.AndroidAudioUsage.voiceCommunication,
+          ),
+          androidAudioFocusGainType: audio_session.AndroidAudioFocusGainType.gain,
+          androidWillPauseWhenDucked: false,
+        ));
+        
+        // Activate the audio session with high priority
+        await session.setActive(true);
+        
+        // Additional speaker enforcement (iOS will use defaultToSpeaker option above)
+        
+        AppLogger().debug('🔊 Audio session configured for maximum speaker output');
+      } catch (e) {
+        AppLogger().debug('❌ Failed to configure audio session: $e');
+        // Continue anyway - audio might still work
+      }
       
     } catch (e) {
       AppLogger().error('❌ Failed to connect WebRTC: $e');
@@ -705,7 +777,17 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       final participants = await _appwrite.getDebateDiscussionParticipants(widget.roomId);
       
       if (mounted && !_isDisposing) {
-        setState(() {
+        // Check if participants actually changed to avoid unnecessary rebuilds
+        if (!PerformanceOptimizations.participantsChanged(_lastParticipants, participants)) {
+          AppLogger().debug('Participants unchanged, skipping rebuild');
+          return;
+        }
+        _lastParticipants = List.from(participants);
+        
+        // Use batched operations to minimize UI updates
+        final List<VoidCallback> operations = [];
+        
+        operations.add(() {
           _speakerPanelists.clear();
           _audienceMembers.clear();
           _speakerRequests.clear();
@@ -714,91 +796,83 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           _isCurrentUserModerator = false;
           _isCurrentUserSpeaker = false;
           _hasRequestedSpeaker = false;
-          
-          // Process participants
-          for (var participant in participants) {
-            final userProfileData = participant['userProfile'];
-            if (userProfileData != null) {
-              final userProfile = UserProfile.fromMap(userProfileData);
-              final role = participant['role'] ?? 'audience';
-              
-              if (role == 'moderator') {
-                // Moderator goes to speaker panel
-                if (!_speakerPanelists.any((p) => p.id == userProfile.id)) {
-                  _speakerPanelists.add(userProfile);
-                }
-                // Check if current user is the moderator
-                if (userProfile.id == _currentUser?.id) {
-                  bool wasCurrentUserModerator = _isCurrentUserModerator;
-                  _isCurrentUserModerator = true;
-                  
-                  // Auto-enable video and audio when current user becomes moderator
-                  if (_isCurrentUserModerator && !wasCurrentUserModerator) {
-                    AppLogger().debug('🎥 Current user became moderator - auto-enabling video/audio');
-                    _autoEnableVideoAndAudio();
-                  }
-                }
-              } else if (role == 'speaker') {
-                // Speaker goes to speaker panel
-                if (!_speakerPanelists.any((p) => p.id == userProfile.id)) {
-                  _speakerPanelists.add(userProfile);
-                }
-                // Check if current user is a speaker (but not moderator)
-                if (userProfile.id == _currentUser?.id) {
-                  bool wasCurrentUserSpeaker = _isCurrentUserSpeaker;
-                  _isCurrentUserSpeaker = true;
-                  
-                  // Auto-enable video and audio when current user becomes speaker
-                  if (_isCurrentUserSpeaker && !wasCurrentUserSpeaker) {
-                    AppLogger().debug('🎥 Current user became speaker - auto-enabling video/audio');
-                    _autoEnableVideoAndAudio();
-                  }
-                }
-              } else if (role == 'pending') {
-                // User has requested to speak - add to speaker requests AND keep in audience
-                if (!_speakerRequests.any((p) => p.id == userProfile.id)) {
-                  _speakerRequests.add(userProfile);
-                }
-                // Also keep them in audience so they don't disappear
-                if (!_audienceMembers.any((p) => p.id == userProfile.id)) {
-                  _audienceMembers.add(userProfile);
-                }
-                // Check if current user has requested
-                if (userProfile.id == _currentUser?.id) {
-                  _hasRequestedSpeaker = true;
-                }
-              } else {
-                // Regular audience member
-                if (!_audienceMembers.any((p) => p.id == userProfile.id)) {
-                  _audienceMembers.add(userProfile);
-                }
-                
-                // Note: Current user status flags are already reset at beginning of loop
-                // If user is in audience, they remain as non-speaker/non-moderator
+        });
+        
+        // Process participants efficiently
+        final List<UserProfile> newSpeakers = [];
+        final List<UserProfile> newAudience = [];
+        final List<UserProfile> newRequests = [];
+        
+        for (var participant in participants) {
+          final userProfileData = participant['userProfile'];
+          if (userProfileData != null) {
+            final userProfile = UserProfile.fromMap(userProfileData);
+            final role = participant['role'] ?? 'audience';
+            
+            // Efficiently sort participants by role
+            if (role == 'moderator') {
+              if (!newSpeakers.any((p) => p.id == userProfile.id)) {
+                newSpeakers.add(userProfile);
+              }
+              if (userProfile.id == _currentUser?.id) {
+                operations.add(() => _isCurrentUserModerator = true);
+              }
+            } else if (role == 'speaker') {
+              if (!newSpeakers.any((p) => p.id == userProfile.id)) {
+                newSpeakers.add(userProfile);
+              }
+              if (userProfile.id == _currentUser?.id) {
+                operations.add(() => _isCurrentUserSpeaker = true);
+              }
+            } else if (role == 'pending') {
+              if (!newRequests.any((p) => p.id == userProfile.id)) {
+                newRequests.add(userProfile);
+              }
+              if (!newAudience.any((p) => p.id == userProfile.id)) {
+                newAudience.add(userProfile);
+              }
+              if (userProfile.id == _currentUser?.id) {
+                operations.add(() => _hasRequestedSpeaker = true);
+              }
+            } else {
+              if (!newAudience.any((p) => p.id == userProfile.id)) {
+                newAudience.add(userProfile);
               }
             }
           }
+        }
+        
+        // Add final operation to update all lists at once
+        operations.add(() {
+          _speakerPanelists.addAll(newSpeakers);
+          _audienceMembers.addAll(newAudience);
+          _speakerRequests.addAll(newRequests);
         });
+        
+        // Execute all operations in batch and trigger single rebuild
+        PerformanceOptimizations.batchedSetState(operations, () {
+          if (mounted) setState(() {});
+        });
+        
+        // Preload avatar images for better scroll performance
+        final avatarUrls = newAudience.map((p) => p.avatar).toList() +
+                          newSpeakers.map((p) => p.avatar).toList() +
+                          newRequests.map((p) => p.avatar).toList();
+        PerformanceOptimizations.preloadAvatarImages(avatarUrls, context);
       }
       
       AppLogger().debug('Loaded ${participants.length} participants: ${_speakerPanelists.length} speakers, ${_audienceMembers.length} audience, ${_speakerRequests.length} pending requests');
       AppLogger().debug('Current user status: moderator=$_isCurrentUserModerator, speaker=$_isCurrentUserSpeaker, requested=$_hasRequestedSpeaker');
-      AppLogger().debug('Video controls should be visible: ${_isCurrentUserModerator || _isCurrentUserSpeaker}');
-      
-      // WebRTC connection handled by video toggle for speakers/moderators only
-      // Audience members can view video feeds without publishing
-      
-      
-      // Trigger UI update to reflect participant role changes
-      if (mounted) {
-        setState(() {});
-      }
     } catch (e) {
       AppLogger().error('Error loading participants: $e');
       // Fallback to mock data if real data fails
       _createMockParticipants();
       if (mounted) {
-        setState(() {});
+        OptimizedStateManager.batchedSetState(
+          'participants_${widget.roomId}',
+          () => setState(() {}),
+          {'audience': _audienceMembers.length, 'speakers': _speakerPanelists.length},
+        );
       }
     }
   }
@@ -879,8 +953,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               }
             }
             
-            // Always reload participants to keep UI in sync
-            await _loadParticipants();
+            // Always reload participants to keep UI in sync (throttled to prevent excessive updates)
+            PerformanceOptimizations.throttledSetState(() async {
+              await _loadParticipants();
+            });
             
             // Show immediate notification for hand-raise events (only for moderators)
             if (isHandRaiseEvent && _isCurrentUserModerator) {
@@ -1663,114 +1739,90 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   }
 
   Widget _buildSpeakerPanel() {
-    // Fixed 8-slot panel: 1 moderator (bottom center) + 7 speaker slots
-    
-    // Separate moderator from other speakers
-    UserProfile? moderator;
-    List<UserProfile> otherSpeakers = [];
-    
-    if (_speakerPanelists.isNotEmpty) {
-      try {
-        moderator = _speakerPanelists.firstWhere(
-          (speaker) => speaker.id == _moderator?.id, 
-        );
-        otherSpeakers = _speakerPanelists.where((speaker) => speaker.id != moderator!.id).toList();
-      } catch (e) {
-        // If moderator not found in speakers list, use the first speaker or the actual moderator
-        if (_moderator != null) {
-          moderator = _moderator;
-        }
-        otherSpeakers = _speakerPanelists.where((speaker) => speaker.id != moderator?.id).toList();
-      }
-    } else {
-      moderator = _moderator;
+    // Prepare data for performance-optimized speakers panel
+    List<Map<String, dynamic>> speakers = _speakerPanelists
+        .where((speaker) => speaker.id != _moderator?.id)
+        .map((speaker) => {
+              'userId': speaker.id,
+              'name': speaker.name,
+              'userName': speaker.name,
+              'avatarUrl': speaker.avatar,
+              'avatar': speaker.avatar,
+              'role': 'speaker',
+            })
+        .toList();
+
+    Map<String, dynamic>? moderatorData;
+    if (_moderator != null) {
+      moderatorData = {
+        'userId': _moderator!.id,
+        'name': _moderator!.name,
+        'userName': _moderator!.name,
+        'avatarUrl': _moderator!.avatar,
+        'avatar': _moderator!.avatar,
+        'role': 'moderator',
+      };
     }
 
-    // Calculate larger tile dimensions based on screen width
-    final screenWidth = MediaQuery.of(context).size.width;
-    const containerMargin = 8.0; // Minimal margins to maximize space
-    final containerWidth = screenWidth - (containerMargin * 2);
-    const tileSpacing = 4.0; // Minimal spacing between tiles
-    
-    // Calculate tile width to fit 4 per row - make them as large as possible
-    final availableWidth = containerWidth - (tileSpacing * 3); // Space for 3 gaps between 4 tiles
-    final tileWidth = (availableWidth / 4).floor().toDouble(); // Use floor to prevent overflow
-    final tileHeight = tileWidth; // Square tiles for better appearance
+    return PerformanceOptimizedSpeakersPanel(
+      speakers: speakers,
+      moderator: moderatorData,
+      onSpeakerTap: (userId) {
+        final speaker = _speakerPanelists.firstWhere((s) => s.id == userId);
+        _showUserProfileModal(speaker);
+      },
+    );
+  }
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: containerMargin),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Fixed 8 speaker slots (always show all slots) - 4x2 grid
-          // First row (slots 1-4)
-          SizedBox(
-            height: tileHeight,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (int i = 0; i < 4; i++) ...[
-                  if (i > 0) const SizedBox(width: tileSpacing),
-                  SizedBox(
-                    width: tileWidth,
-                    height: tileHeight,
-                    child: i < otherSpeakers.length
-                        ? _buildVideoTile(
-                            otherSpeakers[i],
-                            isModerator: false,
-                            showControls: _isCurrentUserModerator,
-                          )
-                        : _buildEmptySlot(i + 1), // Show slot number
-                  ),
-                ],
-              ],
-            ),
-          ),
-          
-          // Second row (slots 5-8)
-          const SizedBox(height: tileSpacing),
-          SizedBox(
-            height: tileHeight,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (int i = 4; i < 8; i++) ...[
-                  if (i > 4) const SizedBox(width: tileSpacing),
-                  SizedBox(
-                    width: tileWidth,
-                    height: tileHeight,
-                    child: i < otherSpeakers.length
-                        ? _buildVideoTile(
-                            otherSpeakers[i],
-                            isModerator: false,
-                            showControls: _isCurrentUserModerator,
-                          )
-                        : _buildEmptySlot(i + 1), // Show slot number
-                  ),
-                ],
-              ],
-            ),
-          ),
-          
-          // Space between speakers and moderator
-          const SizedBox(height: tileSpacing),
-          
-          // Moderator at the bottom (always shown)
-          if (moderator != null)
-            SizedBox(
-              width: tileWidth,
-              height: tileHeight,
-              child: _buildVideoTile(
-                moderator,
-                isModerator: true,
-                showControls: false, // Moderator can't remove themselves
-              ),
-            ),
-        ],
+  /// Helper function to create avatar text content - just first letter
+  Widget _buildAvatarText(UserProfile participant, double fontSize) {
+    String letter;
+    
+    if (participant.name.isEmpty) {
+      letter = participant.email.isNotEmpty ? participant.email.substring(0, 1).toUpperCase() : 'U';
+    } else {
+      letter = participant.name.substring(0, 1).toUpperCase();
+    }
+    
+    return Center(
+      child: Text(
+        letter,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: fontSize,
+          fontWeight: FontWeight.bold,
+        ),
+        textAlign: TextAlign.center,
       ),
     );
   }
 
+  /// Helper function to create avatar text content from Map data - just first letter
+  Widget _buildAvatarTextFromMap(Map<String, dynamic> data, double fontSize) {
+    final name = data['name'] as String? ?? '';
+    String letter;
+    
+    if (name.isEmpty) {
+      letter = 'U';
+    } else {
+      letter = name.substring(0, 1).toUpperCase();
+    }
+    
+    return Center(
+      child: Text(
+        letter,
+        style: TextStyle(
+          color: Colors.black87,
+          fontSize: fontSize,
+          fontWeight: FontWeight.bold,
+        ),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+
+  // Unused method - kept for potential future use
+  // ignore: unused_element
   Widget _buildVideoTile(UserProfile participant, {bool isModerator = false, bool showControls = false}) {
     return AnimatedFadeIn(
       child: GestureDetector(
@@ -1876,6 +1928,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     );
   }
 
+  // Unused method - kept for potential future use
+  // ignore: unused_element
   Widget _buildEmptySlot(int slotNumber) {
     return Container(
       decoration: BoxDecoration(
@@ -1941,14 +1995,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                     ? NetworkImage(participant.avatar!)
                     : null,
                 child: participant.avatar == null || participant.avatar!.isEmpty
-                    ? Text(
-                        participant.initials,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: isModerator ? 20 : 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
+                    ? _buildAvatarText(participant, isModerator ? 20 : 16)
                     : null,
               ),
             ),
@@ -1958,7 +2005,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
 
   Widget _buildAudienceSection() {
     final screenWidth = MediaQuery.of(context).size.width;
-    final crossAxisCount = screenWidth < 360 ? 3 : 4; // Reduced count for larger tiles
     
     // Calculate top padding based on speakers panel height (same as speaker panel)
     const containerMargin = 8.0; // Same as speaker panel
@@ -2045,33 +2091,30 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           const SizedBox(height: 8),
         ],
         
-        // Audience grid
+        // Clean audience grid with round profile pics and names
         Expanded(
-          child: _audienceMembers.isEmpty
-              ? const Center(
-                  child: Text(
-                    'No audience members yet',
-                    style: TextStyle(color: Colors.grey, fontSize: 14),
-                  ),
-                )
-              : GridView.builder(
-                  padding: EdgeInsets.zero, // No padding around the grid
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    crossAxisSpacing: 0, // No horizontal gap
-                    mainAxisSpacing: 0, // No vertical gap
-                    childAspectRatio: 1.0, // Square tiles, adjust as needed
-                  ),
-                  itemCount: _audienceMembers.length,
-                  itemBuilder: (context, index) {
-                    return _buildAudienceMember(_audienceMembers[index]);
-                  },
-                ),
+          child: PerformanceOptimizedAudienceGrid(
+            participants: _audienceMembers.map((member) => {
+              'userId': member.id,
+              'name': member.name,
+              'userName': member.name,
+              'avatarUrl': member.avatar,
+              'avatar': member.avatar,
+              'role': 'audience',
+            }).toList(),
+            onParticipantTap: (userId) {
+              final member = _audienceMembers.firstWhere((m) => m.id == userId);
+              _showUserProfileModal(member);
+            },
+            debugLabel: 'DebatesDiscussionsAudience',
+          ),
         ),
       ],
     );
   }
 
+  // Unused method - kept for potential future use
+  // ignore: unused_element
   Widget _buildAudienceMember(UserProfile member) {
     final screenWidth = MediaQuery.of(context).size.width;
     final avatarSize = screenWidth < 360 ? 36.0 : 42.0;
@@ -2103,14 +2146,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                     ? NetworkImage(member.avatar!)
                     : null,
                 child: member.avatar == null || member.avatar!.isEmpty
-                    ? Text(
-                        member.initials,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: avatarSize * 0.35,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
+                    ? _buildAvatarText(member, avatarSize * 0.35)
                     : null,
               ),
             ],
@@ -2408,10 +2444,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: isModerator ? const Color(0xFF8B5CF6) : Colors.grey[600],
-                        child: Text(
-                          speaker.initials,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                        ),
+                        child: _buildAvatarText(speaker, 14),
                       ),
                       title: Text(
                         speaker.name,
@@ -2451,10 +2484,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                       return ListTile(
                         leading: CircleAvatar(
                           backgroundColor: Colors.orange,
-                          child: Text(
-                            user.initials,
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                          ),
+                          child: _buildAvatarText(user, 14),
                         ),
                         title: Text(
                           user.name,
@@ -3228,13 +3258,7 @@ Join the conversation now in the Arena app!
                 CircleAvatar(
                   radius: 20,
                   backgroundColor: Colors.grey[300],
-                  child: Text(
-                    recipient['name'][0].toUpperCase(),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
+                  child: _buildAvatarTextFromMap(recipient, 16),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
