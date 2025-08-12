@@ -1,28 +1,3 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
-
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
 # Flutter/Dart/Pub related
 **/doc/api/
 **/ios/Flutter/.last_build_id
@@ -32,9 +7,185 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+*.dart.js
+*.info.json
+*.js
+*.js_
+*.js.deps
+*.js.map
+.temp/
 
-# Symbolication related
-app.*.symbols
+# Android related
+**/android/**/gradle-wrapper.jar
+**/android/.gradle
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+**/android/key.properties
+*.jks
+
+# iOS/XCode related
+**/ios/**/*.mode1v3
+**/ios/**/*.mode2v3
+**/ios/**/*.moved-aside
+**/ios/**/*.pbxuser
+**/ios/**/*.perspectivev3
+**/ios/**/*sync/
+**/ios/**/.sconsign.dblite
+**/ios/**/.tags*
+**/ios/**/.vagrant/
+**/ios/**/DerivedData/
+**/ios/**/Icon?
+**/ios/**/Pods/
+**/ios/**/.symlinks/
+**/ios/**/profile
+**/ios/**/xcuserdata
+**/ios/.generated/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+**/ios/build/
+ios/build/
+
+# Web related
+lib/generated_plugin_registrant.dart
+
+# macOS
+**/Flutter/ephemeral/
+**/Pods/
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+**/macos/Flutter/ephemeral
+**/xcuserdata/
+**/.DS_Store
+
+# Windows
+**/windows/flutter/generated_plugin_registrant.cc
+**/windows/flutter/generated_plugin_registrant.h
+**/windows/flutter/generated_plugins.cmake
+
+# Linux
+**/linux/flutter/generated_plugin_registrant.cc
+**/linux/flutter/generated_plugin_registrant.h
+**/linux/flutter/generated_plugins.cmake
+
+# Coverage
+coverage/
+*.lcov
+
+# Exceptions to above rules.
+!/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Visual Studio Code related
+.vscode/
+.history/
+
+# Node modules and server files
+node_modules/
+**/node_modules/
+package-lock.json
+yarn.lock
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Server/deployment files
+mediasoup-server/
+livekit-server/
+livekit-flutter-sdk/
+ant-media-token-server/
+arena-monitoring/
+arena-analytics-mcp/
+linode-deployment/
+webrtc-server/
+*.cjs
+*.mjs
+ecosystem.config.js
+nginx*.conf
+
+# Build artifacts
+*.ipa
+*.apk
+*.aab
+*.dSYM/
+Payload/
+
+# Environment and config files
+.env
+.env.local
+.env.production
+.env.development
+
+# Log files
+*.log
+logs/
+*.log.*
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Archive files
+*.tar.gz
+*.zip
+*.rar
+*.7z
+
+# Documentation build
+docs/_build/
+site/
+
+# Test files
+test-results/
+test-output/
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# IDE specific
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+
+# Miscellaneous
+*.lock
+*.class
+*.pyc
+*.pyo
+.atom/
+.buildlog/
+.svn/
+migrate_working_dir/
 
 # Obfuscation related
 app.*.map.json
@@ -43,5 +194,3 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
-ios/build/
-*.ipa
