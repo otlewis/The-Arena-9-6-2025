@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:appwrite/appwrite.dart';
 import '../models/instant_message.dart';
 import '../models/user_profile.dart';
 import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
+import '../constants/appwrite.dart';
 import 'simple_chat_interface.dart';
 
 /// Modal-based messaging system that provides clean messaging UX
@@ -25,7 +27,7 @@ class _MessagingModalSystemState extends State<MessagingModalSystem> {
   
   UserProfile? _currentUser;
   StreamSubscription<List<Conversation>>? _conversationsSubscription;
-  StreamSubscription<int>? _unreadCountSubscription;
+  RealtimeSubscription? _unreadCountSubscription;
   
   final List<Conversation> _conversations = [];
   final int _unreadCount = 0;
@@ -61,10 +63,167 @@ class _MessagingModalSystemState extends State<MessagingModalSystem> {
         }
       }
       
-      // Messaging service disabled (Agora removed)
-      AppLogger().debug('📱 Messaging modal system disabled (Agora removed)');
+      // Initialize Appwrite-based messaging
+      await _setupAppwriteMessaging();
+      AppLogger().debug('📱 Messaging modal system initialized with Appwrite');
     } catch (e) {
       AppLogger().error('Failed to initialize messaging system: $e');
+    }
+  }
+  
+  Future<void> _setupAppwriteMessaging() async {
+    try {
+      // Subscribe to instant messages for current user
+      if (_currentUser != null) {
+        // Load existing conversations from Appwrite
+        await _loadConversations();
+        
+        // Subscribe to new messages
+        _subscribeToMessages(_currentUser!.id);
+      }
+    } catch (e) {
+      AppLogger().error('Failed to setup Appwrite messaging: $e');
+    }
+  }
+  
+  void _subscribeToMessages(String userId) {
+    try {
+      // Subscribe to instant messages where user is sender or receiver
+      final subscription = _appwriteService.realtimeInstance.subscribe([
+        'databases.${AppwriteConstants.databaseId}.collections.instant_messages.documents'
+      ]);
+      
+      subscription.stream.listen((response) {
+        AppLogger().info('📱 MessagingModal realtime event: ${response.events}');
+        AppLogger().debug('📱 MessagingModal payload: ${response.payload}');
+        
+        // Check for any instant message create events
+        final hasCreateEvent = response.events.any((event) => 
+          event.contains('instant_messages.documents') && event.contains('create'));
+          
+        if (hasCreateEvent) {
+          AppLogger().info('📱 MessagingModal processing new message event');
+          _handleNewMessage(response.payload);
+        }
+      });
+      
+      _unreadCountSubscription = subscription;
+    } catch (e) {
+      AppLogger().error('Failed to subscribe to messages: $e');
+    }
+  }
+  
+  void _handleNewMessage(Map<String, dynamic> payload) {
+    // Show notification banner for new message
+    if (mounted && payload['receiverId'] == _currentUser?.id) {
+      setState(() {
+        _showNotificationBanner = true;
+        _latestMessageFrom = payload['senderUsername'] ?? 'Someone'; // Use actual sender name from database
+        _latestMessageContent = payload['content'] ?? 'New message';
+      });
+      
+      AppLogger().debug('📱 Showing notification banner for new message');
+      
+      // Auto-hide notification after 3 seconds
+      _notificationTimer?.cancel();
+      _notificationTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) {
+          setState(() => _showNotificationBanner = false);
+        }
+      });
+    }
+  }
+  
+  Future<void> _loadConversations() async {
+    try {
+      if (_currentUser == null) {
+        AppLogger().warning('Cannot load conversations: current user is null');
+        return;
+      }
+      
+      AppLogger().info('📬 Loading conversations for user: ${_currentUser!.id}');
+      
+      // Get all messages where current user is sender or receiver
+      final response = await _appwriteService.databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'instant_messages',
+        queries: [
+          Query.or([
+            Query.equal('senderId', _currentUser!.id),
+            Query.equal('receiverId', _currentUser!.id),
+          ]),
+          Query.orderDesc('\$createdAt'),
+          Query.limit(200), // Get recent messages
+        ],
+      );
+      
+      AppLogger().info('📬 Found ${response.documents.length} messages to process');
+      
+      // Group messages by conversation partner
+      final Map<String, Conversation> conversationMap = {};
+      
+      for (final doc in response.documents) {
+        final senderId = doc.data['senderId'];
+        final receiverId = doc.data['receiverId'];
+        final content = doc.data['content'] ?? '';
+        final timestamp = DateTime.tryParse(doc.data['timestamp'] ?? doc.data['\$createdAt'] ?? '') ?? DateTime.now();
+        
+        // Determine the other user in this conversation
+        final otherUserId = senderId == _currentUser!.id ? receiverId : senderId;
+        
+        if (otherUserId != null && otherUserId.isNotEmpty) {
+          // Create or update conversation
+          if (!conversationMap.containsKey(otherUserId)) {
+            // Create new conversation
+            conversationMap[otherUserId] = Conversation(
+              id: 'conv_${_currentUser!.id}_$otherUserId',
+              participantIds: [_currentUser!.id, otherUserId],
+              participants: {
+                _currentUser!.id: UserInfo(
+                  id: _currentUser!.id,
+                  username: _currentUser!.name,
+                  avatar: _currentUser!.avatar,
+                  isOnline: true,
+                  lastSeen: DateTime.now(),
+                ),
+                otherUserId: UserInfo(
+                  id: otherUserId,
+                  username: 'Loading...', // We'll get this from user profiles if needed
+                  avatar: null,
+                  isOnline: false,
+                  lastSeen: DateTime.now(),
+                ),
+              },
+              lastMessage: content,
+              lastMessageTime: timestamp,
+              unreadCount: 0, // We'll calculate this
+            );
+          } else {
+            // Update existing conversation with more recent message if needed
+            final existing = conversationMap[otherUserId]!;
+            if (timestamp.isAfter(existing.lastMessageTime)) {
+              conversationMap[otherUserId] = existing.copyWith(
+                lastMessage: content,
+                lastMessageTime: timestamp,
+              );
+            }
+          }
+        }
+      }
+      
+      _conversations.clear();
+      _conversations.addAll(conversationMap.values);
+      
+      AppLogger().info('📬 Loaded ${_conversations.length} conversations');
+      
+      if (mounted) {
+        setState(() {
+          // Trigger rebuild with loaded conversations
+        });
+      }
+      
+    } catch (e) {
+      AppLogger().error('Failed to load conversations: $e');
     }
   }
 
@@ -698,7 +857,7 @@ class _MessagingModalSystemState extends State<MessagingModalSystem> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Type a username above',
+                      'Type a name or email above',
                       style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
                     ),
                   ],
@@ -830,16 +989,105 @@ class _MessagingModalSystemState extends State<MessagingModalSystem> {
     // Debounce the search
     _searchDebouncer = Timer(const Duration(milliseconds: 300), () async {
       try {
-        AppLogger().info('🔍 User search disabled (Agora removed)');
-        final results = <UserProfile>[];
+        AppLogger().info('🔍 Searching for users with query: "$query"');
+        AppLogger().info('🔍 Database: ${AppwriteConstants.databaseId}, Collection: ${AppwriteConstants.usersCollection}');
+        
+        // Check if current user is available
+        if (_currentUser == null) {
+          AppLogger().warning('🔍 Current user is null - this may cause issues');
+        } else {
+          AppLogger().info('🔍 Current user: ${_currentUser!.name} (${_currentUser!.id})');
+        }
+        
+        // For now, get all users and filter locally to debug the issue
+        AppLogger().info('🔍 Attempting to retrieve users...');
+        
+        final response = await _appwriteService.databases.listDocuments(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: AppwriteConstants.usersCollection,
+          queries: [
+            Query.limit(100), // Get up to 100 users
+          ],
+        );
+        
+        AppLogger().info('🔍 Retrieved ${response.documents.length} total users from database');
+        
+        // Log first document structure for debugging
+        if (response.documents.isNotEmpty) {
+          AppLogger().info('🔍 Sample user document: ${response.documents.first.data}');
+        }
+        
+        // Check for duplicate document IDs
+        final Set<String> seenIds = {};
+        final List<String> duplicateIds = [];
+        
+        for (final doc in response.documents) {
+          if (seenIds.contains(doc.$id)) {
+            duplicateIds.add(doc.$id);
+          } else {
+            seenIds.add(doc.$id);
+          }
+        }
+        
+        if (duplicateIds.isNotEmpty) {
+          AppLogger().warning('🔍 ⚠️ Found duplicate document IDs in database response: $duplicateIds');
+        }
+        
+        var results = response.documents.map((doc) {
+          // Debug: Log each document to see the structure
+          AppLogger().debug('🔍 Processing document ${doc.$id}: name="${doc.data['name']}", email="${doc.data['email']}"');
+          
+          // Try to extract name from different possible fields
+          String userName = 'Unknown';
+          if (doc.data.containsKey('name') && doc.data['name'] != null && doc.data['name'].toString().isNotEmpty) {
+            userName = doc.data['name'].toString();
+          } else if (doc.data.containsKey('username') && doc.data['username'] != null && doc.data['username'].toString().isNotEmpty) {
+            userName = doc.data['username'].toString();
+          } else if (doc.data.containsKey('email') && doc.data['email'] != null) {
+            // Use email as fallback name
+            userName = doc.data['email'].toString().split('@')[0];
+          }
+          
+          return UserProfile(
+            id: doc.$id,
+            name: userName,
+            email: doc.data['email']?.toString() ?? '',
+            avatar: doc.data['avatar']?.toString(),
+            createdAt: DateTime.tryParse(doc.data['\$createdAt']?.toString() ?? '') ?? DateTime.now(),
+            updatedAt: DateTime.tryParse(doc.data['\$updatedAt']?.toString() ?? '') ?? DateTime.now(),
+          );
+        }).toList();
+        
+        AppLogger().info('🔍 Mapped ${results.length} users from documents');
+        
+        // Filter locally based on search query
+        if (query.trim().isNotEmpty) {
+          final filteredByQuery = results.where((user) => 
+            user.name.toLowerCase().contains(query.toLowerCase()) ||
+            user.email.toLowerCase().contains(query.toLowerCase())
+          ).toList();
+          AppLogger().info('🔍 Filtered to ${filteredByQuery.length} users matching "$query"');
+          results = filteredByQuery;
+        }
+        
+        // Remove duplicates based on user ID and filter out current user
+        final Map<String, UserProfile> uniqueUsers = {};
+        for (final user in results) {
+          if (user.id != _currentUser?.id) {
+            uniqueUsers[user.id] = user;
+          }
+        }
+        
+        final filteredResults = uniqueUsers.values.toList();
+        AppLogger().info('🔍 After removing duplicates: ${filteredResults.length} unique users');
         
         if (mounted) {
           setState(() {
-            _searchResults = results;
+            _searchResults = filteredResults;
             _isSearchLoading = false;
           });
           
-          AppLogger().info('🔍 Found ${results.length} users matching "$query"');
+          AppLogger().info('🔍 Found ${filteredResults.length} users matching "$query"');
         }
       } catch (e) {
         AppLogger().error('Failed to search users: $e');
@@ -886,7 +1134,7 @@ class _MessagingModalSystemState extends State<MessagingModalSystem> {
   @override
   void dispose() {
     _conversationsSubscription?.cancel();
-    _unreadCountSubscription?.cancel();
+    _unreadCountSubscription?.close();
     _notificationTimer?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();

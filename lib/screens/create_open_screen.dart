@@ -4,6 +4,7 @@ import '../models/models.dart';
 import '../services/appwrite_service.dart';
 import '../constants/appwrite.dart';
 import 'open_discussion_room_screen.dart';
+import '../widgets/challenge_bell.dart';
 import '../core/logging/app_logger.dart';
 
 class CreateOpenScreen extends StatefulWidget {
@@ -244,6 +245,7 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
       return;
     }
 
+
     setState(() => _isCreating = true);
     
     try {
@@ -254,12 +256,14 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
       }
 
       // Create room in Appwrite
-      final roomId = await _appwriteService.createRoom(
+      final roomId = await _appwriteService.createDiscussionRoom(
         title: _roomTitleController.text.trim(),
         description: _roomDescriptionController.text.trim(),
         createdBy: user.$id,
         tags: [_createFormSelectedCategory],
         maxParticipants: 50,
+        status: 'active',
+        isPrivate: false,
       );
 
       // Get the created room data
@@ -308,36 +312,147 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
     if (_currentUserId == null) return;
 
     try {
-      // Create Room object for navigation
+      // Check for metadata in room description for private/scheduled rooms
+      final description = roomData['description'] as String? ?? '';
+      if (description.contains('[METADATA]')) {
+        final metadataStart = description.indexOf('[METADATA]');
+        final metadataStr = description.substring(metadataStart + '[METADATA]'.length);
+        
+        // Check if room is private
+        if (metadataStr.contains('isPrivate: true')) {
+          // Check if user is the moderator (moderators don't need password)
+          final isCreator = roomData['createdBy'] == _currentUserId;
+          
+          if (!isCreator) {
+            // User is not creator, validate password
+            final passwordValid = await _validateRoomPassword(metadataStr);
+            if (!passwordValid) {
+              return; // Password validation failed or user cancelled
+            }
+          }
+        }
+        
+        // Check if room is scheduled
+        if (metadataStr.contains('isScheduled: true')) {
+          // Extract scheduled time from metadata
+          final scheduledTimeMatch = RegExp(r'scheduledTime: ([^,}]+)').firstMatch(metadataStr);
+          if (scheduledTimeMatch != null) {
+            final scheduledTimeStr = scheduledTimeMatch.group(1)?.trim().replaceAll("'", "");
+            if (scheduledTimeStr != null) {
+              final scheduledTime = DateTime.parse(scheduledTimeStr);
+              final now = DateTime.now();
+              
+              if (now.isBefore(scheduledTime)) {
+                final isCreator = roomData['createdBy'] == _currentUserId;
+                
+                if (!isCreator) {
+                  // Show warning that room is scheduled for later
+                  if (mounted) {
+                    await showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Row(
+                          children: [
+                            Icon(Icons.schedule, color: Colors.orange),
+                            SizedBox(width: 8),
+                            Text('Scheduled Room'),
+                          ],
+                        ),
+                        content: Text(
+                          'This room is scheduled to start at ${_formatDateTime(scheduledTime)}. Only the moderator can enter early.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('OK'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return;
+                } else {
+                  // Creator can choose to start early or enter
+                  if (!mounted) return;
+                  final result = await showDialog<String>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Scheduled Room'),
+                      content: Text('This room is scheduled for ${_formatDateTime(scheduledTime)}. What would you like to do?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, 'cancel'),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, 'enter'),
+                          child: const Text('Enter Now'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(context, 'start'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                          ),
+                          child: const Text('Start Room Early'),
+                        ),
+                      ],
+                    ),
+                  );
+                  
+                  if (result == 'start') {
+                    // Start room early by removing scheduled metadata
+                    await _startRoomEarly(roomData['id']);
+                    // Refresh rooms to show updated status
+                    await _loadRooms();
+                  } else if (result != 'enter') {
+                    return; // User cancelled
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Create Room object for navigation (clean description without metadata)
+      String cleanDescription = description;
+      if (description.contains('[METADATA]')) {
+        cleanDescription = description.substring(0, description.indexOf('[METADATA]')).trim();
+      }
+      
       final room = Room(
         id: roomData['id'],
         title: roomData['title'],
-        description: roomData['description'],
+        description: cleanDescription,
         type: RoomType.discussion,
         createdBy: roomData['createdBy'],
         createdAt: DateTime.parse(roomData['createdAt']),
         status: RoomStatus.active,
-                    participantIds: List<String>.from(roomData['participants'] ?? []),
-            maxParticipants: roomData['maxParticipants'] ?? 999999,
+        participantIds: List<String>.from(roomData['participants'] ?? []),
+        maxParticipants: roomData['maxParticipants'] ?? 999999,
         tags: List<String>.from(roomData['tags'] ?? []),
       );
 
       // Navigate to the room
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OpenDiscussionRoomScreen(room: room),
-        ),
-      );
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OpenDiscussionRoomScreen(room: room),
+          ),
+        );
+      }
 
     } catch (e) {
       AppLogger().debug('Error joining room: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error joining room: $e'),
-          backgroundColor: scarletRed,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error joining room: $e'),
+            backgroundColor: scarletRed,
+          ),
+        );
+      }
     }
   }
 
@@ -401,6 +516,8 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
                   size: 20,
                 ),
               ),
+              const ChallengeBell(iconColor: Color(0xFFFF2400)),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   _showCreateForm ? 'Create Room' : 'Open Discussions',
@@ -762,30 +879,12 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: lightScarlet,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: scarletRed.withValues(alpha: 0.3),
-                      width: 1,
-                    ),
-                  ),
-                  child: const Text(
-                    'LIVE',
-                    style: TextStyle(
-                      color: scarletRed,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+                _buildRoomStatusBadges(roomData),
               ],
             ),
             const SizedBox(height: 8),
             Text(
-              roomData['description'],
+              _getCleanDescription(roomData['description']),
               style: TextStyle(
                 color: deepPurple.withValues(alpha: 0.7),
                 fontSize: 14,
@@ -1145,4 +1244,481 @@ class _CreateOpenScreenState extends State<CreateOpenScreen> {
       return '${difference.inDays}d ago';
     }
   }
-} 
+
+  String _formatDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final dateToCheck = DateTime(dateTime.year, dateTime.month, dateTime.day);
+    
+    String dateStr;
+    if (dateToCheck == today) {
+      dateStr = 'Today';
+    } else if (dateToCheck == tomorrow) {
+      dateStr = 'Tomorrow';
+    } else {
+      dateStr = '${dateTime.month}/${dateTime.day}/${dateTime.year}';
+    }
+    
+    final hour = dateTime.hour > 12 ? dateTime.hour - 12 : (dateTime.hour == 0 ? 12 : dateTime.hour);
+    final amPm = dateTime.hour >= 12 ? 'PM' : 'AM';
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    
+    return '$dateStr at $hour:$minute $amPm';
+  }
+
+  // Removed unused _buildRoomSettings method
+  /*
+  Widget _buildRoomSettings() {
+    return const SizedBox.shrink(); // Removed room settings functionality
+    // Original implementation removed - keeping method to prevent compilation errors
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: lightScarlet,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: scarletRed.withValues(alpha: 0.2),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Room Settings',
+            style: TextStyle(
+              color: deepPurple,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          // Private Room Setting
+          Row(
+            children: [
+              Icon(
+                _isPrivate ? Icons.lock : Icons.lock_open,
+                color: _isPrivate ? scarletRed : deepPurple.withValues(alpha: 0.6),
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Private Room',
+                      style: TextStyle(
+                        color: deepPurple,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      'Require password to join',
+                      style: TextStyle(
+                        color: deepPurple.withValues(alpha: 0.6),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: _isPrivate,
+                onChanged: (value) {
+                  setState(() {
+                    _isPrivate = value;
+                    if (!value) {
+                      _passwordController.clear();
+                    }
+                  });
+                  // Debug print
+                  debugPrint('Private room toggled: $_isPrivate');
+                },
+                activeColor: scarletRed,
+                activeTrackColor: scarletRed.withValues(alpha: 0.3),
+              ),
+            ],
+          ),
+          
+          // Debug: Show current state
+          Text('Debug: _isPrivate = $_isPrivate', style: TextStyle(color: Colors.red, fontSize: 12)),
+          
+          // Password Field (only show if private)
+          if (_isPrivate) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _passwordController,
+              obscureText: true,
+              style: const TextStyle(color: deepPurple),
+              decoration: InputDecoration(
+                hintText: 'Enter room password...',
+                hintStyle: TextStyle(
+                  color: deepPurple.withValues(alpha: 0.5),
+                ),
+                filled: true,
+                fillColor: Colors.white,
+                prefixIcon: const Icon(Icons.key, color: scarletRed, size: 20),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(
+                    color: scarletRed.withValues(alpha: 0.2),
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(
+                    color: scarletRed.withValues(alpha: 0.2),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(
+                    color: scarletRed,
+                    width: 2,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+            ),
+          ],
+          
+          const SizedBox(height: 16),
+          
+          // Schedule for Later Setting
+          Row(
+            children: [
+              Icon(
+                _isScheduled ? Icons.schedule : Icons.schedule_outlined,
+                color: _isScheduled ? scarletRed : deepPurple.withValues(alpha: 0.6),
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Schedule for Later',
+                      style: TextStyle(
+                        color: deepPurple,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      'Set a specific start time',
+                      style: TextStyle(
+                        color: deepPurple.withValues(alpha: 0.6),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: _isScheduled,
+                onChanged: (value) {
+                  setState(() {
+                    _isScheduled = value;
+                    if (!value) {
+                      _scheduledTime = null;
+                    }
+                  });
+                },
+                activeColor: scarletRed,
+                activeTrackColor: scarletRed.withValues(alpha: 0.3),
+              ),
+            ],
+          ),
+          
+          // Date/Time Picker (only show if scheduled)
+          if (_isScheduled) ...[
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: _showDateTimePicker,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: scarletRed.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.access_time, color: scarletRed, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _scheduledTime != null
+                            ? 'Scheduled for ${_formatDateTime(_scheduledTime!)}'
+                            : 'Tap to select date and time',
+                        style: TextStyle(
+                          color: _scheduledTime != null
+                              ? deepPurple
+                              : deepPurple.withValues(alpha: 0.5),
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    const Icon(Icons.keyboard_arrow_right, color: scarletRed),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+    */
+
+  Widget _buildRoomStatusBadges(Map<String, dynamic> roomData) {
+    List<Widget> badges = [];
+    
+    // Check room status
+    final status = roomData['status'] as String? ?? 'active';
+    final description = roomData['description'] as String? ?? '';
+    
+    // Check for private room
+    bool isPrivate = false;
+    bool isScheduled = false;
+    DateTime? scheduledTime;
+    
+    if (description.contains('[METADATA]')) {
+      final metadataStart = description.indexOf('[METADATA]');
+      final metadataStr = description.substring(metadataStart + '[METADATA]'.length);
+      
+      isPrivate = metadataStr.contains('isPrivate: true');
+      isScheduled = metadataStr.contains('isScheduled: true');
+      
+      if (isScheduled) {
+        final scheduledTimeMatch = RegExp(r'scheduledTime: ([^,}]+)').firstMatch(metadataStr);
+        if (scheduledTimeMatch != null) {
+          final scheduledTimeStr = scheduledTimeMatch.group(1)?.trim().replaceAll("'", "");
+          if (scheduledTimeStr != null) {
+            try {
+              scheduledTime = DateTime.parse(scheduledTimeStr);
+            } catch (e) {
+              // Ignore parsing errors
+            }
+          }
+        }
+      }
+    }
+    
+    // Main status badge
+    if (status == 'scheduled' || isScheduled) {
+      badges.add(Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.orange.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Colors.orange.withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.schedule, size: 12, color: Colors.orange),
+            const SizedBox(width: 4),
+            Text(
+              scheduledTime != null && scheduledTime.isAfter(DateTime.now())
+                  ? 'SCHEDULED'
+                  : 'LIVE',
+              style: const TextStyle(
+                color: Colors.orange,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ));
+    } else {
+      badges.add(Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: lightScarlet,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: scarletRed.withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+        child: const Text(
+          'LIVE',
+          style: TextStyle(
+            color: scarletRed,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ));
+    }
+    
+    // Private badge
+    if (isPrivate) {
+      badges.add(const SizedBox(width: 6));
+      badges.add(Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: deepPurple.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: deepPurple.withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.lock, size: 10, color: deepPurple),
+            SizedBox(width: 2),
+            Text(
+              'PRIVATE',
+              style: TextStyle(
+                color: deepPurple,
+                fontSize: 8,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ));
+    }
+    
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: badges,
+    );
+  }
+
+  String _getCleanDescription(String? description) {
+    if (description == null) return '';
+    if (description.contains('[METADATA]')) {
+      return description.substring(0, description.indexOf('[METADATA]')).trim();
+    }
+    return description;
+  }
+
+  Future<bool> _validateRoomPassword(String metadataStr) async {
+    // Password validation removed - all rooms are now public
+    return true;
+  }
+
+  Future<void> _startRoomEarly(String roomId) async {
+    try {
+      // Get the current room data
+      final roomDoc = await _appwriteService.databases.getDocument(
+        databaseId: 'arena_db',
+        collectionId: AppwriteConstants.roomsCollection,
+        documentId: roomId,
+      );
+
+      // Remove scheduling metadata from description
+      String description = roomDoc.data['description'] as String? ?? '';
+      if (description.contains('[METADATA]')) {
+        final metadataStart = description.indexOf('[METADATA]');
+        final originalDescription = description.substring(0, metadataStart).trim();
+        final metadataStr = description.substring(metadataStart + '[METADATA]'.length);
+        
+        // Parse metadata and remove scheduling
+        final isPrivateMatch = RegExp(r'isPrivate: (true|false)').firstMatch(metadataStr);
+        final passwordMatch = RegExp(r'password: ([^,}]+)').firstMatch(metadataStr);
+        
+        String newDescription = originalDescription;
+        if (isPrivateMatch != null && isPrivateMatch.group(1) == 'true') {
+          // Keep private settings but remove scheduling
+          final metadata = {
+            'isPrivate': true,
+            'password': passwordMatch?.group(1)?.trim().replaceAll("'", "") ?? '',
+          };
+          newDescription += ' [METADATA]${metadata.toString()}';
+        }
+        
+        // Update the room with new description (no scheduling)
+        await _appwriteService.databases.updateDocument(
+          databaseId: 'arena_db',
+          collectionId: AppwriteConstants.roomsCollection,
+          documentId: roomId,
+          data: {
+            'description': newDescription,
+          },
+        );
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Room started! Users can now join.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      AppLogger().debug('Error starting room early: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error starting room: $e'),
+            backgroundColor: scarletRed,
+          ),
+        );
+      }
+    }
+  }
+
+  // Removed unused _showDateTimePicker method
+  /*
+  Future<void> _showDateTimePicker() async {
+    // Method stubbed out - room scheduling functionality removed
+    return;
+    
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 30)),
+    );
+    
+    if (date != null && mounted) {
+      final time = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.now(),
+      );
+      
+      if (time != null && mounted) {
+        setState(() {
+          _scheduledTime = DateTime(
+            date.year,
+            date.month,
+            date.day,
+            time.hour,
+            time.minute,
+          );
+        });
+      } else if (mounted) {
+        setState(() {
+          _isScheduled = false;
+        });
+      }
+    } else if (mounted) {
+      setState(() {
+        _isScheduled = false;
+      });
+    }
+  }
+  */
+
+// End of _CreateOpenScreenState class
+}
+
+// Password validation dialog removed - no longer needed

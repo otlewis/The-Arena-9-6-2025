@@ -6,6 +6,7 @@ import 'edit_profile_screen.dart';
 import 'club_details_screen.dart';
 import 'package:appwrite/models.dart' as models;
 import '../core/logging/app_logger.dart';
+import '../services/theme_service.dart';
 class ProfileScreen extends StatefulWidget {
   final VoidCallback? onLogout;
   
@@ -17,6 +18,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final AppwriteService _appwrite = AppwriteService();
+  final ThemeService _themeService = ThemeService();
   List<Map<String, dynamic>> _memberships = [];
   bool _isLoading = true;
   UserProfile? _userProfile;
@@ -237,22 +239,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _themeService.isDarkMode 
+          ? const Color(0xFF2D2D2D)
+          : const Color(0xFFE8E8E8),
       appBar: AppBar(
-        title: const Text('Profile'),
-        backgroundColor: Colors.white,
+        title: Text(
+          'Profile',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: _themeService.isDarkMode ? Colors.white : deepPurple,
+          ),
+        ),
+        backgroundColor: _themeService.isDarkMode 
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E8E8),
         elevation: 0,
-        iconTheme: const IconThemeData(color: scarletRed),
-        titleTextStyle: const TextStyle(
-          color: deepPurple,
-          fontSize: 20,
-          fontWeight: FontWeight.w600,
+        iconTheme: IconThemeData(
+          color: _themeService.isDarkMode ? Colors.white70 : scarletRed,
         ),
         actions: [
           if (_currentUser != null)
-            IconButton(
-              icon: const Icon(Icons.edit, color: scarletRed),
-              onPressed: _editProfile,
+            _buildNeumorphicIcon(
+              icon: Icons.edit,
+              onTap: _editProfile,
             ),
+          const SizedBox(width: 12),
         ],
       ),
       body: _isLoading
@@ -280,37 +291,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                   _buildActionButtons(context),
                   const SizedBox(height: 16),
-                  
-
-                  
-                  // Sign Out
-                  ListTile(
-                    leading: const Icon(Icons.logout, color: scarletRed),
-                    title: const Text('Logout', style: TextStyle(color: deepPurple)),
-                    onTap: () async {
-                      final shouldLogout = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Logout'),
-                          content: const Text('Are you sure you want to logout?'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: const Text('Cancel'),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              child: const Text('Logout', style: TextStyle(color: scarletRed)),
-                            ),
-                          ],
-                        ),
-                      );
-                      
-                      if (shouldLogout == true) {
-                        _logout();
-                      }
-                    },
-                  ),
                 ],
               ),
             ),
@@ -321,255 +301,432 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final profile = _userProfile;
     final isGuest = _currentUser == null;
 
-    return Column(
-  children: [
-    UserAvatar(
-      avatarUrl: profile?.avatar, // This should work if UserAvatar expects 'avatarUrl'
-      initials: profile?.initials,
-      radius: 60,
-      backgroundColor: lightScarlet,
-      textColor: scarletRed,
-    ),
-    const SizedBox(height: 16),
-        Text(
-          isGuest ? 'Guest User' : (profile?.displayName ?? 'Unknown User'),
-                    style: const TextStyle(
-            fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: deepPurple,
-                    ),
-                  ),
-        if (profile?.location != null && profile!.location!.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
-              const SizedBox(width: 4),
-              Text(
-                profile.location!,
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 14,
-                ),
-              ),
-            ],
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode 
+            ? const Color(0xFF3A3A3A)
+            : const Color(0xFFF0F0F3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: scarletRed.withValues(alpha: 0.2),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.white.withValues(alpha: 0.8),
+            offset: const Offset(-8, -8),
+            blurRadius: 16,
+          ),
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.5)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+            offset: const Offset(8, 8),
+            blurRadius: 16,
           ),
         ],
-        if (profile?.isVerified == true) ...[
-                const SizedBox(height: 8),
+      ),
+      child: Column(
+        children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            width: 120,
+            height: 120,
             decoration: BoxDecoration(
-              color: lightScarlet,
-              borderRadius: BorderRadius.circular(12),
+              color: _themeService.isDarkMode 
+                  ? const Color(0xFF2D2D2D)
+                  : const Color(0xFFE8E8E8),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: _themeService.isDarkMode 
+                      ? Colors.black.withValues(alpha: 0.6)
+                      : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                  offset: const Offset(4, 4),
+                  blurRadius: 8,
+                  spreadRadius: -2,
+                ),
+                BoxShadow(
+                  color: _themeService.isDarkMode 
+                      ? Colors.white.withValues(alpha: 0.02)
+                      : Colors.white.withValues(alpha: 0.8),
+                  offset: const Offset(-4, -4),
+                  blurRadius: 8,
+                  spreadRadius: -2,
+                ),
+              ],
             ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
+            child: ClipOval(
+              child: UserAvatar(
+                avatarUrl: profile?.avatar,
+                initials: profile?.initials,
+                radius: 60,
+                backgroundColor: lightScarlet,
+                textColor: scarletRed,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            isGuest ? 'Guest User' : (profile?.displayName ?? 'Unknown User'),
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: _themeService.isDarkMode ? Colors.white : deepPurple,
+            ),
+          ),
+          if (profile?.location != null && profile!.location!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.verified, size: 16, color: scarletRed),
-                SizedBox(width: 4),
+                Icon(
+                  Icons.location_on,
+                  size: 16,
+                  color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[600],
+                ),
+                const SizedBox(width: 4),
                 Text(
-                  'Verified',
-                      style: TextStyle(
-                        color: scarletRed,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
+                  profile.location!,
+                  style: TextStyle(
+                    color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[600],
+                    fontSize: 14,
                   ),
                 ),
               ],
             ),
-          ),
+          ],
+          if (profile?.isVerified == true) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: _themeService.isDarkMode 
+                    ? const Color(0xFF2D2D2D)
+                    : lightScarlet,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: scarletRed.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.verified, size: 16, color: scarletRed),
+                  SizedBox(width: 4),
+                  Text(
+                    'Verified',
+                    style: TextStyle(
+                      color: scarletRed,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (isGuest) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Sign in to access all features',
+              style: TextStyle(color: scarletRed),
+            ),
+          ],
         ],
-        if (isGuest) ...[
-          const SizedBox(height: 8),
-          const Text(
-            'Sign in to access all features',
-            style: TextStyle(color: scarletRed),
-          ),
-        ],
-      ],
+      ),
     );
   }
 
   Widget _buildStatsCard() {
     final profile = _userProfile;
     
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode 
+            ? const Color(0xFF3A3A3A)
+            : const Color(0xFFF0F0F3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: scarletRed.withValues(alpha: 0.2),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.white.withValues(alpha: 0.8),
+            offset: const Offset(-8, -8),
+            blurRadius: 16,
+          ),
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.5)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+            offset: const Offset(8, 8),
+            blurRadius: 16,
+          ),
+        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStat(
-                  profile?.formattedReputation ?? '0',
-                  'Reputation',
-                  icon: Icons.star,
-                ),
-                _buildStat(
-                  profile?.totalDebates.toString() ?? '0',
-                  'Debates',
-                  icon: Icons.forum,
-                ),
-                _buildStat(
-                  _memberships.length.toString(),
-                  'Clubs',
-                  icon: Icons.group,
-                ),
-              ],
-            ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildStat(
+                profile?.formattedReputation ?? '0',
+                'Reputation',
+                icon: Icons.star,
+              ),
+              _buildStat(
+                profile?.totalDebates.toString() ?? '0',
+                'Debates',
+                icon: Icons.forum,
+              ),
+              _buildStat(
+                _memberships.length.toString(),
+                'Clubs',
+                icon: Icons.group,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildStat(
+                _followerCount.toString(),
+                'Followers',
+                icon: Icons.people,
+                color: accentPurple,
+              ),
+              _buildStat(
+                _followingCount.toString(),
+                'Following',
+                icon: Icons.person_add,
+                color: accentPurple,
+              ),
+              _buildStat(
+                profile?.totalWins.toString() ?? '0',
+                'Wins',
+                icon: Icons.emoji_events,
+                color: Colors.green,
+              ),
+            ],
+          ),
+          if (profile != null && profile.totalDebates > 0) ...[
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildStat(
-                  _followerCount.toString(),
-                  'Followers',
-                  icon: Icons.people,
-                  color: accentPurple,
+                  '${(profile.winPercentage * 100).toStringAsFixed(1)}%',
+                  'Win Rate',
+                  icon: Icons.trending_up,
+                  color: profile.winPercentage >= 0.6 ? Colors.green : Colors.orange,
                 ),
                 _buildStat(
-                  _followingCount.toString(),
-                  'Following',
-                  icon: Icons.person_add,
-                  color: accentPurple,
+                  profile.totalRoomsCreated.toString(),
+                  'Rooms Created',
+                  icon: Icons.add_circle,
                 ),
                 _buildStat(
-                  profile?.totalWins.toString() ?? '0',
-                  'Wins',
-                  icon: Icons.emoji_events,
-                  color: Colors.green,
+                  profile.totalRoomsJoined.toString(),
+                  'Rooms Joined',
+                  icon: Icons.login,
                 ),
               ],
             ),
-            if (profile != null && profile.totalDebates > 0) ...[
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildStat(
-                    '${(profile.winPercentage * 100).toStringAsFixed(1)}%',
-                    'Win Rate',
-                    icon: Icons.trending_up,
-                    color: profile.winPercentage >= 0.6 ? Colors.green : Colors.orange,
-                  ),
-                  _buildStat(
-                    profile.totalRoomsCreated.toString(),
-                    'Rooms Created',
-                    icon: Icons.add_circle,
-                  ),
-                  _buildStat(
-                    profile.totalRoomsJoined.toString(),
-                    'Rooms Joined',
-                    icon: Icons.login,
-                  ),
-                ],
-              ),
-            ],
           ],
-        ),
+        ],
       ),
     );
   }
 
   Widget _buildStat(String value, String label, {IconData? icon, Color? color}) {
-    return Column(
-      children: [
-        if (icon != null) ...[
-          Icon(icon, color: color ?? deepPurple, size: 20),
-          const SizedBox(height: 4),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode 
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E8E8),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.6)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+            offset: const Offset(3, 3),
+            blurRadius: 6,
+            spreadRadius: -2,
+          ),
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.02)
+                : Colors.white.withValues(alpha: 0.8),
+            offset: const Offset(-3, -3),
+            blurRadius: 6,
+            spreadRadius: -2,
+          ),
         ],
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: color ?? deepPurple,
+      ),
+      child: Column(
+        children: [
+          if (icon != null) ...[
+            Icon(
+              icon,
+              color: color ?? (_themeService.isDarkMode ? Colors.white70 : deepPurple),
+              size: 20,
+            ),
+            const SizedBox(height: 4),
+          ],
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color ?? (_themeService.isDarkMode ? Colors.white : deepPurple),
+            ),
           ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.grey[600],
-            fontSize: 12,
+          Text(
+            label,
+            style: TextStyle(
+              color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[600],
+              fontSize: 12,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildBioCard() {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'About',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: deepPurple,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _userProfile!.bio!,
-              style: const TextStyle(fontSize: 14, height: 1.4),
-            ),
-          ],
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode 
+            ? const Color(0xFF3A3A3A)
+            : const Color(0xFFF0F0F3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: scarletRed.withValues(alpha: 0.2),
+          width: 1.5,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.white.withValues(alpha: 0.8),
+            offset: const Offset(-6, -6),
+            blurRadius: 12,
+          ),
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.5)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+            offset: const Offset(6, 6),
+            blurRadius: 12,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'About',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: _themeService.isDarkMode ? Colors.white : deepPurple,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _userProfile!.bio!,
+            style: TextStyle(
+              fontSize: 14, 
+              height: 1.4,
+              color: _themeService.isDarkMode ? Colors.white70 : Colors.black87,
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildInterestsCard() {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Interests',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: deepPurple,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _userProfile!.interests.map((interest) {
-                return Chip(
-                  label: Text(interest),
-                  backgroundColor: lightScarlet,
-                  labelStyle: const TextStyle(color: scarletRed, fontSize: 12),
-                );
-              }).toList(),
-            ),
-          ],
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode 
+            ? const Color(0xFF3A3A3A)
+            : const Color(0xFFF0F0F3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: scarletRed.withValues(alpha: 0.2),
+          width: 1.5,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.white.withValues(alpha: 0.8),
+            offset: const Offset(-6, -6),
+            blurRadius: 12,
+          ),
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.5)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+            offset: const Offset(6, 6),
+            blurRadius: 12,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Interests',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: _themeService.isDarkMode ? Colors.white : deepPurple,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _userProfile!.interests.map((interest) {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _themeService.isDarkMode 
+                      ? const Color(0xFF2D2D2D)
+                      : lightScarlet,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: scarletRed.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  interest,
+                  style: const TextStyle(
+                    color: scarletRed,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
   }
@@ -587,40 +744,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildSocialLinksCard() {
     final profile = _userProfile!;
     
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Links',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: deepPurple,
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (profile.website?.isNotEmpty == true)
-              _buildLinkTile(Icons.language, 'Website', profile.website!),
-            if (profile.xHandle?.isNotEmpty == true)
-              _buildLinkTile(Icons.alternate_email, 'X', '@${profile.xHandle!}'),
-            if (profile.linkedinHandle?.isNotEmpty == true)
-              _buildLinkTile(Icons.business, 'LinkedIn', profile.linkedinHandle!),
-            if (profile.youtubeHandle?.isNotEmpty == true)
-              _buildLinkTile(Icons.play_circle, 'YouTube', profile.youtubeHandle!),
-            if (profile.facebookHandle?.isNotEmpty == true)
-              _buildLinkTile(Icons.facebook, 'Facebook', profile.facebookHandle!),
-            if (profile.instagramHandle?.isNotEmpty == true)
-              _buildLinkTile(Icons.camera_alt, 'Instagram', profile.instagramHandle!),
-          ],
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode 
+            ? const Color(0xFF3A3A3A)
+            : const Color(0xFFF0F0F3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: scarletRed.withValues(alpha: 0.2),
+          width: 1.5,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.white.withValues(alpha: 0.8),
+            offset: const Offset(-6, -6),
+            blurRadius: 12,
+          ),
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.5)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+            offset: const Offset(6, 6),
+            blurRadius: 12,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Links',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: _themeService.isDarkMode ? Colors.white : deepPurple,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (profile.website?.isNotEmpty == true)
+            _buildLinkTile(Icons.language, 'Website', profile.website!),
+          if (profile.xHandle?.isNotEmpty == true)
+            _buildLinkTile(Icons.alternate_email, 'X', '@${profile.xHandle!}'),
+          if (profile.linkedinHandle?.isNotEmpty == true)
+            _buildLinkTile(Icons.business, 'LinkedIn', profile.linkedinHandle!),
+          if (profile.youtubeHandle?.isNotEmpty == true)
+            _buildLinkTile(Icons.play_circle, 'YouTube', profile.youtubeHandle!),
+          if (profile.facebookHandle?.isNotEmpty == true)
+            _buildLinkTile(Icons.facebook, 'Facebook', profile.facebookHandle!),
+          if (profile.instagramHandle?.isNotEmpty == true)
+            _buildLinkTile(Icons.camera_alt, 'Instagram', profile.instagramHandle!),
+        ],
       ),
     );
   }
@@ -630,16 +806,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: scarletRed),
+          Icon(
+            icon, 
+            size: 16, 
+            color: _themeService.isDarkMode ? Colors.white70 : scarletRed,
+          ),
           const SizedBox(width: 8),
           Text(
             '$label: ',
-            style: const TextStyle(fontWeight: FontWeight.w500),
+            style: TextStyle(
+              fontWeight: FontWeight.w500,
+              color: _themeService.isDarkMode ? Colors.white : Colors.black87,
+            ),
           ),
           Expanded(
             child: Text(
               value,
-              style: TextStyle(color: Colors.grey[700]),
+              style: TextStyle(
+                color: _themeService.isDarkMode ? Colors.white70 : Colors.grey[700],
+              ),
             ),
           ),
         ],
@@ -651,42 +836,83 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-                  const Text(
+                  Text(
                     'My Clubs',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: deepPurple,
+                      color: _themeService.isDarkMode ? Colors.white : deepPurple,
                     ),
                   ),
                   const SizedBox(height: 16),
                   if (_memberships.isEmpty)
-                    Card(
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: _themeService.isDarkMode 
+                            ? const Color(0xFF3A3A3A)
+                            : const Color(0xFFF0F0F3),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: scarletRed.withValues(alpha: 0.2),
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _themeService.isDarkMode 
+                                ? Colors.white.withValues(alpha: 0.03)
+                                : Colors.white.withValues(alpha: 0.8),
+                            offset: const Offset(-6, -6),
+                            blurRadius: 12,
+                          ),
+                          BoxShadow(
+                            color: _themeService.isDarkMode 
+                                ? Colors.black.withValues(alpha: 0.5)
+                                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                            offset: const Offset(6, 6),
+                            blurRadius: 12,
+                          ),
+                        ],
                       ),
-                      child: const Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Text(
-                          'You haven\'t joined any clubs yet. Join a club to start debating!',
-                          style: TextStyle(color: Colors.grey),
+                      child: Text(
+                        'You haven\'t joined any clubs yet. Join a club to start debating!',
+                        style: TextStyle(
+                          color: _themeService.isDarkMode ? Colors.white54 : Colors.grey,
                         ),
                       ),
                     )
                   else
-          Card(
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
+          Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: _themeService.isDarkMode 
+                            ? const Color(0xFF3A3A3A)
+                            : const Color(0xFFF0F0F3),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: scarletRed.withValues(alpha: 0.2),
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _themeService.isDarkMode 
+                                ? Colors.white.withValues(alpha: 0.03)
+                                : Colors.white.withValues(alpha: 0.8),
+                            offset: const Offset(-6, -6),
+                            blurRadius: 12,
+                          ),
+                          BoxShadow(
+                            color: _themeService.isDarkMode 
+                                ? Colors.black.withValues(alpha: 0.5)
+                                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                            offset: const Offset(6, 6),
+                            blurRadius: 12,
+                          ),
+                        ],
                       ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                   if (_memberships.length <= 3)
                     // Show clubs in a simple list if 3 or fewer
                     ...(_memberships.map((membership) => _buildClubChip(membership)))
@@ -712,7 +938,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
-          ),
       ],
     );
   }
@@ -773,200 +998,388 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildActionButtons(BuildContext context) {
-    return Column(
-      children: [
-        if (_currentUser != null) ...[
-          ListTile(
-            leading: const Icon(Icons.logout, color: scarletRed),
-            title: const Text('Logout', style: TextStyle(color: deepPurple)),
-            onTap: () async {
-              final shouldLogout = await showDialog<bool>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Logout'),
-                  content: const Text('Are you sure you want to logout?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Logout', style: TextStyle(color: scarletRed)),
-                    ),
-                  ],
-                ),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode 
+            ? const Color(0xFF3A3A3A)
+            : const Color(0xFFF0F0F3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: scarletRed.withValues(alpha: 0.2),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.white.withValues(alpha: 0.8),
+            offset: const Offset(-6, -6),
+            blurRadius: 12,
+          ),
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.5)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+            offset: const Offset(6, 6),
+            blurRadius: 12,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          if (_currentUser != null) ...[
+            _buildNeumorphicListTile(
+              icon: Icons.logout,
+              title: 'Logout',
+              onTap: () async {
+                final shouldLogout = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Logout'),
+                    content: const Text('Are you sure you want to logout?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Logout', style: TextStyle(color: scarletRed)),
+                      ),
+                    ],
+                  ),
+                );
+                
+                if (shouldLogout == true) {
+                  _logout();
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+          _buildNeumorphicListTile(
+            icon: Icons.history,
+            title: 'Debate History',
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Debate history coming soon!')),
               );
-              
-              if (shouldLogout == true) {
-                _logout();
-              }
             },
           ),
-          const Divider(),
+          const SizedBox(height: 8),
+          _buildNeumorphicListTile(
+            icon: Icons.bookmark,
+            title: 'Saved Debates',
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Saved debates coming soon!')),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          _buildNeumorphicListTile(
+            icon: Icons.notifications,
+            title: 'Notifications',
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Notifications coming soon!')),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          _buildNeumorphicListTile(
+            icon: Icons.help,
+            title: 'Help & Support',
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Help & support coming soon!')),
+              );
+            },
+          ),
         ],
-        ListTile(
-          leading: const Icon(Icons.history, color: scarletRed),
-          title: const Text('Debate History', style: TextStyle(color: deepPurple)),
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Debate history coming soon!')),
-            );
-          },
+      ),
+    );
+  }
+
+  Widget _buildNeumorphicListTile({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: _themeService.isDarkMode 
+              ? const Color(0xFF2D2D2D)
+              : const Color(0xFFE8E8E8),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: _themeService.isDarkMode 
+                  ? Colors.black.withValues(alpha: 0.6)
+                  : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+              offset: const Offset(3, 3),
+              blurRadius: 6,
+              spreadRadius: -2,
+            ),
+            BoxShadow(
+              color: _themeService.isDarkMode 
+                  ? Colors.white.withValues(alpha: 0.02)
+                  : Colors.white.withValues(alpha: 0.8),
+              offset: const Offset(-3, -3),
+              blurRadius: 6,
+              spreadRadius: -2,
+            ),
+          ],
         ),
-        ListTile(
-          leading: const Icon(Icons.bookmark, color: scarletRed),
-          title: const Text('Saved Debates', style: TextStyle(color: deepPurple)),
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Saved debates coming soon!')),
-            );
-          },
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: _themeService.isDarkMode ? Colors.white70 : scarletRed,
+              size: 20,
+            ),
+            const SizedBox(width: 16),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: _themeService.isDarkMode ? Colors.white : deepPurple,
+              ),
+            ),
+          ],
         ),
-        ListTile(
-          leading: const Icon(Icons.notifications, color: scarletRed),
-          title: const Text('Notifications', style: TextStyle(color: deepPurple)),
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Notifications coming soon!')),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.help, color: scarletRed),
-          title: const Text('Help & Support', style: TextStyle(color: deepPurple)),
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Help & support coming soon!')),
-            );
-          },
-        ),
-      ],
+      ),
     );
   }
 
   Widget _buildAvailabilitySettingsCard() {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode 
+            ? const Color(0xFF3A3A3A)
+            : const Color(0xFFF0F0F3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: scarletRed.withValues(alpha: 0.2),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.white.withValues(alpha: 0.8),
+            offset: const Offset(-6, -6),
+            blurRadius: 12,
+          ),
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.5)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+            offset: const Offset(6, 6),
+            blurRadius: 12,
+          ),
+        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.gavel, color: accentPurple, size: 20),
-                SizedBox(width: 8),
-                Text(
-                  'Arena Availability',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: deepPurple,
-                  ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.gavel, 
+                color: _themeService.isDarkMode ? Colors.white70 : accentPurple, 
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Arena Availability',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: _themeService.isDarkMode ? Colors.white : deepPurple,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Get notified when debates need moderators or judges',
+            style: TextStyle(
+              color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[600],
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          // Moderator availability toggle
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _themeService.isDarkMode 
+                  ? const Color(0xFF2D2D2D)
+                  : accentPurple.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: accentPurple.withValues(alpha: 0.2),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: _themeService.isDarkMode 
+                      ? Colors.black.withValues(alpha: 0.3)
+                      : Colors.grey.withValues(alpha: 0.1),
+                  offset: const Offset(2, 2),
+                  blurRadius: 4,
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Get notified when debates need moderators or judges',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 12,
-              ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.person_pin_circle, 
+                  color: _themeService.isDarkMode ? Colors.white70 : accentPurple, 
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Available as Moderator',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: _themeService.isDarkMode ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        'Help facilitate debates and keep discussions on track',
+                        style: TextStyle(
+                          color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[600],
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: _userProfile?.isAvailableAsModerator ?? false,
+                  onChanged: (value) => _updateAvailability(moderator: value),
+                  activeColor: accentPurple,
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            
-            // Moderator availability toggle
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: accentPurple.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: accentPurple.withValues(alpha: 0.2)),
+          ),
+          
+          const SizedBox(height: 12),
+          
+          // Judge availability toggle
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _themeService.isDarkMode 
+                  ? const Color(0xFF2D2D2D)
+                  : Colors.amber.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.amber.withValues(alpha: 0.3),
+                width: 1,
               ),
-              child: Row(
-                children: [
-                  const Icon(Icons.person_pin_circle, color: accentPurple, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Available as Moderator',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
-                        Text(
-                          'Help facilitate debates and keep discussions on track',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Switch(
-                    value: _userProfile?.isAvailableAsModerator ?? false,
-                    onChanged: (value) => _updateAvailability(moderator: value),
-                    activeColor: accentPurple,
-                  ),
-                ],
-              ),
+              boxShadow: [
+                BoxShadow(
+                  color: _themeService.isDarkMode 
+                      ? Colors.black.withValues(alpha: 0.3)
+                      : Colors.grey.withValues(alpha: 0.1),
+                  offset: const Offset(2, 2),
+                  blurRadius: 4,
+                ),
+              ],
             ),
-            
-            const SizedBox(height: 12),
-            
-            // Judge availability toggle
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.balance, color: Colors.amber.shade700, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Available as Judge',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.balance, 
+                  color: _themeService.isDarkMode ? Colors.white70 : Colors.amber.shade700, 
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Available as Judge',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: _themeService.isDarkMode ? Colors.white : Colors.black87,
                         ),
-                        Text(
-                          'Evaluate debates and provide fair scoring',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 11,
-                          ),
+                      ),
+                      Text(
+                        'Evaluate debates and provide fair scoring',
+                        style: TextStyle(
+                          color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[600],
+                          fontSize: 11,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  Switch(
-                    value: _userProfile?.isAvailableAsJudge ?? false,
-                    onChanged: (value) => _updateAvailability(judge: value),
-                    activeColor: Colors.amber.shade700,
-                  ),
-                ],
-              ),
+                ),
+                Switch(
+                  value: _userProfile?.isAvailableAsJudge ?? false,
+                  onChanged: (value) => _updateAvailability(judge: value),
+                  activeColor: Colors.amber.shade700,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNeumorphicIcon({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: _themeService.isDarkMode 
+              ? const Color(0xFF3A3A3A)
+              : const Color(0xFFF0F0F3),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: _themeService.isDarkMode 
+                  ? Colors.white.withValues(alpha: 0.03)
+                  : Colors.white.withValues(alpha: 0.7),
+              offset: const Offset(-3, -3),
+              blurRadius: 6,
+            ),
+            BoxShadow(
+              color: _themeService.isDarkMode 
+                  ? Colors.black.withValues(alpha: 0.5)
+                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+              offset: const Offset(3, 3),
+              blurRadius: 6,
             ),
           ],
+        ),
+        child: Icon(
+          icon,
+          size: 20,
+          color: _themeService.isDarkMode ? Colors.white70 : scarletRed,
         ),
       ),
     );

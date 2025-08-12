@@ -1,0 +1,284 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+// import 'package:flutter_webrtc/flutter_webrtc.dart'; // Removed - conflicts with Jitsi
+import 'package:http/http.dart' as http;
+import '../core/logging/app_logger.dart';
+
+class SimpleHttpAudioService extends ChangeNotifier {
+  static final SimpleHttpAudioService _instance = SimpleHttpAudioService._internal();
+  factory SimpleHttpAudioService() => _instance;
+  SimpleHttpAudioService._internal();
+
+  // Server configuration
+  String _serverUrl = '';
+  String? _sessionId;
+  String? _roomId;
+  String? _userId;
+  Timer? _pollingTimer;
+  
+  // WebRTC
+  Map<String, RTCPeerConnection> _peerConnections = {};
+  Map<String, MediaStream> _remoteStreams = {};
+  MediaStream? _localStream;
+  
+  // State
+  bool _isConnected = false;
+  bool _isMuted = false;
+  List<Map<String, dynamic>> _participants = [];
+  
+  // Configuration
+  final Map<String, dynamic> _configuration = {
+    'iceServers': [
+      {'urls': 'stun:stun.l.google.com:19302'},
+      {'urls': 'stun:stun1.l.google.com:19302'},
+    ]
+  };
+  
+  // Callbacks
+  Function(String)? onError;
+  Function()? onConnected;
+  Function()? onDisconnected;
+  Function(List<Map<String, dynamic>>)? onParticipantsUpdated;
+  
+  // Getters
+  bool get isConnected => _isConnected;
+  bool get isMuted => _isMuted;
+  MediaStream? get localStream => _localStream;
+  Map<String, MediaStream> get remoteStreams => _remoteStreams;
+  List<Map<String, dynamic>> get participants => _participants;
+
+  Future<void> connect(String serverUrl, String roomId, String userId, String userName) async {
+    try {
+      _serverUrl = 'http://$serverUrl:3002'; // Use port 3002 for simple server
+      _roomId = roomId;
+      _userId = userId;
+      
+      AppLogger().debug('🔌 Connecting to Simple Audio Server: $_serverUrl');
+      
+      // Initialize local audio
+      await _initializeLocalAudio();
+      
+      // Join room via HTTP
+      final response = await http.post(
+        Uri.parse('$_serverUrl/api/join-room'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'roomId': roomId,
+          'userId': userId,
+          'userName': userName,
+        }),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        _sessionId = data['sessionId'];
+        _participants = List<Map<String, dynamic>>.from(data['roomInfo']['participants']);
+        
+        setState(() {
+          _isConnected = true;
+        });
+        
+        onConnected?.call();
+        onParticipantsUpdated?.call(_participants);
+        
+        AppLogger().debug('✅ Connected to room: $roomId with session: $_sessionId');
+        
+        // Start polling for updates
+        _startPolling();
+        
+        // Create peer connections for existing participants
+        for (var participant in _participants) {
+          if (participant['sessionId'] != _sessionId) {
+            await _createPeerConnection(participant['sessionId']);
+          }
+        }
+      } else {
+        throw Exception('Failed to join room: ${response.body}');
+      }
+    } catch (e) {
+      AppLogger().error('❌ Connection error: $e');
+      onError?.call(e.toString());
+      rethrow;
+    }
+  }
+
+  Future<void> _initializeLocalAudio() async {
+    try {
+      _localStream = await navigator.mediaDevices.getUserMedia({
+        'audio': {
+          'echoCancellation': true,
+          'noiseSuppression': true,
+          'autoGainControl': true,
+        },
+        'video': false,
+      });
+      AppLogger().debug('🎤 Local audio initialized');
+    } catch (e) {
+      AppLogger().error('❌ Failed to get audio: $e');
+      throw Exception('Microphone access denied');
+    }
+  }
+
+  void _startPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (!_isConnected || _sessionId == null || _roomId == null) return;
+      
+      try {
+        final response = await http.get(
+          Uri.parse('$_serverUrl/api/room-status/$_roomId/$_sessionId'),
+        );
+        
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          final newParticipants = List<Map<String, dynamic>>.from(data['participants']);
+          
+          // Check for new participants
+          for (var participant in newParticipants) {
+            if (participant['sessionId'] != _sessionId && 
+                !_peerConnections.containsKey(participant['sessionId'])) {
+              await _createPeerConnection(participant['sessionId']);
+            }
+          }
+          
+          // Check for left participants
+          final currentIds = newParticipants.map((p) => p['sessionId']).toSet();
+          _peerConnections.keys.toList().forEach((sessionId) {
+            if (!currentIds.contains(sessionId)) {
+              _removePeerConnection(sessionId);
+            }
+          });
+          
+          _participants = newParticipants;
+          onParticipantsUpdated?.call(_participants);
+        }
+      } catch (e) {
+        AppLogger().error('❌ Polling error: $e');
+      }
+    });
+  }
+
+  Future<void> _createPeerConnection(String remoteSessionId) async {
+    try {
+      final pc = await createPeerConnection(_configuration);
+      
+      // Add local stream
+      if (_localStream != null) {
+        _localStream!.getTracks().forEach((track) {
+          pc.addTrack(track, _localStream!);
+        });
+      }
+      
+      // Handle remote stream
+      pc.onAddStream = (stream) {
+        AppLogger().debug('🔊 Received remote stream from: $remoteSessionId');
+        setState(() {
+          _remoteStreams[remoteSessionId] = stream;
+        });
+      };
+      
+      // Handle ICE candidates
+      pc.onIceCandidate = (candidate) {
+        _sendSignal(remoteSessionId, 'ice-candidate', candidate.toMap());
+      };
+      
+      _peerConnections[remoteSessionId] = pc;
+      
+      // Create offer
+      final offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      
+      _sendSignal(remoteSessionId, 'offer', offer.toMap());
+      
+      AppLogger().debug('📞 Created peer connection for: $remoteSessionId');
+    } catch (e) {
+      AppLogger().error('❌ Failed to create peer connection: $e');
+    }
+  }
+
+  void _removePeerConnection(String sessionId) {
+    _peerConnections[sessionId]?.close();
+    _peerConnections.remove(sessionId);
+    _remoteStreams.remove(sessionId);
+    AppLogger().debug('👋 Removed peer connection: $sessionId');
+  }
+
+  Future<void> _sendSignal(String targetSessionId, String type, Map<String, dynamic> data) async {
+    if (_sessionId == null) return;
+    
+    try {
+      await http.post(
+        Uri.parse('$_serverUrl/api/signal'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'sessionId': _sessionId,
+          'targetSessionId': targetSessionId,
+          'type': type,
+          'data': data,
+        }),
+      );
+    } catch (e) {
+      AppLogger().error('❌ Signal error: $e');
+    }
+  }
+
+  void toggleMute() {
+    if (_localStream == null) return;
+    
+    _isMuted = !_isMuted;
+    _localStream!.getAudioTracks().forEach((track) {
+      track.enabled = !_isMuted;
+    });
+    
+    notifyListeners();
+    AppLogger().debug('🎤 Audio ${_isMuted ? 'muted' : 'unmuted'}');
+  }
+
+  Future<void> disconnect() async {
+    _pollingTimer?.cancel();
+    
+    // Close all peer connections
+    for (var pc in _peerConnections.values) {
+      await pc.close();
+    }
+    _peerConnections.clear();
+    _remoteStreams.clear();
+    
+    // Leave room
+    if (_sessionId != null) {
+      try {
+        await http.post(
+          Uri.parse('$_serverUrl/api/leave-room'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({'sessionId': _sessionId}),
+        );
+      } catch (e) {
+        AppLogger().error('❌ Leave room error: $e');
+      }
+    }
+    
+    // Dispose local stream
+    _localStream?.dispose();
+    _localStream = null;
+    
+    setState(() {
+      _isConnected = false;
+      _participants.clear();
+    });
+    
+    onDisconnected?.call();
+    AppLogger().debug('👋 Disconnected from audio server');
+  }
+
+  void setState(VoidCallback fn) {
+    fn();
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    disconnect();
+    super.dispose();
+  }
+}

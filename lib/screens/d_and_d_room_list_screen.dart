@@ -4,7 +4,7 @@ import 'dart:async';
 import '../core/logging/app_logger.dart';
 import '../services/appwrite_service.dart';
 import 'debates_discussions_screen.dart';
-import 'create_d_and_d_screen.dart';
+import 'create_discussion_room_screen.dart';
 
 class DAndDRoomListScreen extends StatefulWidget {
   const DAndDRoomListScreen({super.key});
@@ -702,7 +702,7 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const CreateDAndDScreen(),
+        builder: (context) => const CreateDiscussionRoomScreen(),
       ),
     ).then((_) {
       // Refresh rooms list when user comes back from creating a room

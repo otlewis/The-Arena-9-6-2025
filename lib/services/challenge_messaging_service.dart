@@ -284,6 +284,12 @@ class ChallengeMessagingService {
       AppLogger().debug('📱 REALTIME: challenge.challengedId=${challenge.challengedId}, currentUserId=$_currentUserId');
       AppLogger().debug('📱 REALTIME: challenge.messageType=${challenge.messageType}, isArenaRole=${challenge.isArenaRole}');
       
+      // Skip instant messages - let AgoraInstantMessagingService handle them
+      if (challenge.messageType == 'instant_message') {
+        AppLogger().debug('📱 REALTIME: Skipping instant message - handled by AgoraInstantMessagingService');
+        return;
+      }
+      
       // Only process events relevant to current user
       if (challenge.challengedId != _currentUserId && challenge.challengerId != _currentUserId) {
         AppLogger().debug('📱 REALTIME: Skipping - not relevant to current user');

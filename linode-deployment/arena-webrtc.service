@@ -1,0 +1,15 @@
+[Unit]
+Description=Arena WebRTC Signaling Server
+Documentation=https://github.com/arena/webrtc-signaling
+After=network.target
+
+[Service]
+Environment=NODE_ENV=production
+Environment=PORT=3001
+Type=simple
+User=www-data
+ExecStart=/usr/bin/node /opt/arena-webrtc/signaling-server.js
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

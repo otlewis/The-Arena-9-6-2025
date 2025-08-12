@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -83,6 +84,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   final List<UserProfile> _speakerPanelists = []; // Max 6 speakers
   final List<UserProfile> _audienceMembers = [];
   final List<UserProfile> _speakerRequests = []; // Pending speaker requests
+  
+  // Role mapping for participants (userId -> role)
+  final Map<String, String> _participantRoles = {};
   
   // Performance optimization - cache last participants to prevent unnecessary rebuilds
   List<dynamic> _lastParticipants = [];
@@ -451,6 +455,169 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       ),
     );
   }
+
+  void _showDebateParticipantOptions(UserProfile user) {
+    final currentRole = _participantRoles[user.id] ?? 'speaker';
+    final hasAffirmative = _participantRoles.values.contains('affirmative');
+    final hasNegative = _participantRoles.values.contains('negative');
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Manage ${user.name}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Current position: ${currentRole == 'affirmative' ? 'Affirmative' : currentRole == 'negative' ? 'Negative' : 'Speaker'}',
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 16),
+            const Text('Choose new position:'),
+            const SizedBox(height: 8),
+            // Move to Affirmative
+            if (currentRole != 'affirmative')
+              ListTile(
+                leading: Icon(
+                  Icons.thumb_up,
+                  color: hasAffirmative ? Colors.grey : Colors.green,
+                ),
+                title: Text(
+                  'Assign to Affirmative',
+                  style: TextStyle(
+                    color: hasAffirmative ? Colors.grey : Colors.black,
+                  ),
+                ),
+                subtitle: Text(hasAffirmative ? 'Position occupied' : 'Argues FOR the topic'),
+                enabled: !hasAffirmative,
+                onTap: hasAffirmative ? null : () {
+                  Navigator.pop(context);
+                  _assignUserToRole(user, 'affirmative');
+                },
+              ),
+            // Move to Negative
+            if (currentRole != 'negative')
+              ListTile(
+                leading: Icon(
+                  Icons.thumb_down,
+                  color: hasNegative ? Colors.grey : Colors.red,
+                ),
+                title: Text(
+                  'Assign to Negative',
+                  style: TextStyle(
+                    color: hasNegative ? Colors.grey : Colors.black,
+                  ),
+                ),
+                subtitle: Text(hasNegative ? 'Position occupied' : 'Argues AGAINST the topic'),
+                enabled: !hasNegative,
+                onTap: hasNegative ? null : () {
+                  Navigator.pop(context);
+                  _assignUserToRole(user, 'negative');
+                },
+              ),
+            // Remove from debate panel
+            ListTile(
+              leading: const Icon(Icons.remove_circle, color: Colors.orange),
+              title: const Text('Move to Audience'),
+              subtitle: const Text('Remove from debate panel'),
+              onTap: () {
+                Navigator.pop(context);
+                _assignUserToRole(user, 'audience');
+              },
+            ),
+            // View Profile
+            ListTile(
+              leading: const Icon(Icons.person, color: Colors.blue),
+              title: const Text('View Profile'),
+              onTap: () {
+                Navigator.pop(context);
+                _showUserProfileModal(user);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAudiencePromotionOptions(UserProfile user) {
+    final hasAffirmative = _participantRoles.values.contains('affirmative');
+    final hasNegative = _participantRoles.values.contains('negative');
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Promote ${user.name} to Debate Position'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Choose which debate position to assign:'),
+            const SizedBox(height: 16),
+            // Promote to Affirmative
+            ListTile(
+              leading: Icon(
+                Icons.thumb_up,
+                color: hasAffirmative ? Colors.grey : Colors.green,
+              ),
+              title: Text(
+                'Promote to Affirmative',
+                style: TextStyle(
+                  color: hasAffirmative ? Colors.grey : Colors.black,
+                ),
+              ),
+              subtitle: Text(hasAffirmative ? 'Position already occupied' : 'Argues FOR the topic'),
+              enabled: !hasAffirmative,
+              onTap: hasAffirmative ? null : () {
+                Navigator.pop(context);
+                _assignUserToRole(user, 'affirmative');
+              },
+            ),
+            // Promote to Negative
+            ListTile(
+              leading: Icon(
+                Icons.thumb_down,
+                color: hasNegative ? Colors.grey : Colors.red,
+              ),
+              title: Text(
+                'Promote to Negative',
+                style: TextStyle(
+                  color: hasNegative ? Colors.grey : Colors.black,
+                ),
+              ),
+              subtitle: Text(hasNegative ? 'Position already occupied' : 'Argues AGAINST the topic'),
+              enabled: !hasNegative,
+              onTap: hasNegative ? null : () {
+                Navigator.pop(context);
+                _assignUserToRole(user, 'negative');
+              },
+            ),
+            const Divider(),
+            // View Profile option
+            ListTile(
+              leading: const Icon(Icons.person, color: Colors.blue),
+              title: const Text('View Profile'),
+              onTap: () {
+                Navigator.pop(context);
+                _showUserProfileModal(user);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
   
   Widget _buildWebRTCVideoContent(UserProfile participant, bool isModerator) {
     // Check if this participant has a video stream
@@ -809,6 +976,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             final userProfile = UserProfile.fromMap(userProfileData);
             final role = participant['role'] ?? 'audience';
             
+            // Store role mapping for this participant
+            _participantRoles[userProfile.id] = role;
+            
             // Efficiently sort participants by role
             if (role == 'moderator') {
               if (!newSpeakers.any((p) => p.id == userProfile.id)) {
@@ -817,7 +987,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               if (userProfile.id == _currentUser?.id) {
                 operations.add(() => _isCurrentUserModerator = true);
               }
-            } else if (role == 'speaker') {
+            } else if (role == 'speaker' || role == 'affirmative' || role == 'negative') {
               if (!newSpeakers.any((p) => p.id == userProfile.id)) {
                 newSpeakers.add(userProfile);
               }
@@ -1100,71 +1270,118 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           context: context,
           barrierDismissible: false,
           builder: (BuildContext context) {
-            return AlertDialog(
+            final screenHeight = MediaQuery.of(context).size.height;
+            final isSmallScreen = screenHeight < 700; // iPhone 12 is ~844px
+            
+            return Dialog(
               backgroundColor: Colors.grey[900],
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(16),
               ),
-              title: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: Container(
+                padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Compact Title Row
+                    Row(
+                      children: [
+                        Container(
+                          padding: EdgeInsets.all(isSmallScreen ? 6 : 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            LucideIcons.hand,
+                            color: const Color(0xFF8B5CF6),
+                            size: isSmallScreen ? 20 : 24,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Hand Raised!',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: isSmallScreen ? 16 : 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    child: const Icon(
-                      LucideIcons.hand,
-                      color: Color(0xFF8B5CF6),
-                      size: 24,
+                    SizedBox(height: isSmallScreen ? 10 : 14),
+                    // Compact Content
+                    Flexible(
+                      child: Text(
+                        '${userProfile.name} wants to join the speakers panel',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: isSmallScreen ? 14 : 15,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Hand Raised!',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                    SizedBox(height: isSmallScreen ? 12 : 16),
+                    // Compact Action buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _denySpeakerRequest(userProfile);
+                            },
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.symmetric(
+                                vertical: isSmallScreen ? 8 : 10,
+                              ),
+                            ),
+                            child: Text(
+                              'Deny',
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontSize: isSmallScreen ? 14 : 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _approveSpeakerRequest(userProfile);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF8B5CF6),
+                              padding: EdgeInsets.symmetric(
+                                vertical: isSmallScreen ? 8 : 10,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                            child: Text(
+                              'Approve',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: isSmallScreen ? 14 : 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
-              content: Text(
-                '${userProfile.name} wants to join the speakers panel',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 16,
+                  ],
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _denySpeakerRequest(userProfile);
-                  },
-                  child: const Text(
-                    'Deny',
-                    style: TextStyle(color: Colors.red),
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _approveSpeakerRequest(userProfile);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF8B5CF6),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Text(
-                    'Approve',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
-              ],
             );
           },
         );
@@ -1385,23 +1602,106 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   }
 
   void _approveSpeakerRequest(UserProfile user) async {
-    // Allow up to 6 speakers + moderator (7 total)
-    final otherSpeakersCount = _speakerPanelists.where((speaker) => speaker.id != _moderator?.id).length;
-    if (!_isCurrentUserModerator || otherSpeakersCount >= 6) {
-      return;
-    }
+    if (!_isCurrentUserModerator) return;
     
+    // Check if this is a debate room
+    final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
+    AppLogger().debug('🏛️ Approving speaker request for ${user.name}, isDebateRoom: $isDebateRoom, debateStyle: ${_roomData?['debateStyle']}');
+    
+    if (isDebateRoom) {
+      // For debate rooms, show position selection dialog
+      AppLogger().debug('🏛️ Showing debate position selection dialog');
+      _showDebatePositionSelectionDialog(user);
+    } else {
+      // For regular rooms, use the original logic
+      final otherSpeakersCount = _speakerPanelists.where((speaker) => speaker.id != _moderator?.id).length;
+      if (otherSpeakersCount >= 6) {
+        return;
+      }
+      
+      AppLogger().debug('🏛️ Assigning user to regular speaker role');
+      await _assignUserToRole(user, 'speaker');
+    }
+  }
+
+  void _showDebatePositionSelectionDialog(UserProfile user) {
+    // Check current position occupancy using actual role data
+    final hasAffirmative = _participantRoles.values.contains('affirmative');
+    final hasNegative = _participantRoles.values.contains('negative');
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Assign ${user.name} to Debate Position'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Choose which side of the debate this participant will argue for:'),
+            const SizedBox(height: 16),
+            // Affirmative option
+            ListTile(
+              leading: Icon(
+                Icons.thumb_up,
+                color: hasAffirmative ? Colors.grey : Colors.green,
+              ),
+              title: Text(
+                'Affirmative',
+                style: TextStyle(
+                  color: hasAffirmative ? Colors.grey : Colors.black,
+                ),
+              ),
+              subtitle: Text(hasAffirmative ? 'Position occupied' : 'Argues FOR the topic'),
+              enabled: !hasAffirmative,
+              onTap: hasAffirmative ? null : () {
+                Navigator.pop(context);
+                _assignUserToRole(user, 'affirmative');
+              },
+            ),
+            // Negative option  
+            ListTile(
+              leading: Icon(
+                Icons.thumb_down,
+                color: hasNegative ? Colors.grey : Colors.red,
+              ),
+              title: Text(
+                'Negative',
+                style: TextStyle(
+                  color: hasNegative ? Colors.grey : Colors.black,
+                ),
+              ),
+              subtitle: Text(hasNegative ? 'Position occupied' : 'Argues AGAINST the topic'),
+              enabled: !hasNegative,
+              onTap: hasNegative ? null : () {
+                Navigator.pop(context);
+                _assignUserToRole(user, 'negative');
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _assignUserToRole(UserProfile user, String role) async {
     try {
       await _appwrite.updateDebateDiscussionParticipantRole(
         roomId: widget.roomId,
         userId: user.id,
-        newRole: 'speaker',
+        newRole: role,
       );
       
       if (mounted) {
+        final roleDisplayName = role == 'affirmative' ? 'Affirmative' : 
+                               role == 'negative' ? 'Negative' : 'Speakers Panel';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ ${user.name} added to speakers panel'),
+            content: Text('✅ ${user.name} assigned to $roleDisplayName'),
             backgroundColor: Colors.green,
           ),
         );
@@ -1414,11 +1714,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       
       // The real-time subscription will update the UI automatically
     } catch (e) {
-      AppLogger().error('Error approving speaker request: $e');
+      AppLogger().error('Error assigning user to role: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error approving request: $e'),
+            content: Text('Error assigning role: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -1717,22 +2017,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   }
 
   Widget _buildVideoGrid() {
-    return Stack(
+    return Column(
       children: [
-        // Audience section (full screen background)
-        Positioned.fill(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 16, bottom: 16), // Reduced padding
-            child: _buildAudienceSection(),
-          ),
-        ),
+        // Speakers panel at the top
+        _buildSpeakerPanel(),
         
-        // Floating speakers panel (always show to display all 6 slots)
-        Positioned(
-          top: 16,
-          left: 0,
-          right: 0,
-          child: _buildSpeakerPanel(),
+        const SizedBox(height: 16),
+        
+        // Audience section below the speakers panel
+        Expanded(
+          child: _buildAudienceSection(),
         ),
       ],
     );
@@ -1748,7 +2042,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               'userName': speaker.name,
               'avatarUrl': speaker.avatar,
               'avatar': speaker.avatar,
-              'role': 'speaker',
+              'role': _participantRoles[speaker.id] ?? 'speaker', // Use actual role
             })
         .toList();
 
@@ -1767,9 +2061,19 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     return PerformanceOptimizedSpeakersPanel(
       speakers: speakers,
       moderator: moderatorData,
+      debateStyle: _roomData?['debateStyle'], // Pass the debate style from room data
       onSpeakerTap: (userId) {
         final speaker = _speakerPanelists.firstWhere((s) => s.id == userId);
-        _showUserProfileModal(speaker);
+        final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
+        AppLogger().debug('🏛️ Speaker tapped: ${speaker.name}, isDebateRoom: $isDebateRoom, isModerator: $_isCurrentUserModerator');
+        
+        if (_isCurrentUserModerator && isDebateRoom) {
+          AppLogger().debug('🏛️ Showing debate participant options');
+          _showDebateParticipantOptions(speaker);
+        } else {
+          AppLogger().debug('🏛️ Showing regular user profile modal');
+          _showUserProfileModal(speaker);
+        }
       },
     );
   }
@@ -2004,35 +2308,12 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   }
 
   Widget _buildAudienceSection() {
-    final screenWidth = MediaQuery.of(context).size.width;
-    
-    // Calculate top padding based on speakers panel height (same as speaker panel)
-    const containerMargin = 8.0; // Same as speaker panel
-    final containerWidth = screenWidth - (containerMargin * 2);
-    const tileSpacing = 4.0; // Same as speaker panel
-    
-    // Same tile calculations as speaker panel for consistency (4 tiles per row)
-    final availableWidth = containerWidth - (tileSpacing * 3); // 3 gaps for 4 tiles
-    final tileWidth = (availableWidth / 4).floor().toDouble(); // 4 tiles per row
-    final tileHeight = tileWidth; // Square tiles
-    
-    // Calculate speakers panel height for fixed 4x2 grid + moderator
-    double speakersPanelHeight = 16.0; // Initial top padding
-    
-    // Always show 2 rows of 4 speakers each
-    speakersPanelHeight += tileHeight; // First row (slots 1-4)
-    speakersPanelHeight += tileSpacing + tileHeight; // Gap + second row (slots 5-8)
-    speakersPanelHeight += tileSpacing; // Gap before moderator
-    speakersPanelHeight += tileHeight + 16; // Moderator tile + bottom padding
-    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Add spacing for floating speakers panel (dynamic height)
-        SizedBox(height: speakersPanelHeight),
-        
+        // Audience header
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4.0), // Reduced padding
+          padding: const EdgeInsets.symmetric(horizontal: 12.0),
           child: Row(
             children: [
               const Icon(
@@ -2104,6 +2385,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             }).toList(),
             onParticipantTap: (userId) {
               final member = _audienceMembers.firstWhere((m) => m.id == userId);
+              AppLogger().debug('🏛️ Audience member tapped: ${member.name}');
               _showUserProfileModal(member);
             },
             debugLabel: 'DebatesDiscussionsAudience',
@@ -2121,7 +2403,14 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     final fontSize = screenWidth < 360 ? 9.0 : 10.0;
     
     return GestureDetector(
-      onTap: () => _showUserProfileModal(member),
+      onTap: () {
+        final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
+        if (_isCurrentUserModerator && isDebateRoom) {
+          _showAudiencePromotionOptions(member);
+        } else {
+          _showUserProfileModal(member);
+        }
+      },
       child: Container(
         decoration: BoxDecoration(
           color: Colors.grey[800]?.withValues(alpha: 0.3),
@@ -2317,10 +2606,14 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.grey[900],
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.6,
+        ),
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2343,11 +2636,27 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               },
             ),
             _buildOptionTile(
+              icon: LucideIcons.users2,
+              title: 'Assign Roles',
+              onTap: () {
+                Navigator.pop(context);
+                _showRoleAssignment();
+              },
+            ),
+            _buildOptionTile(
               icon: LucideIcons.micOff,
               title: 'Mute All',
               onTap: () {
                 Navigator.pop(context);
                 _muteAllParticipants();
+              },
+            ),
+            _buildOptionTile(
+              icon: LucideIcons.testTube,
+              title: 'Test Data Message',
+              onTap: () {
+                Navigator.pop(context);
+                _testDataMessage();
               },
             ),
             _buildOptionTile(
@@ -2528,14 +2837,593 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     );
   }
 
-  void _muteAllParticipants() {
-    // Audio functionality disabled (Agora removed)
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('🔇 Audio features disabled (Agora removed)'),
-        backgroundColor: Colors.orange,
+  void _showRoleAssignment() {
+    final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        minChildSize: 0.5,
+        builder: (context, scrollController) => Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              const Text(
+                'Assign Roles',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+              
+              // Show position availability for debate rooms
+              if (isDebateRoom) ...[
+                _buildPositionStatus(),
+                const SizedBox(height: 20),
+              ],
+              
+              // Show all audience members for role assignment
+              if (_audienceMembers.isNotEmpty) ...[
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Audience Members',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollController,
+                    itemCount: _audienceMembers.length,
+                    itemBuilder: (context, index) {
+                      final member = _audienceMembers[index];
+                      final hasAffirmative = _speakerPanelists.any((speaker) => _participantRoles[speaker.id] == 'affirmative');
+                      final hasNegative = _speakerPanelists.any((speaker) => _participantRoles[speaker.id] == 'negative');
+                      final canAssign = !isDebateRoom || (!hasAffirmative || !hasNegative);
+                      
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: const Color(0xFF8B5CF6),
+                          child: _buildAvatarText(member, 14),
+                        ),
+                        title: Text(
+                          member.name,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        subtitle: Text(
+                          isDebateRoom && !canAssign
+                              ? 'All positions filled'
+                              : 'Audience Member',
+                          style: TextStyle(
+                            color: isDebateRoom && !canAssign
+                                ? Colors.orange[400]
+                                : Colors.grey[400],
+                          ),
+                        ),
+                        trailing: IconButton(
+                          icon: Icon(
+                            canAssign ? LucideIcons.userCheck : LucideIcons.userX,
+                            color: canAssign ? const Color(0xFF8B5CF6) : Colors.grey[600],
+                          ),
+                          onPressed: canAssign ? () => _showRoleSelectionDialog(member) : null,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ] else ...[
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      'No audience members available',
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
+  }
+
+  Widget _buildPositionStatus() {
+    final hasAffirmative = _speakerPanelists.any((speaker) => _participantRoles[speaker.id] == 'affirmative');
+    final hasNegative = _speakerPanelists.any((speaker) => _participantRoles[speaker.id] == 'negative');
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[850],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[700]!, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Debate Positions',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildPositionIndicator(
+                  icon: LucideIcons.thumbsUp,
+                  title: 'Affirmative',
+                  isOccupied: hasAffirmative,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildPositionIndicator(
+                  icon: LucideIcons.thumbsDown,
+                  title: 'Negative',
+                  isOccupied: hasNegative,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPositionIndicator({
+    required IconData icon,
+    required String title,
+    required bool isOccupied,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isOccupied ? Colors.red[900]?.withValues(alpha: 0.3) : Colors.green[900]?.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isOccupied ? Colors.red[700]! : Colors.green[700]!,
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            icon,
+            color: isOccupied ? Colors.red[400] : Colors.green[400],
+            size: 20,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(
+              color: isOccupied ? Colors.red[400] : Colors.green[400],
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            isOccupied ? 'FILLED' : 'OPEN',
+            style: TextStyle(
+              color: isOccupied ? Colors.red[300] : Colors.green[300],
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRoleSelectionDialog(UserProfile member) {
+    final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
+    
+    if (isDebateRoom) {
+      // Check which debate positions are already occupied
+      final hasAffirmative = _speakerPanelists.any((speaker) => _participantRoles[speaker.id] == 'affirmative');
+      final hasNegative = _speakerPanelists.any((speaker) => _participantRoles[speaker.id] == 'negative');
+      
+      AppLogger().debug('🏛️ Debate positions check - Affirmative: $hasAffirmative, Negative: $hasNegative');
+      
+      // If both positions are filled, show error
+      if (hasAffirmative && hasNegative) {
+        _showPositionFullDialog();
+        return;
+      }
+      
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: Colors.grey[900],
+          title: Text(
+            'Assign Role to ${member.name}',
+            style: const TextStyle(color: Colors.white),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Show available positions only
+              if (!hasAffirmative) ...[
+                _buildRoleOption(
+                  icon: LucideIcons.thumbsUp,
+                  title: 'Affirmative',
+                  subtitle: 'Pro side of the debate',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pop(context); // Close role assignment sheet
+                    _assignRole(member, 'affirmative');
+                  },
+                ),
+                if (!hasNegative) const SizedBox(height: 8),
+              ],
+              if (!hasNegative) ...[
+                _buildRoleOption(
+                  icon: LucideIcons.thumbsDown,
+                  title: 'Negative',
+                  subtitle: 'Against side of the debate',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pop(context); // Close role assignment sheet
+                    _assignRole(member, 'negative');
+                  },
+                ),
+              ],
+              
+              // Show occupied positions with indicators
+              if (hasAffirmative) ...[
+                _buildOccupiedRoleOption(
+                  icon: LucideIcons.thumbsUp,
+                  title: 'Affirmative',
+                  subtitle: 'Position already filled',
+                ),
+                if (!hasNegative) const SizedBox(height: 8),
+              ],
+              if (hasNegative) ...[
+                _buildOccupiedRoleOption(
+                  icon: LucideIcons.thumbsDown,
+                  title: 'Negative', 
+                  subtitle: 'Position already filled',
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // For discussion rooms, show Speaker option (no restrictions)
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: Colors.grey[900],
+          title: Text(
+            'Assign Role to ${member.name}',
+            style: const TextStyle(color: Colors.white),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildRoleOption(
+                icon: LucideIcons.mic,
+                title: 'Speaker',
+                subtitle: 'Can participate in discussion',
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pop(context); // Close role assignment sheet
+                  _assignRole(member, 'speaker');
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Widget _buildRoleOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey[800],
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: const Color(0xFF8B5CF6), size: 24),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(LucideIcons.chevronRight, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOccupiedRoleOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[850],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[700]!, width: 1),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.grey[500], size: 24),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(LucideIcons.lock, color: Colors.grey[600], size: 16),
+        ],
+      ),
+    );
+  }
+
+  void _showPositionFullDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Text(
+          'Debate Positions Full',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              LucideIcons.users,
+              color: Colors.orange,
+              size: 48,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Both Affirmative and Negative positions are already filled.',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 8),
+            Text(
+              'You must remove a current debater before assigning a new one.',
+              style: TextStyle(
+                color: Colors.grey,
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK', style: TextStyle(color: Color(0xFF8B5CF6))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _assignRole(UserProfile member, String role) async {
+    try {
+      AppLogger().info('Assigning role "$role" to ${member.name}');
+      
+      // Update the participant's role in the database
+      await _appwrite.updateDebateDiscussionParticipantRole(
+        roomId: widget.roomId,
+        userId: member.id,
+        newRole: role,
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ ${member.name} assigned as $role'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+      
+      // The real-time subscription will update the UI automatically
+    } catch (e) {
+      AppLogger().error('Error assigning role: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _testDataMessage() async {
+    try {
+      AppLogger().debug('🧪 Testing data message functionality...');
+      
+      if (!_webrtcService.isConnected) {
+        AppLogger().warning('🧪 WebRTC not connected');
+        return;
+      }
+      
+      final participants = _webrtcService.remoteParticipants;
+      if (participants.isEmpty) {
+        AppLogger().warning('🧪 No participants to test with');
+        return;
+      }
+      
+      for (final participant in participants) {
+        AppLogger().debug('🧪 Sending test message to ${participant.identity}');
+        
+        // Send a test message
+        await _webrtcService.localParticipant?.publishData(
+          utf8.encode(jsonEncode({
+            'type': 'test_message',
+            'targetParticipant': participant.identity,
+            'fromModerator': _webrtcService.localParticipant?.identity,
+            'message': 'Hello from moderator!',
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          })),
+          reliable: true,
+          destinationIdentities: [participant.identity],
+        );
+        
+        AppLogger().debug('🧪 Test message sent to ${participant.identity}');
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🧪 Test messages sent to ${participants.length} participants'),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+    } catch (e) {
+      AppLogger().error('🧪 Error testing data messages: $e');
+    }
+  }
+
+  void _muteAllParticipants() async {
+    try {
+      AppLogger().debug('🔇 Attempting to mute all participants...');
+      AppLogger().debug('🔇 WebRTC connected: ${_webrtcService.isConnected}');
+      AppLogger().debug('🔇 Current user role: ${_webrtcService.userRole}');
+      AppLogger().debug('🔇 Is moderator: $_isCurrentUserModerator');
+      AppLogger().debug('🔇 Remote participants count: ${_webrtcService.remoteParticipants.length}');
+      
+      if (!_webrtcService.isConnected) {
+        AppLogger().warning('🔇 WebRTC not connected, cannot mute participants');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ Not connected to audio service'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+      
+      if (!_isCurrentUserModerator) {
+        AppLogger().warning('🔇 User is not moderator, cannot mute all');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ Only moderators can mute all participants'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+      
+      // Use LiveKit to mute all participants
+      await _webrtcService.muteAllParticipants();
+      
+      AppLogger().info('🔇 Successfully sent mute all command');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🔇 Muting all participants (${_webrtcService.remoteParticipants.length} users)'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      AppLogger().error('Error muting all participants: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error muting participants: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _showRoomSettings() {
@@ -2575,14 +3463,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               onTap: () {
                 Navigator.pop(context);
                 _showRoomDurationInfo();
-              },
-            ),
-            _buildOptionTile(
-              icon: LucideIcons.volume2,
-              title: 'Audio Settings',
-              onTap: () {
-                Navigator.pop(context);
-                _showAudioSettings();
               },
             ),
             _buildOptionTile(
@@ -2683,47 +3563,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     );
   }
 
-  void _showAudioSettings() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.grey[900],
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Audio Settings',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading: const Icon(
-                LucideIcons.micOff, // Audio always disabled (Agora removed)
-                color: Colors.red,
-              ),
-              title: const Text(
-                'Audio Disabled',
-                style: TextStyle(color: Colors.white),
-              ),
-              subtitle: Text(
-                'Audio functionality disabled (Agora removed)',
-                style: TextStyle(color: Colors.grey[400]),
-              ),
-            ),
-            // Audio options disabled (Agora removed)
-          ],
-        ),
-      ),
-    );
-  }
 
 
   void _shareRoom() {

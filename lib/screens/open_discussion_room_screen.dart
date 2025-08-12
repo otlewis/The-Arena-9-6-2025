@@ -6,10 +6,11 @@ import '../services/websocket_webrtc_service.dart';
 import '../services/appwrite_service.dart';
 import '../services/firebase_gift_service.dart';
 import '../widgets/user_avatar.dart';
-import '../widgets/user_profile_modal.dart';
+import '../widgets/user_profile_bottom_sheet.dart';
 import '../widgets/instant_message_bell.dart';
 import '../widgets/challenge_bell.dart';
 import '../widgets/appwrite_timer_widget.dart';
+import '../screens/email_compose_screen.dart';
 import '../widgets/mattermost_chat_widget.dart';
 import '../models/discussion_chat_message.dart';
 import '../constants/appwrite.dart';
@@ -1901,15 +1902,49 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   }
 
   void _showUserProfile(UserProfile userProfile, String? userRole) {
-    final currentUser = _getCurrentUserProfile();
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      barrierColor: Colors.transparent,
-      builder: (context) => UserProfileModal(
-        userProfile: userProfile,
-        userRole: userRole,
-        currentUser: currentUser,
-        onClose: () => Navigator.of(context).pop(),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => UserProfileBottomSheet(
+        user: userProfile,
+        onFollow: () {
+          // TODO: Implement follow functionality
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Following ${userProfile.name}'),
+                backgroundColor: const Color(0xFF10B981),
+              ),
+            );
+          }
+        },
+        onChallenge: () {
+          // TODO: Implement challenge functionality
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Challenge sent to ${userProfile.name}'),
+                backgroundColor: const Color(0xFFDC2626),
+              ),
+            );
+          }
+        },
+        onEmail: () {
+          if (mounted && _getCurrentUserProfile() != null) {
+            final currentUser = _getCurrentUserProfile()!;
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => EmailComposeScreen(
+                  currentUserId: currentUser.id,
+                  currentUsername: currentUser.name,
+                  recipient: userProfile,
+                ),
+              ),
+            );
+          }
+        },
       ),
     );
   }

@@ -7,6 +7,9 @@ import '../models/user_profile.dart';
 import '../models/gift_transaction.dart';
 import '../core/logging/app_logger.dart';
 import 'firebase_arena_timer_service.dart';
+import 'network_resilience_service.dart';
+import 'offline_data_cache.dart';
+import 'package:get_it/get_it.dart';
 
 class AppwriteService {
   static final AppwriteService _instance = AppwriteService._internal();
@@ -43,6 +46,12 @@ class AppwriteService {
 
   // Getter for realtime access
   Realtime get realtimeInstance => realtime;
+  
+  // Getter for network resilience service
+  NetworkResilienceService get _networkService => GetIt.instance<NetworkResilienceService>();
+  
+  // Getter for offline services
+  OfflineDataCache get _cache => GetIt.instance<OfflineDataCache>();
 
   // Helper method for Chrome/browser detection and debugging
   String _getBrowserInfo() {
@@ -99,6 +108,50 @@ class AppwriteService {
     AppLogger().debug('🔍 DEBUG TEST COMPLETE');
   }
 
+  // Network resilience wrapper methods
+  
+  /// Executes database operations with circuit breaker and adaptive timeouts
+  Future<T> _executeWithResilience<T>(
+    String operationName,
+    Future<T> Function() operation,
+  ) async {
+    return await _networkService.executeWithCircuitBreaker(
+      operationName,
+      () async {
+        final timeout = _networkService.getAdaptiveTimeout();
+        return await operation().timeout(timeout);
+      },
+    );
+  }
+
+  /// Executes database operations with retry logic for poor connections  
+  Future<T> _executeWithRetry<T>(
+    String operationName,
+    Future<T> Function() operation, {
+    int maxRetries = 3,
+  }) async {
+    int attempts = 0;
+    
+    while (attempts < maxRetries) {
+      try {
+        return await _executeWithResilience(operationName, operation);
+      } catch (e) {
+        attempts++;
+        
+        if (attempts >= maxRetries) {
+          rethrow;
+        }
+        
+        // Wait before retry with network-aware delay
+        final delay = _networkService.getRetryDelay(attempts);
+        AppLogger().warning('🔄 $operationName failed (attempt $attempts), retrying in ${delay.inSeconds}s: $e');
+        await Future.delayed(delay);
+      }
+    }
+    
+    throw Exception('Max retries exceeded for $operationName');
+  }
+
   // Auth Methods
   Future<models.User> createAccount({
     required String email,
@@ -124,9 +177,12 @@ class AppwriteService {
     required String password,
   }) async {
     try {
-      final session = await account.createEmailPasswordSession(
-        email: email,
-        password: password,
+      final session = await _executeWithRetry(
+        'signIn',
+        () => account.createEmailPasswordSession(
+          email: email,
+          password: password,
+        ),
       );
       return session;
     } catch (e) {
@@ -285,14 +341,28 @@ class AppwriteService {
     // Log Chrome-specific debugging info
     _logChromeSpecificDebugInfo();
     
+    // Check cache first
+    try {
+      final cachedProfile = await _cache.getCachedUserProfile(userId);
+      if (cachedProfile != null) {
+        AppLogger().debug('📦 Using cached user profile for: $userId');
+        return UserProfile.fromMap(cachedProfile);
+      }
+    } catch (e) {
+      AppLogger().warning('📦 Cache read failed, fetching from server: $e');
+    }
+    
     try {
       AppLogger().debug('Attempting to fetch user profile from database...');
       AppLogger().debug('Database ID: arena_db, Collection ID: users, Document ID: $userId');
       
-      final response = await databases.getDocument(
-        databaseId: 'arena_db',
-        collectionId: 'users',
-        documentId: userId,
+      final response = await _executeWithRetry(
+        'getUserProfile-$userId',
+        () => databases.getDocument(
+          databaseId: 'arena_db',
+          collectionId: 'users',
+          documentId: userId,
+        ),
       );
       
       AppLogger().debug('Raw response received from Appwrite:');
@@ -319,6 +389,14 @@ class AppwriteService {
       AppLogger().debug('  - Email: ${userProfile.email}');
       AppLogger().debug('  - Avatar: ${userProfile.avatar}');
       AppLogger().debug('  - Created at: ${userProfile.createdAt}');
+      
+      // Cache the profile for offline access
+      try {
+        await _cache.cacheUserProfile(userId, profileData);
+        AppLogger().debug('📦 Cached user profile for: $userId');
+      } catch (e) {
+        AppLogger().warning('📦 Failed to cache user profile: $e');
+      }
       
       AppLogger().debug('========== getUserProfile SUCCESS ==========');
       return userProfile;
@@ -731,24 +809,27 @@ class AppwriteService {
     int maxParticipants = 999999, // Effectively unlimited
   }) async {
     try {
-      final response = await databases.createDocument(
-        databaseId: 'arena_db',
-        collectionId: AppwriteConstants.roomsCollection,
-        documentId: ID.unique(),
-        data: {
-          'title': title,
-          'description': description,
-          'type': 'discussion',
-          'status': 'active',
-          'createdBy': createdBy,
-          'isPublic': true,
-          'maxParticipants': maxParticipants,
-          'participants': [],
-          'moderatorId': createdBy,
-          'settings': '{}',
-          'tags': tags ?? [],
-          'isFeatured': false,
-        },
+      final response = await _executeWithRetry(
+        'createRoom',
+        () => databases.createDocument(
+          databaseId: 'arena_db',
+          collectionId: AppwriteConstants.roomsCollection,
+          documentId: ID.unique(),
+          data: {
+            'title': title,
+            'description': description,
+            'type': 'discussion',
+            'status': 'active',
+            'createdBy': createdBy,
+            'isPublic': true,
+            'maxParticipants': maxParticipants,
+            'participants': [],
+            'moderatorId': createdBy,
+            'settings': '{}',
+            'tags': tags ?? [],
+            'isFeatured': false,
+          },
+        ),
       );
 
       // Create initial room participant entry for the creator as moderator
@@ -948,27 +1029,45 @@ class AppwriteService {
     }
   }
 
+  /// Clean up duplicate entries for a user in an Open Discussion room
+  Future<void> _cleanupOpenDiscussionParticipantDuplicates(String roomId, String userId) async {
+    try {
+      // Get ALL entries for this user in this room (active or not)
+      final allEntries = await databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'room_participants',
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('userId', userId),
+        ],
+      );
+      
+      // Delete all existing entries to ensure no duplicates
+      for (var entry in allEntries.documents) {
+        await databases.deleteDocument(
+          databaseId: 'arena_db',
+          collectionId: 'room_participants',
+          documentId: entry.$id,
+        );
+      }
+      
+      if (allEntries.documents.isNotEmpty) {
+        AppLogger().debug('Cleaned up ${allEntries.documents.length} duplicate Open Discussion entries for user $userId in room $roomId');
+      }
+    } catch (e) {
+      AppLogger().error('Error cleaning up Open Discussion participant duplicates: $e');
+    }
+  }
+
   Future<void> joinRoom({
     required String roomId,
     required String userId,
     String role = 'audience',
   }) async {
     try {
-      // Check if user is already in the room
-      final existingParticipants = await databases.listDocuments(
-        databaseId: 'arena_db',
-        collectionId: 'room_participants',
-        queries: [
-          Query.equal('roomId', roomId),
-          Query.equal('userId', userId),
-          Query.equal('status', 'joined'),
-        ],
-      );
-
-      if (existingParticipants.documents.isNotEmpty) {
-        return; // User already in room
-      }
-
+      // First, clean up any existing entries for this user in this room to prevent duplicates
+      await _cleanupOpenDiscussionParticipantDuplicates(roomId, userId);
+      
       // Get user info for participant record
       final user = await getCurrentUser();
       
@@ -998,27 +1097,10 @@ class AppwriteService {
     required String userId,
   }) async {
     try {
-      final participants = await databases.listDocuments(
-        databaseId: 'arena_db',
-        collectionId: 'room_participants',
-        queries: [
-          Query.equal('roomId', roomId),
-          Query.equal('userId', userId),
-          Query.equal('status', 'joined'),
-        ],
-      );
+      // Delete ALL entries for this user in this room to prevent duplicates
+      await _cleanupOpenDiscussionParticipantDuplicates(roomId, userId);
       
-      for (var participant in participants.documents) {
-        await databases.updateDocument(
-          databaseId: 'arena_db',
-          collectionId: 'room_participants',
-          documentId: participant.$id,
-          data: {
-            'status': 'left',
-            'leftAt': DateTime.now().toIso8601String(),
-          },
-        );
-      }
+      AppLogger().debug('User $userId left open discussion room $roomId (all entries deleted)');
     } catch (e) {
       AppLogger().debug('Error leaving room: $e');
       rethrow;
@@ -1731,6 +1813,10 @@ class AppwriteService {
     String role = 'participant',
   }) async {
     try {
+      // First, clean up any existing entries for this user in this room to prevent duplicates
+      await _cleanupDebateDiscussionParticipantDuplicates(roomId, userId);
+      
+      // Now create the new entry
       await databases.createDocument(
         databaseId: AppwriteConstants.databaseId,
         collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
@@ -1745,7 +1831,7 @@ class AppwriteService {
         },
       );
       
-      AppLogger().debug('User $userId joined debate discussion room $roomId as $role');
+      AppLogger().debug('User $userId joined debate discussion room $roomId as $role (duplicates cleaned)');
     } catch (e) {
       AppLogger().error('Error joining debate discussion room: $e');
       rethrow;
@@ -1757,29 +1843,10 @@ class AppwriteService {
     required String userId,
   }) async {
     try {
-      final participants = await databases.listDocuments(
-        databaseId: AppwriteConstants.databaseId,
-        collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
-        queries: [
-          Query.equal('roomId', roomId),
-          Query.equal('userId', userId),
-          Query.equal('status', 'joined'),
-        ],
-      );
+      // Delete ALL entries for this user in this room to prevent duplicates
+      await _cleanupDebateDiscussionParticipantDuplicates(roomId, userId);
       
-      for (var participant in participants.documents) {
-        await databases.updateDocument(
-          databaseId: AppwriteConstants.databaseId,
-          collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
-          documentId: participant.$id,
-          data: {
-            'status': 'left',
-            'leftAt': DateTime.now().toIso8601String(),
-          },
-        );
-      }
-      
-      AppLogger().debug('User $userId left debate discussion room $roomId');
+      AppLogger().debug('User $userId left debate discussion room $roomId (all entries deleted)');
     } catch (e) {
       AppLogger().error('Error leaving debate discussion room: $e');
       rethrow;
@@ -1820,6 +1887,36 @@ class AppwriteService {
     } catch (e) {
       AppLogger().error('Error getting debate discussion participants: $e');
       return [];
+    }
+  }
+
+  /// Clean up duplicate entries for a user in a debate discussion room
+  Future<void> _cleanupDebateDiscussionParticipantDuplicates(String roomId, String userId) async {
+    try {
+      // Get ALL entries for this user in this room (active or not)
+      final allEntries = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('userId', userId),
+        ],
+      );
+      
+      // Delete all existing entries to ensure no duplicates
+      for (var entry in allEntries.documents) {
+        await databases.deleteDocument(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+          documentId: entry.$id,
+        );
+      }
+      
+      if (allEntries.documents.isNotEmpty) {
+        AppLogger().debug('Cleaned up ${allEntries.documents.length} duplicate debate discussion entries for user $userId in room $roomId');
+      }
+    } catch (e) {
+      AppLogger().error('Error cleaning up debate discussion participant duplicates: $e');
     }
   }
 
@@ -2005,6 +2102,36 @@ class AppwriteService {
     }
   }
 
+  /// Clean up duplicate entries for a user in an Arena room
+  Future<void> _cleanupArenaParticipantDuplicates(String roomId, String userId) async {
+    try {
+      // Get ALL entries for this user in this room (active or not)
+      final allEntries = await databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'arena_participants',
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('userId', userId),
+        ],
+      );
+      
+      // Delete all existing entries to ensure no duplicates
+      for (var entry in allEntries.documents) {
+        await databases.deleteDocument(
+          databaseId: 'arena_db',
+          collectionId: 'arena_participants',
+          documentId: entry.$id,
+        );
+      }
+      
+      if (allEntries.documents.isNotEmpty) {
+        AppLogger().debug('Cleaned up ${allEntries.documents.length} duplicate Arena entries for user $userId in room $roomId');
+      }
+    } catch (e) {
+      AppLogger().error('Error cleaning up Arena participant duplicates: $e');
+    }
+  }
+
   Future<void> assignArenaRole({
     required String roomId,
     required String userId,
@@ -2051,45 +2178,23 @@ class AppwriteService {
         }
       }
       
-      // Check if user already has a role in this room
-      final existingRoles = await databases.listDocuments(
+      // First, clean up any existing entries for this user in this room to prevent duplicates
+      await _cleanupArenaParticipantDuplicates(roomId, userId);
+      
+      // Create new role assignment (always create fresh to avoid duplicates)
+      await databases.createDocument(
         databaseId: 'arena_db',
         collectionId: 'arena_participants',
-        queries: [
-          Query.equal('roomId', roomId),
-          Query.equal('userId', userId),
-        ],
+        documentId: ID.unique(),
+        data: {
+          'roomId': roomId,
+          'userId': userId,
+          'role': finalRole,
+          'assignedAt': DateTime.now().toIso8601String(),
+          'isActive': true,
+        },
       );
-
-      if (existingRoles.documents.isNotEmpty) {
-        // Update existing role
-        await databases.updateDocument(
-          databaseId: 'arena_db',
-          collectionId: 'arena_participants',
-          documentId: existingRoles.documents.first.$id,
-          data: {
-            'role': finalRole,
-            'assignedAt': DateTime.now().toIso8601String(),
-            'isActive': true, // Ensure participant is marked as active
-          },
-        );
-        AppLogger().info('✅ Updated existing participant: user $userId as $finalRole in room $roomId (isActive: true)');
-      } else {
-        // Create new role assignment
-        await databases.createDocument(
-          databaseId: 'arena_db',
-          collectionId: 'arena_participants',
-          documentId: ID.unique(),
-          data: {
-            'roomId': roomId,
-            'userId': userId,
-            'role': finalRole,
-            'assignedAt': DateTime.now().toIso8601String(),
-            'isActive': true,
-          },
-        );
-        AppLogger().info('✅ Created new participant: user $userId as $finalRole in room $roomId (isActive: true)');
-      }
+      AppLogger().info('✅ Created new participant: user $userId as $finalRole in room $roomId (duplicates cleaned)');
 
       AppLogger().info('Assigned $finalRole to user $userId in room $roomId');
     } catch (e) {

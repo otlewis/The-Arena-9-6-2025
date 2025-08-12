@@ -12,7 +12,10 @@ class ArenaParticipantColors {
 
 class ArenaParticipantWidgets {
   // Build compact audience display with scrolling
-  static Widget buildCompactAudienceDisplay(List<UserProfile> audience) {
+  static Widget buildCompactAudienceDisplay(
+    List<UserProfile> audience, {
+    Function(UserProfile)? onUserTap,
+  }) {
     if (audience.isEmpty) {
       return Container(
         height: 60,
@@ -86,6 +89,7 @@ class ArenaParticipantWidgets {
                     avatarUrl: audienceMember.avatar,
                     initials: audienceMember.name.isNotEmpty ? audienceMember.name[0] : '?',
                     radius: 28, // Slightly smaller to fit better with reduced spacing
+                    onTap: onUserTap != null ? () => onUserTap(audienceMember) : null,
                   ),
                   const SizedBox(height: 3),
                   Text(

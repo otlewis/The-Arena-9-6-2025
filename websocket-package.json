@@ -1,0 +1,16 @@
+{
+  "name": "arena-websocket-signaling-server",
+  "version": "1.0.0",
+  "description": "Arena WebSocket Signaling Server (bypasses Socket.IO)",
+  "main": "websocket-signaling-server.cjs",
+  "scripts": {
+    "start": "node websocket-signaling-server.cjs"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.0",
+    "cors": "^2.8.5"
+  },
+  "author": "Arena Debate App",
+  "license": "MIT"
+}

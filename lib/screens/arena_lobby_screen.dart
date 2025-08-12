@@ -598,7 +598,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                   BlendMode.srcIn,
                 ),
                 child: Image(
-                  image: AssetImage('assets/images/logo.png'),
+                  image: AssetImage('assets/images/Arenalogo.png'),
                   width: 56,
                   height: 56,
                   fit: BoxFit.contain,

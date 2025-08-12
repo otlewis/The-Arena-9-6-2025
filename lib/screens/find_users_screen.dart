@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../services/appwrite_service.dart';
+import '../services/theme_service.dart';
 import '../models/user_profile.dart';
 import '../widgets/user_avatar.dart';
+import '../widgets/challenge_bell.dart';
 import '../screens/user_profile_screen.dart';
 
 class FindUsersScreen extends StatefulWidget {
@@ -13,6 +15,7 @@ class FindUsersScreen extends StatefulWidget {
 
 class _FindUsersScreenState extends State<FindUsersScreen> {
   final AppwriteService _appwrite = AppwriteService();
+  final ThemeService _themeService = ThemeService();
   final TextEditingController _searchController = TextEditingController();
   
   List<UserProfile> _allUsers = [];
@@ -78,53 +81,52 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _themeService.isDarkMode 
+          ? const Color(0xFF2D2D2D)
+          : const Color(0xFFE8E8E8),
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Find Users',
           style: TextStyle(
-            color: deepPurple,
+            color: _themeService.isDarkMode ? Colors.white : deepPurple,
             fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: _themeService.isDarkMode 
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E8E8),
         elevation: 0,
-        iconTheme: const IconThemeData(color: scarletRed),
+        iconTheme: IconThemeData(
+          color: _themeService.isDarkMode ? Colors.white : scarletRed,
+        ),
+        actions: [
+          _buildNeumorphicAppBarIcon(
+            const ChallengeBell(iconColor: Color(0xFF6B46C1)),
+          ),
+          const SizedBox(width: 16),
+        ],
       ),
       body: Column(
         children: [
           // Search bar
           Container(
             padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _filterUsers,
-              decoration: InputDecoration(
-                hintText: 'Search users by name or email...',
-                prefixIcon: const Icon(Icons.search, color: accentPurple),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: accentPurple.withValues(alpha: 0.3)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: accentPurple),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
-                ),
-              ),
-            ),
+            child: _buildNeumorphicSearchBar(),
           ),
           
           // Users list
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: accentPurple,
+                    ),
+                  )
                 : _filteredUsers.isEmpty
                     ? _buildEmptyState()
                     : RefreshIndicator(
                         onRefresh: _loadUsers,
+                        color: accentPurple,
                         child: ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           itemCount: _filteredUsers.length,
@@ -144,19 +146,50 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
-            Icons.people_outline,
-            size: 64,
-            color: Colors.grey,
+          Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              color: _themeService.isDarkMode 
+                  ? const Color(0xFF3A3A3A)
+                  : const Color(0xFFF0F0F3),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: _themeService.isDarkMode 
+                      ? Colors.white.withValues(alpha: 0.03)
+                      : Colors.white.withValues(alpha: 0.7),
+                  offset: const Offset(-8, -8),
+                  blurRadius: 16,
+                ),
+                BoxShadow(
+                  color: _themeService.isDarkMode 
+                      ? Colors.black.withValues(alpha: 0.5)
+                      : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                  offset: const Offset(8, 8),
+                  blurRadius: 16,
+                ),
+              ],
+            ),
+            child: Icon(
+              Icons.people_outline,
+              size: 60,
+              color: _themeService.isDarkMode 
+                  ? Colors.white24
+                  : Colors.grey[400],
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
           Text(
             _searchController.text.isEmpty
                 ? 'No users found'
                 : 'No users match your search',
             style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey[600],
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: _themeService.isDarkMode 
+                  ? Colors.white70
+                  : Colors.grey[700],
             ),
           ),
           const SizedBox(height: 8),
@@ -165,128 +198,285 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                 ? 'Check back later for new users'
                 : 'Try a different search term',
             style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[500],
+              fontSize: 16,
+              color: _themeService.isDarkMode 
+                  ? Colors.white54
+                  : Colors.grey[600],
+              height: 1.4,
             ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildUserCard(UserProfile user) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
+  Widget _buildNeumorphicAppBarIcon(Widget child) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode 
+            ? const Color(0xFF3A3A3A)
+            : const Color(0xFFF0F0F3),
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.white.withValues(alpha: 0.7),
+            offset: const Offset(-4, -4),
+            blurRadius: 8,
+          ),
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.5)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+            offset: const Offset(4, 4),
+            blurRadius: 8,
+          ),
+        ],
       ),
-      child: InkWell(
-        onTap: () => _navigateToUserProfile(user),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              UserAvatar(
-                avatarUrl: user.avatar,
-                initials: user.initials,
-                radius: 24,
-                backgroundColor: accentPurple.withValues(alpha: 0.1),
-                textColor: accentPurple,
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            user.displayName,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: deepPurple,
-                            ),
-                          ),
-                        ),
-                        if (user.isVerified)
-                          const Icon(
-                            Icons.verified,
-                            size: 16,
-                            color: accentPurple,
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      user.email,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
+      child: Center(child: child),
+    );
+  }
+
+  Widget _buildNeumorphicSearchBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode 
+            ? const Color(0xFF3A3A3A)
+            : const Color(0xFFF0F0F3),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.6)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+            offset: const Offset(4, 4),
+            blurRadius: 8,
+            spreadRadius: -2,
+          ),
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.02)
+                : Colors.white.withValues(alpha: 0.8),
+            offset: const Offset(-4, -4),
+            blurRadius: 8,
+            spreadRadius: -2,
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: _searchController,
+        onChanged: _filterUsers,
+        style: TextStyle(
+          color: _themeService.isDarkMode ? Colors.white : Colors.black87,
+        ),
+        decoration: InputDecoration(
+          hintText: 'Search users by name or email...',
+          hintStyle: TextStyle(
+            color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[500],
+          ),
+          prefixIcon: const Icon(
+            Icons.search, 
+            color: accentPurple,
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserCard(UserProfile user) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode 
+            ? const Color(0xFF3A3A3A)
+            : const Color(0xFFF0F0F3),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.white.withValues(alpha: 0.8),
+            offset: const Offset(-6, -6),
+            blurRadius: 12,
+          ),
+          BoxShadow(
+            color: _themeService.isDarkMode 
+                ? Colors.black.withValues(alpha: 0.5)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+            offset: const Offset(6, 6),
+            blurRadius: 12,
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _navigateToUserProfile(user),
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: _themeService.isDarkMode 
+                            ? Colors.black.withValues(alpha: 0.4)
+                            : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                        offset: const Offset(3, 3),
+                        blurRadius: 6,
+                        spreadRadius: -2,
                       ),
-                    ),
-                    if (user.location?.isNotEmpty == true) ...[
-                      const SizedBox(height: 4),
+                      BoxShadow(
+                        color: _themeService.isDarkMode 
+                            ? Colors.white.withValues(alpha: 0.02)
+                            : Colors.white.withValues(alpha: 0.7),
+                        offset: const Offset(-3, -3),
+                        blurRadius: 6,
+                        spreadRadius: -2,
+                      ),
+                    ],
+                  ),
+                  child: UserAvatar(
+                    avatarUrl: user.avatar,
+                    initials: user.initials,
+                    radius: 24,
+                    backgroundColor: accentPurple.withValues(alpha: 0.1),
+                    textColor: accentPurple,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Row(
                         children: [
-                          const Icon(
-                            Icons.location_on,
-                            size: 12,
-                            color: Colors.grey,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            user.location!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[500],
+                          Expanded(
+                            child: Text(
+                              user.displayName,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: _themeService.isDarkMode 
+                                    ? Colors.white
+                                    : deepPurple,
+                              ),
                             ),
+                          ),
+                          if (user.isVerified)
+                            const Icon(
+                              Icons.verified,
+                              size: 16,
+                              color: accentPurple,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        user.email,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: _themeService.isDarkMode 
+                              ? Colors.white70
+                              : Colors.grey[600],
+                        ),
+                      ),
+                      if (user.location?.isNotEmpty == true) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.location_on,
+                              size: 12,
+                              color: _themeService.isDarkMode 
+                                  ? Colors.white54
+                                  : Colors.grey,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              user.location!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _themeService.isDarkMode 
+                                    ? Colors.white54
+                                    : Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _themeService.isDarkMode 
+                            ? const Color(0xFF2D2D2D)
+                            : const Color(0xFFE8E8E8),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _themeService.isDarkMode 
+                                ? Colors.black.withValues(alpha: 0.6)
+                                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                            offset: const Offset(2, 2),
+                            blurRadius: 4,
+                            spreadRadius: -1,
+                          ),
+                          BoxShadow(
+                            color: _themeService.isDarkMode 
+                                ? Colors.white.withValues(alpha: 0.02)
+                                : Colors.white.withValues(alpha: 0.8),
+                            offset: const Offset(-2, -2),
+                            blurRadius: 4,
+                            spreadRadius: -1,
                           ),
                         ],
                       ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: scarletRed.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '${user.formattedReputation} rep',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: scarletRed,
+                      child: Text(
+                        '${user.formattedReputation} rep',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: scarletRed,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${user.totalDebates} debates',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey[500],
+                    const SizedBox(height: 4),
+                    Text(
+                      '${user.totalDebates} debates',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: _themeService.isDarkMode 
+                            ? Colors.white54
+                            : Colors.grey[500],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 8),
-              const Icon(
-                Icons.arrow_forward_ios,
-                size: 16,
-                color: Colors.grey,
-              ),
-            ],
+                  ],
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: _themeService.isDarkMode 
+                      ? Colors.white54
+                      : Colors.grey,
+                ),
+              ],
+            ),
           ),
         ),
       ),

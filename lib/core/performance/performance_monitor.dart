@@ -13,6 +13,7 @@ class PerformanceMonitor {
   final Map<String, DateTime> _operationTimers = {};
   final List<FrameTimingInfo> _frameTimings = [];
   bool _isMonitoring = false;
+  DateTime? _lastSlowFrameLog;
 
   /// Initialize performance monitoring
   void initialize() {
@@ -78,31 +79,39 @@ class PerformanceMonitor {
     SchedulerBinding.instance.addTimingsCallback(_onFrameTiming);
   }
 
-  /// Handle frame timing information
+  /// Handle frame timing information (optimized to reduce overhead)
   void _onFrameTiming(List<FrameTiming> timings) {
     if (!kDebugMode) return;
 
-    for (final timing in timings) {
-      final buildDuration = timing.buildDuration.inMicroseconds / 1000.0;
-      final rasterDuration = timing.rasterDuration.inMicroseconds / 1000.0;
-      final totalDuration = buildDuration + rasterDuration;
+    // Process only the latest timing to reduce overhead
+    if (timings.isEmpty) return;
+    final timing = timings.last;
+    
+    final buildDuration = timing.buildDuration.inMicroseconds / 1000.0;
+    final rasterDuration = timing.rasterDuration.inMicroseconds / 1000.0;
+    final totalDuration = buildDuration + rasterDuration;
 
-      final frameInfo = FrameTimingInfo(
-        buildTime: buildDuration,
-        rasterTime: rasterDuration,
-        totalTime: totalDuration,
-        timestamp: DateTime.now(),
-      );
+    final frameInfo = FrameTimingInfo(
+      buildTime: buildDuration,
+      rasterTime: rasterDuration,
+      totalTime: totalDuration,
+      timestamp: DateTime.now(),
+    );
 
-      _frameTimings.add(frameInfo);
+    _frameTimings.add(frameInfo);
 
-      // Keep only last 100 frames
-      if (_frameTimings.length > 100) {
-        _frameTimings.removeAt(0);
-      }
+    // Keep only last 50 frames (reduced from 100 for better performance)
+    if (_frameTimings.length > 50) {
+      _frameTimings.removeAt(0);
+    }
 
-      // Log slow frames
-      if (totalDuration > 16.67) { // 60 FPS threshold
+    // Log slow frames with throttling to avoid excessive logging
+    if (totalDuration > 16.67) { // 60 FPS threshold
+      // Throttle logging to max once per 1000ms to prevent log spam
+      final now = DateTime.now();
+      if (_lastSlowFrameLog == null || 
+          now.difference(_lastSlowFrameLog!).inMilliseconds > 1000) {
+        _lastSlowFrameLog = now;
         _logger.warning('Slow frame detected: ${totalDuration.toStringAsFixed(2)}ms (build: ${buildDuration.toStringAsFixed(2)}ms, raster: ${rasterDuration.toStringAsFixed(2)}ms)');
       }
     }

@@ -1,0 +1,15 @@
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/Arenalogo.png"
+  min_sdk_android: 21
+  remove_alpha_ios: true
+  background_color_ios: "#ffffff"
+  
+  # Optional: Different icon for different platforms
+  # android: "assets/images/icon-android.png"
+  # ios: "assets/images/icon-ios.png"
+  
+  # Adaptive icon for Android (optional)
+  adaptive_icon_foreground: "assets/images/Arenalogo.png"
+  adaptive_icon_background: "#ffffff"

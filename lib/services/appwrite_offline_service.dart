@@ -23,7 +23,7 @@ class AppwriteOfflineService {
   
   StreamController<bool>? _connectionStatusController;
   StreamController<OfflineStatus>? _offlineStatusController;
-  StreamSubscription<ConnectivityResult>? _connectivitySubscription;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   
   bool _isConnected = true;
   bool _hasPendingActions = false;
@@ -75,8 +75,8 @@ class AppwriteOfflineService {
   /// Setup connectivity monitoring
   void _setupConnectivityMonitoring() {
     _connectivitySubscription = _connectivity.onConnectivityChanged.listen(
-      (ConnectivityResult result) {
-        _handleConnectivityChange([result]);
+      (List<ConnectivityResult> results) {
+        _handleConnectivityChange(results);
       },
       onError: (error) {
         AppLogger().error('🔌 Connectivity monitoring error: $error');
@@ -88,7 +88,7 @@ class AppwriteOfflineService {
   Future<void> _checkInitialConnection() async {
     try {
       final connectivityResult = await _connectivity.checkConnectivity();
-      _handleConnectivityChange([connectivityResult]);
+      _handleConnectivityChange(connectivityResult);
     } catch (e) {
       AppLogger().error('🔌 Failed to check initial connection: $e');
       _updateConnectionStatus(false);

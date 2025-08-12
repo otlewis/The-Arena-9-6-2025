@@ -10,8 +10,11 @@ class WebSocketWebRTCService {
   bool _isConnected = false;
   String? _clientId;
   String? _currentRoom;
+  String? _currentUserId;
   // WebRTC
   MediaStream? _localStream;
+  MediaStream? _screenStream;
+  bool _isScreenSharing = false;
   final Map<String, RTCPeerConnection> _remotePeerConnections = {};
   final Map<String, MediaStream> _remoteStreams = {};
   
@@ -23,6 +26,7 @@ class WebSocketWebRTCService {
   Function(String error)? onError;
   Function()? onConnected;
   Function()? onDisconnected;
+  Function(String userId, bool isSharing)? onRemoteScreenShareChanged;
   
   // STUN servers for NAT traversal with Unified Plan SdpSemantics
   final Map<String, dynamic> _iceServers = {
@@ -60,6 +64,7 @@ class WebSocketWebRTCService {
       debugPrint('   role: $role');
       
       _currentRoom = room;
+      _currentUserId = userId;
       
       // Create WebSocket connection (bypassing Socket.IO)
       final wsUrl = serverUrl.startsWith('http') 
@@ -213,6 +218,10 @@ class WebSocketWebRTCService {
           _handleIceCandidate(messageData);
           break;
           
+        case 'screen-share-status':
+          _handleScreenShareStatus(messageData);
+          break;
+          
         case 'error':
           debugPrint('❌ Server error: ${message['message']}');
           onError?.call('Server error: ${message['message']}');
@@ -295,14 +304,24 @@ class WebSocketWebRTCService {
       
       _remotePeerConnections[peerId] = peerConnection;
       
-      // Add local stream using Unified Plan API
+      // Add local stream using Unified Plan API (AUDIO-FIRST)
       if (_localStream != null) {
         try {
-          // Use addTrack for Unified Plan (modern WebRTC)
-          for (final track in _localStream!.getTracks()) {
-            await peerConnection.addTrack(track, _localStream!);
+          // PRIORITIZE AUDIO TRACKS FIRST
+          final audioTracks = _localStream!.getAudioTracks();
+          for (final audioTrack in audioTracks) {
+            await peerConnection.addTrack(audioTrack, _localStream!);
+            debugPrint('🎤 PRIORITY: Added audio track to peer connection for $peerId');
           }
-          debugPrint('➕ Added local tracks to peer connection for $peerId');
+          
+          // Add video tracks only if available (secondary priority)
+          final videoTracks = _localStream!.getVideoTracks();
+          for (final videoTrack in videoTracks) {
+            await peerConnection.addTrack(videoTrack, _localStream!);
+            debugPrint('📹 Added video track to peer connection for $peerId');
+          }
+          
+          debugPrint('✅ Added local tracks (audio-first) to peer connection for $peerId');
         } catch (e) {
           debugPrint('❌ Failed to add tracks to peer connection for $peerId: $e');
           rethrow; // Don't continue if we can't add tracks
@@ -315,6 +334,11 @@ class WebSocketWebRTCService {
         debugPrint('🎵 Track kind: ${event.track.kind}');
         debugPrint('🎵 Track enabled: ${event.track.enabled}');
         
+        // AUDIO TRACKING
+        if (event.track.kind == 'audio') {
+          debugPrint('🎤 AUDIO TRACK RECEIVED from $userId - PRESERVED!');
+        }
+        
         if (event.streams.isNotEmpty) {
           final stream = event.streams.first;
           _remoteStreams[peerId] = stream;
@@ -322,6 +346,11 @@ class WebSocketWebRTCService {
           debugPrint('🎊 REMOTE STREAM RECEIVED from $userId!');
           debugPrint('🎤 Audio tracks in stream: ${stream.getAudioTracks().length}');
           debugPrint('🎥 Video tracks in stream: ${stream.getVideoTracks().length}');
+          
+          // Highlight audio functionality
+          if (stream.getAudioTracks().isNotEmpty) {
+            debugPrint('✅ AUDIO CONNECTION ACTIVE with $userId');
+          }
           
           onRemoteStream?.call(peerId, stream, userId, role);
         }
@@ -533,6 +562,34 @@ class WebSocketWebRTCService {
     }
   }
   
+  void _handleScreenShareStatus(Map<String, dynamic> data) {
+    try {
+      final userId = data['userId'];
+      final isSharing = data['isSharing'] ?? false;
+      
+      debugPrint('📺 Screen share status from $userId: ${isSharing ? 'started' : 'stopped'}');
+      debugPrint('📺 Current user ID: $_currentUserId');
+      debugPrint('📺 Callback available: ${onRemoteScreenShareChanged != null}');
+      
+      // Don't notify about our own screen sharing
+      if (userId == _currentUserId) {
+        debugPrint('📺 Ignoring own screen share status');
+        return;
+      }
+      
+      // Notify the callback about remote screen share status
+      if (onRemoteScreenShareChanged != null) {
+        onRemoteScreenShareChanged!(userId, isSharing);
+        debugPrint('📺 Called screen share callback for $userId');
+      } else {
+        debugPrint('❌ No screen share callback available');
+      }
+      
+    } catch (e) {
+      debugPrint('❌ Error handling screen share status: $e');
+    }
+  }
+  
   void _sendMessage(Map<String, dynamic> message) {
     if (_channel != null && _isConnected) {
       _channel!.sink.add(jsonEncode(message));
@@ -541,8 +598,186 @@ class WebSocketWebRTCService {
     }
   }
   
+  // Audio-safe screen sharing methods
+  Future<void> startScreenShare() async {
+    try {
+      debugPrint('🖥️ Starting AUDIO-SAFE screen share...');
+      
+      if (_isScreenSharing) {
+        debugPrint('⚠️ Screen sharing already active');
+        return;
+      }
+      
+      MediaStream? screenStream;
+      
+      if (kIsWeb) {
+        // Web platform - use getDisplayMedia for screen capture
+        final screenConstraints = {
+          'audio': false, // Never capture audio to avoid conflicts
+          'video': {
+            'width': {'ideal': 1920},
+            'height': {'ideal': 1080},
+            'frameRate': {'ideal': 15}, // Reduced framerate for stability
+          }
+        };
+        
+        screenStream = await navigator.mediaDevices.getDisplayMedia(screenConstraints);
+      } else {
+        // Mobile platforms - use screen capture from flutter_webrtc
+        try {
+          screenStream = await navigator.mediaDevices.getDisplayMedia({
+            'audio': false, // Never capture audio
+            'video': {
+              'width': {'ideal': 1280}, // Lower resolution for mobile
+              'height': {'ideal': 720},
+              'frameRate': {'ideal': 10}, // Lower framerate for mobile
+            }
+          });
+        } catch (e) {
+          debugPrint('❌ Mobile screen sharing failed: $e');
+          // Fallback: Try to get user media with back camera for "document sharing"
+          try {
+            screenStream = await navigator.mediaDevices.getUserMedia({
+              'audio': false,
+              'video': {
+                'width': {'ideal': 1280},
+                'height': {'ideal': 720},
+                'frameRate': {'ideal': 15},
+                'facingMode': 'environment', // Back camera for document/screen sharing
+              }
+            });
+            debugPrint('📹 Using back camera as screen share alternative on mobile');
+          } catch (e2) {
+            debugPrint('❌ Camera fallback also failed: $e2');
+            onError?.call('Screen sharing not available on this device');
+            return;
+          }
+        }
+      }
+      
+      
+      _screenStream = screenStream;
+      _isScreenSharing = true;
+      
+      debugPrint('✅ Screen capture started - audio connections preserved');
+      
+      // ADD screen tracks without replacing existing tracks
+      for (final entry in _remotePeerConnections.entries) {
+        await _addScreenVideoTrack(entry.value, _screenStream!);
+      }
+      
+      // Listen for screen share ending (user clicks stop sharing)
+      _screenStream!.getVideoTracks().first.onEnded = () {
+        debugPrint('🛑 Screen share ended by user');
+        stopScreenShare();
+      };
+      
+      // Notify peers that screen sharing started
+      _sendMessage({
+        'type': 'screen-share-status',
+        'data': {
+          'userId': _currentUserId,
+          'isSharing': true,
+          'roomId': _currentRoom,
+        }
+      });
+      
+      debugPrint('🎤 Audio connection maintained during screen share');
+      
+    } catch (e) {
+      debugPrint('❌ Failed to start screen share: $e');
+      onError?.call('Failed to start screen share: $e');
+      _isScreenSharing = false;
+    }
+  }
+  
+  Future<void> stopScreenShare() async {
+    try {
+      debugPrint('🛑 Stopping AUDIO-SAFE screen share...');
+      
+      if (!_isScreenSharing || _screenStream == null) {
+        debugPrint('⚠️ Screen sharing not active');
+        return;
+      }
+      
+      // Stop screen stream
+      _screenStream!.getTracks().forEach((track) => track.stop());
+      await _screenStream!.dispose();
+      _screenStream = null;
+      _isScreenSharing = false;
+      
+      // Remove screen tracks without affecting audio
+      for (final entry in _remotePeerConnections.entries) {
+        await _removeScreenVideoTrack(entry.value);
+      }
+      
+      // Notify peers that screen sharing stopped
+      _sendMessage({
+        'type': 'screen-share-status',
+        'data': {
+          'userId': _currentUserId,
+          'isSharing': false,
+          'roomId': _currentRoom,
+        }
+      });
+      
+      debugPrint('✅ Screen share stopped - audio connections preserved');
+      debugPrint('🎤 Audio remains fully functional');
+      
+    } catch (e) {
+      debugPrint('❌ Failed to stop screen share: $e');
+      onError?.call('Failed to stop screen share: $e');
+    }
+  }
+  
+  // Audio-safe screen sharing track management
+  Future<void> _addScreenVideoTrack(RTCPeerConnection pc, MediaStream screenStream) async {
+    try {
+      final screenVideoTrack = screenStream.getVideoTracks().isNotEmpty 
+          ? screenStream.getVideoTracks().first 
+          : null;
+      
+      if (screenVideoTrack != null) {
+        // Add screen track WITHOUT removing existing tracks
+        await pc.addTrack(screenVideoTrack, screenStream);
+        debugPrint('✅ Added screen video track (audio preserved)');
+      }
+    } catch (e) {
+      debugPrint('❌ Failed to add screen video track: $e');
+      // Don't throw - this shouldn't break audio
+    }
+  }
+  
+  Future<void> _removeScreenVideoTrack(RTCPeerConnection pc) async {
+    try {
+      final senders = await pc.getSenders();
+      
+      // Find and remove screen sharing tracks only
+      for (final sender in senders) {
+        if (sender.track?.kind == 'video' && 
+            sender.track?.label?.contains('screen') == true) {
+          await pc.removeTrack(sender);
+          debugPrint('✅ Removed screen video track (audio preserved)');
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Failed to remove screen video track: $e');
+      // Don't throw - this shouldn't break audio
+    }
+  }
+
+  // Deprecated: Use audio-safe methods above instead
+  @Deprecated('Use audio-safe screen sharing methods instead')
+  
+  bool get isScreenSharing => _isScreenSharing;
+  
   Future<void> disconnect() async {
     debugPrint('🔌 Disconnecting WebSocket WebRTC service');
+    
+    // Stop screen share if active
+    if (_isScreenSharing) {
+      await stopScreenShare();
+    }
     
     // Close all peer connections
     for (final peerConnection in _remotePeerConnections.values) {

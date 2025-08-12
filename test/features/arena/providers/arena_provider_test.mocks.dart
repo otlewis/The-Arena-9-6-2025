@@ -326,6 +326,16 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
       ) as _i6.Future<void>);
 
   @override
+  _i6.Future<void> sendPasswordResetEmail(String? email) => (super.noSuchMethod(
+        Invocation.method(
+          #sendPasswordResetEmail,
+          [email],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
   _i6.Future<_i3.User?> getCurrentUser() => (super.noSuchMethod(
         Invocation.method(
           #getCurrentUser,
@@ -668,6 +678,48 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
       ) as _i6.Future<String>);
 
   @override
+  _i6.Future<String> createDiscussionRoom({
+    required String? title,
+    required String? description,
+    required String? createdBy,
+    required String? status,
+    required bool? isPrivate,
+    List<String>? tags,
+    int? maxParticipants = 999999,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #createDiscussionRoom,
+          [],
+          {
+            #title: title,
+            #description: description,
+            #createdBy: createdBy,
+            #status: status,
+            #isPrivate: isPrivate,
+            #tags: tags,
+            #maxParticipants: maxParticipants,
+          },
+        ),
+        returnValue: _i6.Future<String>.value(_i9.dummyValue<String>(
+          this,
+          Invocation.method(
+            #createDiscussionRoom,
+            [],
+            {
+              #title: title,
+              #description: description,
+              #createdBy: createdBy,
+              #status: status,
+              #isPrivate: isPrivate,
+              #tags: tags,
+              #maxParticipants: maxParticipants,
+            },
+          ),
+        )),
+      ) as _i6.Future<String>);
+
+  @override
   _i6.Future<List<Map<String, dynamic>>> getRooms() => (super.noSuchMethod(
         Invocation.method(
           #getRooms,
@@ -966,6 +1018,180 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
       ) as _i6.Future<List<Map<String, dynamic>>>);
 
   @override
+  _i6.Future<String> createDebateDiscussionRoom({
+    required String? name,
+    required String? description,
+    required String? category,
+    required String? debateStyle,
+    required String? createdBy,
+    bool? isPrivate = false,
+    String? password,
+    bool? isScheduled = false,
+    DateTime? scheduledDate,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #createDebateDiscussionRoom,
+          [],
+          {
+            #name: name,
+            #description: description,
+            #category: category,
+            #debateStyle: debateStyle,
+            #createdBy: createdBy,
+            #isPrivate: isPrivate,
+            #password: password,
+            #isScheduled: isScheduled,
+            #scheduledDate: scheduledDate,
+          },
+        ),
+        returnValue: _i6.Future<String>.value(_i9.dummyValue<String>(
+          this,
+          Invocation.method(
+            #createDebateDiscussionRoom,
+            [],
+            {
+              #name: name,
+              #description: description,
+              #category: category,
+              #debateStyle: debateStyle,
+              #createdBy: createdBy,
+              #isPrivate: isPrivate,
+              #password: password,
+              #isScheduled: isScheduled,
+              #scheduledDate: scheduledDate,
+            },
+          ),
+        )),
+      ) as _i6.Future<String>);
+
+  @override
+  _i6.Future<List<Map<String, dynamic>>> getDebateDiscussionRooms() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getDebateDiscussionRooms,
+          [],
+        ),
+        returnValue: _i6.Future<List<Map<String, dynamic>>>.value(
+            <Map<String, dynamic>>[]),
+      ) as _i6.Future<List<Map<String, dynamic>>>);
+
+  @override
+  _i6.Future<Map<String, dynamic>?> getDebateDiscussionRoom(String? roomId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getDebateDiscussionRoom,
+          [roomId],
+        ),
+        returnValue: _i6.Future<Map<String, dynamic>?>.value(),
+      ) as _i6.Future<Map<String, dynamic>?>);
+
+  @override
+  _i6.Future<bool> validateDebateDiscussionRoomPassword({
+    required String? roomId,
+    required String? enteredPassword,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #validateDebateDiscussionRoomPassword,
+          [],
+          {
+            #roomId: roomId,
+            #enteredPassword: enteredPassword,
+          },
+        ),
+        returnValue: _i6.Future<bool>.value(false),
+      ) as _i6.Future<bool>);
+
+  @override
+  _i6.Future<void> joinDebateDiscussionRoom({
+    required String? roomId,
+    required String? userId,
+    String? role = 'participant',
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #joinDebateDiscussionRoom,
+          [],
+          {
+            #roomId: roomId,
+            #userId: userId,
+            #role: role,
+          },
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> leaveDebateDiscussionRoom({
+    required String? roomId,
+    required String? userId,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #leaveDebateDiscussionRoom,
+          [],
+          {
+            #roomId: roomId,
+            #userId: userId,
+          },
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<List<Map<String, dynamic>>> getDebateDiscussionParticipants(
+          String? roomId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getDebateDiscussionParticipants,
+          [roomId],
+        ),
+        returnValue: _i6.Future<List<Map<String, dynamic>>>.value(
+            <Map<String, dynamic>>[]),
+      ) as _i6.Future<List<Map<String, dynamic>>>);
+
+  @override
+  _i6.Future<void> updateDebateDiscussionParticipantRole({
+    required String? roomId,
+    required String? userId,
+    required String? newRole,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updateDebateDiscussionParticipantRole,
+          [],
+          {
+            #roomId: roomId,
+            #userId: userId,
+            #newRole: newRole,
+          },
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> updateDebateDiscussionRoom({
+    required String? roomId,
+    Map<String, dynamic>? data,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updateDebateDiscussionRoom,
+          [],
+          {
+            #roomId: roomId,
+            #data: data,
+          },
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
   _i6.Future<String> createArenaRoom({
     required String? challengeId,
     required String? challengerId,
@@ -1221,6 +1447,23 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
       ) as _i6.Future<void>);
 
   @override
+  _i6.Future<void> updateArenaRoomStatus(
+    String? roomId,
+    String? newStatus,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updateArenaRoomStatus,
+          [
+            roomId,
+            newStatus,
+          ],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
   _i6.Future<void> updateArenaJudgingEnabled(
     String? roomId,
     bool? judgingEnabled,
@@ -1283,6 +1526,16 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
       ) as _i6.Future<List<_i7.UserProfile>>);
 
   @override
+  _i6.Future<void> debugUserSearch() => (super.noSuchMethod(
+        Invocation.method(
+          #debugUserSearch,
+          [],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
   _i6.Future<void> testRealtimeConnection() => (super.noSuchMethod(
         Invocation.method(
           #testRealtimeConnection,
@@ -1337,7 +1590,7 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
     required String? creatorId,
     required String? topic,
     String? description,
-    int? maxParticipants = 8,
+    int? maxParticipants = 1000,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1360,6 +1613,39 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
               #topic: topic,
               #description: description,
               #maxParticipants: maxParticipants,
+            },
+          ),
+        )),
+      ) as _i6.Future<String>);
+
+  @override
+  _i6.Future<String> createScheduledArenaRoom({
+    required String? creatorId,
+    required String? topic,
+    String? description,
+    required DateTime? scheduledTime,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #createScheduledArenaRoom,
+          [],
+          {
+            #creatorId: creatorId,
+            #topic: topic,
+            #description: description,
+            #scheduledTime: scheduledTime,
+          },
+        ),
+        returnValue: _i6.Future<String>.value(_i9.dummyValue<String>(
+          this,
+          Invocation.method(
+            #createScheduledArenaRoom,
+            [],
+            {
+              #creatorId: creatorId,
+              #topic: topic,
+              #description: description,
+              #scheduledTime: scheduledTime,
             },
           ),
         )),
@@ -1778,6 +2064,26 @@ class MockSoundService extends _i1.Mock implements _i13.SoundService {
   _i6.Future<void> playDeniedSound() => (super.noSuchMethod(
         Invocation.method(
           #playDeniedSound,
+          [],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> playInstantMessageSound() => (super.noSuchMethod(
+        Invocation.method(
+          #playInstantMessageSound,
+          [],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> playEmailSound() => (super.noSuchMethod(
+        Invocation.method(
+          #playEmailSound,
           [],
         ),
         returnValue: _i6.Future<void>.value(),

@@ -4,6 +4,10 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../notification_model.dart';
 import '../notification_service.dart';
 import '../notification_types.dart';
+import '../../../models/user_profile.dart';
+import '../../../widgets/modern_chat_interface.dart';
+import '../../../services/appwrite_service.dart';
+import '../../../core/logging/app_logger.dart';
 
 /// Notification center panel that shows notification history
 class NotificationCenter extends StatefulWidget {
@@ -333,6 +337,10 @@ class _NotificationCenterState extends State<NotificationCenter> {
         iconData = Icons.schedule;
         color = Colors.grey;
         break;
+      case NotificationType.instantMessage:
+        iconData = Icons.message;
+        color = const Color(0xFF8B5CF6);
+        break;
     }
 
     return Container(
@@ -419,6 +427,12 @@ class _NotificationCenterState extends State<NotificationCenter> {
     if (action.data != null) {
       final data = action.data!;
       
+      // Handle instant message actions
+      if (action.id == 'open_chat' && data.containsKey('senderId')) {
+        _handleOpenChatAction(data, notification);
+        return;
+      }
+      
       if (data.containsKey('challengeId') && data.containsKey('action')) {
         final challengeId = data['challengeId'] as String;
         final actionType = data['action'] as String;
@@ -446,6 +460,65 @@ class _NotificationCenterState extends State<NotificationCenter> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Navigate to: ${action.deepLink}')),
       );
+    }
+  }
+
+  /// Handle opening chat from instant message notification
+  Future<void> _handleOpenChatAction(Map<String, dynamic> data, ArenaNotification notification) async {
+    try {
+      AppLogger().info('🔔 Opening chat from notification');
+      
+      // Get current user
+      final appwriteService = AppwriteService();
+      final currentUser = await appwriteService.getCurrentUser();
+      if (currentUser == null) {
+        AppLogger().error('🔔 No current user found');
+        return;
+      }
+      
+      final currentUserProfile = await appwriteService.getUserProfile(currentUser.$id);
+      if (currentUserProfile == null) {
+        AppLogger().error('🔔 Current user profile not found');
+        return;
+      }
+      
+      // Create other user profile from notification data
+      final otherUserProfile = UserProfile(
+        id: data['senderId'] as String,
+        name: data['senderUsername'] as String? ?? 'Unknown User',
+        email: '',
+        avatar: data['senderAvatar'] as String?,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+      
+      // Mark notification as read
+      _notificationService.markAsRead(notification.id);
+      
+      // Close notification center
+      widget.onDismiss?.call();
+      
+      // Show modern chat interface
+      if (mounted) {
+        showModernChatInterface(
+          context,
+          currentUser: currentUserProfile,
+          otherUser: otherUserProfile,
+          conversationId: data['conversationId'] as String?,
+        );
+      }
+      
+      AppLogger().info('🔔 Chat opened successfully');
+    } catch (e) {
+      AppLogger().error('🔔 Failed to open chat from notification: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to open chat: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }

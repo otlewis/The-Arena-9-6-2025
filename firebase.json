@@ -3,39 +3,46 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "appDistribution": {
+    "app": "1:18237618385:ios:159de79359b3a43e52edf0",
+    "releaseNotesFile": "RELEASE_NOTES.txt",
+    "groups": [
+      "arena-beta-testers"
+    ]
+  },
   "flutter": {
     "platforms": {
       "android": {
         "default": {
-          "projectId": "thearena-7345e",
-          "appId": "1:695571234525:android:be365e4f1ffd92f507a534",
+          "projectId": "arena-flutter",
+          "appId": "1:18237618385:android:NEED_ANDROID_APP_ID",
           "fileOutput": "android/app/google-services.json"
         }
       },
       "ios": {
         "default": {
-          "projectId": "thearena-7345e",
-          "appId": "1:695571234525:ios:c310a09ed02e1aca07a534",
+          "projectId": "arena-flutter",
+          "appId": "1:18237618385:ios:159de79359b3a43e52edf0",
           "uploadDebugSymbols": false,
           "fileOutput": "ios/Runner/GoogleService-Info.plist"
         }
       },
       "macos": {
         "default": {
-          "projectId": "thearena-7345e",
-          "appId": "1:695571234525:ios:c310a09ed02e1aca07a534",
+          "projectId": "arena-flutter",
+          "appId": "1:18237618385:ios:159de79359b3a43e52edf0",
           "uploadDebugSymbols": false,
           "fileOutput": "macos/Runner/GoogleService-Info.plist"
         }
       },
       "dart": {
         "lib/firebase_options.dart": {
-          "projectId": "thearena-7345e",
+          "projectId": "arena-flutter",
           "configurations": {
-            "android": "1:695571234525:android:be365e4f1ffd92f507a534",
-            "ios": "1:695571234525:ios:c310a09ed02e1aca07a534",
-            "macos": "1:695571234525:ios:c310a09ed02e1aca07a534",
-            "web": "1:695571234525:web:71e4348be176a01907a534"
+            "android": "1:18237618385:android:NEED_ANDROID_APP_ID",
+            "ios": "1:18237618385:ios:159de79359b3a43e52edf0",
+            "macos": "1:18237618385:ios:159de79359b3a43e52edf0",
+            "web": "1:18237618385:web:NEED_WEB_APP_ID"
           }
         }
       }

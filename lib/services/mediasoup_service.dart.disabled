@@ -1,0 +1,677 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+// import 'package:flutter_webrtc/flutter_webrtc.dart'; // Removed - conflicts with Jitsi
+import 'package:socket_io_client/socket_io_client.dart' as io;
+
+class MediaSoupService extends ChangeNotifier {
+  static final MediaSoupService _instance = MediaSoupService._internal();
+  factory MediaSoupService() => _instance;
+  MediaSoupService._internal();
+
+  // Socket.IO connection
+  io.Socket? _socket;
+  
+  // WebRTC
+  RTCPeerConnection? _sendTransport;
+  RTCPeerConnection? _recvTransport;
+  Map<String, MediaStream> _remoteStreams = {};
+  Map<String, MediaStream> _pendingStreams = {}; // trackId -> stream
+  MediaStream? _localStream;
+  
+  // MediaSoup state
+  Map<String, dynamic>? _routerRtpCapabilities;
+  String? _sendTransportId;
+  String? _recvTransportId;
+  Map<String, String> _producers = {}; // producerId -> kind
+  Map<String, String> _consumers = {}; // consumerId -> producerId
+  
+  // State
+  bool _isConnected = false;
+  bool _isMuted = false;
+  bool _isVideoEnabled = true;
+  bool _isDisposed = false;
+  String? _currentRoom;
+  String? _userId;
+  Map<String, String> _peerUserMap = {}; // Maps peerId to userId
+  Map<String, List<String>> _peerProducers = {}; // peerId -> [producerId...]
+  
+  // Callbacks
+  Function(MediaStream)? onLocalStream;
+  Function(String peerId, MediaStream stream)? onRemoteStream;
+  Function(String peerId)? onPeerJoined;
+  Function(String peerId)? onPeerLeft;
+  Function(String)? onError;
+  Function()? onConnected;
+  Function()? onDisconnected;
+  
+  // Getters
+  bool get isConnected => _isConnected;
+  bool get isMuted => _isMuted;
+  bool get isVideoEnabled => _isVideoEnabled;
+  MediaStream? get localStream => _localStream;
+  Map<String, MediaStream> get remoteStreams => _remoteStreams;
+  Map<String, String> get peerUserMap => _peerUserMap;
+
+  Future<void> connect(String serverUrl, String room, String userId, {bool audioOnly = false, bool receiveOnly = false}) async {
+    try {
+      _currentRoom = room;
+      _userId = userId;
+      _isVideoEnabled = !audioOnly;
+      
+      // Connect to MediaSoup server
+      final serverPort = serverUrl.contains('localhost') ? '3000' : '8444';
+      final protocol = serverUrl.contains('localhost') ? 'http' : 'https';
+      final serverUri = '$protocol://$serverUrl:$serverPort';
+      
+      debugPrint('🔌 Connecting to MediaSoup server: $serverUri');
+      
+      _socket = io.io(serverUri, <String, dynamic>{
+        'transports': ['websocket'],
+        'autoConnect': false,
+        'reconnection': true,
+        'reconnectionAttempts': 5,
+        'reconnectionDelay': 1000,
+      });
+      
+      _setupSocketListeners();
+      _socket!.connect();
+      
+      // Wait for connection
+      await _waitForConnection();
+      
+      // Join room and get router capabilities
+      await _joinRoom(room, userId);
+      
+      if (!receiveOnly) {
+        // Initialize local media
+        await _initializeMedia();
+        
+        // Create send transport and start producing
+        await _createSendTransport();
+        await _startProducing();
+      }
+      
+      // Create receive transport and start consuming (everyone can receive)
+      await _createReceiveTransport();
+      await _startConsuming();
+      
+      _isConnected = true;
+      onConnected?.call();
+      notifyListeners();
+      
+    } catch (e) {
+      debugPrint('MediaSoup connection error: $e');
+      onError?.call(e.toString());
+    }
+  }
+
+  void _setupSocketListeners() {
+    _socket!.on('connect', (_) {
+      debugPrint('📡 Connected to MediaSoup server');
+    });
+    
+    _socket!.on('disconnect', (_) {
+      debugPrint('📡 Disconnected from MediaSoup server');
+      _handleDisconnection();
+    });
+    
+    _socket!.on('connect_error', (error) {
+      debugPrint('❌ Socket connection error: $error');
+      onError?.call('Connection error: $error');
+    });
+    
+    _socket!.on('error', (error) {
+      debugPrint('❌ Socket error: $error');
+      onError?.call('Socket error: $error');
+    });
+    
+    _socket!.on('peer-joined', (data) {
+      final peerId = data['peerId'];
+      final userId = data['userId'];
+      debugPrint('👤 Peer joined: $peerId (user: $userId)');
+      // Store the userId mapping
+      if (userId != null) {
+        _peerUserMap[peerId] = userId;
+        debugPrint('🗺️ Updated peer mapping: $peerId -> $userId');
+        
+        // CRITICAL FIX: Try to associate any pending streams immediately
+        _tryAssociatePendingStreams(peerId);
+      }
+      onPeerJoined?.call(peerId);
+    });
+    
+    _socket!.on('peer-left', (data) {
+      final peerId = data['peerId'];
+      debugPrint('👋 Peer left: $peerId');
+      _remoteStreams.remove(peerId);
+      _peerUserMap.remove(peerId);
+      _peerProducers.remove(peerId);
+      onPeerLeft?.call(peerId);
+      notifyListeners();
+    });
+    
+    _socket!.on('new-producer', (data) {
+      final peerId = data['peerId'];
+      final userId = data['userId'];
+      final producerId = data['producerId'];
+      final kind = data['kind'];
+      debugPrint('🎬 New producer: $producerId ($kind) from $peerId (user: $userId)');
+      if (userId != null) {
+        _peerUserMap[peerId] = userId;
+        debugPrint('🗺️ Updated peer mapping: $peerId -> $userId');
+      }
+      
+      // Track which producer belongs to which peer
+      if (!_peerProducers.containsKey(peerId)) {
+        _peerProducers[peerId] = [];
+      }
+      _peerProducers[peerId]!.add(producerId);
+      
+      // CRITICAL FIX: Check if we have pending streams that can now be associated
+      _tryAssociatePendingStreams(peerId);
+      
+      _consumeProducer(producerId, kind);
+    });
+    
+    _socket!.on('consumer-closed', (data) {
+      final consumerId = data['consumerId'];
+      debugPrint('📺 Consumer closed: $consumerId');
+      _consumers.remove(consumerId);
+    });
+  }
+
+  Future<void> _waitForConnection() async {
+    final completer = Completer<void>();
+    
+    // Check if already connected
+    if (_socket!.connected) {
+      return;
+    }
+    
+    // Set up one-time listener for connection
+    void onConnect(_) {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    }
+    
+    _socket!.once('connect', onConnect);
+    
+    // Also listen for connection errors
+    void onError(error) {
+      if (!completer.isCompleted) {
+        completer.completeError(Exception('Socket connection error: $error'));
+      }
+    }
+    
+    _socket!.once('connect_error', onError);
+    
+    return completer.future.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        _socket!.off('connect', onConnect);
+        _socket!.off('connect_error', onError);
+        throw Exception('Connection timeout');
+      },
+    );
+  }
+
+  Future<void> _joinRoom(String roomId, String userId) async {
+    final completer = Completer<Map<String, dynamic>>();
+    
+    _socket!.emitWithAck('join-room', {
+      'roomId': roomId,
+      'userId': userId,
+      'device': {
+        'name': 'Flutter Client',
+        'version': '1.0.0',
+      }
+    }, ack: (data) {
+      if (data['success']) {
+        _routerRtpCapabilities = data['rtpCapabilities'];
+        completer.complete(data);
+      } else {
+        completer.completeError(Exception(data['error']));
+      }
+    });
+    
+    await completer.future;
+    debugPrint('🏠 Joined room: $roomId');
+  }
+
+  Future<void> _initializeMedia() async {
+    try {
+      final Map<String, dynamic> mediaConstraints = {
+        'audio': {
+          'echoCancellation': true,
+          'noiseSuppression': true,
+          'autoGainControl': true,
+        },
+        'video': _isVideoEnabled ? {
+          'facingMode': 'user',
+          'width': {'ideal': 640},
+          'height': {'ideal': 480},
+        } : false,
+      };
+      
+      _localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+      
+      // If video is disabled, ensure no video tracks exist
+      if (!_isVideoEnabled) {
+        final videoTracks = _localStream!.getVideoTracks();
+        for (final track in videoTracks) {
+          track.stop();
+          _localStream!.removeTrack(track);
+        }
+      }
+      
+      onLocalStream?.call(_localStream!);
+      debugPrint('🎥 Local media initialized');
+      
+    } catch (e) {
+      debugPrint('Media initialization error: $e');
+      throw Exception('Failed to access camera/microphone: $e');
+    }
+  }
+
+  Future<void> _createSendTransport() async {
+    final completer = Completer<Map<String, dynamic>>();
+    
+    _socket!.emitWithAck('create-transport', {
+      'direction': 'send'
+    }, ack: (data) {
+      if (data['success']) {
+        completer.complete(data['params']);
+      } else {
+        completer.completeError(Exception(data['error']));
+      }
+    });
+    
+    final params = await completer.future;
+    
+    // Create WebRTC transport
+    _sendTransport = await createPeerConnection({
+      'iceServers': [
+        {'urls': 'stun:stun.l.google.com:19302'},
+      ]
+    });
+    
+    _sendTransportId = params['id'];
+    
+    // Handle ICE candidates
+    _sendTransport!.onIceCandidate = (candidate) {
+      debugPrint('🧊 Send transport ICE candidate: ${candidate.candidate}');
+    };
+    
+    // Connect transport
+    await _connectTransport(_sendTransportId!, params);
+    
+    debugPrint('🚛 Send transport created: $_sendTransportId');
+  }
+
+  Future<void> _createReceiveTransport() async {
+    final completer = Completer<Map<String, dynamic>>();
+    
+    _socket!.emitWithAck('create-transport', {
+      'direction': 'recv'
+    }, ack: (data) {
+      if (data['success']) {
+        completer.complete(data['params']);
+      } else {
+        completer.completeError(Exception(data['error']));
+      }
+    });
+    
+    final params = await completer.future;
+    
+    // Create WebRTC transport
+    _recvTransport = await createPeerConnection({
+      'iceServers': [
+        {'urls': 'stun:stun.l.google.com:19302'},
+      ]
+    });
+    
+    _recvTransportId = params['id'];
+    
+    // Handle ICE candidates and remote streams
+    _recvTransport!.onIceCandidate = (candidate) {
+      debugPrint('🧊 Receive transport ICE candidate: ${candidate.candidate}');
+    };
+    
+    _recvTransport!.onTrack = (event) {
+      debugPrint('🎬 Received remote track: ${event.track.kind}');
+      final stream = event.streams.first;
+      
+      // Store the stream temporarily with track info
+      final trackId = event.track.id ?? 'track-${DateTime.now().millisecondsSinceEpoch}';
+      _pendingStreams[trackId] = stream;
+      
+      debugPrint('📦 Stored pending stream for track: $trackId');
+      debugPrint('🗺️ Current peer-user mapping: $_peerUserMap');
+      debugPrint('📺 Current remote streams: ${_remoteStreams.keys.toList()}');
+      
+      // CRITICAL FIX: Try to immediately associate if we already have peer mappings
+      if (_peerUserMap.isNotEmpty) {
+        debugPrint('🔍 Attempting immediate association for new stream...');
+        // Find the most likely peer for this stream (most recent one with mapping)
+        final availablePeers = _peerUserMap.keys.where((peerId) => !_remoteStreams.containsKey(peerId));
+        if (availablePeers.isNotEmpty) {
+          final targetPeerId = availablePeers.first;
+          final removedStream = _pendingStreams.remove(trackId);
+          if (removedStream != null) {
+            _remoteStreams[targetPeerId] = removedStream;
+            debugPrint('🎯 Immediately associated stream with peer: $targetPeerId (user: ${_peerUserMap[targetPeerId]})');
+            onRemoteStream?.call(targetPeerId, removedStream);
+          }
+        }
+      }
+    };
+    
+    // Add connection state monitoring
+    _recvTransport!.onConnectionState = (state) {
+      debugPrint('🔗 Receive transport connection state: $state');
+    };
+    
+    _recvTransport!.onIceConnectionState = (state) {
+      debugPrint('🧊 Receive transport ICE connection state: $state');
+    };
+    
+    // Connect transport
+    await _connectTransport(_recvTransportId!, params);
+    
+    debugPrint('🚛 Receive transport created: $_recvTransportId');
+  }
+
+  Future<void> _connectTransport(String transportId, Map<String, dynamic> params) async {
+    final completer = Completer<void>();
+    
+    // Set remote description
+    final transport = transportId == _sendTransportId ? _sendTransport : _recvTransport;
+    if (transport != null && params['dtlsParameters'] != null) {
+      // For MediaSoup, we need to handle DTLS parameters differently
+      debugPrint('🔌 Setting up transport with DTLS parameters');
+    }
+    
+    _socket!.emitWithAck('connect-transport', {
+      'transportId': transportId,
+      'dtlsParameters': params['dtlsParameters']
+    }, ack: (data) {
+      if (data['success']) {
+        completer.complete();
+      } else {
+        completer.completeError(Exception(data['error']));
+      }
+    });
+    
+    await completer.future;
+    debugPrint('🔌 Transport connected: $transportId');
+  }
+
+  Future<void> _startProducing() async {
+    if (_localStream == null || _sendTransport == null || _sendTransportId == null) return;
+    
+    // Add local stream tracks to transport
+    for (final track in _localStream!.getTracks()) {
+      final sender = await _sendTransport!.addTrack(track, _localStream!);
+      
+      // Produce track
+      await _produceTrack(_sendTransportId!, track, sender);
+    }
+  }
+
+  Future<void> _produceTrack(String transportId, MediaStreamTrack track, RTCRtpSender sender) async {
+    final completer = Completer<String>();
+    
+    // For MediaSoup, we need to build RTP parameters based on the track kind
+    // This is a simplified version - in production you'd negotiate capabilities
+    final rtpParameters = {
+      'codecs': track.kind == 'audio' ? [
+        {
+          'mimeType': 'audio/opus',
+          'clockRate': 48000,
+          'channels': 2,
+          'payloadType': 111,
+          'parameters': {
+            'minptime': 10,
+            'useinbandfec': 1,
+          },
+        }
+      ] : [
+        {
+          'mimeType': 'video/VP8',
+          'clockRate': 90000,
+          'payloadType': 96,
+          'parameters': {},
+        }
+      ],
+      'headerExtensions': [],
+      'encodings': [
+        {
+          'ssrc': DateTime.now().millisecondsSinceEpoch % 1000000,
+          'active': true,
+        }
+      ],
+      'rtcp': {
+        'cname': 'flutter-client-${DateTime.now().millisecondsSinceEpoch}',
+      },
+    };
+    
+    _socket!.emitWithAck('produce', {
+      'transportId': transportId,
+      'kind': track.kind,
+      'rtpParameters': rtpParameters,
+      'appData': {'trackId': track.id}
+    }, ack: (data) {
+      if (data['success']) {
+        completer.complete(data['id']);
+      } else {
+        completer.completeError(Exception(data['error']));
+      }
+    });
+    
+    final producerId = await completer.future;
+    _producers[producerId] = track.kind!;
+    
+    debugPrint('🎬 Producing ${track.kind}: $producerId');
+  }
+
+  Future<void> _startConsuming() async {
+    // Get existing producers from server
+    final completer = Completer<List<dynamic>>();
+    
+    _socket!.emitWithAck('get-producers', null, ack: (data) {
+      if (data['success']) {
+        completer.complete(data['producers']);
+      } else {
+        completer.completeError(Exception(data['error']));
+      }
+    });
+    
+    final producers = await completer.future;
+    
+    // Consume each producer
+    for (final producer in producers) {
+      await _consumeProducer(producer['producerId'], producer['kind']);
+    }
+  }
+
+  Future<void> _consumeProducer(String producerId, String kind) async {
+    if (_recvTransportId == null || _recvTransport == null) {
+      debugPrint('Receive transport not found for consuming');
+      return;
+    }
+    
+    final completer = Completer<Map<String, dynamic>>();
+    
+    _socket!.emitWithAck('consume', {
+      'transportId': _recvTransportId,
+      'producerId': producerId,
+      'rtpCapabilities': _routerRtpCapabilities
+    }, ack: (data) {
+      if (data['success']) {
+        completer.complete(data['params']);
+      } else {
+        completer.completeError(Exception(data['error']));
+      }
+    });
+    
+    final params = await completer.future;
+    final consumerId = params['id'];
+    final rtpParameters = params['rtpParameters'];
+    
+    _consumers[consumerId] = producerId;
+    
+    // CRITICAL: Add the remote track to receive transport
+    try {
+      // Create a transceiver for receiving the remote track
+      final transceiver = await _recvTransport!.addTransceiver(
+        kind: kind == 'audio' ? RTCRtpMediaType.RTCRtpMediaTypeAudio : RTCRtpMediaType.RTCRtpMediaTypeVideo,
+        init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
+      );
+      
+      debugPrint('📡 Created transceiver for $kind consumer: $consumerId');
+      
+      // This should trigger the onTrack event when the track arrives
+    } catch (e) {
+      debugPrint('❌ Error creating transceiver: $e');
+    }
+    
+    // Resume consumer and associate with peer
+    _socket!.emitWithAck('resume-consumer', {
+      'consumerId': consumerId
+    }, ack: (data) {
+      if (data['success']) {
+        debugPrint('▶️ Consumer resumed: $consumerId');
+        _associatePendingStream(producerId);
+      }
+    });
+    
+    debugPrint('🍽️ Consuming $kind: $consumerId for producer: $producerId');
+  }
+  
+  void _associatePendingStream(String producerId) {
+    // Find the peer that owns this producer
+    String? ownerPeerId;
+    for (final entry in _peerProducers.entries) {
+      if (entry.value.contains(producerId)) {
+        ownerPeerId = entry.key;
+        break;
+      }
+    }
+    
+    if (ownerPeerId != null && _pendingStreams.isNotEmpty) {
+      // Get the most recent pending stream (likely the one we just received)
+      final trackId = _pendingStreams.keys.last;
+      final stream = _pendingStreams.remove(trackId);
+      
+      if (stream != null) {
+        _remoteStreams[ownerPeerId] = stream;
+        debugPrint('🎯 Associated stream with peer: $ownerPeerId (user: ${_peerUserMap[ownerPeerId]})');
+        onRemoteStream?.call(ownerPeerId, stream);
+      }
+    }
+  }
+
+  // CRITICAL FIX: Try to associate any pending streams when we get peer info
+  void _tryAssociatePendingStreams(String peerId) {
+    if (_pendingStreams.isNotEmpty && _peerUserMap.containsKey(peerId)) {
+      debugPrint('🔍 Trying to associate pending streams for peer: $peerId (user: ${_peerUserMap[peerId]})');
+      debugPrint('📦 Available pending streams: ${_pendingStreams.keys.toList()}');
+      
+      // Associate the most recent pending stream with this peer
+      if (_pendingStreams.isNotEmpty) {
+        final trackId = _pendingStreams.keys.last;
+        final stream = _pendingStreams.remove(trackId);
+        
+        if (stream != null) {
+          _remoteStreams[peerId] = stream;
+          debugPrint('🎯 Successfully associated pending stream with peer: $peerId (user: ${_peerUserMap[peerId]})');
+          onRemoteStream?.call(peerId, stream);
+        }
+      }
+    }
+  }
+
+  Future<void> toggleMute() async {
+    if (_localStream != null) {
+      _isMuted = !_isMuted;
+      _localStream!.getAudioTracks().forEach((track) {
+        track.enabled = !_isMuted;
+      });
+      notifyListeners();
+    }
+  }
+
+  Future<void> toggleVideo() async {
+    if (_localStream != null) {
+      _isVideoEnabled = !_isVideoEnabled;
+      _localStream!.getVideoTracks().forEach((track) {
+        track.enabled = _isVideoEnabled;
+      });
+      notifyListeners();
+    }
+  }
+
+  void _handleDisconnection() {
+    _isConnected = false;
+    onDisconnected?.call();
+    notifyListeners();
+  }
+
+  Future<void> disconnect() async {
+    if (_isDisposed || !_isConnected) return;
+    
+    // Close transports
+    _sendTransport?.close();
+    _recvTransport?.close();
+    _sendTransport = null;
+    _recvTransport = null;
+    
+    // Stop local stream
+    _localStream?.getTracks().forEach((track) => track.stop());
+    _localStream?.dispose();
+    _localStream = null;
+    
+    // Clear remote streams
+    for (final stream in _remoteStreams.values) {
+      stream.dispose();
+    }
+    _remoteStreams.clear();
+    
+    // Disconnect socket
+    _socket?.disconnect();
+    _socket = null;
+    
+    // Clear state
+    _sendTransportId = null;
+    _recvTransportId = null;
+    _producers.clear();
+    _consumers.clear();
+    _routerRtpCapabilities = null;
+    _isConnected = false;
+    _currentRoom = null;
+    _peerUserMap.clear();
+    _peerProducers.clear();
+    _pendingStreams.clear();
+    
+    // Reset callbacks
+    onLocalStream = null;
+    onRemoteStream = null;
+    onPeerJoined = null;
+    onPeerLeft = null;
+    onError = null;
+    onConnected = null;
+    onDisconnected = null;
+    
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    if (_isDisposed) return;
+    
+    _isDisposed = true;
+    disconnect();
+    super.dispose();
+  }
+}

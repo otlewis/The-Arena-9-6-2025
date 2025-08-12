@@ -8,17 +8,23 @@ import '../constants/arena_colors.dart';
 class ResultsModal extends StatelessWidget {
   final String winner;
   final UserProfile? affirmativeDebater;
+  final UserProfile? affirmative2Debater;
   final UserProfile? negativeDebater;
+  final UserProfile? negative2Debater;
   final List<dynamic> judgments;
   final String topic;
+  final int? teamSize;
 
   const ResultsModal({
     super.key,
     required this.winner,
     this.affirmativeDebater,
+    this.affirmative2Debater,
     this.negativeDebater,
+    this.negative2Debater,
     required this.judgments,
     required this.topic,
+    this.teamSize,
   });
 
   @override
@@ -176,47 +182,7 @@ class ResultsModal extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12), // Reduced from 16
-                if ((winner == 'affirmative' ? affirmativeDebater : negativeDebater) != null)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.amber, width: 2), // Reduced from 3
-                        ),
-                        child: UserAvatar(
-                          avatarUrl: (winner == 'affirmative' ? affirmativeDebater : negativeDebater)?.avatar,
-                          initials: (winner == 'affirmative' ? affirmativeDebater : negativeDebater)?.name.isNotEmpty == true ? (winner == 'affirmative' ? affirmativeDebater : negativeDebater)!.name[0] : '?',
-                          radius: 24, // Reduced from 32
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              (winner == 'affirmative' ? affirmativeDebater : negativeDebater)?.name ?? 'Unknown',
-                              style: const TextStyle(
-                                fontSize: 16, // Reduced from 20
-                                fontWeight: FontWeight.bold,
-                                color: ArenaColors.deepPurple,
-                              ),
-                            ),
-                            Text(
-                              '${winner.toUpperCase()} SIDE',
-                              style: TextStyle(
-                                fontSize: 12, // Reduced from 14
-                                fontWeight: FontWeight.w600,
-                                color: isAffirmativeWinner ? Colors.green : ArenaColors.scarletRed,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                _buildWinnerDisplay(isAffirmativeWinner),
               ],
             ),
           ),
@@ -416,6 +382,132 @@ class ResultsModal extends StatelessWidget {
               color: Colors.grey[600],
               fontStyle: FontStyle.italic,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWinnerDisplay(bool isAffirmativeWinner) {
+    // Get the winning team members
+    final winningDebater1 = winner == 'affirmative' ? affirmativeDebater : negativeDebater;
+    final winningDebater2 = winner == 'affirmative' ? affirmative2Debater : negative2Debater;
+    
+    // If no debaters found, return empty container
+    if (winningDebater1 == null && winningDebater2 == null) {
+      return const SizedBox.shrink();
+    }
+    
+    // For 1v1 or if only one debater exists, show single debater
+    if ((teamSize ?? 1) == 1 || winningDebater2 == null) {
+      if (winningDebater1 != null) {
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.amber, width: 2),
+              ),
+              child: UserAvatar(
+                avatarUrl: winningDebater1.avatar,
+                initials: winningDebater1.name.isNotEmpty ? winningDebater1.name[0] : '?',
+                radius: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    winningDebater1.name,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: ArenaColors.deepPurple,
+                    ),
+                  ),
+                  Text(
+                    '${winner.toUpperCase()} SIDE',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isAffirmativeWinner ? Colors.green : ArenaColors.scarletRed,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      }
+    } 
+    
+    // For 2v2, show both team members
+    return Column(
+      children: [
+        Text(
+          '${winner.toUpperCase()} TEAM',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: isAffirmativeWinner ? Colors.green : ArenaColors.scarletRed,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            // First team member
+            if (winningDebater1 != null) ...[
+              Expanded(
+                child: _buildTeamMemberCard(winningDebater1),
+              ),
+              if (winningDebater2 != null) const SizedBox(width: 8),
+            ],
+            // Second team member
+            if (winningDebater2 != null)
+              Expanded(
+                child: _buildTeamMemberCard(winningDebater2),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTeamMemberCard(UserProfile debater) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.amber, width: 2),
+            ),
+            child: UserAvatar(
+              avatarUrl: debater.avatar,
+              initials: debater.name.isNotEmpty ? debater.name[0] : '?',
+              radius: 20,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            debater.name,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: ArenaColors.deepPurple,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

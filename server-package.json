@@ -1,0 +1,19 @@
+{
+  "name": "arena-webrtc-server",
+  "version": "1.0.0",
+  "description": "Arena WebRTC signaling server",
+  "main": "arena-webrtc-server.js",
+  "scripts": {
+    "start": "node arena-webrtc-server.js",
+    "dev": "nodemon arena-webrtc-server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.4",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
+EOF < /dev/null

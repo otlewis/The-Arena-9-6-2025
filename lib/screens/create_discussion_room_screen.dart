@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/appwrite_service.dart';
+import '../widgets/challenge_bell.dart';
 import '../core/logging/app_logger.dart';
+import 'debates_discussions_screen.dart';
 
 class CreateDiscussionRoomScreen extends StatefulWidget {
   const CreateDiscussionRoomScreen({super.key});
@@ -149,30 +151,30 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
       // Show success message
       _showSnackBar('Room created successfully!');
       
-      // Add a small delay to ensure database operation completes
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Wait for room setup to complete before navigation
+      AppLogger().info('Waiting for room setup to stabilize before navigation...');
+      await Future.delayed(const Duration(seconds: 1));
       
-      // Use post-frame callback to ensure safe navigation
+      // Verify room exists and is properly set up before navigating
+      final roomData = await _appwriteService.getDebateDiscussionRoom(roomId);
+      if (roomData == null) {
+        throw Exception('Room was not properly created or was deleted');
+      }
+      
+      AppLogger().info('Room verified, proceeding with navigation to: $roomId');
+      
+      // Navigate directly to the created room (using Arena pattern)
       if (mounted) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            try {
-              Navigator.of(context).pop();
-            } catch (e) {
-              AppLogger().error('Navigation error: $e');
-              // If navigation fails, try alternative approach
-              Future.delayed(const Duration(milliseconds: 100), () {
-                if (mounted) {
-                  try {
-                    Navigator.of(context).pop();
-                  } catch (e) {
-                    AppLogger().error('Secondary navigation error: $e');
-                  }
-                }
-              });
-            }
-          }
-        });
+        await Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DebatesDiscussionsScreen(
+              roomId: roomId,
+              roomName: _roomNameController.text.trim(),
+              moderatorName: _userNameController.text.trim(),
+            ),
+          ),
+        );
       }
       
     } catch (e) {
@@ -246,6 +248,8 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          const ChallengeBell(iconColor: Color(0xFF8B5CF6)),
+          const SizedBox(width: 8),
           TextButton(
             onPressed: (_isFormValid && !_isCreating) ? _createRoom : null,
             child: _isCreating 

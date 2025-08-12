@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/chat_message.dart';
 import '../models/user_profile.dart';
-import '../services/chat_service.dart';
+// import '../services/chat_service.dart'; // Removed with new chat system
 import '../core/logging/app_logger.dart';
 
 /// Live chat widget for real-time messaging in Arena rooms
@@ -42,7 +44,8 @@ class LiveChatWidget extends StatefulWidget {
 
 class _LiveChatWidgetState extends State<LiveChatWidget>
     with TickerProviderStateMixin {
-  final ChatService _chatService = ChatService();
+  // Chat service removed - using stub functionality
+  // final ChatService _chatService = ChatService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _messageFocusNode = FocusNode();
@@ -54,8 +57,8 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   
-  List<ChatMessage> _messages = [];
-  List<ChatUserPresence> _activeUsers = [];
+  final List<ChatMessage> _messages = [];
+  final List<ChatUserPresence> _activeUsers = [];
   bool _isLoading = true;
   bool _isSending = false;
   bool _showScrollToBottom = false;
@@ -120,22 +123,23 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
 
   Future<void> _initializeChat() async {
     try {
-      await _chatService.initialize();
-      await _chatService.joinChatRoom(
-        chatRoomId: widget.chatRoomId,
-        user: widget.currentUser,
-        userRole: widget.userRole,
-      );
+      // Stub implementation - chat service removed
+      // await _chatService.initialize();
+      // await _chatService.joinChatRoom(
+      //   chatRoomId: widget.chatRoomId,
+      //   user: widget.currentUser,
+      //   userRole: widget.userRole,
+      // );
       
-      // Subscribe to messages
-      _messagesSubscription = _chatService
-          .getMessagesStream(widget.chatRoomId)
-          .listen(_onMessagesUpdated, onError: _onError);
+      // Subscribe to messages - stub implementation
+      // _messagesSubscription = _chatService
+      //     .getMessagesStream(widget.chatRoomId)
+      //     .listen(_onMessagesUpdated, onError: _onError);
       
-      // Subscribe to user presence
-      _presenceSubscription = _chatService
-          .getPresenceStream(widget.chatRoomId)
-          .listen(_onPresenceUpdated, onError: _onError);
+      // Subscribe to user presence - stub implementation
+      // _presenceSubscription = _chatService
+      //     .getPresenceStream(widget.chatRoomId)
+      //     .listen(_onPresenceUpdated, onError: _onError);
       
       setState(() => _isLoading = false);
     } catch (e) {
@@ -147,41 +151,11 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
     }
   }
 
-  void _onMessagesUpdated(List<ChatMessage> messages) {
-    if (!mounted) return;
-    
-    final shouldAutoScroll = _shouldAutoScroll();
-    
-    setState(() {
-      _messages = messages;
-      _errorMessage = null;
-    });
-    
-    if (shouldAutoScroll) {
-      _scrollToBottom();
-    }
-  }
+  // Removed unused methods since chat service was stubbed out
+  // void _onMessagesUpdated(List<ChatMessage> messages) { ... }
+  // void _onPresenceUpdated(List<ChatUserPresence> presence) { ... }
+  // void _onError(dynamic error) { ... }
 
-  void _onPresenceUpdated(List<ChatUserPresence> presence) {
-    if (!mounted) return;
-    setState(() => _activeUsers = presence);
-  }
-
-  void _onError(dynamic error) {
-    if (!mounted) return;
-    setState(() => _errorMessage = 'Connection error: $error');
-    AppLogger().error('💬 Chat stream error: $error');
-  }
-
-  bool _shouldAutoScroll() {
-    if (!_scrollController.hasClients) return true;
-    
-    final maxScroll = _scrollController.position.maxScrollExtent;
-    final currentScroll = _scrollController.offset;
-    const threshold = 100; // Auto-scroll if within 100px of bottom
-    
-    return (maxScroll - currentScroll) <= threshold;
-  }
 
   Future<void> _scrollToBottom({bool animated = true}) async {
     if (!_scrollController.hasClients) return;
@@ -206,13 +180,14 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
     setState(() => _isSending = true);
     
     try {
-      await _chatService.sendMessage(
-        content: content,
-        chatRoomId: widget.chatRoomId,
-        roomType: widget.roomType,
-        user: widget.currentUser,
-        userRole: widget.userRole,
-      );
+      // Stub implementation - chat service removed
+      // await _chatService.sendMessage(
+      //   content: content,
+      //   chatRoomId: widget.chatRoomId,
+      //   roomType: widget.roomType,
+      //   user: widget.currentUser,
+      //   userRole: widget.userRole,
+      // );
       
       _messageController.clear();
       _scrollToBottom();
@@ -528,20 +503,24 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
   }
 
   Widget _buildMessageContent(ChatMessage message) {
+    final bool isLink = _isMessageALink(message.content);
+    
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: _messageBackground,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(
-        message.content,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 12,
-          height: 1.3,
-        ),
-      ),
+      child: isLink 
+          ? _buildLinkMessage(message.content)
+          : Text(
+              message.content,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                height: 1.3,
+              ),
+            ),
     );
   }
 
@@ -559,6 +538,11 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
   }
 
   Widget _buildMessageInput() {
+    final bool canPostLinks = _canUserPostLinks();
+    final String hintText = canPostLinks 
+        ? 'Type a message or paste a link...'
+        : 'Type a message...';
+    
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: const BoxDecoration(
@@ -578,7 +562,7 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
               maxLength: 500,
               style: const TextStyle(color: Colors.white, fontSize: 12),
               decoration: InputDecoration(
-                hintText: 'Type a message...',
+                hintText: hintText,
                 hintStyle: TextStyle(color: Colors.grey[400], fontSize: 12),
                 border: InputBorder.none,
                 counterText: '',
@@ -655,6 +639,107 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
     
     return '$displayHour:$minute $period';
   }
+  
+  /// Check if user can post links (non-audience members)
+  bool _canUserPostLinks() {
+    final role = widget.userRole?.toLowerCase();
+    return role != 'audience' && role != 'participant' && role != null;
+  }
+  
+  /// Check if message content is a link
+  bool _isMessageALink(String content) {
+    final urlPattern = RegExp(
+      r'https?://[^\s]+',
+      caseSensitive: false,
+    );
+    return urlPattern.hasMatch(content);
+  }
+  
+  /// Build clickable link message
+  Widget _buildLinkMessage(String content) {
+    final urlPattern = RegExp(
+      r'(https?://[^\s]+)',
+      caseSensitive: false,
+    );
+    
+    final matches = urlPattern.allMatches(content);
+    if (matches.isEmpty) {
+      // Fallback to regular text if no links found
+      return Text(
+        content,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          height: 1.3,
+        ),
+      );
+    }
+    
+    // Build rich text with clickable links
+    List<TextSpan> spans = [];
+    int lastEnd = 0;
+    
+    for (final match in matches) {
+      // Add text before link
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(
+          text: content.substring(lastEnd, match.start),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            height: 1.3,
+          ),
+        ));
+      }
+      
+      // Add clickable link
+      final url = match.group(0)!;
+      spans.add(TextSpan(
+        text: url,
+        style: const TextStyle(
+          color: Colors.blue,
+          fontSize: 12,
+          height: 1.3,
+          decoration: TextDecoration.underline,
+        ),
+        recognizer: TapGestureRecognizer()
+          ..onTap = () => _openLink(url),
+      ));
+      
+      lastEnd = match.end;
+    }
+    
+    // Add remaining text after last link
+    if (lastEnd < content.length) {
+      spans.add(TextSpan(
+        text: content.substring(lastEnd),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          height: 1.3,
+        ),
+      ));
+    }
+    
+    return RichText(
+      text: TextSpan(children: spans),
+    );
+  }
+  
+  /// Open link in external browser
+  Future<void> _openLink(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        AppLogger().info('🔗 Opened link: $url');
+      } else {
+        AppLogger().warning('⚠️ Could not launch URL: $url');
+      }
+    } catch (e) {
+      AppLogger().error('❌ Error opening link: $e');
+    }
+  }
 
 
   @override
@@ -682,11 +767,11 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
     _fadeAnimationController.dispose();
     _slideAnimationController.dispose();
     
-    // Leave chat room
-    _chatService.leaveChatRoom(
-      chatRoomId: widget.chatRoomId,
-      userId: widget.currentUser.id,
-    );
+    // Leave chat room - stub implementation
+    // _chatService.leaveChatRoom(
+    //   chatRoomId: widget.chatRoomId,
+    //   userId: widget.currentUser.id,
+    // );
     
     super.dispose();
   }

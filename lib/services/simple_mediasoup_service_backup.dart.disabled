@@ -1,0 +1,1000 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:socket_io_client/socket_io_client.dart' as io;
+
+class SimpleMediaSoupService extends ChangeNotifier {
+  static final SimpleMediaSoupService _instance = SimpleMediaSoupService._internal();
+  factory SimpleMediaSoupService() => _instance;
+  SimpleMediaSoupService._internal();
+
+  // Socket.IO connection
+  io.Socket? _socket;
+  
+  // WebRTC - Multiple peer connections for multi-user support
+  final Map<String, RTCPeerConnection> _peerConnections = {};
+  final Map<String, MediaStream> _remoteStreams = {};
+  MediaStream? _localStream;
+  final Map<String, RTCVideoRenderer> _videoRenderers = {};
+  
+  // State
+  bool _isConnected = false;
+  bool _isMuted = false;
+  bool _isVideoEnabled = false;
+  bool _isDisposed = false;
+  Map<String, dynamic>? _rtpCapabilities;
+  String? _currentRoom; // Track current room
+  String? _userId;
+  String? _userRole; // 'moderator', 'speaker', 'audience'
+  
+  // Audio-only mode - video state tracking removed
+  
+  // Callbacks
+  Function(MediaStream)? onLocalStream;
+  Function(String peerId, MediaStream stream, String? userId, String? role)? onRemoteStream;
+  Function(String peerId, String? userId, String? role)? onPeerJoined;
+  Function(String peerId)? onPeerLeft;
+  Function(String)? onError;
+  Function()? onConnected;
+  Function()? onDisconnected;
+  
+  // Audio-only mode - video callbacks removed
+  
+  // Getters
+  bool get isConnected => _isConnected;
+  bool get isMuted => _isMuted;
+  bool get isLocalVideoEnabled => _isVideoEnabled;
+  String? get userRole => _userRole;
+  MediaStream? get localStream => _localStream;
+  Map<String, MediaStream> get remoteStreams => _remoteStreams;
+  Map<String, RTCVideoRenderer> get videoRenderers => _videoRenderers;
+  int get connectedPeersCount => _connectedPeers.length;
+  
+  bool hasVideoEnabled(String userId) {
+    final stream = _remoteStreams[userId];
+    return stream != null && stream.getVideoTracks().isNotEmpty;
+  }
+
+  Future<void> connect(String serverUrl, String room, String userId, {bool audioOnly = true, String role = 'audience'}) async {
+    try {
+      // Check if already connected to the same room
+      if (_isConnected && _socket != null && _socket!.connected && _currentRoom == room) {
+        debugPrint('⚠️ [SimpleMediaSoupService] Already connected to room: $room, skipping reconnection');
+        return;
+      }
+      
+      // If connected to a different room or disconnected, clean up first
+      if (_socket != null || _currentRoom != room) {
+        debugPrint('🔄 [SimpleMediaSoupService] Switching from room $_currentRoom to $room...');
+        await _forceDisconnect(); // Use force disconnect for proper cleanup
+        await Future.delayed(const Duration(milliseconds: 500)); // Longer delay for cleanup
+      }
+      
+      _currentRoom = room;
+      _userId = userId;
+      _userRole = role;
+      
+      debugPrint('🔌 [SimpleMediaSoupService] Connecting to MediaSoup server: $serverUrl');
+      debugPrint('👤 [SimpleMediaSoupService] User: $userId, Role: $role, Mode: ${audioOnly ? 'Audio-only' : 'Audio+Video'}');
+      debugPrint('🏠 [SimpleMediaSoupService] Room: $room');
+      
+      // Connect to Unified WebRTC server on Linode (simple signaling namespace)
+      const serverPort = '3001'; // Unified server port
+      const protocol = 'http'; // Use HTTP to avoid certificate issues
+      final serverUri = '$protocol://$serverUrl:$serverPort/signaling'; // Simple WebRTC namespace
+      debugPrint('🔌 [SimpleMediaSoupService] Attempting to connect to: $serverUri');
+      
+      _socket = io.io(serverUri, <String, dynamic>{
+        'transports': ['websocket', 'polling'],
+        'autoConnect': false,
+        'timeout': 20000,
+        'forceNew': true,
+        'upgrade': true,
+      });
+      
+      _setupSocketListeners();
+      debugPrint('📡 Starting socket connection...');
+      _socket!.connect();
+      
+      // Wait for connection
+      await _waitForConnection();
+      
+      // Join room with role information (Simple WebRTC format)
+      debugPrint('🏠 [SimpleMediaSoupService] Joining Simple WebRTC room: $room');
+      _joinSimpleRoom(room, userId, role);
+      
+      // Initialize local media
+      debugPrint('🎤 [SimpleMediaSoupService] Initializing local media...');
+      debugPrint('🎭 User role: $role, audioOnly: $audioOnly');
+      await _initializeMedia(audioOnly: audioOnly);
+      
+      // Initialize local media - peer connections will be created as needed
+      
+      _isConnected = true;
+      debugPrint('✅ [SimpleMediaSoupService] Connection established, calling onConnected callback');
+      onConnected?.call();
+      notifyListeners();
+      
+      debugPrint('✅ [SimpleMediaSoupService] Connected to MediaSoup successfully');
+      
+    } catch (e) {
+      debugPrint('❌ MediaSoup connection error: $e');
+      onError?.call(e.toString());
+    }
+  }
+
+  void _setupSocketListeners() {
+    _socket!.on('connect', (_) {
+      debugPrint('✅ [SimpleMediaSoupService] Socket connected to signaling server');
+      _mySocketId = _socket!.id;
+      debugPrint('🆔 [SimpleMediaSoupService] My socket ID: $_mySocketId');
+      debugPrint('🏠 [SimpleMediaSoupService] Current room: $_currentRoom, User role: $_userRole');
+      
+      // Debug: Listen for any event
+      _socket!.onAny((event, data) {
+        debugPrint('📨 [SimpleMediaSoupService] Event received: $event with data: $data');
+      });
+    });
+    
+    _socket!.on('disconnect', (_) {
+      debugPrint('📡 Disconnected from MediaSoup server');
+      // Clean up all peer tracking
+      _connectedPeers.clear();
+      _mySocketId = null;
+      debugPrint('🧹 Cleared all peer connections on disconnect');
+      _handleDisconnection();
+    });
+    
+    _socket!.on('connect_error', (error) {
+      debugPrint('❌ Socket connection error: $error');
+    });
+    
+    _socket!.on('error', (error) {
+      debugPrint('❌ Socket error: $error');
+    });
+    
+    // Handle existing peers when joining room
+    _socket!.on('existing-peers', (data) async {
+      final peers = data['peers'] as List;
+      debugPrint('👥 Found ${peers.length} existing peers in room');
+      
+      for (final peer in peers) {
+        final peerId = peer['peerId'];
+        final userId = peer['userId'];
+        final role = peer['role'];
+        
+        debugPrint('👤 Existing peer: $peerId (User: $userId, Role: $role)');
+        
+        if (!_connectedPeers.contains(peerId)) {
+          _connectedPeers.add(peerId);
+          _peerMetadata[peerId] = {'userId': userId, 'role': role};
+          
+          // Create peer connection
+          await _createPeerConnectionForPeer(peerId);
+          onPeerJoined?.call(peerId, userId, role);
+          
+          // Initiate offer to existing peer
+          await Future.delayed(const Duration(milliseconds: 500));
+          await _createAndSendOffer(peerId);
+        }
+      }
+      notifyListeners();
+    });
+    
+    _socket!.on('peer-joined', (data) async {
+      final peerId = data['peerId'];
+      final userId = data['userId'];
+      final role = data['role'];
+      debugPrint('👤 Peer joined: $peerId (User: $userId, Role: $role, my ID: $_mySocketId)');
+      debugPrint('🔍 PEER DEBUG: Current connected peers: $_connectedPeers');
+      debugPrint('🔍 PEER DEBUG: Current remote streams: ${_remoteStreams.keys.toList()}');
+      
+      // Skip if it's our own socket ID
+      if (peerId == _mySocketId) {
+        debugPrint('🚫 Ignoring self peer-joined event');
+        return;
+      }
+      
+      // Avoid duplicate processing of the same peer
+      if (_connectedPeers.contains(peerId)) {
+        debugPrint('⚠️ Peer $peerId already processed, skipping duplicate...');
+        return;
+      }
+      
+      _connectedPeers.add(peerId);
+      debugPrint('✅ Added peer $peerId to connected peers list');
+      _peerMetadata[peerId] = {'userId': userId, 'role': role};
+      debugPrint('📝 Added peer $peerId to connected peers. Total peers: ${_connectedPeers.length}');
+      
+      // Create a dedicated peer connection for this peer
+      debugPrint('🎭 Creating peer connection as $_userRole for peer $peerId (who is $role)');
+      await _createPeerConnectionForPeer(peerId);
+      
+      onPeerJoined?.call(peerId, userId, role);
+      notifyListeners(); // Update UI with new peer count
+      
+      // Always initiate offers when we detect a new peer - this ensures WebRTC starts
+      // Let the WebRTC collision detection handle any conflicts
+      debugPrint('🔍 Socket ID comparison: My ID: $_mySocketId, Peer ID: $peerId');
+      debugPrint('🎯 Always initiating call to ensure WebRTC connection starts');
+      debugPrint('🎭 As $_userRole, initiating offer to $role peer: $peerId');
+      
+      // Small delay to ensure both peers have processed the join
+      await Future.delayed(const Duration(milliseconds: 500));
+      await _createAndSendOffer(peerId);
+    });
+    
+    _socket!.on('peer-left', (data) {
+      final peerId = data['peerId'];
+      debugPrint('👋 Peer left: $peerId');
+      
+      // Clean up peer tracking and connection
+      _cleanupPeerConnection(peerId);
+      
+      onPeerLeft?.call(peerId);
+      notifyListeners();
+    });
+    
+    
+    // Simple WebRTC signaling
+    _socket!.on('offer', (data) async {
+      final fromPeerId = data['from'];
+      debugPrint('📥 Received offer from $fromPeerId (my ID: $_mySocketId)');
+      debugPrint('📥 Offer data: $data');
+      
+      // Make sure this peer is tracked
+      if (!_connectedPeers.contains(fromPeerId)) {
+        debugPrint('📝 Adding $fromPeerId to connected peers (discovered via offer)');
+        _connectedPeers.add(fromPeerId);
+      }
+      
+      await _handleOffer(data, fromPeerId);
+    });
+    
+    _socket!.on('answer', (data) async {
+      final fromPeerId = data['from'];
+      debugPrint('📥 Received answer from $fromPeerId (my ID: $_mySocketId)');
+      
+      // Make sure this peer is tracked
+      if (!_connectedPeers.contains(fromPeerId)) {
+        debugPrint('📝 Adding $fromPeerId to connected peers (discovered via answer)');
+        _connectedPeers.add(fromPeerId);
+      }
+      
+      await _handleAnswer(data, fromPeerId);
+    });
+    
+    _socket!.on('ice-candidate', (data) async {
+      final fromPeerId = data['from'];
+      debugPrint('🧊 Received ICE candidate from $fromPeerId (my ID: $_mySocketId)');
+      
+      // Make sure this peer is tracked
+      if (!_connectedPeers.contains(fromPeerId)) {
+        debugPrint('📝 Adding $fromPeerId to connected peers (discovered via ICE)');
+        _connectedPeers.add(fromPeerId);
+      }
+      
+      await _handleIceCandidate(data, fromPeerId);
+    });
+    
+    // Audio-only mode - video state listeners removed
+    
+  }
+
+  Future<void> _waitForConnection() async {
+    final completer = Completer<void>();
+    
+    // Check if already connected
+    if (_socket!.connected) {
+      return Future.value();
+    }
+    
+    // Set up one-time listener for connection
+    late void Function(dynamic) connectHandler;
+    connectHandler = (_) {
+      _socket!.off('connect', connectHandler);
+      completer.complete();
+    };
+    
+    _socket!.on('connect', connectHandler);
+    
+    return completer.future.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        _socket!.off('connect', connectHandler);
+        throw Exception('Connection timeout');
+      },
+    );
+  }
+
+  void _joinMediaSoupRoom(String roomId, String userId, String role) {
+    debugPrint('📤 [SimpleMediaSoupService] Joining MediaSoup room: $roomId');
+    
+    // Send join request to MediaSoup server
+    final joinData = {
+      'roomId': roomId,
+      'userId': userId,
+      'role': role,
+      'device': {
+        'name': 'Flutter Client',
+        'version': '1.0.0',
+      },
+    };
+    debugPrint('📤 [SimpleMediaSoupService] Sending join data: $joinData');
+    _socket!.emit('join-room', joinData);
+    
+    debugPrint('🏠 [SimpleMediaSoupService] MediaSoup room join request sent');
+  }
+  
+  void _joinSimpleRoom(String roomId, String userId, String role) {
+    debugPrint('📤 [SimpleMediaSoupService] Joining simple WebRTC room: $roomId');
+    
+    // Send join request to signaling namespace (expects 'join-room' event)
+    final joinData = {
+      'roomId': roomId,
+      'userId': userId,
+      'role': role,
+    };
+    debugPrint('📤 [SimpleMediaSoupService] Sending join-room data: $joinData');
+    _socket!.emit('join-room', joinData);
+    
+    // Listen for join acknowledgment from signaling namespace
+    _socket!.once('room-joined', (data) {
+      debugPrint('✅ [SimpleMediaSoupService] Successfully joined signaling room: $data');
+    });
+    
+    debugPrint('🏠 [SimpleMediaSoupService] Signaling room join request sent, waiting for peers...');
+  }
+
+  Future<void> _initializeMedia({bool audioOnly = true}) async {
+    try {
+      if (audioOnly) {
+        debugPrint('🎤 [SimpleMediaSoupService] Audio-only mode for $_userRole - no microphone needed for audience');
+        // For audience members in audio-only mode, we don't need local media
+        // They will only receive streams from others
+        if (_userRole == 'audience') {
+          debugPrint('🎭 Audience member - skipping local media setup, will only receive');
+          // Don't call onLocalStream for audience members - they don't publish
+          return;
+        }
+        debugPrint('🎤 [SimpleMediaSoupService] Requesting microphone permissions for $_userRole...');
+      } else {
+        debugPrint('🎥 [SimpleMediaSoupService] Requesting camera and microphone permissions for $_userRole...');
+      }
+      
+      // Initialize media stream based on mode
+      final Map<String, dynamic> mediaConstraints = {
+        'audio': {
+          'echoCancellation': true,
+          'noiseSuppression': true,
+          'autoGainControl': true,
+        },
+        'video': audioOnly ? false : {
+          'width': {'ideal': 640},
+          'height': {'ideal': 480},
+          'frameRate': {'ideal': 30},
+          'facingMode': 'user', // Front camera
+        },
+      };
+      
+      _localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+      onLocalStream?.call(_localStream!);
+      
+      // Set initial video state based on tracks available
+      if (!audioOnly && _localStream!.getVideoTracks().isNotEmpty) {
+        _isVideoEnabled = true;
+        debugPrint('🎥 Local media initialized - Audio+Video mode: ✅');
+        debugPrint('🎤 Audio tracks: ${_localStream!.getAudioTracks().length}');
+        debugPrint('🎥 Video tracks: ${_localStream!.getVideoTracks().length}');
+        
+        // Log video track details
+        for (final track in _localStream!.getVideoTracks()) {
+          debugPrint('🎥 Video track: ${track.id}, enabled: ${track.enabled}, kind: ${track.kind}');
+        }
+      } else {
+        _isVideoEnabled = false;
+        debugPrint('🎤 Local media initialized - Audio-only mode: ✅');
+        debugPrint('🎤 Audio tracks: ${_localStream!.getAudioTracks().length}');
+        if (audioOnly) {
+          debugPrint('🎥 Video disabled due to audioOnly=true');
+        } else {
+          debugPrint('🎥 Video disabled - no video tracks available');
+        }
+      }
+      
+    } catch (e) {
+      debugPrint('❌ Media initialization error: $e');
+      
+      // More specific error handling
+      if (e.toString().contains('Permission denied') || 
+          e.toString().contains('NotAllowedError') ||
+          e.toString().contains('PermissionDeniedError')) {
+        final deviceType = audioOnly ? 'microphone' : 'camera and microphone';
+        throw Exception('$deviceType permission denied. Please enable $deviceType access in your device settings and try again.');
+      } else if (e.toString().contains('NotFoundError') || 
+                 e.toString().contains('DevicesNotFoundError')) {
+        final deviceType = audioOnly ? 'microphone' : 'camera or microphone';
+        throw Exception('No $deviceType found. Please check your device has working $deviceType hardware.');
+      } else {
+        final deviceType = audioOnly ? 'microphone' : 'camera and microphone';
+        throw Exception('Failed to access $deviceType: $e');
+      }
+    }
+  }
+  
+  // Video initialization removed - audio-only mode
+
+
+  // Old single peer connection method removed - now using multi-peer architecture
+
+  // Track connected peers to determine who should initiate
+  final Set<String> _connectedPeers = {};
+  final Map<String, Map<String, String?>> _peerMetadata = {}; // peerId -> {userId, role}
+  String? _mySocketId;
+  
+  Future<void> _createPeerConnectionForPeer(String peerId) async {
+    try {
+      debugPrint('🔄 [CreatePeerConnection] Starting creation for $peerId');
+      
+      // Check if we already have a peer connection for this peer
+      if (_peerConnections.containsKey(peerId)) {
+        final existingConnection = _peerConnections[peerId]!;
+        final connectionState = await existingConnection.getConnectionState();
+        if (connectionState != RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+          debugPrint('⚠️ Peer connection for $peerId already exists and is active, skipping...');
+          return;
+        } else {
+          debugPrint('🧹 Removing closed peer connection for $peerId');
+          _cleanupPeerConnection(peerId);
+        }
+      }
+      
+      debugPrint('🔄 [CreatePeerConnection] Creating RTCPeerConnection for $peerId');
+      final configuration = {
+        'iceServers': [
+          {'urls': 'stun:stun.l.google.com:19302'},
+        ]
+      };
+      
+      final peerConnection = await createPeerConnection(configuration);
+      _peerConnections[peerId] = peerConnection;
+      debugPrint('✅ [CreatePeerConnection] RTCPeerConnection created for $peerId');
+      
+      // Initialize ICE candidate buffer for this peer
+      _iceCandidateBuffers[peerId] = [];
+      _remoteDescriptionStates[peerId] = false;
+      
+      debugPrint('🔄 [CreatePeerConnection] Setting up event handlers for $peerId');
+      
+      // Set up event handlers for this peer connection
+      peerConnection.onIceCandidate = (candidate) {
+        debugPrint('🧊 Sending ICE candidate to $peerId');
+        _socket!.emit('ice-candidate', {
+          'candidate': candidate.candidate,
+          'sdpMid': candidate.sdpMid,
+          'sdpMLineIndex': candidate.sdpMLineIndex,
+          'to': peerId,
+          'from': _mySocketId, // Use socket ID for consistency
+        });
+      };
+      
+      peerConnection.onTrack = (event) async {
+        debugPrint('🎬 Received remote track from $peerId: ${event.track.kind}');
+        debugPrint('🎭 I am $_userRole, receiving from peer $peerId (user: ${_peerMetadata[peerId]?['userId']})');
+        final stream = event.streams.first;
+        
+        // CRITICAL DEBUG: Check if stream is being reassigned
+        if (_remoteStreams.containsKey(peerId)) {
+          debugPrint('⚠️ STREAM REASSIGNMENT WARNING: Peer $peerId already has a stream!');
+          debugPrint('⚠️ Previous stream ID: ${_remoteStreams[peerId]?.id}');
+          debugPrint('⚠️ New stream ID: ${stream.id}');
+        }
+        
+        _remoteStreams[peerId] = stream;
+        debugPrint('✅ Assigned stream ${stream.id} to peer $peerId');
+        
+        // Log all tracks in the stream
+        debugPrint('🎬 Stream has ${stream.getTracks().length} total tracks');
+        debugPrint('🎤 Audio tracks: ${stream.getAudioTracks().length}');
+        debugPrint('🎥 Video tracks: ${stream.getVideoTracks().length}');
+        debugPrint('🔍 ALL CURRENT STREAMS: ${_remoteStreams.keys.map((k) => '$k->${_remoteStreams[k]?.id}').join(', ')}');
+        
+        // Initialize video renderer for this peer if video track exists
+        if (stream.getVideoTracks().isNotEmpty) {
+          final renderer = RTCVideoRenderer();
+          await renderer.initialize();
+          renderer.srcObject = stream;
+          _videoRenderers[peerId] = renderer;
+          debugPrint('🎥 Video renderer initialized for peer: $peerId');
+          
+          // Log video track details
+          for (final track in stream.getVideoTracks()) {
+            debugPrint('🎥 Remote video track: ${track.id}, enabled: ${track.enabled}');
+          }
+        } else {
+          debugPrint('🎥 No video tracks in remote stream from $peerId');
+        }
+        
+        // Get metadata for this peer
+        final metadata = _peerMetadata[peerId];
+        final userId = metadata?['userId'];
+        final role = metadata?['role'];
+        
+        debugPrint('🎬 Remote stream metadata - userId: $userId, role: $role');
+        onRemoteStream?.call(peerId, stream, userId, role);
+        notifyListeners();
+      };
+      
+      debugPrint('🔄 [CreatePeerConnection] Adding local stream to peer $peerId');
+      // Add local media tracks to this peer connection
+      await _addLocalStreamToPeer(peerId);
+      
+      debugPrint('🔄 [CreatePeerConnection] Processing buffered candidates for $peerId');
+      // Process any buffered ICE candidates for this peer
+      await _processBufferedCandidatesForPeer(peerId);
+      
+      debugPrint('🔗 [CreatePeerConnection] Completed setup for $peerId');
+      
+    } catch (e) {
+      debugPrint('❌ Failed to create peer connection for $peerId: $e');
+    }
+  }
+
+  Future<void> _addLocalStreamToPeer(String peerId) async {
+    try {
+      final peerConnection = _peerConnections[peerId];
+      if (peerConnection == null) {
+        debugPrint('❌ [AddLocalStream] No peer connection found for $peerId');
+        return;
+      }
+      
+      // Add audio and video tracks
+      if (_localStream != null) {
+        final audioTracks = _localStream!.getAudioTracks();
+        final videoTracks = _localStream!.getVideoTracks();
+        
+        // Debug current track states before adding
+        debugPrint('🔍 [AddLocalStream] Current local stream state before adding to $peerId:');
+        for (final track in audioTracks) {
+          debugPrint('  🎤 Audio track ${track.id}: enabled=${track.enabled}, muted=${track.muted}');
+        }
+        for (final track in videoTracks) {
+          debugPrint('  🎥 Video track ${track.id}: enabled=${track.enabled}, muted=${track.muted}');
+        }
+        
+        debugPrint('🔄 [AddLocalStream] Adding ${audioTracks.length} audio tracks to $peerId');
+        for (final track in audioTracks) {
+          await peerConnection.addTrack(track, _localStream!);
+          debugPrint('➕ Added audio track ${track.id} (enabled: ${track.enabled}) to peer connection for $peerId');
+        }
+        
+        debugPrint('🔄 [AddLocalStream] Adding ${videoTracks.length} video tracks to $peerId');
+        for (final track in videoTracks) {
+          await peerConnection.addTrack(track, _localStream!);
+          debugPrint('➕ Added video track ${track.id} (enabled: ${track.enabled}) to peer connection for $peerId');
+        }
+        
+        // Verify tracks are still enabled after adding
+        debugPrint('🔍 [AddLocalStream] Local stream state after adding to $peerId:');
+        for (final track in audioTracks) {
+          debugPrint('  🎤 Audio track ${track.id}: enabled=${track.enabled}, muted=${track.muted}');
+        }
+        for (final track in videoTracks) {
+          debugPrint('  🎥 Video track ${track.id}: enabled=${track.enabled}, muted=${track.muted}');
+        }
+        
+        debugPrint('📱 [AddLocalStream] Total tracks added to $peerId: ${audioTracks.length + videoTracks.length} (${audioTracks.length} audio, ${videoTracks.length} video)');
+      } else {
+        debugPrint('⚠️ [AddLocalStream] No local stream available for $peerId');
+        
+        // For audience members who don't have local video, still add transceivers to receive video
+        if (_userRole == 'audience') {
+          debugPrint('🎭 Adding transceivers for audience member to receive video from $peerId');
+          await peerConnection.addTransceiver(
+            kind: RTCRtpMediaType.RTCRtpMediaTypeVideo,
+            init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
+          );
+          await peerConnection.addTransceiver(
+            kind: RTCRtpMediaType.RTCRtpMediaTypeAudio,
+            init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
+          );
+        }
+      }
+      
+      debugPrint('📱 [AddLocalStream] Media tracks added to peer connection for $peerId');
+    } catch (e) {
+      debugPrint('❌ [AddLocalStream] Error adding local stream to $peerId: $e');
+      throw e; // Re-throw to fail peer connection creation
+    }
+  }
+  
+  void _cleanupPeerConnection(String peerId) {
+    // Close and remove peer connection
+    final peerConnection = _peerConnections.remove(peerId);
+    if (peerConnection != null) {
+      try {
+        peerConnection.close();
+      } catch (e) {
+        debugPrint('⚠️ Error closing peer connection for $peerId: $e');
+      }
+    }
+    
+    // Remove streams and buffers
+    final remoteStream = _remoteStreams.remove(peerId);
+    if (remoteStream != null) {
+      try {
+        remoteStream.dispose();
+      } catch (e) {
+        debugPrint('⚠️ Error disposing remote stream for $peerId: $e');
+      }
+    }
+    
+    // Clean up video renderer
+    final videoRenderer = _videoRenderers.remove(peerId);
+    if (videoRenderer != null) {
+      try {
+        videoRenderer.dispose();
+      } catch (e) {
+        debugPrint('⚠️ Error disposing video renderer for $peerId: $e');
+      }
+    }
+    
+    _iceCandidateBuffers.remove(peerId);
+    _remoteDescriptionStates.remove(peerId);
+    _connectedPeers.remove(peerId);
+    _peerMetadata.remove(peerId);
+    
+    debugPrint('🧹 Cleaned up peer connection for $peerId. Remaining peers: ${_connectedPeers.length}');
+    notifyListeners(); // Update UI with new peer count
+  }
+
+  Future<void> _createAndSendOffer(String targetPeerId) async {
+    try {
+      final peerConnection = _peerConnections[targetPeerId];
+      if (peerConnection == null) {
+        debugPrint('❌ No peer connection found for $targetPeerId');
+        return;
+      }
+      
+      // Check if peer connection is closed
+      final connectionState = await peerConnection.getConnectionState();
+      debugPrint('🔍 Connection state for $targetPeerId: $connectionState');
+      
+      if (connectionState == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+        debugPrint('❌ Cannot create offer - peer connection for $targetPeerId is closed');
+        return;
+      }
+      
+      // Check if peer connection is in a valid state for creating offers
+      final signalingState = await peerConnection.getSignalingState();
+      debugPrint('🔍 Current signaling state for $targetPeerId: $signalingState');
+      
+      if (signalingState != RTCSignalingState.RTCSignalingStateStable) {
+        debugPrint('⚠️ Cannot create offer - peer connection for $targetPeerId not in stable state: $signalingState');
+        return;
+      }
+      
+      final offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+      
+      debugPrint('📤 Sending offer to $targetPeerId (SDP: ${offer.sdp?.substring(0, 50)}...)');
+      final offerData = {
+        'sdp': offer.sdp,
+        'type': offer.type,
+        'to': targetPeerId,
+        'from': _mySocketId, // Use socket ID instead of user ID
+      };
+      debugPrint('📤 Offer data: $offerData');
+      _socket!.emit('offer', offerData);
+    } catch (e) {
+      debugPrint('❌ Error creating/sending offer to $targetPeerId: $e');
+    }
+  }
+
+  Future<void> _handleOffer(Map<String, dynamic> data, String fromPeerId) async {
+    debugPrint('🔍 [HandleOffer] Looking for peer connection for $fromPeerId');
+    debugPrint('🔍 [HandleOffer] Available peer connections: ${_peerConnections.keys.toList()}');
+    
+    var peerConnection = _peerConnections[fromPeerId];
+    if (peerConnection == null) {
+      debugPrint('❌ No peer connection found for offer from $fromPeerId, creating one...');
+      try {
+        // Create peer connection if it doesn't exist
+        await _createPeerConnectionForPeer(fromPeerId);
+        peerConnection = _peerConnections[fromPeerId];
+        
+        if (peerConnection == null) {
+          debugPrint('❌ Failed to create peer connection for $fromPeerId');
+          return;
+        }
+        debugPrint('✅ Successfully created peer connection for $fromPeerId');
+      } catch (e) {
+        debugPrint('❌ Error creating peer connection for offer from $fromPeerId: $e');
+        return;
+      }
+    }
+    
+    try {
+      // Check current signaling state before processing offer
+      final signalingState = await peerConnection.getSignalingState();
+      debugPrint('📥 Received offer from $fromPeerId, current signaling state: $signalingState');
+      
+      // Handle collision case - if we're already in have-local-offer state
+      if (signalingState == RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
+        debugPrint('⚡ Collision detected - both peers sent offers. Comparing socket IDs...');
+        
+        // The peer with higher socket ID should back down and accept the other's offer
+        if (_mySocketId != null && _mySocketId!.compareTo(fromPeerId) > 0) {
+          debugPrint('🔄 I have higher socket ID ($_mySocketId > $fromPeerId), backing down and accepting their offer');
+          // Reset to stable state first
+          await peerConnection.setLocalDescription(await peerConnection.createAnswer());
+        } else {
+          debugPrint('🚫 I have lower socket ID ($_mySocketId < $fromPeerId), ignoring their offer');
+          return;
+        }
+      }
+      
+      final offer = RTCSessionDescription(data['sdp'], data['type']);
+      await peerConnection.setRemoteDescription(offer);
+      
+      // Mark remote description as set and process buffered candidates for this peer
+      _remoteDescriptionStates[fromPeerId] = true;
+      await _addBufferedIceCandidates(fromPeerId);
+      
+      final answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      
+      debugPrint('📤 Sending answer to $fromPeerId');
+      _socket!.emit('answer', {
+        'sdp': answer.sdp,
+        'type': answer.type,
+        'to': fromPeerId,
+        'from': _mySocketId, // Use socket ID for consistency
+      });
+    } catch (e) {
+      debugPrint('❌ Error handling offer from $fromPeerId: $e');
+    }
+  }
+
+  Future<void> _handleAnswer(Map<String, dynamic> data, String fromPeerId) async {
+    debugPrint('🔍 [HandleAnswer] Looking for peer connection for $fromPeerId');
+    debugPrint('🔍 [HandleAnswer] Available peer connections: ${_peerConnections.keys.toList()}');
+    
+    var peerConnection = _peerConnections[fromPeerId];
+    if (peerConnection == null) {
+      debugPrint('❌ No peer connection found for answer from $fromPeerId');
+      debugPrint('⚠️ Cannot create peer connection for incoming answer - answers require existing offers');
+      return;
+    }
+    
+    try {
+      // Check signaling state before setting answer
+      final signalingState = await peerConnection.getSignalingState();
+      debugPrint('🔍 [HandleAnswer] Current signaling state for $fromPeerId: $signalingState');
+      
+      if (signalingState != RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
+        debugPrint('❌ Cannot set answer - peer connection not in have-local-offer state: $signalingState');
+        return;
+      }
+      
+      final answer = RTCSessionDescription(data['sdp'], data['type']);
+      await peerConnection.setRemoteDescription(answer);
+      
+      // Mark remote description as set and process buffered candidates for this peer
+      _remoteDescriptionStates[fromPeerId] = true;
+      await _addBufferedIceCandidates(fromPeerId);
+      
+      debugPrint('✅ Answer set successfully for $fromPeerId');
+    } catch (e) {
+      debugPrint('❌ Error handling answer from $fromPeerId: $e');
+    }
+  }
+
+  // Buffer ICE candidates until remote description is set (per peer)
+  final Map<String, List<RTCIceCandidate>> _iceCandidateBuffers = {};
+  final Map<String, bool> _remoteDescriptionStates = {};
+
+  Future<void> _handleIceCandidate(Map<String, dynamic> data, String fromPeerId) async {
+    debugPrint('🔍 [HandleICE] Looking for peer connection for $fromPeerId');
+    debugPrint('🔍 [HandleICE] Available peer connections: ${_peerConnections.keys.toList()}');
+    
+    var peerConnection = _peerConnections[fromPeerId];
+    if (peerConnection == null) {
+      debugPrint('❌ No peer connection found for ICE candidate from $fromPeerId');
+      debugPrint('⚠️ Buffering ICE candidate until peer connection is established');
+      
+      // Buffer the candidate for when the peer connection is created
+      _iceCandidateBuffers[fromPeerId] ??= [];
+      final candidate = RTCIceCandidate(
+        data['candidate'],
+        data['sdpMid'],
+        data['sdpMLineIndex'],
+      );
+      _iceCandidateBuffers[fromPeerId]!.add(candidate);
+      debugPrint('🧊 ICE candidate buffered for $fromPeerId (${_iceCandidateBuffers[fromPeerId]!.length} total)');
+      return;
+    }
+    
+    final candidate = RTCIceCandidate(
+      data['candidate'],
+      data['sdpMid'],
+      data['sdpMLineIndex'],
+    );
+    
+    final isRemoteDescriptionSet = _remoteDescriptionStates[fromPeerId] ?? false;
+    
+    if (isRemoteDescriptionSet) {
+      // Remote description is set, add candidate immediately
+      try {
+        await peerConnection.addCandidate(candidate);
+        debugPrint('🧊 ICE candidate added for $fromPeerId');
+      } catch (e) {
+        debugPrint('❌ Error adding ICE candidate for $fromPeerId: $e');
+      }
+    } else {
+      // Buffer candidate for later
+      _iceCandidateBuffers[fromPeerId] ??= [];
+      _iceCandidateBuffers[fromPeerId]!.add(candidate);
+      debugPrint('🧊 ICE candidate buffered for $fromPeerId (${_iceCandidateBuffers[fromPeerId]!.length} total)');
+    }
+  }
+  
+  Future<void> _processBufferedCandidatesForPeer(String peerId) async {
+    final buffer = _iceCandidateBuffers[peerId];
+    if (buffer == null || buffer.isEmpty) return;
+    
+    debugPrint('🧊 Processing ${buffer.length} buffered ICE candidates for $peerId (from peer creation)');
+    final peerConnection = _peerConnections[peerId];
+    if (peerConnection == null) return;
+    
+    // We can't add ICE candidates until remote description is set, so just leave them buffered
+    // They will be processed when the remote description is set
+    debugPrint('🧊 ICE candidates remain buffered until remote description is set for $peerId');
+  }
+
+  Future<void> _addBufferedIceCandidates(String peerId) async {
+    final buffer = _iceCandidateBuffers[peerId];
+    final peerConnection = _peerConnections[peerId];
+    
+    if (buffer == null || peerConnection == null) return;
+    
+    debugPrint('🧊 Adding ${buffer.length} buffered ICE candidates for $peerId');
+    for (final candidate in buffer) {
+      try {
+        await peerConnection.addCandidate(candidate);
+        debugPrint('🧊 Buffered ICE candidate added for $peerId');
+      } catch (e) {
+        debugPrint('❌ Error adding buffered ICE candidate for $peerId: $e');
+      }
+    }
+    buffer.clear();
+  }
+
+  Future<void> toggleMute() async {
+    if (_localStream != null) {
+      _isMuted = !_isMuted;
+      _localStream!.getAudioTracks().forEach((track) {
+        track.enabled = !_isMuted;
+      });
+      notifyListeners();
+    }
+  }
+
+  Future<void> toggleLocalVideo() async {
+    if (_localStream != null) {
+      _isVideoEnabled = !_isVideoEnabled;
+      _localStream!.getVideoTracks().forEach((track) {
+        track.enabled = _isVideoEnabled;
+      });
+      debugPrint('🎥 Local video ${_isVideoEnabled ? 'enabled' : 'disabled'}');
+      notifyListeners();
+    }
+  }
+  
+  // All video-related methods removed - audio-only mode
+
+  // Video renderer methods removed - audio-only mode
+
+  void _handleDisconnection() {
+    _isConnected = false;
+    onDisconnected?.call();
+    notifyListeners();
+  }
+
+  Future<void> _forceDisconnect() async {
+    debugPrint('🧹 [SimpleMediaSoupService] Force disconnecting...');
+    
+    // Close all peer connections immediately
+    for (final entry in _peerConnections.entries) {
+      final peerId = entry.key;
+      final peerConnection = entry.value;
+      try {
+        debugPrint('🔒 Closing peer connection for $peerId');
+        await peerConnection.close();
+      } catch (e) {
+        debugPrint('⚠️ Error closing peer connection for $peerId: $e');
+      }
+    }
+    _peerConnections.clear();
+    
+    // Stop local audio stream
+    if (_localStream != null) {
+      _localStream!.getTracks().forEach((track) {
+        try {
+          track.stop();
+        } catch (e) {
+          debugPrint('⚠️ Error stopping track: $e');
+        }
+      });
+      _localStream?.dispose();
+      _localStream = null;
+    }
+    
+    // Clear remote streams and video renderers
+    for (final entry in _remoteStreams.entries) {
+      try {
+        entry.value.dispose();
+      } catch (e) {
+        debugPrint('⚠️ Error disposing remote stream for ${entry.key}: $e');
+      }
+    }
+    _remoteStreams.clear();
+    
+    // Clean up video renderers
+    for (final entry in _videoRenderers.entries) {
+      try {
+        await entry.value.dispose();
+      } catch (e) {
+        debugPrint('⚠️ Error disposing video renderer for ${entry.key}: $e');
+      }
+    }
+    _videoRenderers.clear();
+    
+    // Disconnect socket
+    if (_socket != null) {
+      try {
+        _socket!.disconnect();
+      } catch (e) {
+        debugPrint('⚠️ Error disconnecting socket: $e');
+      }
+      _socket = null;
+    }
+    
+    // Clear state
+    _isConnected = false;
+    _currentRoom = null;
+    _remoteDescriptionStates.clear();
+    _iceCandidateBuffers.clear();
+    _connectedPeers.clear();
+    _peerMetadata.clear();
+    _mySocketId = null;
+    
+    debugPrint('✅ [SimpleMediaSoupService] Force disconnect complete');
+  }
+
+  Future<void> disconnect() async {
+    if (_isDisposed) return;
+    
+    await _forceDisconnect();
+    
+    // Reset callbacks
+    onLocalStream = null;
+    onRemoteStream = null;
+    onPeerJoined = null;
+    onPeerLeft = null;
+    onError = null;
+    onConnected = null;
+    onDisconnected = null;
+    
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    if (_isDisposed) return;
+    
+    _isDisposed = true;
+    disconnect();
+    super.dispose();
+  }
+}

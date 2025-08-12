@@ -1,12 +1,12 @@
-import { Client, Databases, Query, Functions } from 'node-appwrite';
+import { Client, Databases, Query } from 'node-appwrite';
 
 /**
- * Appwrite Function: Timer Ticker
+ * Appwrite Function: Timer Ticker with Second-level Precision
  * 
- * Scheduled function that runs every second to update all active timers
- * This ensures perfect synchronization across all clients
+ * Scheduled function that runs every minute but creates internal second-by-second updates
+ * This ensures near-perfect synchronization across all clients
  * 
- * Schedule: Every 1 second via cron expression "* * * * * *"
+ * Schedule: Every 1 minute via cron expression "* * * * *"
  * Runtime: Node.js 18.0
  */
 
@@ -17,51 +17,64 @@ const client = new Client()
   .setKey(process.env.APPWRITE_API_KEY);
 
 const databases = new Databases(client);
-const functions = new Functions(client);
 
 // Constants
 const DATABASE_ID = process.env.APPWRITE_DATABASE_ID;
-const TIMER_CONTROLLER_FUNCTION_ID = process.env.TIMER_CONTROLLER_FUNCTION_ID;
+const MAX_EXECUTION_TIME = 12000; // 12 seconds to avoid timeout
 
 /**
- * Main function handler - runs every second
+ * Main function handler - runs internal loop for second-level precision
  */
 export default async ({ req, res, log, error }) => {
   try {
     const startTime = Date.now();
+    let totalUpdated = 0;
+    let totalCompleted = 0;
+    let tickCount = 0;
     
-    log('Timer Ticker: Starting scheduled tick...');
+    log('Timer Ticker: Starting second-level precision loop...');
     
-    // Call the timer controller function to update all active timers
-    const result = await functions.createExecution(
-      TIMER_CONTROLLER_FUNCTION_ID,
-      JSON.stringify({
-        action: 'tick'
-      }),
-      false, // sync execution
-      '/tick',
-      'POST',
-      {
-        'Content-Type': 'application/json'
-      }
-    );
-    
-    const duration = Date.now() - startTime;
-    
-    if (result.responseStatusCode === 200) {
-      const response = JSON.parse(result.responseBody);
-      log(`Timer Ticker: Success - Updated: ${response.updated}, Completed: ${response.completed}, Duration: ${duration}ms`);
+    // Run internal loop for up to 50 seconds (allowing 10s buffer for cleanup)
+    while ((Date.now() - startTime) < MAX_EXECUTION_TIME) {
+      const tickStartTime = Date.now();
       
-      return res.json({
-        success: true,
-        updated: response.updated,
-        completed: response.completed,
-        duration: duration,
-        timestamp: new Date().toISOString()
-      });
-    } else {
-      throw new Error(`Timer controller function failed: ${result.responseStatusCode} - ${result.responseBody}`);
+      try {
+        // Update all running timers
+        const result = await updateRunningTimers(log, error);
+        
+        totalUpdated += result.updated;
+        totalCompleted += result.completed;
+        tickCount++;
+        
+        if (result.updated > 0 || result.completed > 0) {
+          log(`Tick ${tickCount}: Updated ${result.updated}, Completed ${result.completed}`);
+        }
+        
+      } catch (tickError) {
+        error(`Tick ${tickCount} failed: ${tickError.message}`);
+      }
+      
+      // Wait for remainder of 1 second
+      const tickDuration = Date.now() - tickStartTime;
+      const waitTime = Math.max(0, 1000 - tickDuration);
+      
+      if (waitTime > 0) {
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
     }
+    
+    const totalDuration = Date.now() - startTime;
+    
+    log(`Timer Ticker: Completed ${tickCount} ticks in ${totalDuration}ms - Updated: ${totalUpdated}, Completed: ${totalCompleted}`);
+    
+    return res.json({
+      success: true,
+      updated: totalUpdated,
+      completed: totalCompleted,
+      ticks: tickCount,
+      duration: totalDuration,
+      timestamp: new Date().toISOString()
+    });
     
   } catch (err) {
     error(`Timer Ticker Error: ${err.message}`);
@@ -75,9 +88,9 @@ export default async ({ req, res, log, error }) => {
 };
 
 /**
- * Alternative implementation: Direct database updates (use if function calls are limited)
+ * Update all running timers - called every second
  */
-async function directTimerTick(log, error) {
+async function updateRunningTimers(log, error) {
   try {
     const now = new Date().toISOString();
     const nowMs = Date.now();
@@ -89,71 +102,77 @@ async function directTimerTick(log, error) {
       [
         Query.equal('status', 'running'),
         Query.equal('isActive', true),
-        Query.limit(100) // Process in batches
+        Query.limit(50) // Process reasonable batch size
       ]
     );
+
+    if (runningTimers.documents.length === 0) {
+      return { updated: 0, completed: 0 };
+    }
 
     let updatedCount = 0;
     let completedCount = 0;
     const updates = [];
 
-    // Prepare batch updates
+    // Calculate updates for each timer
     for (const timer of runningTimers.documents) {
-      const startTime = new Date(timer.startTime).getTime();
-      const elapsed = Math.floor((nowMs - startTime) / 1000);
-      const remainingSeconds = Math.max(0, timer.remainingSeconds - elapsed);
+      try {
+        const startTime = new Date(timer.startTime).getTime();
+        const elapsed = Math.floor((nowMs - startTime) / 1000);
+        const remainingSeconds = Math.max(0, timer.durationSeconds - elapsed);
 
-      if (remainingSeconds <= 0) {
-        // Timer completed
-        updates.push({
-          id: timer.$id,
-          data: {
-            status: 'completed',
-            remainingSeconds: 0,
-            lastTick: now,
-            isActive: false
-          }
-        });
-        completedCount++;
-      } else {
-        // Update remaining time
-        updates.push({
-          id: timer.$id,
-          data: {
-            remainingSeconds: remainingSeconds,
-            lastTick: now
-          }
-        });
-        updatedCount++;
+        if (remainingSeconds <= 0) {
+          // Timer completed
+          updates.push({
+            id: timer.$id,
+            data: {
+              status: 'completed',
+              remainingSeconds: 0,
+              lastTick: now,
+              isActive: false
+            }
+          });
+          completedCount++;
+        } else if (remainingSeconds !== timer.remainingSeconds) {
+          // Update remaining time only if changed
+          updates.push({
+            id: timer.$id,
+            data: {
+              remainingSeconds: remainingSeconds,
+              lastTick: now
+            }
+          });
+          updatedCount++;
+        }
+      } catch (timerError) {
+        error(`Error processing timer ${timer.$id}: ${timerError.message}`);
       }
     }
 
-    // Execute batch updates
-    const updatePromises = updates.map(update => 
-      databases.updateDocument(
-        DATABASE_ID,
-        'timers',
-        update.id,
-        update.data
-      ).catch(err => {
-        log(`Error updating timer ${update.id}: ${err.message}`);
-        return null;
-      })
-    );
+    // Execute batch updates with error handling
+    if (updates.length > 0) {
+      const updatePromises = updates.map(update => 
+        databases.updateDocument(
+          DATABASE_ID,
+          'timers',
+          update.id,
+          update.data
+        ).catch(err => {
+          error(`Error updating timer ${update.id}: ${err.message}`);
+          return null;
+        })
+      );
 
-    await Promise.all(updatePromises);
+      await Promise.all(updatePromises);
+    }
 
-    log(`Direct Timer Tick: ${updatedCount} updated, ${completedCount} completed`);
-    
     return {
-      success: true,
       updated: updatedCount,
-      completed: completedCount,
-      timestamp: now
+      completed: completedCount
     };
     
   } catch (err) {
-    error(`Direct Timer Tick Error: ${err.message}`);
+    error(`updateRunningTimers Error: ${err.message}`);
     throw err;
   }
 }

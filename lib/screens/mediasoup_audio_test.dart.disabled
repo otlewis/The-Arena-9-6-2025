@@ -1,0 +1,459 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+import '../services/simple_mediasoup_service.dart';
+import '../services/appwrite_service.dart';
+import '../models/user_profile.dart';
+import '../core/logging/app_logger.dart';
+
+class MediaSoupAudioTest extends StatefulWidget {
+  const MediaSoupAudioTest({Key? key}) : super(key: key);
+
+  @override
+  State<MediaSoupAudioTest> createState() => _MediaSoupAudioTestState();
+}
+
+class _MediaSoupAudioTestState extends State<MediaSoupAudioTest> {
+  final AppwriteService _appwrite = AppwriteService();
+  final SimpleMediaSoupService _mediasoup = SimpleMediaSoupService();
+  
+  // Authentication and user info
+  UserProfile? _currentUser;
+  
+  // Room state
+  String _roomId = 'MEDIASOUP_AUDIO_TEST';
+  String _userId = 'USER_1';
+  bool _isConnected = false;
+  bool _inRoom = false;
+  bool _isMuted = false;
+  String _status = 'Ready to connect';
+  
+  // Audio streams
+  Map<String, MediaStream> _remoteStreams = {};
+  List<String> _participants = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+    _setupMediaSoupCallbacks();
+  }
+
+  Future<void> _initialize() async {
+    await _loadCurrentUser();
+  }
+
+  Future<void> _loadCurrentUser() async {
+    try {
+      final currentUser = await _appwrite.getCurrentUser();
+      if (currentUser != null) {
+        final userProfile = await _appwrite.getUserProfile(currentUser.$id);
+        setState(() {
+          _currentUser = userProfile;
+          _userId = 'USER_${_currentUser!.id.substring(0, 6)}';
+        });
+        AppLogger().debug("Loaded user: ${userProfile?.name}");
+      }
+    } catch (e) {
+      AppLogger().error("Error loading current user: $e");
+      setState(() {
+        _userId = 'USER_GUEST';
+      });
+    }
+  }
+
+  void _setupMediaSoupCallbacks() {
+    _mediasoup.onConnected = () {
+      AppLogger().debug("✅ Connected to MediaSoup server");
+      setState(() {
+        _isConnected = true;
+        _status = 'Connected - ready to join room';
+      });
+    };
+
+    _mediasoup.onDisconnected = () {
+      AppLogger().debug("❌ Disconnected from MediaSoup server");
+      setState(() {
+        _isConnected = false;
+        _inRoom = false;
+        _status = 'Disconnected';
+      });
+    };
+
+    _mediasoup.onError = (error) {
+      AppLogger().error("❌ MediaSoup error: $error");
+      setState(() {
+        _status = 'Error: $error';
+      });
+    };
+
+    _mediasoup.onLocalStream = (stream) {
+      AppLogger().debug("🎤 Local audio stream ready");
+      setState(() {
+        _status = 'Local audio ready';
+      });
+    };
+
+    _mediasoup.onRemoteStream = (peerId, stream) {
+      AppLogger().debug("🔊 Remote audio from: $peerId");
+      setState(() {
+        _remoteStreams[peerId] = stream;
+        if (!_participants.contains(peerId)) {
+          _participants.add(peerId);
+        }
+      });
+    };
+
+    _mediasoup.onPeerJoined = (peerId) {
+      AppLogger().debug("👥 Peer joined: $peerId");
+      setState(() {
+        if (!_participants.contains(peerId)) {
+          _participants.add(peerId);
+        }
+      });
+    };
+
+    _mediasoup.onPeerLeft = (peerId) {
+      AppLogger().debug("👋 Peer left: $peerId");
+      setState(() {
+        _participants.remove(peerId);
+        _remoteStreams.remove(peerId);
+      });
+    };
+  }
+
+  Future<void> _connectToServer() async {
+    if (_isConnected) return;
+
+    setState(() {
+      _status = 'Connecting to MediaSoup server...';
+    });
+
+    try {
+      // Use Mac's IP address like we did for WebRTC
+      await _mediasoup.connect('192.168.4.94', _roomId, _userId, audioOnly: true);
+      
+      setState(() {
+        _inRoom = true;
+        _status = 'Connected to audio room';
+      });
+      
+      AppLogger().debug("🏠 Joined MediaSoup room: $_roomId as $_userId");
+    } catch (e) {
+      AppLogger().error("❌ Failed to connect: $e");
+      setState(() {
+        _status = 'Connection failed: $e';
+      });
+    }
+  }
+
+  Future<void> _leaveRoom() async {
+    if (!_inRoom) return;
+
+    await _mediasoup.disconnect();
+    
+    setState(() {
+      _inRoom = false;
+      _isConnected = false;
+      _participants.clear();
+      _remoteStreams.clear();
+      _status = 'Disconnected';
+    });
+
+    AppLogger().debug("👋 Left MediaSoup room: $_roomId");
+  }
+
+  void _toggleMute() {
+    setState(() {
+      _isMuted = !_isMuted;
+    });
+
+    // Note: SimpleMediaSoupService should have a mute method
+    // _mediasoup.muteAudio(_isMuted);
+    
+    AppLogger().debug("🎤 Audio ${_isMuted ? 'muted' : 'unmuted'}");
+  }
+
+  @override
+  void dispose() {
+    _leaveRoom();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('MediaSoup Audio Test'),
+        backgroundColor: Colors.purple,
+        foregroundColor: Colors.white,
+      ),
+      backgroundColor: Colors.black,
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Status info
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[900],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _inRoom ? Colors.green : (_isConnected ? Colors.orange : Colors.red),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    'User: ${_currentUser?.name ?? 'Loading...'}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Status: $_status',
+                    style: const TextStyle(color: Colors.white70),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Participants: ${_participants.length}',
+                    style: const TextStyle(color: Colors.white70),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Room: $_roomId | User: $_userId',
+                    style: const TextStyle(color: Colors.purple, fontSize: 11),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Connection controls
+            if (!_isConnected) ...[ 
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _connectToServer,
+                  icon: const Icon(Icons.connect_without_contact, color: Colors.white),
+                  label: const Text(
+                    'Connect & Join Room',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purple,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            
+            const SizedBox(height: 20),
+            
+            // Participant list
+            Expanded(
+              child: _buildParticipantList(),
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: _inRoom ? Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          FloatingActionButton(
+            heroTag: "mute",
+            onPressed: _toggleMute,
+            backgroundColor: _isMuted ? Colors.red : Colors.green,
+            child: Icon(
+              _isMuted ? Icons.mic_off : Icons.mic,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 16),
+          FloatingActionButton(
+            heroTag: "leave",
+            onPressed: _leaveRoom,
+            backgroundColor: Colors.red,
+            child: const Icon(Icons.call_end, color: Colors.white),
+          ),
+        ],
+      ) : null,
+    );
+  }
+
+  Widget _buildParticipantList() {
+    List<Widget> participantWidgets = [];
+
+    // Add local user first
+    participantWidgets.add(
+      _buildParticipantCard(
+        name: _currentUser?.name ?? 'You',
+        userId: _userId,
+        isLocal: true,
+        isSpeaking: !_isMuted,
+        hasAudio: _mediasoup.localStream != null,
+      ),
+    );
+
+    // Add remote participants
+    for (var participantId in _participants) {
+      participantWidgets.add(
+        _buildParticipantCard(
+          name: 'User ${participantId.substring(0, 8)}...',
+          userId: participantId,
+          isLocal: false,
+          isSpeaking: false, // MediaSoup needs speaking detection
+          hasAudio: _remoteStreams.containsKey(participantId),
+        ),
+      );
+    }
+
+    if (participantWidgets.length == 1 && !_inRoom) {
+      return Container(
+        color: Colors.grey[800],
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.headset_off, size: 80, color: Colors.purple),
+              SizedBox(height: 20),
+              Text(
+                'MediaSoup Audio Room Empty',
+                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Connect to start audio conference',
+                style: TextStyle(color: Colors.white70, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      color: Colors.grey[900],
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: participantWidgets.length,
+        itemBuilder: (context, index) => participantWidgets[index],
+      ),
+    );
+  }
+
+  Widget _buildParticipantCard({
+    required String name,
+    required String userId,
+    required bool isLocal,
+    required bool isSpeaking,
+    required bool hasAudio,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isLocal ? Colors.purple.withValues(alpha: 0.2) : Colors.grey[800],
+        border: Border.all(
+          color: isSpeaking ? Colors.orange : (isLocal ? Colors.purple : Colors.grey),
+          width: isSpeaking ? 3 : 1,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          // Audio indicator
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: hasAudio ? 
+                (isSpeaking ? Colors.orange : Colors.green) : 
+                Colors.grey[700],
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              hasAudio ? 
+                (isSpeaking ? Icons.mic : Icons.mic_none) : 
+                Icons.mic_off,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          
+          // Participant info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  isLocal ? 'Local (You)' : 'Remote Participant',
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 12,
+                  ),
+                ),
+                Text(
+                  'ID: ${userId.length > 12 ? userId.substring(0, 12) : userId}...',
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Status indicators  
+          Column(
+            children: [
+              if (isSpeaking)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'Speaking',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 4),
+              Icon(
+                hasAudio ? Icons.volume_up : Icons.volume_off,
+                color: hasAudio ? Colors.green : Colors.red,
+                size: 16,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

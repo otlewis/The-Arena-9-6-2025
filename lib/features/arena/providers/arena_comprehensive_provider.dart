@@ -69,7 +69,7 @@ final arenaComprehensiveProvider = StateNotifierProvider.family<ArenaComprehensi
 /// These providers are convenience providers that work with specific arena instances
 /// They should be used with a specific ArenaInitParams instance, not create new ones
 
-/// Timer provider that streams remaining seconds
+/// Optimized timer provider with reduced rebuilds
 final arenaTimerStreamProvider = StreamProvider.family<int, ArenaInitParams>((ref, params) {
   final arena = ref.watch(arenaComprehensiveProvider(params));
   
@@ -77,10 +77,11 @@ final arenaTimerStreamProvider = StreamProvider.family<int, ArenaInitParams>((re
     return Stream.value(arena.remainingSeconds);
   }
   
+  // Use broadcast stream to prevent multiple subscriptions
   return Stream.periodic(const Duration(seconds: 1), (count) {
     final remaining = arena.remainingSeconds - count - 1;
     return remaining > 0 ? remaining : 0;
-  }).takeWhile((time) => time >= 0);
+  }).takeWhile((time) => time >= 0).asBroadcastStream();
 });
 
 /// Network health provider

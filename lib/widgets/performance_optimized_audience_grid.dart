@@ -602,12 +602,14 @@ class PerformanceOptimizedSpeakersPanel extends StatefulWidget {
   final List<Map<String, dynamic>> speakers;
   final Map<String, dynamic>? moderator;
   final Function(String userId)? onSpeakerTap;
+  final String? debateStyle; // New parameter for debate style
   
   const PerformanceOptimizedSpeakersPanel({
     super.key,
     required this.speakers,
     this.moderator,
     this.onSpeakerTap,
+    this.debateStyle,
   });
 
   @override
@@ -630,13 +632,110 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
   }
   
   void _buildCachedSpeakers() {
-    // Build speakers only (not moderator) - fill to 8 slots for 4x2 grid
-    final speakersWithPlaceholders = <Map<String, dynamic>>[];
-    speakersWithPlaceholders.addAll(widget.speakers);
+    // Check layout type: Debate (2 slots), Take (3 slots), or regular (8 slots)
+    final isDebateLayout = widget.debateStyle == 'Debate';
+    final isTakeLayout = widget.debateStyle == 'Take';
+    final totalSlots = isDebateLayout ? 2 : (isTakeLayout ? 3 : 8);
     
-    // Fill remaining slots with empty placeholders (8 speaker slots total)
-    while (speakersWithPlaceholders.length < 8) {
-      speakersWithPlaceholders.add({'isEmpty': true, 'slotNumber': speakersWithPlaceholders.length + 1});
+    final speakersWithPlaceholders = <Map<String, dynamic>>[];
+    
+    if (isDebateLayout) {
+      // For debate layout, arrange speakers in specific positions
+      Map<String, dynamic>? affirmativeSpeaker;
+      Map<String, dynamic>? negativeSpeaker;
+      
+      // Find affirmative and negative speakers
+      for (final speaker in widget.speakers) {
+        final role = speaker['role'] ?? 'speaker';
+        if (role == 'affirmative') {
+          affirmativeSpeaker = speaker;
+        } else if (role == 'negative') {
+          negativeSpeaker = speaker;
+        }
+      }
+      
+      // First slot: Affirmative
+      if (affirmativeSpeaker != null) {
+        speakersWithPlaceholders.add(affirmativeSpeaker);
+      } else {
+        speakersWithPlaceholders.add({
+          'isEmpty': true, 
+          'slotNumber': 1,
+          'debatePosition': 'Affirmative'
+        });
+      }
+      
+      // Second slot: Negative
+      if (negativeSpeaker != null) {
+        speakersWithPlaceholders.add(negativeSpeaker);
+      } else {
+        speakersWithPlaceholders.add({
+          'isEmpty': true, 
+          'slotNumber': 2,
+          'debatePosition': 'Negative'
+        });
+      }
+    } else if (isTakeLayout) {
+      // For Take layout, arrange 3 speakers
+      Map<String, dynamic>? speaker1;
+      Map<String, dynamic>? speaker2;
+      Map<String, dynamic>? speaker3;
+      
+      // Assign speakers to the 3 slots
+      int speakerIndex = 0;
+      for (final speaker in widget.speakers) {
+        if (speakerIndex == 0) {
+          speaker1 = speaker;
+        } else if (speakerIndex == 1) {
+          speaker2 = speaker;
+        } else if (speakerIndex == 2) {
+          speaker3 = speaker;
+        }
+        speakerIndex++;
+        if (speakerIndex >= 3) break;
+      }
+      
+      // First slot
+      if (speaker1 != null) {
+        speakersWithPlaceholders.add(speaker1);
+      } else {
+        speakersWithPlaceholders.add({
+          'isEmpty': true, 
+          'slotNumber': 1,
+          'takePosition': 'Speaker 1'
+        });
+      }
+      
+      // Second slot
+      if (speaker2 != null) {
+        speakersWithPlaceholders.add(speaker2);
+      } else {
+        speakersWithPlaceholders.add({
+          'isEmpty': true, 
+          'slotNumber': 2,
+          'takePosition': 'Speaker 2'
+        });
+      }
+      
+      // Third slot
+      if (speaker3 != null) {
+        speakersWithPlaceholders.add(speaker3);
+      } else {
+        speakersWithPlaceholders.add({
+          'isEmpty': true, 
+          'slotNumber': 3,
+          'takePosition': 'Speaker 3'
+        });
+      }
+    } else {
+      // Regular layout - add all speakers and fill with placeholders
+      speakersWithPlaceholders.addAll(widget.speakers);
+      
+      // Fill remaining slots with empty placeholders
+      while (speakersWithPlaceholders.length < totalSlots) {
+        final slotNumber = speakersWithPlaceholders.length + 1;
+        speakersWithPlaceholders.add({'isEmpty': true, 'slotNumber': slotNumber});
+      }
     }
     
     _cachedSpeakerWidgets = speakersWithPlaceholders.map((speaker) => 
@@ -645,65 +744,123 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
         speaker: speaker,
         onTap: widget.onSpeakerTap,
         isModerator: false,
+        isDebateLayout: isDebateLayout,
       )
     ).toList();
   }
   
   @override
   Widget build(BuildContext context) {
-    // Calculate larger tile dimensions based on screen width
-    final screenWidth = MediaQuery.of(context).size.width;
-    const containerMargin = 8.0; // Minimal margins to maximize space
-    final containerWidth = screenWidth - (containerMargin * 2);
-    const tileSpacing = 4.0; // Minimal spacing between tiles
+    final isDebateLayout = widget.debateStyle == 'Debate';
+    final isTakeLayout = widget.debateStyle == 'Take';
     
-    // Calculate tile width to fit 4 per row - make them larger and more prominent
-    final availableWidth = containerWidth - (tileSpacing * 3); // Space for 3 gaps between 4 tiles
-    final tileWidth = (availableWidth / 4).floor().toDouble(); // Use floor to prevent overflow
-    final tileHeight = tileWidth * 1.15; // Slightly taller for better proportion and visibility
+    // Calculate dimensions based on screen width and layout type
+    final screenWidth = MediaQuery.of(context).size.width;
+    const containerMargin = 8.0;
+    final containerWidth = screenWidth - (containerMargin * 2);
+    const tileSpacing = 4.0;
+    
+    late final double tileWidth;
+    late final double tileHeight;
+    
+    if (isDebateLayout) {
+      // For debate layout: 2 large slots side by side
+      final availableWidth = containerWidth - tileSpacing; // Space for 1 gap between 2 tiles
+      tileWidth = (availableWidth / 2).floor().toDouble();
+      tileHeight = tileWidth * 1.2; // Larger tiles for debate
+    } else if (isTakeLayout) {
+      // For Take layout: 3 medium slots side by side
+      final availableWidth = containerWidth - (tileSpacing * 2); // Space for 2 gaps between 3 tiles
+      tileWidth = (availableWidth / 3).floor().toDouble();
+      tileHeight = tileWidth * 1.15; // Medium-sized tiles for Take
+    } else {
+      // Regular layout: 4 tiles per row
+      final availableWidth = containerWidth - (tileSpacing * 3); // Space for 3 gaps between 4 tiles
+      tileWidth = (availableWidth / 4).floor().toDouble();
+      tileHeight = tileWidth * 1.15;
+    }
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: containerMargin),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Fixed 8 speaker slots (always show all slots) - 4x2 grid
-          // First row (slots 1-4)
-          SizedBox(
-            height: tileHeight,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (int i = 0; i < 4; i++) ...[
-                  if (i > 0) const SizedBox(width: tileSpacing),
-                  SizedBox(
-                    width: tileWidth,
-                    height: tileHeight,
-                    child: _cachedSpeakerWidgets[i],
-                  ),
+          if (isDebateLayout)
+            // Debate layout: 2 large slots for Affirmative and Negative
+            SizedBox(
+              height: tileHeight,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (int i = 0; i < 2; i++) ...[
+                    if (i > 0) const SizedBox(width: tileSpacing),
+                    SizedBox(
+                      width: tileWidth,
+                      height: tileHeight,
+                      child: _cachedSpeakerWidgets[i],
+                    ),
+                  ],
                 ],
-              ],
-            ),
-          ),
-          
-          // Second row (slots 5-8)
-          const SizedBox(height: tileSpacing),
-          SizedBox(
-            height: tileHeight,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (int i = 4; i < 8; i++) ...[
-                  if (i > 4) const SizedBox(width: tileSpacing),
-                  SizedBox(
-                    width: tileWidth,
-                    height: tileHeight,
-                    child: _cachedSpeakerWidgets[i],
-                  ),
+              ),
+            )
+          else if (isTakeLayout)
+            // Take layout: 3 medium slots for speakers
+            SizedBox(
+              height: tileHeight,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (int i = 0; i < 3; i++) ...[
+                    if (i > 0) const SizedBox(width: tileSpacing),
+                    SizedBox(
+                      width: tileWidth,
+                      height: tileHeight,
+                      child: _cachedSpeakerWidgets[i],
+                    ),
+                  ],
                 ],
-              ],
-            ),
-          ),
+              ),
+            )
+          else
+            // Regular layout: 4x2 grid of 8 speaker slots
+            ...[
+              // First row (slots 1-4)
+              SizedBox(
+                height: tileHeight,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (int i = 0; i < 4; i++) ...[
+                      if (i > 0) const SizedBox(width: tileSpacing),
+                      SizedBox(
+                        width: tileWidth,
+                        height: tileHeight,
+                        child: _cachedSpeakerWidgets[i],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              
+              // Second row (slots 5-8)
+              const SizedBox(height: tileSpacing),
+              SizedBox(
+                height: tileHeight,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (int i = 4; i < 8; i++) ...[
+                      if (i > 4) const SizedBox(width: tileSpacing),
+                      SizedBox(
+                        width: tileWidth,
+                        height: tileHeight,
+                        child: _cachedSpeakerWidgets[i],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           
           // Space between speakers and moderator
           const SizedBox(height: tileSpacing),
@@ -711,8 +868,8 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
           // Moderator at the bottom (always shown)
           if (widget.moderator != null)
             SizedBox(
-              width: tileWidth,
-              height: tileHeight,
+              width: isDebateLayout || isTakeLayout ? tileWidth * 0.8 : tileWidth, // Slightly smaller for debate/take layout
+              height: isDebateLayout || isTakeLayout ? tileHeight * 0.8 : tileHeight,
               child: _VideoTile(
                 speaker: {
                   ...widget.moderator!,
@@ -720,6 +877,7 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
                 },
                 onTap: widget.onSpeakerTap,
                 isModerator: true,
+                isDebateLayout: isDebateLayout || isTakeLayout,
               ),
             ),
         ],
@@ -733,17 +891,24 @@ class _VideoTile extends StatelessWidget {
   final Map<String, dynamic> speaker;
   final Function(String userId)? onTap;
   final bool isModerator;
+  final bool isDebateLayout;
   
   const _VideoTile({
     super.key,
     required this.speaker,
     this.onTap,
     this.isModerator = false,
+    this.isDebateLayout = false,
   });
   
   @override
   Widget build(BuildContext context) {
     if (speaker['isEmpty'] == true) {
+      // Different display for debate layout vs Take layout vs regular layout
+      final displayText = isDebateLayout && speaker['debatePosition'] != null 
+          ? speaker['debatePosition']
+          : speaker['takePosition'] ?? '${speaker['slotNumber'] ?? ''}';
+      
       return Container(
         decoration: BoxDecoration(
           color: const Color(0xFF2D2D2D),
@@ -764,12 +929,13 @@ class _VideoTile extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '${speaker['slotNumber'] ?? ''}',
+                displayText,
                 style: TextStyle(
                   color: Colors.grey.withValues(alpha: 0.6),
-                  fontSize: 12,
+                  fontSize: isDebateLayout ? 14 : 12, // Slightly larger text for debate positions
                   fontWeight: FontWeight.w500,
                 ),
+                textAlign: TextAlign.center,
               ),
             ],
           ),

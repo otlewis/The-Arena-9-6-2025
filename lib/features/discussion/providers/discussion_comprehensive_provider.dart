@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:appwrite/appwrite.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
 import '../models/discussion_state.dart';
@@ -7,7 +8,7 @@ import '../../../core/logging/app_logger.dart';
 import '../../../core/error/app_error.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../services/appwrite_service.dart';
-import '../../../services/agora_service.dart';
+// import '../../../services/jitsi_service.dart';  // Disabled for WebRTC testing
 import '../../../services/firebase_gift_service.dart';
 import '../../../models/models.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -151,7 +152,7 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
   final AppwriteService appwrite;
   
   // Services
-  final AgoraService _agoraService = AgoraService();
+  // final JitsiService _jitsiService = JitsiService();  // Disabled for WebRTC testing
   final FirebaseGiftService _firebaseGiftService = FirebaseGiftService();
   final AudioPlayer _audioPlayer = AudioPlayer();
   
@@ -165,31 +166,40 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
 
   Future<void> _init() async {
     try {
+      debugPrint('🚨 PROVIDER DEBUG: Starting provider initialization...');
       state = state.copyWith(isLoading: true);
       logger.info('Initializing discussion room: ${params.room.id}');
       
       // Initialize audio player
+      debugPrint('🚨 PROVIDER DEBUG: Initializing audio player...');
       await _initializeAudioPlayer();
       
       // Get current user
+      debugPrint('🚨 PROVIDER DEBUG: Loading current user...');
       await _loadCurrentUser();
       
       // Load Firebase coin balance
+      debugPrint('🚨 PROVIDER DEBUG: Loading Firebase coin balance...');
       await _loadFirebaseCoinBalance();
       
       // Join the room as a participant
+      debugPrint('🚨 PROVIDER DEBUG: Joining room...');
       await _joinRoom();
       
       // Load participants and profiles
+      debugPrint('🚨 PROVIDER DEBUG: Loading room participants...');
       await _loadRoomParticipants();
       
       // Load hand raises from participant metadata
+      debugPrint('🚨 PROVIDER DEBUG: Loading hand raises...');
       await _loadHandRaisesFromParticipants();
       
       // Set up real-time subscription
+      debugPrint('🚨 PROVIDER DEBUG: Setting up realtime subscription...');
       await _setupRealtimeSubscription();
       
       // Initialize Agora voice
+      debugPrint('🚨 PROVIDER DEBUG: About to initialize Jitsi...');
       await _initializeAgora();
       
       state = state.copyWith(isLoading: false);
@@ -491,24 +501,26 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
 
   Future<void> _initializeAgora() async {
     try {
+      debugPrint('🚨 PROVIDER DEBUG: Starting Jitsi initialization in provider...');
       state = state.copyWith(
         voiceState: state.voiceState.copyWith(isConnecting: true),
       );
       
       // Initialize Agora
-      await _agoraService.initialize();
+      // Jitsi/Agora voice chat disabled for WebRTC testing
+      // await _jitsiService.initialize();
       
       // Set up callbacks
-      _agoraService.onUserJoined = (uid) {
+      /* _jitsiService.onUserJoined = (uid) {
         state = state.copyWith(
           voiceState: state.voiceState.copyWith(
             remoteUsers: {...state.voiceState.remoteUsers, uid},
           ),
         );
         logger.debug('User $uid joined the voice channel. Total in voice: ${state.voiceState.remoteUsers.length + 1}');
-      };
+      }; */
       
-      _agoraService.onUserLeft = (uid) {
+      /* _jitsiService.onUserLeft = (uid) {
         final newRemoteUsers = Set<int>.from(state.voiceState.remoteUsers);
         final newSpeakingUsers = Set<int>.from(state.voiceState.speakingUsers);
         newRemoteUsers.remove(uid);
@@ -521,9 +533,9 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
           ),
         );
         logger.debug('User $uid left the voice channel. Total in voice: ${state.voiceState.remoteUsers.length + 1}');
-      };
+      }; */
       
-      _agoraService.onUserMuteAudio = (uid, muted) {
+      /* _jitsiService.onUserMuteAudio = (uid, muted) {
         final newSpeakingUsers = Set<int>.from(state.voiceState.speakingUsers);
         if (muted) {
           newSpeakingUsers.remove(uid);
@@ -535,21 +547,21 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
           voiceState: state.voiceState.copyWith(speakingUsers: newSpeakingUsers),
         );
         logger.debug('User $uid ${muted ? 'muted' : 'unmuted'}');
-      };
+      }; */
       
-      _agoraService.onJoinChannel = (joined) {
+      /* _jitsiService.onJoinChannel = (joined) {
         state = state.copyWith(
           voiceState: state.voiceState.copyWith(isConnecting: false),
         );
-      };
+      }; */
       
       // Join the channel as audience initially (even if moderator)
-      await _agoraService.joinChannel();
+      // await _jitsiService.joinChannel();
       
       // If user is moderator, automatically become speaker
       if (state.isCurrentUserModerator) {
         await Future.delayed(const Duration(milliseconds: 500));
-        await _agoraService.switchToSpeaker();
+        // await _jitsiService.switchToSpeaker();
         state = state.copyWith(
           voiceState: state.voiceState.copyWith(isMuted: false),
         );
@@ -566,16 +578,16 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
 
   // Voice Chat Methods
   Future<void> toggleMute() async {
-    if (_agoraService.isBroadcaster) {
-      await _agoraService.muteLocalAudio(state.voiceState.isMuted);
+    /* if (_jitsiService.isBroadcaster) {
+      await _jitsiService.muteLocalAudio(state.voiceState.isMuted);
       state = state.copyWith(
         voiceState: state.voiceState.copyWith(isMuted: !state.voiceState.isMuted),
       );
-    }
+    } */
   }
 
   Future<void> toggleSpeakerphone() async {
-    await _agoraService.setEnableSpeakerphone(!state.voiceState.isSpeakerphoneEnabled);
+    // await _jitsiService.setEnableSpeakerphone(!state.voiceState.isSpeakerphoneEnabled);
     state = state.copyWith(
       voiceState: state.voiceState.copyWith(
         isSpeakerphoneEnabled: !state.voiceState.isSpeakerphoneEnabled,
@@ -753,7 +765,7 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
       
       // If this is the current user being promoted, switch their Agora role
       if (userId == state.currentUserId) {
-        await _agoraService.switchToSpeaker();
+        // await _jitsiService.switchToSpeaker();
         state = state.copyWith(
           voiceState: state.voiceState.copyWith(
             isMuted: false,
@@ -782,7 +794,7 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
       
       // If this is the current user being demoted, switch their Agora role
       if (userId == state.currentUserId) {
-        await _agoraService.switchToAudience();
+        // await _jitsiService.switchToAudience();
         state = state.copyWith(
           voiceState: state.voiceState.copyWith(isMuted: true),
         );
@@ -872,7 +884,7 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
         );
       }
       
-      await _agoraService.leaveChannel();
+      // await _jitsiService.leaveChannel();
       logger.info('Left room: ${params.room.id}');
     } catch (e) {
       logger.error('Error leaving room: $e');
@@ -901,7 +913,7 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
     _speakingTimer?.cancel();
     _fallbackRefreshTimer?.cancel();
     _audioPlayer.dispose();
-    _agoraService.dispose();
+    // _jitsiService.dispose();
     
     super.dispose();
   }

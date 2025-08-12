@@ -1,0 +1,399 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+
+class WebRTCService extends ChangeNotifier {
+  static final WebRTCService _instance = WebRTCService._internal();
+  factory WebRTCService() => _instance;
+  WebRTCService._internal();
+
+  // WebSocket for signaling
+  WebSocketChannel? _channel;
+  
+  // WebRTC
+  RTCPeerConnection? _peerConnection;
+  MediaStream? _localStream;
+  MediaStream? _remoteStream;
+  
+  // State
+  bool _isConnected = false;
+  bool _isMuted = false;
+  bool _isVideoEnabled = true;
+  bool _isDisposed = false;
+  String? _currentRoom;
+  String? _userId;
+  
+  // Callbacks
+  Function(MediaStream)? onLocalStream;
+  Function(MediaStream)? onRemoteStream;
+  Function(String)? onError;
+  Function()? onConnected;
+  Function()? onDisconnected;
+  
+  // Getters
+  bool get isConnected => _isConnected;
+  bool get isMuted => _isMuted;
+  bool get isVideoEnabled => _isVideoEnabled;
+  MediaStream? get localStream => _localStream;
+  MediaStream? get remoteStream => _remoteStream;
+
+  // Configuration
+  final Map<String, dynamic> _iceServers = {
+    'iceServers': [
+      {'urls': 'stun:stun.l.google.com:19302'},
+      {'urls': 'stun:stun1.l.google.com:19302'},
+    ]
+  };
+
+  Map<String, dynamic> get _constraints => {
+    'mandatory': {
+      'OfferToReceiveAudio': true,
+      'OfferToReceiveVideo': _isVideoEnabled,
+    },
+    'optional': [],
+  };
+
+  Future<void> connect(String serverUrl, String room, String userId, {bool audioOnly = false}) async {
+    try {
+      _currentRoom = room;
+      _userId = userId;
+      
+      // Connect to signaling server
+      _channel = WebSocketChannel.connect(
+        Uri.parse('wss://$serverUrl:8443'),
+      );
+      
+      _channel!.stream.listen(
+        _handleSignalingMessage,
+        onError: (error) {
+          debugPrint('WebSocket error: $error');
+          onError?.call(error.toString());
+        },
+        onDone: () {
+          debugPrint('WebSocket closed');
+          _handleDisconnection();
+        },
+      );
+      
+      // Set video mode based on audioOnly parameter
+      if (audioOnly) {
+        _isVideoEnabled = false;
+      }
+      
+      // Initialize local media
+      await _initializeMedia();
+      
+      // Join room
+      _sendSignalingMessage({
+        'type': 'join',
+        'room': room,
+        'userId': userId,
+      });
+      
+      _isConnected = true;
+      onConnected?.call();
+      notifyListeners();
+      
+    } catch (e) {
+      debugPrint('Connection error: $e');
+      onError?.call(e.toString());
+    }
+  }
+
+  Future<void> _initializeMedia() async {
+    try {
+      // Get user media - explicitly disable video for audio-only mode
+      final Map<String, dynamic> mediaConstraints = {
+        'audio': {
+          'echoCancellation': true,
+          'noiseSuppression': true,
+          'autoGainControl': true,
+        },
+        'video': _isVideoEnabled ? {
+          'facingMode': 'user',
+          'width': {'ideal': 640},
+          'height': {'ideal': 480},
+        } : false,
+      };
+      
+      _localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+      
+      // If video is disabled, ensure no video tracks exist
+      if (!_isVideoEnabled) {
+        final videoTracks = _localStream!.getVideoTracks();
+        for (final track in videoTracks) {
+          track.stop();
+          _localStream!.removeTrack(track);
+        }
+      }
+      
+      onLocalStream?.call(_localStream!);
+      
+    } catch (e) {
+      debugPrint('Media initialization error: $e');
+      throw Exception('Failed to access microphone: $e');
+    }
+  }
+
+  Future<void> _createPeerConnection() async {
+    try {
+      _peerConnection = await createPeerConnection(_iceServers);
+      
+      // Add local stream tracks
+      _localStream?.getTracks().forEach((track) {
+        _peerConnection?.addTrack(track, _localStream!);
+      });
+      
+      // Handle remote stream
+      _peerConnection?.onAddStream = (MediaStream stream) {
+        _remoteStream = stream;
+        onRemoteStream?.call(stream);
+        notifyListeners();
+      };
+      
+      // Handle ICE candidates
+      _peerConnection?.onIceCandidate = (RTCIceCandidate candidate) {
+        if (candidate.candidate != null) {
+          _sendSignalingMessage({
+            'type': 'ice-candidate',
+            'candidate': candidate.toMap(),
+          });
+        }
+      };
+      
+      // Handle connection state
+      _peerConnection?.onConnectionState = (RTCPeerConnectionState state) {
+        debugPrint('Connection state: $state');
+        if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+            state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+          _handleDisconnection();
+        }
+      };
+      
+    } catch (e) {
+      debugPrint('Peer connection error: $e');
+      throw Exception('Failed to create peer connection: $e');
+    }
+  }
+
+  void _handleSignalingMessage(dynamic message) async {
+    final data = json.decode(message);
+    
+    switch (data['type']) {
+      case 'user-joined':
+        debugPrint('User joined: ${data['userId']}');
+        // Create offer for new user
+        await _createPeerConnection();
+        await _createOffer();
+        break;
+        
+      case 'offer':
+        debugPrint('Received offer');
+        await _handleOffer(data['offer']);
+        break;
+        
+      case 'answer':
+        debugPrint('Received answer');
+        await _handleAnswer(data['answer']);
+        break;
+        
+      case 'ice-candidate':
+        debugPrint('Received ICE candidate');
+        await _handleIceCandidate(data['candidate']);
+        break;
+        
+      case 'user-left':
+        debugPrint('User left: ${data['userId']}');
+        _closeRemoteConnection();
+        break;
+    }
+  }
+
+  Future<void> _createOffer() async {
+    try {
+      final RTCSessionDescription offer = await _peerConnection!.createOffer(_constraints);
+      await _peerConnection!.setLocalDescription(offer);
+      
+      _sendSignalingMessage({
+        'type': 'offer',
+        'offer': offer.toMap(),
+      });
+    } catch (e) {
+      debugPrint('Create offer error: $e');
+    }
+  }
+
+  Future<void> _handleOffer(Map<String, dynamic> offerData) async {
+    try {
+      await _createPeerConnection();
+      
+      final offer = RTCSessionDescription(
+        offerData['sdp'],
+        offerData['type'],
+      );
+      
+      await _peerConnection!.setRemoteDescription(offer);
+      
+      final RTCSessionDescription answer = await _peerConnection!.createAnswer(_constraints);
+      await _peerConnection!.setLocalDescription(answer);
+      
+      _sendSignalingMessage({
+        'type': 'answer',
+        'answer': answer.toMap(),
+      });
+    } catch (e) {
+      debugPrint('Handle offer error: $e');
+    }
+  }
+
+  Future<void> _handleAnswer(Map<String, dynamic> answerData) async {
+    try {
+      final answer = RTCSessionDescription(
+        answerData['sdp'],
+        answerData['type'],
+      );
+      
+      await _peerConnection?.setRemoteDescription(answer);
+    } catch (e) {
+      debugPrint('Handle answer error: $e');
+    }
+  }
+
+  Future<void> _handleIceCandidate(Map<String, dynamic> candidateData) async {
+    try {
+      final candidate = RTCIceCandidate(
+        candidateData['candidate'],
+        candidateData['sdpMid'],
+        candidateData['sdpMLineIndex'],
+      );
+      
+      await _peerConnection?.addCandidate(candidate);
+    } catch (e) {
+      debugPrint('Handle ICE candidate error: $e');
+    }
+  }
+
+  void _sendSignalingMessage(Map<String, dynamic> message) {
+    if (_channel != null) {
+      _channel!.sink.add(json.encode(message));
+    }
+  }
+
+  Future<void> toggleMute() async {
+    if (_localStream != null) {
+      _isMuted = !_isMuted;
+      _localStream!.getAudioTracks().forEach((track) {
+        track.enabled = !_isMuted;
+      });
+      notifyListeners();
+    }
+  }
+
+  Future<void> toggleVideo() async {
+    if (_localStream != null) {
+      _isVideoEnabled = !_isVideoEnabled;
+      _localStream!.getVideoTracks().forEach((track) {
+        track.enabled = _isVideoEnabled;
+      });
+      notifyListeners();
+    }
+  }
+
+  Future<void> switchCamera() async {
+    if (_localStream != null) {
+      final videoTrack = _localStream!.getVideoTracks().firstOrNull;
+      if (videoTrack != null) {
+        await Helper.switchCamera(videoTrack);
+      }
+    }
+  }
+
+  void _closeRemoteConnection() {
+    _remoteStream?.dispose();
+    _remoteStream = null;
+    _peerConnection?.close();
+    _peerConnection = null;
+    notifyListeners();
+  }
+
+  void _handleDisconnection() {
+    _isConnected = false;
+    onDisconnected?.call();
+    
+    // Clean up without disposing the singleton
+    _localStream?.dispose();
+    _localStream = null;
+    
+    _remoteStream?.dispose();
+    _remoteStream = null;
+    
+    _peerConnection?.close();
+    _peerConnection = null;
+    
+    _channel?.sink.close();
+    _channel = null;
+    
+    _currentRoom = null;
+  }
+
+  Future<void> disconnect() async {
+    if (_isDisposed || !_isConnected) return;
+    
+    _sendSignalingMessage({
+      'type': 'leave',
+      'room': _currentRoom,
+      'userId': _userId,
+    });
+    
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    // Clean up connection without disposing the singleton
+    _localStream?.dispose();
+    _localStream = null;
+    
+    _remoteStream?.dispose();
+    _remoteStream = null;
+    
+    _peerConnection?.close();
+    _peerConnection = null;
+    
+    _channel?.sink.close();
+    _channel = null;
+    
+    _isConnected = false;
+    _currentRoom = null;
+    
+    // Reset callbacks
+    onLocalStream = null;
+    onRemoteStream = null;
+    onError = null;
+    onConnected = null;
+    onDisconnected = null;
+  }
+
+  @override
+  void dispose() {
+    if (_isDisposed) return; // Prevent multiple disposals
+    
+    _isDisposed = true;
+    
+    _localStream?.dispose();
+    _localStream = null;
+    
+    _remoteStream?.dispose();
+    _remoteStream = null;
+    
+    _peerConnection?.close();
+    _peerConnection = null;
+    
+    _channel?.sink.close();
+    _channel = null;
+    
+    _isConnected = false;
+    _currentRoom = null;
+    
+    super.dispose();
+  }
+}

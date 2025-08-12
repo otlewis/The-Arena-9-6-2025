@@ -1,0 +1,20 @@
+[Unit]
+Description=Arena Unified WebRTC Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/arena-webrtc
+ExecStart=/usr/bin/node unified-webrtc-server.js
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=arena-webrtc
+Environment="NODE_ENV=production"
+Environment="PORT=3000"
+Environment="PUBLIC_IP=YOUR_SERVER_IP"
+
+[Install]
+WantedBy=multi-user.target

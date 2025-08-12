@@ -31,7 +31,7 @@ class _DebugTimerRealtimeState extends State<DebugTimerRealtime> {
         if (_logs.length > 20) _logs.removeAt(0);
       });
     }
-    // print('🔍 DEBUG: $message'); // Disabled for production
+    // debugPrint('🔍 DEBUG: $message'); // Disabled for production
   }
   
   Future<void> _startDebugTest() async {

@@ -14,7 +14,8 @@ enum NotificationType {
   systemAnnouncement('system_announcement'),
   roomChat('room_chat'),
   voteReminder('vote_reminder'),
-  followUp('follow_up');
+  followUp('follow_up'),
+  instantMessage('instant_message');
 
   const NotificationType(this.value);
   final String value;

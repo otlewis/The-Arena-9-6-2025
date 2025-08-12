@@ -1,0 +1,333 @@
+import 'package:flutter/material.dart';
+import '../services/simple_http_audio_service.dart';
+import '../services/appwrite_service.dart';
+import '../models/user_profile.dart';
+import '../core/logging/app_logger.dart';
+
+class SimpleAudioTest extends StatefulWidget {
+  const SimpleAudioTest({Key? key}) : super(key: key);
+
+  @override
+  State<SimpleAudioTest> createState() => _SimpleAudioTestState();
+}
+
+class _SimpleAudioTestState extends State<SimpleAudioTest> {
+  final AppwriteService _appwrite = AppwriteService();
+  final SimpleHttpAudioService _audioService = SimpleHttpAudioService();
+  
+  // User info
+  UserProfile? _currentUser;
+  String _userId = 'USER_1';
+  
+  // Room state
+  String _roomId = 'SIMPLE_AUDIO_TEST';
+  String _status = 'Ready to connect';
+  List<Map<String, dynamic>> _participants = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+    _setupCallbacks();
+  }
+
+  Future<void> _initialize() async {
+    await _loadCurrentUser();
+  }
+
+  Future<void> _loadCurrentUser() async {
+    try {
+      final currentUser = await _appwrite.getCurrentUser();
+      if (currentUser != null) {
+        final userProfile = await _appwrite.getUserProfile(currentUser.$id);
+        setState(() {
+          _currentUser = userProfile;
+          _userId = 'USER_${_currentUser!.id.substring(0, 6)}';
+        });
+        AppLogger().debug("Loaded user: ${userProfile?.name}");
+      }
+    } catch (e) {
+      AppLogger().error("Error loading current user: $e");
+      setState(() {
+        _userId = 'USER_GUEST';
+      });
+    }
+  }
+
+  void _setupCallbacks() {
+    _audioService.onConnected = () {
+      setState(() {
+        _status = 'Connected to audio room';
+      });
+    };
+
+    _audioService.onDisconnected = () {
+      setState(() {
+        _status = 'Disconnected';
+        _participants.clear();
+      });
+    };
+
+    _audioService.onError = (error) {
+      setState(() {
+        _status = 'Error: $error';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $error'), backgroundColor: Colors.red),
+      );
+    };
+
+    _audioService.onParticipantsUpdated = (participants) {
+      setState(() {
+        _participants = participants;
+      });
+    };
+  }
+
+  Future<void> _connect() async {
+    setState(() {
+      _status = 'Connecting...';
+    });
+
+    try {
+      await _audioService.connect(
+        '192.168.4.94',
+        _roomId,
+        _userId,
+        _currentUser?.name ?? 'Guest',
+      );
+    } catch (e) {
+      AppLogger().error("Failed to connect: $e");
+    }
+  }
+
+  Future<void> _disconnect() async {
+    await _audioService.disconnect();
+  }
+
+  @override
+  void dispose() {
+    _audioService.disconnect();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Simple Audio Test (HTTP)'),
+        backgroundColor: Colors.orange,
+        foregroundColor: Colors.white,
+      ),
+      backgroundColor: Colors.black,
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Status card
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[900],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _audioService.isConnected ? Colors.green : Colors.orange,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    'User: ${_currentUser?.name ?? 'Loading...'}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Status: $_status',
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Participants: ${_participants.length}',
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Room: $_roomId',
+                    style: const TextStyle(color: Colors.orange, fontSize: 11),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'HTTP-based (iOS Simulator Friendly!)',
+                    style: TextStyle(color: Colors.green, fontSize: 10),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Connect button
+            if (!_audioService.isConnected) ...[
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _connect,
+                  icon: const Icon(Icons.phone_in_talk, color: Colors.white),
+                  label: const Text(
+                    'Connect to Audio Room',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            
+            const SizedBox(height: 20),
+            
+            // Participants
+            Expanded(
+              child: _buildParticipantList(),
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: _audioService.isConnected ? Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          FloatingActionButton(
+            heroTag: "mute",
+            onPressed: () => _audioService.toggleMute(),
+            backgroundColor: _audioService.isMuted ? Colors.red : Colors.green,
+            child: Icon(
+              _audioService.isMuted ? Icons.mic_off : Icons.mic,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 16),
+          FloatingActionButton(
+            heroTag: "leave",
+            onPressed: _disconnect,
+            backgroundColor: Colors.red,
+            child: const Icon(Icons.call_end, color: Colors.white),
+          ),
+        ],
+      ) : null,
+    );
+  }
+
+  Widget _buildParticipantList() {
+    if (_participants.isEmpty && !_audioService.isConnected) {
+      return Container(
+        color: Colors.grey[800],
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.wifi_tethering, size: 80, color: Colors.orange),
+              SizedBox(height: 20),
+              Text(
+                'Simple HTTP Audio Room',
+                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'No WebSocket/Socket.IO required!',
+                style: TextStyle(color: Colors.white70, fontSize: 16),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Works on iOS Simulator ✅',
+                style: TextStyle(color: Colors.green, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      color: Colors.grey[900],
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _participants.length,
+        itemBuilder: (context, index) {
+          final participant = _participants[index];
+          final isLocal = participant['userId'] == _userId;
+          final hasAudio = _audioService.remoteStreams.containsKey(participant['sessionId']) || isLocal;
+          
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isLocal ? Colors.orange.withValues(alpha: 0.2) : Colors.grey[800],
+              border: Border.all(
+                color: isLocal ? Colors.orange : Colors.grey,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                // Audio indicator
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: hasAudio ? Colors.green : Colors.grey[700],
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    hasAudio ? Icons.mic : Icons.mic_off,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                
+                // Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        participant['userName'] ?? 'Unknown',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        isLocal ? 'You' : 'Remote',
+                        style: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        'Active: ${participant['isActive'] ?? false}',
+                        style: TextStyle(
+                          color: participant['isActive'] == true ? Colors.green : Colors.red,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}

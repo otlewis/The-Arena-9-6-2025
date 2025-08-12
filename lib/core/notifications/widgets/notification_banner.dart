@@ -227,6 +227,10 @@ class _NotificationBannerState extends State<NotificationBanner>
         iconData = Icons.schedule;
         color = Colors.grey;
         break;
+      case NotificationType.instantMessage:
+        iconData = Icons.message;
+        color = const Color(0xFF8B5CF6);
+        break;
     }
 
     return Container(

@@ -223,7 +223,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         ),
                         child: Center(
                           child: Image.asset(
-                            'assets/images/logo.png',
+                            'assets/images/Arenalogo.png',
                             width: 80,
                             height: 80,
                             fit: BoxFit.contain,

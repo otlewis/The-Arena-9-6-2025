@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/instant_message.dart';
 import '../models/user_profile.dart';
-import '../services/agora_instant_messaging_service.dart';
 import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
 import 'modern_chat_interface.dart';
@@ -23,7 +22,6 @@ class FloatingIMWidget extends StatefulWidget {
 
 class _FloatingIMWidgetState extends State<FloatingIMWidget>
     with TickerProviderStateMixin {
-  final AgoraInstantMessagingService _imService = AgoraInstantMessagingService();
   final AppwriteService _appwriteService = AppwriteService();
   
   // Animation controllers
@@ -36,7 +34,7 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
   bool _isExpanded = false;
   UserProfile? _currentUser;
   bool _isVisible = true; // Allow users to hide the widget
-  bool _showNotificationPulse = false; // Pulse animation for new messages
+  final bool _showNotificationPulse = false; // Pulse animation for new messages
   
   // Position variables for draggable functionality
   double _buttonX = 20;
@@ -47,11 +45,9 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
   StreamSubscription<int>? _unreadCountSubscription;
   
   // Data
-  List<Conversation> _conversations = [];
-  int _unreadCount = 0;
+  final List<Conversation> _conversations = [];
+  final int _unreadCount = 0;
   
-  // Notification cooldown
-  DateTime? _lastNotificationTime;
   
   
   // Search
@@ -107,69 +103,13 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
         }
       }
       
-      // Initialize IM service
-      await _imService.initialize();
-      
-      // Subscribe to conversations
-      _conversationsSubscription = _imService
-          .getConversationsStream()
-          .listen((conversations) {
-        if (mounted) {
-          setState(() => _conversations = conversations);
-        }
-      });
-      
-      // Subscribe to unread count
-      _unreadCountSubscription = _imService
-          .getUnreadCountStream()
-          .listen((count) {
-        if (mounted) {
-          final previousCount = _unreadCount;
-          setState(() => _unreadCount = count);
-          
-          AppLogger().info('📱 FloatingIM: Unread count updated from $previousCount to $count');
-          
-          // If we have new unread messages, trigger pulse animation
-          if (count > previousCount && count > 0) {
-            final now = DateTime.now();
-            // Only trigger notification if it's been more than 2 seconds since last notification
-            if (_lastNotificationTime == null || 
-                now.difference(_lastNotificationTime!).inSeconds >= 2) {
-              AppLogger().info('📱 FloatingIM: Triggering new message notification');
-              _lastNotificationTime = now;
-              _triggerNewMessageNotification();
-            } else {
-              AppLogger().info('📱 FloatingIM: Skipping notification due to cooldown');
-            }
-          }
-        }
-      });
+      // IM service disabled (Agora removed)
+      AppLogger().debug('📱 Floating IM widget disabled (Agora removed)');
     } catch (e) {
       AppLogger().error('Failed to initialize floating IM: $e');
     }
   }
 
-  void _triggerNewMessageNotification() {
-    if (!mounted) return;
-    
-    setState(() => _showNotificationPulse = true);
-    
-    // Start pulse animation
-    _pulseController.repeat(reverse: true);
-    
-    // NO AUTO-OPENING - Let users decide if they want to view the message
-    // This gives users control over their conversation flow
-    
-    // Stop pulse after 5 seconds
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted) {
-        _pulseController.stop();
-        setState(() => _showNotificationPulse = false);
-      }
-    });
-    
-    AppLogger().info('💬 New message notification triggered - showing banner only (no auto-open)');
-  }
 
 
   @override
@@ -218,33 +158,43 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: _unreadCount > 0 
-                        ? const Color(0xFF8B5CF6) 
-                        : Colors.grey[700],
+                      color: Colors.grey.shade100,
                       shape: BoxShape.circle,
-                      boxShadow: [
+                      boxShadow: const [
                         BoxShadow(
-                          color: _unreadCount > 0 
-                            ? const Color(0xFF8B5CF6).withValues(alpha: 0.4)
-                            : Colors.black.withValues(alpha: 0.2),
+                          color: Colors.white,
+                          offset: Offset(-4, -4),
                           blurRadius: 8,
-                          offset: const Offset(0, 2),
+                          spreadRadius: 0,
+                        ),
+                        BoxShadow(
+                          color: Colors.grey,
+                          offset: Offset(4, 4),
+                          blurRadius: 8,
+                          spreadRadius: 0,
                         ),
                       ],
                     ),
                     child: Center(
                       child: _unreadCount > 0
-                        ? Text(
-                            _unreadCount > 9 ? '9+' : '$_unreadCount',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                        ? Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade600,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Text(
+                              _unreadCount > 9 ? '9+' : '$_unreadCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           )
-                        : const Icon(
+                        : Icon(
                             Icons.message,
-                            color: Colors.white,
+                            color: Colors.blue.shade600,
                             size: 20,
                           ),
                     ),
@@ -269,25 +219,27 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
               return Transform.scale(
                 scale: _showNotificationPulse ? _pulseAnimation.value : 1.0,
                 child: Container(
-                  width: 160,
-                  height: 160,
-                  decoration: _isExpanded ? BoxDecoration(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF8B5CF6), Color(0xFF6366F1)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    boxShadow: [
+                    color: Colors.grey.shade100,
+                    boxShadow: const [
+                      // Light shadow for depth
                       BoxShadow(
-                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.4),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
+                        color: Colors.white,
+                        offset: Offset(-8, -8),
+                        blurRadius: 16,
+                        spreadRadius: 0,
+                      ),
+                      // Dark shadow for depth
+                      BoxShadow(
+                        color: Colors.grey,
+                        offset: Offset(8, 8),
+                        blurRadius: 16,
+                        spreadRadius: 0,
                       ),
                     ],
-                  ) : const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.transparent,
                   ),
                   child: Stack(
                     alignment: Alignment.center,
@@ -295,40 +247,35 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
                       RotationTransition(
                         turns: _rotateAnimation,
                         child: _isExpanded 
-                          ? const Icon(
+                          ? Icon(
                               Icons.close,
-                              color: Colors.white,
-                              size: 23,
+                              color: Colors.grey.shade700,
+                              size: 24,
                             )
-                          : Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                // Scarlet background
-                                Icon(
-                                  Icons.chat_bubble_rounded,
-                                  color: Color(0xFFFF2400), // Scarlet red background
-                                  size: 48,
-                                ),
-                                // Purple lines inside
-                                Icon(
-                                  Icons.chat_bubble_outline_rounded, // Outline version for purple lines
-                                  color: Color(0xFF8B5CF6), // Purple lines inside
-                                  size: 48,
-                                ),
-                              ],
+                          : Icon(
+                              Icons.chat_bubble_outline,
+                              color: Colors.blue.shade600,
+                              size: 28,
                             ),
                       ),
                       if (_unreadCount > 0 && !_isExpanded)
                         Positioned(
-                          top: 20,
-                          right: 20,
+                          top: 8,
+                          right: 8,
                           child: Container(
                             width: 20,
                             height: 20,
                             decoration: BoxDecoration(
-                              color: Colors.red,
+                              color: Colors.red.shade600,
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.red,
+                                  offset: Offset(1, 1),
+                                  blurRadius: 2,
+                                  spreadRadius: 0,
+                                ),
+                              ],
                             ),
                             child: Center(
                               child: Text(
@@ -352,24 +299,37 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
         // Hide button (only show when not expanded)
         if (!_isExpanded)
           Positioned(
-            top: 15,
-            right: 15,
+            top: -5,
+            right: -5,
             child: GestureDetector(
               onTap: () {
                 setState(() => _isVisible = false);
               },
               child: Container(
-                width: 32,
-                height: 32,
+                width: 22,
+                height: 22,
                 decoration: BoxDecoration(
-                  color: Colors.grey[800],
+                  color: Colors.grey.shade100,
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 1),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.white,
+                      offset: Offset(-2, -2),
+                      blurRadius: 4,
+                      spreadRadius: 0,
+                    ),
+                    BoxShadow(
+                      color: Colors.grey,
+                      offset: Offset(2, 2),
+                      blurRadius: 4,
+                      spreadRadius: 0,
+                    ),
+                  ],
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.close,
-                  color: Colors.white,
-                  size: 16,
+                  color: Colors.grey.shade600,
+                  size: 14,
                 ),
               ),
             ),
@@ -381,12 +341,26 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
   Widget _buildConversationsBottomSheet() {
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
-      decoration: const BoxDecoration(
-        color: Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.only(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
         ),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.white,
+            offset: Offset(-8, -8),
+            blurRadius: 16,
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: Colors.grey,
+            offset: Offset(8, 8),
+            blurRadius: 16,
+            spreadRadius: 0,
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -412,40 +386,50 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF8B5CF6), Color(0xFF6366F1)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(16),
-          topRight: Radius.circular(16),
-        ),
-      ),
       child: Row(
         children: [
-          const SizedBox(width: 8),
-          const Expanded(
+          Icon(Icons.chat_bubble_outline, color: Colors.blue.shade600),
+          const SizedBox(width: 12),
+          Expanded(
             child: Text(
               'Messages',
               style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
+                color: Colors.grey.shade800,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.person_add, color: Colors.white),
-            onPressed: () {
-              setState(() => _isSearching = true);
-              // Ensure keyboard appears after the widget rebuilds
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _searchFocusNode.requestFocus();
-              });
-            },
-            tooltip: 'Start new conversation',
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              shape: BoxShape.circle,
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.white,
+                  offset: Offset(-2, -2),
+                  blurRadius: 4,
+                  spreadRadius: 0,
+                ),
+                BoxShadow(
+                  color: Colors.grey,
+                  offset: Offset(2, 2),
+                  blurRadius: 4,
+                  spreadRadius: 0,
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: Icon(Icons.person_add, color: Colors.blue.shade600),
+              onPressed: () {
+                setState(() => _isSearching = true);
+                // Ensure keyboard appears after the widget rebuilds
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _searchFocusNode.requestFocus();
+                });
+              },
+              tooltip: 'Start new conversation',
+            ),
           ),
         ],
       ),
@@ -473,16 +457,30 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
+                color: Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(12),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.grey,
+                    offset: Offset(4, 4),
+                    blurRadius: 8,
+                    spreadRadius: 0,
+                  ),
+                  BoxShadow(
+                    color: Colors.white,
+                    offset: Offset(-4, -4),
+                    blurRadius: 8,
+                    spreadRadius: 0,
+                  ),
+                ],
               ),
               child: Row(
                 children: [
-                  Icon(Icons.search, color: Colors.grey[500], size: 20),
+                  Icon(Icons.search, color: Colors.grey.shade600, size: 20),
                   const SizedBox(width: 12),
                   Text(
                     'Search for users...',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                   ),
                 ],
               ),
@@ -497,16 +495,16 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey[600]),
+                    Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey.shade400),
                     const SizedBox(height: 16),
                     Text(
                       'No conversations yet',
-                      style: TextStyle(color: Colors.grey[400], fontSize: 16),
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Search for users above to start chatting',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
                     ),
                   ],
                 ),
@@ -529,15 +527,33 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
   Widget _buildConversationTile(Conversation conversation, UserInfo otherUser) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: const Color(0xFF2A2A2A),
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: () => _openConversation(conversation, otherUser),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
           borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.white,
+              offset: Offset(-4, -4),
+              blurRadius: 8,
+              spreadRadius: 0,
+            ),
+            BoxShadow(
+              color: Colors.grey,
+              offset: Offset(4, 4),
+              blurRadius: 8,
+              spreadRadius: 0,
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _openConversation(conversation, otherUser),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
               children: [
                 // Optimized Avatar
                 _ConversationAvatar(
@@ -560,6 +576,7 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -573,25 +590,25 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
             controller: _searchController,
             focusNode: _searchFocusNode,
             autofocus: true,
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: Colors.grey.shade800),
             decoration: InputDecoration(
               hintText: 'Search by username...',
-              hintStyle: TextStyle(color: Colors.grey[500]),
-              prefixIcon: const Icon(Icons.search, color: Colors.grey),
+              hintStyle: TextStyle(color: Colors.grey.shade600),
+              prefixIcon: Icon(Icons.search, color: Colors.grey.shade600),
               suffixIcon: _isSearchLoading 
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
+                ? Padding(
+                    padding: const EdgeInsets.all(12),
                     child: SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Color(0xFF8B5CF6),
+                        color: Colors.blue.shade600,
                       ),
                     ),
                   )
                 : IconButton(
-                    icon: const Icon(Icons.close, color: Colors.grey),
+                    icon: Icon(Icons.close, color: Colors.grey.shade600),
                     onPressed: () {
                       _searchFocusNode.unfocus(); // Dismiss keyboard
                       setState(() {
@@ -603,8 +620,16 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
                     },
                   ),
               filled: true,
-              fillColor: const Color(0xFF2A2A2A),
+              fillColor: Colors.grey.shade100,
               border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
               ),
@@ -619,16 +644,16 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.person_search, size: 64, color: Colors.grey[600]),
+                    Icon(Icons.person_search, size: 64, color: Colors.grey.shade400),
                     const SizedBox(height: 16),
                     Text(
                       'Search for users to start messaging',
-                      style: TextStyle(color: Colors.grey[400], fontSize: 16),
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Type a username above',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
                     ),
                   ],
                 ),
@@ -638,16 +663,16 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.search_off, size: 64, color: Colors.grey[600]),
+                      Icon(Icons.search_off, size: 64, color: Colors.grey.shade400),
                       const SizedBox(height: 16),
                       Text(
                         'No users found',
-                        style: TextStyle(color: Colors.grey[400], fontSize: 16),
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'Try a different search term',
-                        style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                        style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
                       ),
                     ],
                   ),
@@ -668,15 +693,33 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
   Widget _buildUserSearchTile(UserProfile user) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: const Color(0xFF2A2A2A),
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: () => _startNewConversation(user),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
           borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.white,
+              offset: Offset(-4, -4),
+              blurRadius: 8,
+              spreadRadius: 0,
+            ),
+            BoxShadow(
+              color: Colors.grey,
+              offset: Offset(4, 4),
+              blurRadius: 8,
+              spreadRadius: 0,
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _startNewConversation(user),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
               children: [
                 // Optimized Avatar for search
                 _SearchUserAvatar(
@@ -688,8 +731,8 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
                 Expanded(
                   child: Text(
                     user.name,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: Colors.grey.shade800,
                       fontSize: 16,
                     ),
                   ),
@@ -698,6 +741,7 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
             ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -756,8 +800,8 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
       );
     }
 
-    // Mark messages as read
-    await _imService.markMessagesAsRead(conversation.id);
+    // Message read marking disabled (Agora removed)
+    AppLogger().debug('📱 Message read marking disabled (Agora removed)');
   }
 
 
@@ -781,8 +825,8 @@ class _FloatingIMWidgetState extends State<FloatingIMWidget>
     // Debounce the search
     _searchDebouncer = Timer(const Duration(milliseconds: 300), () async {
       try {
-        AppLogger().info('🔍 Searching for users: $query');
-        final results = await _imService.searchUsers(query);
+        AppLogger().info('🔍 User search disabled (Agora removed)');
+        final results = <UserProfile>[];
         
         if (mounted) {
           setState(() {
@@ -854,7 +898,7 @@ class _ConversationAvatar extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: const Color(0xFF8B5CF6),
+        color: Colors.blue.shade600,
         image: user.avatar != null
             ? DecorationImage(
                 image: NetworkImage(user.avatar!),
@@ -913,8 +957,8 @@ class _ConversationContent extends StatelessWidget {
             Expanded(
               child: Text(
                 otherUser.username,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: Colors.grey.shade800,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
@@ -923,7 +967,7 @@ class _ConversationContent extends StatelessWidget {
             Text(
               _formatLastMessageTime(conversation.lastMessageTime),
               style: TextStyle(
-                color: Colors.grey[500],
+                color: Colors.grey.shade500,
                 fontSize: 12,
               ),
             ),
@@ -933,7 +977,7 @@ class _ConversationContent extends StatelessWidget {
         Text(
           conversation.lastMessage ?? '',
           style: TextStyle(
-            color: Colors.grey[400],
+            color: Colors.grey.shade600,
             fontSize: 14,
           ),
           maxLines: 1,
@@ -956,7 +1000,7 @@ class _UnreadBadge extends StatelessWidget {
       margin: const EdgeInsets.only(left: 8),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.red,
+        color: Colors.red.shade600,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -988,7 +1032,7 @@ class _SearchUserAvatar extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: const Color(0xFF8B5CF6),
+        color: Colors.blue.shade600,
         image: user.avatar != null
             ? DecorationImage(
                 image: NetworkImage(user.avatar!),

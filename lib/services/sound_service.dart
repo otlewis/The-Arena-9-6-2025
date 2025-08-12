@@ -78,6 +78,16 @@ class SoundService {
     await _playSound('denied.mp3', 'denied sound for declined challenge');
   }
 
+  /// Play instant message notification sound
+  Future<void> playInstantMessageSound() async {
+    await _playSound('instantmessage.mp3', 'instant message notification');
+  }
+  
+  /// Play email notification sound
+  Future<void> playEmailSound() async {
+    await _playSound('email.mp3', 'email notification');
+  }
+
   /// Play a custom sound file
   Future<void> playCustomSound(String fileName) async {
     if (!_soundEnabled) return;

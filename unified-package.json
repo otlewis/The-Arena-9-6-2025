@@ -1,0 +1,20 @@
+{
+  "name": "arena-unified-webrtc-server",
+  "version": "1.0.0",
+  "description": "Unified WebRTC server with MediaSoup and Signaling",
+  "main": "unified-webrtc-server.js",
+  "scripts": {
+    "start": "node unified-webrtc-server.js",
+    "dev": "nodemon unified-webrtc-server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1",
+    "mediasoup": "^3.16.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}

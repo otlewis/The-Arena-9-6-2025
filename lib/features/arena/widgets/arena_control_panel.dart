@@ -15,6 +15,11 @@ class ArenaControlPanel extends StatelessWidget {
   final VoidCallback onShowGift;
   final VoidCallback onShowChat;
   final VoidCallback onShowRoleManager;
+  final VoidCallback? onToggleScreenShare;
+  final bool isScreenSharing;
+  final bool isDebater;
+  final VoidCallback? onTestDebaterMode;
+  final VoidCallback? onManageScreenSharePermissions;
 
   const ArenaControlPanel({
     super.key,
@@ -29,7 +34,13 @@ class ArenaControlPanel extends StatelessWidget {
     required this.onShowGift,
     required this.onShowChat,
     required this.onShowRoleManager,
+    this.onToggleScreenShare,
+    this.isScreenSharing = false,
+    this.isDebater = false,
+    this.onTestDebaterMode,
+    this.onManageScreenSharePermissions,
   });
+
 
   @override
   Widget build(BuildContext context) {
@@ -100,12 +111,37 @@ class ArenaControlPanel extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: _buildControlButton(
-                  icon: Icons.chat_bubble_outline,
+                  icon: Icons.chat_bubble,
                   label: 'Chat',
                   onPressed: onShowChat,
-                  color: Colors.blue,
+                  color: const Color(0xFF8B5CF6), // Purple to match chat theme
                 ),
               ),
+
+
+              // Screen Share button (for debaters with permission or moderators)
+              if (onToggleScreenShare != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: _buildControlButton(
+                    icon: isScreenSharing ? Icons.stop_screen_share : Icons.screen_share,
+                    label: isScreenSharing ? 'Stop Share' : 'Share Screen',
+                    onPressed: onToggleScreenShare,
+                    color: isScreenSharing ? Colors.red : Colors.blue,
+                  ),
+                ),
+
+              // Screen Share Management (for moderators only)
+              if (isModerator && onManageScreenSharePermissions != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: _buildControlButton(
+                    icon: Icons.screen_share_outlined,
+                    label: 'Share Perms',
+                    onPressed: onManageScreenSharePermissions,
+                    color: Colors.indigo,
+                  ),
+                ),
 
               // Role Manager (always available for testing)
               if (!judgingComplete)
@@ -116,6 +152,18 @@ class ArenaControlPanel extends StatelessWidget {
                     label: 'Roles',
                     onPressed: onShowRoleManager,
                     color: ArenaColors.accentPurple,
+                  ),
+                ),
+
+              // Test Debater Mode button (for testing microphone functionality)
+              if (onTestDebaterMode != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: _buildControlButton(
+                    icon: isDebater ? Icons.mic : Icons.mic_off,
+                    label: isDebater ? 'Test: Debater' : 'Test: Audience',
+                    onPressed: onTestDebaterMode,
+                    color: isDebater ? Colors.green : Colors.orange,
                   ),
                 ),
             ],
@@ -164,4 +212,5 @@ class ArenaControlPanel extends StatelessWidget {
       ),
     );
   }
+
 }

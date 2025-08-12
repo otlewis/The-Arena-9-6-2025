@@ -18,26 +18,41 @@ import 'core/logging/app_logger.dart';
 import 'core/cache/cache_service.dart';
 import 'core/error/app_error.dart';
 import 'core/performance/performance_monitor.dart';
+import 'utils/performance_monitor.dart' as utils;
+import 'utils/mobile_performance_optimizer.dart';
 import 'core/notifications/notification_service.dart';
 import 'core/notifications/push_notification_service.dart';
 import 'core/notifications/notification_preferences.dart';
 import 'core/notifications/widgets/notification_banner.dart';
 import 'core/startup/app_startup_optimizer.dart';
 import 'core/cache/smart_cache_manager.dart';
-import 'core/agora/optimized_agora_service.dart';
 import 'core/navigation/optimized_navigation.dart';
+import 'services/network_resilience_service.dart';
+import 'services/offline_data_cache.dart';
+import 'services/offline_conflict_resolver.dart';
+import 'services/background_sync_service.dart';
+import 'widgets/network_quality_indicator.dart';
 import 'package:mcp_toolkit/mcp_toolkit.dart';
 
 // Service locator instance
 final getIt = GetIt.instance;
 
 void setupServiceLocator() {
-  // Register core services
+  // Register core services - use async singletons for heavy services
   getIt.registerLazySingleton<AppLogger>(() => AppLogger());
   getIt.registerLazySingleton<CacheService>(() => CacheService());
   getIt.registerLazySingleton<PerformanceMonitor>(() => PerformanceMonitor());
+  
+  // Use factory for services that might be recreated
   getIt.registerLazySingleton<ChallengeMessagingService>(() => ChallengeMessagingService());
-  getIt.registerLazySingleton<AppwriteService>(() => AppwriteService());
+  
+  // Heavy services - initialize lazily
+  getIt.registerLazySingletonAsync<AppwriteService>(() async {
+    final service = AppwriteService();
+    // Pre-warm any critical connections
+    return service;
+  });
+  
   getIt.registerLazySingleton<SoundService>(() => SoundService());
   
   // Register notification services
@@ -47,8 +62,15 @@ void setupServiceLocator() {
   
   // Register optimization services
   getIt.registerLazySingleton<SmartCacheManager>(() => SmartCacheManager());
-  getIt.registerLazySingleton<OptimizedAgoraService>(() => OptimizedAgoraService());
   getIt.registerLazySingleton<AppStartupOptimizer>(() => AppStartupOptimizer());
+  
+  // Register network resilience service
+  getIt.registerLazySingleton<NetworkResilienceService>(() => NetworkResilienceService());
+  
+  // Register offline services
+  getIt.registerLazySingleton<OfflineDataCache>(() => OfflineDataCache());
+  getIt.registerLazySingleton<OfflineConflictResolver>(() => OfflineConflictResolver());
+  getIt.registerLazySingleton<BackgroundSyncService>(() => BackgroundSyncService());
 }
 
 void resetMessagingService() {
@@ -88,6 +110,16 @@ void main() async {
     setupServiceLocator();
     final logger = getIt<AppLogger>();
     logger.initialize();
+    
+    // Start performance monitoring in debug mode
+    if (kDebugMode) {
+      utils.PerformanceMonitor.instance.startMonitoring();
+      logger.info('🔍 Performance monitoring enabled');
+    }
+    
+    // Initialize mobile performance optimizations
+    await MobilePerformanceOptimizer.instance.initialize();
+    logger.info('📱 Mobile performance optimizations initialized');
     
     // Set up global error handling with proper logging
     FlutterError.onError = (FlutterErrorDetails details) {
@@ -131,6 +163,14 @@ void main() async {
       
       // Initialize notification preferences (load user settings)
       await getIt<NotificationPreferencesService>().loadPreferences();
+      
+      // Initialize network resilience service
+      await getIt<NetworkResilienceService>().initialize();
+      
+      // Initialize offline services
+      await getIt<OfflineDataCache>().initialize();
+      await getIt<OfflineConflictResolver>().loadUnresolvedConflicts();
+      await getIt<BackgroundSyncService>().initialize();
       
       // Start app optimization in background (non-blocking)
       _startAppOptimization();
@@ -239,15 +279,33 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     
-    // Initialize services
-    _messagingService = getIt<ChallengeMessagingService>();
-    _soundService = getIt<SoundService>();
-    _notificationService = getIt<NotificationService>();
-    
-    // Trigger initial auth check and setup messaging
+    // Initialize services asynchronously to avoid blocking UI
+    _initializeServicesAsync();
+  }
+  
+  Future<void> _initializeServicesAsync() async {
+    try {
+      // Wait for heavy services if they're async
+      await getIt.allReady();
+      
+      _messagingService = getIt<ChallengeMessagingService>();
+      _soundService = getIt<SoundService>();
+      _notificationService = getIt<NotificationService>();
+      
+      // Setup messaging after services are ready
+      _setupMessageListening();
+    } catch (e) {
+      AppLogger().error('Error initializing services: $e');
+    }
+  }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Trigger initial auth check after dependencies are ready
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(navigationProvider.notifier).refreshAuth();
-      _setupMessageListening();
+    
     });
   }
 
@@ -470,6 +528,13 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
       body: Stack(
         children: [
           screens[navState.currentIndex],
+          // Network quality banner (top)
+          Positioned(
+            top: MediaQuery.of(context).padding.top,
+            left: 0,
+            right: 0,
+            child: const NetworkQualityBanner(),
+          ),
           // Banner notifications overlay
           NotificationBannerOverlay(
             notificationStream: _notificationService.bannerNotifications,
@@ -555,12 +620,12 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
         items: [
           BottomNavigationBarItem(
             icon: _buildNeumorphicNavIcon(
-              Icons.bolt,
+              Icons.mail,
               isSelected: navState.currentIndex == 0,
               themeService: themeService,
-              badgeCount: navState.pendingChallengeCount,
+              badgeCount: 0, // TODO: Replace with unread email count
             ),
-            label: 'Challenges',
+            label: 'Inbox', // Changed to ensure hot reload picks up changes
           ),
           BottomNavigationBarItem(
             icon: _buildNeumorphicNavIcon(

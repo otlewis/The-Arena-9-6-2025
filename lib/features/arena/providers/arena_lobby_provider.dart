@@ -11,6 +11,8 @@ class ArenaRoom {
   final String status;
   final String? challengeId;
   final String? description;
+  final String? category;
+  final int teamSize;
   final DateTime createdAt;
   final int currentParticipants;
   final bool isManual;
@@ -22,6 +24,8 @@ class ArenaRoom {
     required this.status,
     this.challengeId,
     this.description,
+    this.category,
+    required this.teamSize,
     required this.createdAt,
     required this.currentParticipants,
     required this.isManual,
@@ -35,6 +39,8 @@ class ArenaRoom {
       status: map['status'] ?? 'waiting',
       challengeId: map['challengeId'],
       description: map['description'],
+      category: map['category'],
+      teamSize: map['teamSize'] ?? 1, // Default to 1v1 for backwards compatibility
       createdAt: DateTime.parse(map['\$createdAt'] ?? DateTime.now().toIso8601String()),
       currentParticipants: map['currentParticipants'] ?? 0,
       isManual: (map['challengeId'] ?? '').isEmpty,
@@ -48,6 +54,8 @@ class ArenaRoom {
     String? status,
     String? challengeId,
     String? description,
+    String? category,
+    int? teamSize,
     DateTime? createdAt,
     int? currentParticipants,
     bool? isManual,
@@ -59,6 +67,8 @@ class ArenaRoom {
       status: status ?? this.status,
       challengeId: challengeId ?? this.challengeId,
       description: description ?? this.description,
+      category: category ?? this.category,
+      teamSize: teamSize ?? this.teamSize,
       createdAt: createdAt ?? this.createdAt,
       currentParticipants: currentParticipants ?? this.currentParticipants,
       isManual: isManual ?? this.isManual,

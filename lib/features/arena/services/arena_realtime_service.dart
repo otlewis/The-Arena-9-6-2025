@@ -11,6 +11,7 @@ class ArenaRealtimeService {
   RealtimeSubscription? _subscription;
   Timer? _heartbeatTimer;
   Timer? _roomStatusChecker;
+  Timer? _debounceTimer;
   
   // Callbacks
   VoidCallback? _onParticipantsChanged;
@@ -20,6 +21,10 @@ class ArenaRealtimeService {
   
   bool _isConnected = false;
   int _reconnectAttempts = 0;
+  bool _isDisposing = false;
+  
+  static const int _maxReconnectAttempts = 5;
+  static const Duration _debounceDelay = Duration(milliseconds: 300);
   
   ArenaRealtimeService({required AppwriteService appwriteService})
       : _appwriteService = appwriteService;
@@ -65,23 +70,31 @@ class ArenaRealtimeService {
     }
   }
   
-  /// Handle real-time messages
+  /// Handle real-time messages with debouncing
   void _handleRealtimeMessage(RealtimeMessage message) {
+    if (_isDisposing) return;
+    
     try {
       final event = message.events.isNotEmpty ? message.events.first : '';
       AppLogger().debug('📨 Real-time event: $event');
       
-      if (event.contains(ArenaConstants.roomParticipantsCollection)) {
-        _onParticipantsChanged?.call();
-      } else if (event.contains(ArenaConstants.debateRoomsCollection)) {
-        _onRoomDataChanged?.call();
+      // Debounce rapid updates to prevent UI thrashing
+      _debounceTimer?.cancel();
+      _debounceTimer = Timer(_debounceDelay, () {
+        if (_isDisposing) return;
         
-        // Check if room was closed
-        final payload = message.payload;
-        if (payload['status'] == ArenaConstants.roomStatusClosed) {
-          _onRoomClosed?.call(ArenaConstants.roomStatusClosed);
+        if (event.contains(ArenaConstants.roomParticipantsCollection)) {
+          _onParticipantsChanged?.call();
+        } else if (event.contains(ArenaConstants.debateRoomsCollection)) {
+          _onRoomDataChanged?.call();
+          
+          // Check if room was closed - handle immediately (no debounce)
+          final payload = message.payload;
+          if (payload['status'] == ArenaConstants.roomStatusClosed) {
+            _onRoomClosed?.call(ArenaConstants.roomStatusClosed);
+          }
         }
-      }
+      });
     } catch (e) {
       AppLogger().warning('⚠️ Error handling real-time message: $e');
     }
@@ -108,10 +121,10 @@ class ArenaRealtimeService {
     _onConnectionLost?.call();
   }
   
-  /// Schedule reconnection
+  /// Schedule reconnection with improved backoff
   void _scheduleReconnect(String roomId) {
-    if (_reconnectAttempts >= ArenaConstants.maxRetryAttempts) {
-      AppLogger().error('❌ Max reconnection attempts reached');
+    if (_reconnectAttempts >= _maxReconnectAttempts || _isDisposing) {
+      AppLogger().error('❌ Max reconnection attempts reached or service disposing');
       return;
     }
     
@@ -121,7 +134,7 @@ class ArenaRealtimeService {
     AppLogger().info('🔄 Scheduling reconnection attempt $_reconnectAttempts in ${delay.inSeconds}s');
     
     Timer(delay, () {
-      if (!_isConnected) {
+      if (!_isConnected && !_isDisposing) {
         _establishSubscription(roomId);
       }
     });
@@ -200,9 +213,14 @@ class ArenaRealtimeService {
     }
   }
   
-  /// Dispose resources
+  /// Dispose resources safely
   void dispose() {
     AppLogger().info('🧹 Disposing real-time service');
+    
+    _isDisposing = true;
+    
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
     
     _subscription?.close();
     _subscription = null;
@@ -214,6 +232,13 @@ class ArenaRealtimeService {
     _roomStatusChecker = null;
     
     _isConnected = false;
+    _reconnectAttempts = 0;
+    
+    // Clear callbacks to prevent memory leaks
+    _onParticipantsChanged = null;
+    _onRoomDataChanged = null;
+    _onRoomClosed = null;
+    _onConnectionLost = null;
     _reconnectAttempts = 0;
     
     // Clear callbacks

@@ -1,0 +1,712 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
+import '../services/appwrite_service.dart';
+import '../models/user_profile.dart';
+import '../core/logging/app_logger.dart';
+
+class WebRTCAudioTest extends StatefulWidget {
+  const WebRTCAudioTest({Key? key}) : super(key: key);
+
+  @override
+  State<WebRTCAudioTest> createState() => _WebRTCAudioTestState();
+}
+
+class _WebRTCAudioTestState extends State<WebRTCAudioTest> {
+  final AppwriteService _appwrite = AppwriteService();
+  
+  // Authentication and user info
+  UserProfile? _currentUser;
+  
+  // Socket.IO connection
+  IO.Socket? _socket;
+  bool _isConnected = false;
+  String _status = 'Ready to connect';
+  
+  // Audio room state
+  String _roomId = 'AUDIO_TEST_ROOM';
+  String _userId = 'USER_1';
+  bool _inRoom = false;
+  bool _isMuted = false;
+  
+  // WebRTC
+  MediaStream? _localStream;
+  Map<String, RTCPeerConnection> _peerConnections = {};
+  Map<String, MediaStream> _remoteStreams = {};
+  Map<String, bool> _participantSpeaking = {};
+  List<String> _participants = [];
+  
+  // Configuration
+  final Map<String, dynamic> _configuration = {
+    'iceServers': [
+      {'urls': 'stun:stun.l.google.com:19302'},
+      {'urls': 'stun:stun1.l.google.com:19302'},
+    ]
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    await _loadCurrentUser();
+    await _initializeWebRTC();
+  }
+
+  Future<void> _loadCurrentUser() async {
+    try {
+      final currentUser = await _appwrite.getCurrentUser();
+      if (currentUser != null) {
+        final userProfile = await _appwrite.getUserProfile(currentUser.$id);
+        setState(() {
+          _currentUser = userProfile;
+          _userId = 'USER_${_currentUser!.id.substring(0, 6)}';
+        });
+        AppLogger().debug("Loaded user: ${userProfile?.name}");
+      }
+    } catch (e) {
+      AppLogger().error("Error loading current user: $e");
+      setState(() {
+        _userId = 'USER_GUEST';
+      });
+    }
+  }
+
+  Future<void> _initializeWebRTC() async {
+    try {
+      // Request audio permissions
+      await navigator.mediaDevices.getUserMedia({
+        'audio': {
+          'echoCancellation': true,
+          'noiseSuppression': true,
+          'autoGainControl': true,
+        },
+        'video': false, // Audio only
+      }).then((stream) {
+        setState(() {
+          _localStream = stream;
+        });
+        AppLogger().debug("🎤 Local audio stream initialized");
+      });
+    } catch (e) {
+      AppLogger().error("❌ Failed to get audio stream: $e");
+      setState(() {
+        _status = 'Microphone access denied';
+      });
+    }
+  }
+
+  void _connectToSignalingServer() {
+    if (_socket != null) return;
+
+    setState(() {
+      _status = 'Connecting to signaling server...';
+    });
+
+    // Configure server URL - use Mac's local IP for iOS simulator
+    const String serverUrl = 'http://192.168.4.94:3001';
+    
+    AppLogger().debug("🔌 Connecting to signaling server: $serverUrl");
+
+    _socket = IO.io(serverUrl, IO.OptionBuilder()
+        .setTransports(['websocket'])
+        .disableAutoConnect()
+        .setTimeout(15000)
+        .enableReconnection()
+        .setReconnectionAttempts(3)
+        .setReconnectionDelay(1000)
+        .build());
+
+    _socket!.onConnect((_) {
+      AppLogger().debug("✅ Connected to signaling server");
+      setState(() {
+        _isConnected = true;
+        _status = 'Connected - ready to join room';
+      });
+    });
+
+    _socket!.onDisconnect((reason) {
+      AppLogger().debug("❌ Disconnected from signaling server: $reason");
+      setState(() {
+        _isConnected = false;
+        _status = 'Disconnected: $reason';
+      });
+    });
+
+    _socket!.onConnectError((error) {
+      AppLogger().error("❌ Connection error: $error");
+      setState(() {
+        _isConnected = false;
+        _status = 'Connection failed: Check server';
+      });
+    });
+
+    _socket!.onConnectTimeout((_) {
+      AppLogger().error("❌ Connection timeout");
+      setState(() {
+        _isConnected = false;
+        _status = 'Connection timeout - check network';
+      });
+    });
+
+    // Room management events
+    _socket!.on('user-joined', (data) => _handleUserJoined(data));
+    _socket!.on('user-left', (data) => _handleUserLeft(data));
+    _socket!.on('offer', (data) => _handleOffer(data));
+    _socket!.on('answer', (data) => _handleAnswer(data));
+    _socket!.on('ice-candidate', (data) => _handleIceCandidate(data));
+    _socket!.on('room-users', (data) => _handleRoomUsers(data));
+
+    _socket!.connect();
+  }
+
+  Future<void> _joinRoom() async {
+    if (!_isConnected || _localStream == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Not ready to join room')),
+      );
+      return;
+    }
+
+    setState(() {
+      _status = 'Joining audio room...';
+    });
+
+    _socket!.emit('join-room', {
+      'roomId': _roomId,
+      'userId': _userId,
+      'userName': _currentUser?.name ?? 'Guest',
+    });
+
+    setState(() {
+      _inRoom = true;
+      _status = 'Connected to audio room';
+    });
+
+    AppLogger().debug("🏠 Joined room: $_roomId as $_userId");
+  }
+
+  Future<void> _leaveRoom() async {
+    if (!_inRoom) return;
+
+    // Close all peer connections
+    for (var pc in _peerConnections.values) {
+      await pc.close();
+    }
+    _peerConnections.clear();
+    _remoteStreams.clear();
+    _participants.clear();
+
+    _socket!.emit('leave-room', {
+      'roomId': _roomId,
+      'userId': _userId,
+    });
+
+    setState(() {
+      _inRoom = false;
+      _participantSpeaking.clear();
+      _status = _isConnected ? 'Connected - ready to join room' : 'Disconnected';
+    });
+
+    AppLogger().debug("👋 Left room: $_roomId");
+  }
+
+  void _handleUserJoined(dynamic data) {
+    final String userId = data['userId'];
+    final String userName = data['userName'] ?? 'Unknown';
+    
+    AppLogger().debug("👥 User joined: $userId ($userName)");
+    
+    setState(() {
+      if (!_participants.contains(userId)) {
+        _participants.add(userId);
+        _participantSpeaking[userId] = false;
+      }
+    });
+
+    // Create peer connection for new user
+    _createPeerConnection(userId);
+  }
+
+  void _handleUserLeft(dynamic data) {
+    final String userId = data['userId'];
+    
+    AppLogger().debug("👋 User left: $userId");
+    
+    // Close peer connection
+    _peerConnections[userId]?.close();
+    _peerConnections.remove(userId);
+    _remoteStreams.remove(userId);
+    
+    setState(() {
+      _participants.remove(userId);
+      _participantSpeaking.remove(userId);
+    });
+  }
+
+  void _handleRoomUsers(dynamic data) {
+    final List<dynamic> users = data['users'];
+    
+    AppLogger().debug("👥 Room users: ${users.length}");
+    
+    setState(() {
+      _participants.clear();
+      for (var user in users) {
+        final userId = user['userId'];
+        if (userId != _userId) {
+          _participants.add(userId);
+          _participantSpeaking[userId] = false;
+        }
+      }
+    });
+
+    // Create peer connections for existing users
+    for (var user in users) {
+      final userId = user['userId'];
+      if (userId != _userId) {
+        _createPeerConnection(userId);
+      }
+    }
+  }
+
+  Future<void> _createPeerConnection(String userId) async {
+    try {
+      final pc = await createPeerConnection(_configuration);
+      
+      // Add local stream
+      if (_localStream != null) {
+        _localStream!.getTracks().forEach((track) {
+          pc.addTrack(track, _localStream!);
+        });
+      }
+
+      // Handle remote stream
+      pc.onAddStream = (stream) {
+        AppLogger().debug("🎤 Received remote audio from: $userId");
+        setState(() {
+          _remoteStreams[userId] = stream;
+        });
+      };
+
+      // Handle ICE candidates
+      pc.onIceCandidate = (candidate) {
+        _socket!.emit('ice-candidate', {
+          'candidate': candidate.toMap(),
+          'userId': _userId,
+          'targetUserId': userId,
+        });
+      };
+
+      _peerConnections[userId] = pc;
+
+      // Create offer
+      final offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      _socket!.emit('offer', {
+        'offer': offer.toMap(),
+        'userId': _userId,
+        'targetUserId': userId,
+      });
+
+      AppLogger().debug("📞 Created offer for: $userId");
+    } catch (e) {
+      AppLogger().error("❌ Failed to create peer connection: $e");
+    }
+  }
+
+  void _handleOffer(dynamic data) async {
+    final String userId = data['userId'];
+    final Map<String, dynamic> offerData = data['offer'];
+
+    try {
+      final pc = _peerConnections[userId];
+      if (pc == null) return;
+
+      final offer = RTCSessionDescription(offerData['sdp'], offerData['type']);
+      await pc.setRemoteDescription(offer);
+
+      final answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      _socket!.emit('answer', {
+        'answer': answer.toMap(),
+        'userId': _userId,
+        'targetUserId': userId,
+      });
+
+      AppLogger().debug("📞 Answered offer from: $userId");
+    } catch (e) {
+      AppLogger().error("❌ Failed to handle offer: $e");
+    }
+  }
+
+  void _handleAnswer(dynamic data) async {
+    final String userId = data['userId'];
+    final Map<String, dynamic> answerData = data['answer'];
+
+    try {
+      final pc = _peerConnections[userId];
+      if (pc == null) return;
+
+      final answer = RTCSessionDescription(answerData['sdp'], answerData['type']);
+      await pc.setRemoteDescription(answer);
+
+      AppLogger().debug("📞 Received answer from: $userId");
+    } catch (e) {
+      AppLogger().error("❌ Failed to handle answer: $e");
+    }
+  }
+
+  void _handleIceCandidate(dynamic data) async {
+    final String userId = data['userId'];
+    final Map<String, dynamic> candidateData = data['candidate'];
+
+    try {
+      final pc = _peerConnections[userId];
+      if (pc == null) return;
+
+      final candidate = RTCIceCandidate(
+        candidateData['candidate'],
+        candidateData['sdpMid'],
+        candidateData['sdpMLineIndex'],
+      );
+
+      await pc.addCandidate(candidate);
+      AppLogger().debug("🧊 Added ICE candidate from: $userId");
+    } catch (e) {
+      AppLogger().error("❌ Failed to handle ICE candidate: $e");
+    }
+  }
+
+  void _toggleMute() {
+    if (_localStream == null) return;
+
+    setState(() {
+      _isMuted = !_isMuted;
+    });
+
+    final audioTracks = _localStream!.getAudioTracks();
+    for (var track in audioTracks) {
+      track.enabled = !_isMuted;
+    }
+
+    AppLogger().debug("🎤 Audio ${_isMuted ? 'muted' : 'unmuted'}");
+  }
+
+  @override
+  void dispose() {
+    _leaveRoom();
+    _socket?.disconnect();
+    _socket?.dispose();
+    _localStream?.dispose();
+    
+    for (var pc in _peerConnections.values) {
+      pc.close();
+    }
+    
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('WebRTC Audio Test'),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+      ),
+      backgroundColor: Colors.black,
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Status info
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[900],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _inRoom ? Colors.green : (_isConnected ? Colors.orange : Colors.red),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    'User: ${_currentUser?.name ?? 'Loading...'}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Status: $_status',
+                    style: const TextStyle(color: Colors.white70),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Participants: ${_participants.length}',
+                    style: const TextStyle(color: Colors.white70),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Room: $_roomId | User: $_userId',
+                    style: const TextStyle(color: Colors.yellow, fontSize: 11),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Connection controls
+            if (!_isConnected) ...[
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _connectToSignalingServer,
+                  icon: const Icon(Icons.connect_without_contact, color: Colors.white),
+                  label: const Text(
+                    'Connect to Server',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            
+            // Room controls
+            if (_isConnected && !_inRoom) ...[
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _joinRoom,
+                  icon: const Icon(Icons.headset_mic, color: Colors.white),
+                  label: const Text(
+                    'Join Audio Room',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            
+            const SizedBox(height: 20),
+            
+            // Participant list
+            Expanded(
+              child: _buildParticipantList(),
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: _inRoom ? Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          FloatingActionButton(
+            heroTag: "mute",
+            onPressed: _toggleMute,
+            backgroundColor: _isMuted ? Colors.red : Colors.green,
+            child: Icon(
+              _isMuted ? Icons.mic_off : Icons.mic,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 16),
+          FloatingActionButton(
+            heroTag: "leave",
+            onPressed: _leaveRoom,
+            backgroundColor: Colors.red,
+            child: const Icon(Icons.call_end, color: Colors.white),
+          ),
+        ],
+      ) : null,
+    );
+  }
+
+  Widget _buildParticipantList() {
+    List<Widget> participantWidgets = [];
+
+    // Add local user first
+    participantWidgets.add(
+      _buildParticipantCard(
+        name: _currentUser?.name ?? 'You',
+        userId: _userId,
+        isLocal: true,
+        isSpeaking: !_isMuted,
+        hasAudio: _localStream != null,
+      ),
+    );
+
+    // Add remote participants
+    for (var participantId in _participants) {
+      participantWidgets.add(
+        _buildParticipantCard(
+          name: 'User ${participantId.substring(0, 8)}...',
+          userId: participantId,
+          isLocal: false,
+          isSpeaking: _participantSpeaking[participantId] ?? false,
+          hasAudio: _remoteStreams.containsKey(participantId),
+        ),
+      );
+    }
+
+    if (participantWidgets.length == 1 && !_inRoom) {
+      return Container(
+        color: Colors.grey[800],
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.headset_off, size: 80, color: Colors.grey),
+              SizedBox(height: 20),
+              Text(
+                'WebRTC Audio Room Empty',
+                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Connect and join to start audio conference',
+                style: TextStyle(color: Colors.white70, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      color: Colors.grey[900],
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: participantWidgets.length,
+        itemBuilder: (context, index) => participantWidgets[index],
+      ),
+    );
+  }
+
+  Widget _buildParticipantCard({
+    required String name,
+    required String userId,
+    required bool isLocal,
+    required bool isSpeaking,
+    required bool hasAudio,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isLocal ? Colors.green.withValues(alpha: 0.2) : Colors.grey[800],
+        border: Border.all(
+          color: isSpeaking ? Colors.orange : (isLocal ? Colors.green : Colors.grey),
+          width: isSpeaking ? 3 : 1,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          // Audio indicator
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: hasAudio ? 
+                (isSpeaking ? Colors.orange : Colors.green) : 
+                Colors.grey[700],
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              hasAudio ? 
+                (isSpeaking ? Icons.mic : Icons.mic_none) : 
+                Icons.mic_off,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          
+          // Participant info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  isLocal ? 'Local (You)' : 'Remote Participant',
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 12,
+                  ),
+                ),
+                Text(
+                  'ID: ${userId.length > 12 ? userId.substring(0, 12) : userId}...',
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Status indicators
+          Column(
+            children: [
+              if (isSpeaking)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'Speaking',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 4),
+              Icon(
+                hasAudio ? Icons.volume_up : Icons.volume_off,
+                color: hasAudio ? Colors.green : Colors.red,
+                size: 16,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

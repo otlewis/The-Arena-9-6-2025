@@ -4,7 +4,7 @@ import '../widgets/user_avatar.dart';
 import '../models/user_profile.dart';
 import '../models/message.dart';
 import '../models/judge_scorecard.dart';
-import '../services/chat_service.dart';
+// import '../services/chat_service.dart'; // Removed with new chat system
 import '../widgets/debater_invite_choice_modal.dart';
 import 'package:intl/intl.dart';
 // Conditional import to avoid web compilation issues
@@ -162,11 +162,11 @@ class ArenaModals {
     );
   }
 
-  // Show chat bottom sheet
+  // Show chat bottom sheet - DEPRECATED: Use showAgoraChatBottomSheet instead
   static void showChatBottomSheet(
     BuildContext context,
     {
-      required ChatService chatService,
+      // required ChatService chatService, // Removed with new chat system
       required String roomId,
       required String? currentUserId,
     }
@@ -176,7 +176,7 @@ class ArenaModals {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => ArenaChatBottomSheet(
-        chatService: chatService,
+        // chatService: chatService, // Removed with new chat system
         roomId: roomId,
         currentUserId: currentUserId,
       ),
@@ -1938,13 +1938,13 @@ class RoleManagerPanel extends StatelessWidget {
 
 // Arena Chat Bottom Sheet (simplified version)
 class ArenaChatBottomSheet extends StatefulWidget {
-  final ChatService chatService;
+  // final ChatService chatService; // Removed with new chat system
   final String roomId;
   final String? currentUserId;
 
   const ArenaChatBottomSheet({
     super.key,
-    required this.chatService,
+    // required this.chatService, // Removed with new chat system
     required this.roomId,
     required this.currentUserId,
   });

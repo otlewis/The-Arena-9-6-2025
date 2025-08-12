@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  livekit:
+    image: livekit/livekit-server:v1.5.2
+    container_name: livekit-arena-production
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50100:50000-50100/udp"
+    volumes:
+      - ./livekit-production.yaml:/etc/livekit.yaml:ro
+    command: --config /etc/livekit.yaml
+    restart: unless-stopped
+    environment:
+      - LIVEKIT_CONFIG=/etc/livekit.yaml
+    networks:
+      - livekit-network
+
+networks:
+  livekit-network:
+    driver: bridge

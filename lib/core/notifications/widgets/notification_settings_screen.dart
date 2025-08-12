@@ -323,6 +323,10 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
         iconData = Icons.schedule;
         color = Colors.grey;
         break;
+      case NotificationType.instantMessage:
+        iconData = Icons.message;
+        color = const Color(0xFF8B5CF6);
+        break;
     }
 
     return Icon(iconData, color: color);
@@ -354,6 +358,8 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
         return 'Vote Reminders';
       case NotificationType.followUp:
         return 'Follow-ups';
+      case NotificationType.instantMessage:
+        return 'Instant Messages';
     }
   }
 

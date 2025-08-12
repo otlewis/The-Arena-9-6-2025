@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:appwrite/appwrite.dart';
 import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
+import '../constants/appwrite.dart';
 import '../widgets/messaging_modal_system.dart';
 
 class InstantMessageBell extends StatefulWidget {
@@ -81,9 +83,9 @@ class _MemoizedBellIcon extends StatelessWidget {
 
 class _InstantMessageBellState extends State<InstantMessageBell> with SingleTickerProviderStateMixin {
   final AppwriteService _appwriteService = AppwriteService();
-  StreamSubscription? _unreadCountSubscription;
+  RealtimeSubscription? _unreadCountSubscription;
   StreamSubscription? _conversationsSubscription;
-  final int _unreadCount = 0;
+  int _unreadCount = 0;
   
   // Animation controller for bell shake
   late AnimationController _animationController;
@@ -116,13 +118,108 @@ class _InstantMessageBellState extends State<InstantMessageBell> with SingleTick
       // Get current user first
       final user = await _appwriteService.getCurrentUser();
       if (user != null && mounted) {
-        await _appwriteService.getUserProfile(user.$id);
+        // Load initial unread count
+        await _loadUnreadCount(user.$id);
+        
+        // Subscribe to new messages for real-time count updates
+        _subscribeToMessages(user.$id);
       }
 
-      // Instant messaging disabled (Agora removed)
-      AppLogger().debug('📱 Instant messaging bell disabled (Agora removed)');
+      AppLogger().info('📱 🔔 InstantMessageBell initialized successfully for user: ${user?.$id}');
+      AppLogger().info('📱 🔔 Initial unread count: $_unreadCount');
     } catch (e) {
       AppLogger().error('Failed to initialize instant messaging bell: $e');
+    }
+  }
+  
+  Future<void> _loadUnreadCount(String userId) async {
+    try {
+      // Count unread messages where user is receiver and isRead = false
+      final response = await _appwriteService.databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'instant_messages',
+        queries: [
+          Query.equal('receiverId', userId),
+          Query.equal('isRead', false),
+          Query.limit(100), // Just for counting, we don't need all
+        ],
+      );
+      
+      if (mounted) {
+        setState(() {
+          _unreadCount = response.documents.length;
+        });
+        
+        AppLogger().debug('📱 Loaded unread count: $_unreadCount');
+        
+        // Animate if there are unread messages
+        if (_unreadCount > 0) {
+          _animationController.forward();
+        }
+      }
+    } catch (e) {
+      AppLogger().error('Failed to load unread count: $e');
+    }
+  }
+  
+  void _subscribeToMessages(String userId) {
+    try {
+      // Test basic realtime connection first
+      AppLogger().info('📱 Testing Appwrite realtime connection...');
+      AppLogger().info('📱 Database ID: ${AppwriteConstants.databaseId}');
+      
+      // First test with a simpler subscription to see if realtime works at all
+      _unreadCountSubscription = _appwriteService.realtimeInstance.subscribe([
+        'databases.${AppwriteConstants.databaseId}.collections.instant_messages.documents'
+      ]);
+      
+      _unreadCountSubscription?.stream.listen(
+        (response) {
+          AppLogger().info('📱 📡 REALTIME EVENT RECEIVED: ${response.events}');
+          AppLogger().debug('📱 Payload: ${response.payload}');
+          
+          // Check for any instant message create events
+          final hasCreateEvent = response.events.any((event) => 
+            event.contains('instant_messages.documents') && event.contains('create'));
+            
+          if (hasCreateEvent) {
+            final doc = response.payload;
+            AppLogger().info('📱 🔄 Processing new message for user $userId');
+            AppLogger().debug('📱 Message receiverId: ${doc['receiverId']}, isRead: ${doc['isRead']}');
+            
+            // Only count if it's for current user and unread
+            if (doc['receiverId'] == userId && doc['isRead'] == false) {
+              if (mounted) {
+                setState(() {
+                  _unreadCount++;
+                });
+                
+                AppLogger().info('📱 🚨 NEW UNREAD MESSAGE DETECTED! Count: $_unreadCount');
+                
+                // Animate the bell
+                _animationController.forward().then((_) {
+                  _animationController.reverse();
+                });
+              }
+            } else {
+              AppLogger().debug('📱 ❌ Message not for current user or already read');
+            }
+          } else {
+            AppLogger().debug('📱 ❌ No create event found in: ${response.events}');
+          }
+        },
+        onError: (error) {
+          AppLogger().error('📱 💥 Realtime subscription error: $error');
+        },
+        onDone: () {
+          AppLogger().warning('📱 ⚠️ Realtime subscription closed');
+        },
+      );
+      
+      AppLogger().info('📱 ✅ Successfully subscribed to instant messages for real-time updates');
+      AppLogger().info('📱 Subscription channels: databases.${AppwriteConstants.databaseId}.collections.instant_messages.documents');
+    } catch (e) {
+      AppLogger().error('Failed to subscribe to messages: $e');
     }
   }
 
@@ -207,7 +304,7 @@ class _InstantMessageBellState extends State<InstantMessageBell> with SingleTick
   
   @override
   void dispose() {
-    _unreadCountSubscription?.cancel();
+    _unreadCountSubscription?.close();
     _conversationsSubscription?.cancel();
     _animationController.dispose();
     super.dispose();

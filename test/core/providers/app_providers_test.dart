@@ -130,7 +130,7 @@ void main() {
       // Test the connectivity provider with override
       final testContainer = ProviderContainer(
         overrides: [
-          connectivityProvider.overrideWith((ref) => Stream.value(ConnectivityResult.wifi)),
+          connectivityProvider.overrideWith((ref) => Stream.value([ConnectivityResult.wifi])),
         ],
       );
       addTearDown(testContainer.dispose);

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../logging/app_logger.dart';
 import '../cache/smart_cache_manager.dart';
-import '../agora/optimized_agora_service.dart';
 import '../../services/appwrite_service.dart';
 
 /// Handles app startup optimizations for instant navigation
@@ -26,7 +25,6 @@ class AppStartupOptimizer {
     // Run optimizations in parallel for maximum speed
     final futures = [
       _preloadCriticalData(),
-      _preInitializeAgora(),
       _warmupCaches(),
       _preloadAssets(),
       _initializeBackgroundServices(),
@@ -105,22 +103,6 @@ class AppStartupOptimizer {
     }
   }
 
-  /// Pre-initialize Agora for instant voice chat
-  Future<void> _preInitializeAgora() async {
-    try {
-      _logger.debug('🎙️ Pre-initializing Agora...');
-      
-      final agora = OptimizedAgoraService();
-      await agora.preInitialize();
-      
-      _completedTasks.add('agora_preinit');
-      _logger.debug('✅ Agora pre-initialized');
-      
-    } catch (e) {
-      _failedTasks.add('agora_preinit');
-      _logger.error('Failed to pre-initialize Agora: $e');
-    }
-  }
 
   /// Warm up caches with frequently accessed data
   Future<void> _warmupCaches() async {

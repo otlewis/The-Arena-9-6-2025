@@ -12,12 +12,12 @@ import '../services/challenge_messaging_service.dart';
 import '../services/theme_service.dart';
 import '../widgets/arena_role_notification_modal.dart';
 import '../widgets/animated_fade_in.dart';
-import '../widgets/instant_message_bell.dart';
+import '../widgets/simple_message_bell.dart';
 import '../widgets/challenge_bell.dart';
 import 'package:get_it/get_it.dart';
 import '../core/logging/app_logger.dart';
-// import 'mediasfu_test_screen.dart'; // Unused import
-import 'arena_webrtc_screen.dart';
+import '../debug_coin_initializer.dart';
+// All test screen imports removed - files deleted
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -144,30 +144,17 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // Go DIRECTLY to Arena test room - NO options
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const ArenaWebRTCScreen(),
-            ),
-          );
-        },
-        backgroundColor: Colors.orange,
-        icon: const Icon(Icons.bolt),
-        label: const Text('ARENA CALL'),
-        tooltip: 'Enter Arena Test Room',
-      ),
     );
   }
 
   Widget _buildHeader() {
-    return Container(
-      color: _themeService.isDarkMode 
-          ? const Color(0xFF2D2D2D)
-          : const Color(0xFFE8E8E8),
-      child: SafeArea(
+    return GestureDetector(
+      onLongPress: _showDebugOptions,
+      child: Container(
+        color: _themeService.isDarkMode 
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E8E8),
+        child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
           child: Column(
@@ -225,9 +212,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ],
                         ),
-                        child: const InstantMessageBell(
-                          iconColor: Color(0xFFDC2626),
-                          iconSize: 24,
+                        child: const Center(
+                          child: ChallengeBell(
+                            iconColor: Color(0xFFDC143C), // Scarlet red
+                            iconSize: 24,
+                          ),
                         ),
                       ),
                     ),
@@ -259,9 +248,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ],
                         ),
-                        child: const ChallengeBell(
-                          iconColor: Color(0xFF8B5CF6),
-                          iconSize: 24,
+                        child: const Center(
+                          child: SimpleMessageBell(
+                            iconColor: Color(0xFF8B5CF6), // Purple
+                            iconSize: 24,
+                          ),
                         ),
                       ),
                     ),
@@ -390,7 +381,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ),
                           child: Image.asset(
-                            'assets/images/logo.png',
+                            'assets/images/Arenalogo.png',
                             width: 60,
                             height: 60,
                             fit: BoxFit.contain,
@@ -462,6 +453,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -632,7 +624,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Container(), // Empty space to balance the row
+              child: AnimatedScaleIn(
+                delay: const Duration(milliseconds: 1900),
+                child: _buildFeatureCard('Rankings', 'Rankings', () => _navigateToRankings()),
+              ),
             ),
           ],
         ),
@@ -648,8 +643,7 @@ class _HomeScreenState extends State<HomeScreen> {
       'OpenDiscussions': 'assets/icons/opendiscussions.png',
       'DebateTakeDiscuss': 'assets/icons/debatetakesdiscuss.png',
       'DebateClubs': 'assets/icons/debate clubs.png',
-      'WebRTCTest': Icons.video_call, // Video call icon for WebRTC test
-      'SimpleConference': Icons.video_camera_front, // Camera icon for Simple Conference
+      'Rankings': 'assets/icons/rank1.png',
     };
     
     final iconAsset = iconMap[feature];
@@ -789,6 +783,57 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _navigateToDebatesDiscussions() {
     Navigator.push(context, MaterialPageRoute(builder: (context) => const DiscussionsRoomListScreen()));
+  }
+
+  void _navigateToRankings() {
+    // TODO: Navigate to rankings screen when implemented
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Rankings feature coming soon!'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showDebugOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              '🔧 Debug Options',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            DebugCoinInitializer.debugButton(context),
+            const SizedBox(height: 10),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                DebugCoinInitializer.showAppwriteInstructions(context);
+              },
+              icon: const Icon(Icons.help_outline),
+              label: const Text('📋 Appwrite Setup Guide'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
   }
 
 

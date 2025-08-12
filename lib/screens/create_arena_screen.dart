@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/appwrite_service.dart';
 import '../features/arena/providers/arena_lobby_provider.dart';
 import '../core/logging/app_logger.dart';
+import '../widgets/challenge_bell.dart';
 import 'arena_screen.dart';
 
 class CreateArenaScreen extends ConsumerStatefulWidget {
@@ -257,6 +258,8 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          const ChallengeBell(iconColor: Color(0xFF6B46C1)),
+          const SizedBox(width: 8),
           IconButton(
             icon: const Icon(Icons.refresh, color: deepPurple),
             onPressed: () => ref.read(arenaLobbyProvider.notifier).refreshArenas(),
@@ -613,7 +616,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
   }
 
   Widget _buildArenaCard(String roomId, String topic, String status, String challengeId, String description, int currentParticipants, bool isManual) {
-    const maxParticipants = 8;
+    const maxParticipants = 1000; // Allow unlimited participants
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),

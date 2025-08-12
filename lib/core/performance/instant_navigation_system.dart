@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../logging/app_logger.dart';
 import '../cache/smart_cache_manager.dart';
-import '../agora/optimized_agora_service.dart';
 
 /// Complete instant navigation system that eliminates loading delays
 class InstantNavigationSystem {
@@ -24,7 +23,6 @@ class InstantNavigationSystem {
       // Initialize all components in parallel
       await Future.wait([
         _initializeCaching(),
-        _initializeAgoraOptimization(),
         _preloadCriticalAssets(),
         _setupPerformanceMonitoring(),
       ]);
@@ -53,14 +51,6 @@ class InstantNavigationSystem {
     _logger.debug('✅ Smart caching initialized');
   }
 
-  Future<void> _initializeAgoraOptimization() async {
-    _logger.debug('🎙️ Initializing Agora optimization...');
-    
-    final agora = OptimizedAgoraService();
-    await agora.preInitialize();
-    
-    _logger.debug('✅ Agora optimization initialized');
-  }
 
   Future<void> _preloadCriticalAssets() async {
     _logger.debug('🖼️ Preloading critical assets...');
@@ -170,11 +160,8 @@ class InstantNavigationSystem {
   }
 
   Future<void> _preloadArenaScreenData() async {
-    final agora = OptimizedAgoraService();
-    // Pre-initialize Agora for instant voice chat
-    if (!agora.isInitialized) {
-      await agora.preInitialize();
-    }
+    // Agora pre-initialization disabled (removed)
+    _logger.debug('🏟️ Agora pre-initialization disabled (removed)');
   }
 
   Future<void> _preloadProfileScreenData() async {
@@ -194,7 +181,7 @@ class InstantNavigationSystem {
     return {
       'is_initialized': _isInitialized,
       'cache_stats': SmartCacheManager().getCacheStats(),
-      'agora_status': OptimizedAgoraService().isInitialized,
+      'agora_status': false, // Agora removed
       'timestamp': DateTime.now().toIso8601String(),
     };
   }

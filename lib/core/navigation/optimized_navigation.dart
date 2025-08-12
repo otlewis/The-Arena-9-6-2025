@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../screens/messages_screen.dart';
+import '../../screens/email_inbox_screen.dart';
 import '../../screens/home_screen.dart';
 import '../../screens/premium_screen.dart';
 import '../../screens/profile_screen.dart';
@@ -88,7 +88,7 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
     return [
       const _PersistentScreenWrapper(
         screenIndex: 0,
-        child: MessagesScreen(),
+        child: EmailInboxScreen(),
       ),
       _PersistentScreenWrapper(
         screenIndex: 1,
@@ -382,15 +382,10 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
       child: ClipRRect(
         borderRadius: BorderRadius.circular(25),
         child: BottomNavigationBar(
-        currentIndex: navState.currentIndex == 0 ? 1 : navState.currentIndex,
+        currentIndex: navState.currentIndex,
         onTap: (index) {
-          // Special handling for messages tab (index 0) - open modal instead
-          if (index == 0) {
-            context.openMessagingModal();
-          } else {
-            // Instant navigation - no rebuild needed
-            ref.read(navigationProvider.notifier).setCurrentIndex(index);
-          }
+          // Navigate to the selected screen
+          ref.read(navigationProvider.notifier).setCurrentIndex(index);
         },
         backgroundColor: Colors.transparent,
         selectedItemColor: themeService.isDarkMode 
@@ -436,7 +431,7 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
                   ),
                   child: Center(
                     child: Icon(
-                      Icons.bolt,
+                      Icons.mail,
                       size: 28,
                       color: themeService.isDarkMode ? Colors.grey[400] : Colors.grey[600],
                     ),
@@ -469,7 +464,7 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
                   ),
               ],
             ),
-            label: 'Challenges',
+            label: 'Inbox',
           ),
           BottomNavigationBarItem(
             icon: navState.isAuthenticated 

@@ -8,7 +8,7 @@ import '../../../core/providers/app_providers.dart';
 import '../../../screens/home_screen.dart';
 import '../../../screens/login_screen.dart';
 import '../../../screens/profile_screen.dart';
-import '../../../screens/messages_screen.dart';
+import '../../../screens/email_inbox_screen.dart';
 import '../../../screens/premium_screen.dart';
 
 /// Navigation state
@@ -58,6 +58,7 @@ class NavigationNotifier extends StateNotifier<NavigationState> {
   
   Key _profileKey = UniqueKey(); // To force ProfileScreen refresh
   List<Widget>? _cachedScreens;
+  // ignore: unused_field
   bool _screensCacheValid = false;
 
   Key get profileKey => _profileKey;
@@ -66,13 +67,14 @@ class NavigationNotifier extends StateNotifier<NavigationState> {
     required VoidCallback onLoginSuccess,
     required VoidCallback onLogout,
   }) {
-    if (_screensCacheValid && _cachedScreens != null) {
-      return _cachedScreens!;
-    }
+    // Force rebuild screens to ensure navigation changes take effect
+    // if (_screensCacheValid && _cachedScreens != null) {
+    //   return _cachedScreens!;
+    // }
 
     _logger.debug('🔍 Building screens - isAuthenticated: ${state.isAuthenticated}, currentIndex: ${state.currentIndex}');
     _cachedScreens = [
-      const MessagesScreen(),
+      const EmailInboxScreen(),
       state.isAuthenticated ? const HomeScreen() : LoginScreen(
         onLoginSuccess: onLoginSuccess,
       ),

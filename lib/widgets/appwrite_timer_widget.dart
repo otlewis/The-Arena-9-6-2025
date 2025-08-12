@@ -390,7 +390,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
     return GestureDetector(
       onTap: widget.isModerator && widget.showControls ? _showTimerControls : null,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: _getTimerColor(),
           borderRadius: BorderRadius.circular(12),
@@ -404,8 +404,8 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
           children: [
             _buildTimerDisplay(compact: true),
             if (widget.isModerator && widget.showControls) ...[
-              const SizedBox(width: 3),
-              const Icon(Icons.settings, color: Colors.white, size: 12),
+              const SizedBox(width: 2),
+              const Icon(Icons.settings, color: Colors.white, size: 10),
             ],
           ],
         ),
@@ -417,7 +417,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
     return GestureDetector(
       onTap: widget.isModerator && widget.showControls ? _showCreateTimerDialog : null,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: const Color(0xFF4A4A4A), // Arena purple
           borderRadius: BorderRadius.circular(12),
@@ -434,13 +434,13 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
-                fontSize: 16,
+                fontSize: 14,
                 fontFamily: 'monospace',
               ),
             ),
             if (widget.isModerator && widget.showControls) ...[
-              const SizedBox(width: 3),
-              const Icon(Icons.add_circle_outline, color: Colors.white, size: 12),
+              const SizedBox(width: 2),
+              const Icon(Icons.add_circle_outline, color: Colors.white, size: 10),
             ],
           ],
         ),
@@ -542,7 +542,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
     Widget timeDisplay = Text(
       timeText,
       style: TextStyle(
-        fontSize: compact ? 16 : 56,
+        fontSize: compact ? 14 : 56,
         fontWeight: FontWeight.bold,
         color: compact ? Colors.white : color,
         fontFamily: 'monospace',

@@ -1,0 +1,66 @@
+{
+  "mcpServers": {
+    "ElevenLabs": {
+      "command": "/Users/otislewis/elevenlabs-mcp-venv/bin/python",
+      "args": [
+        "/Users/otislewis/elevenlabs-mcp-venv/lib/python3.11/site-packages/elevenlabs_mcp/server.py"
+      ],
+      "env": {
+        "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY}"
+      }
+    },
+    "mcp_flutter": {
+      "command": "/Users/otislewis/Desktop/mcp_flutter/mcp_server_dart/build/flutter_inspector_mcp",
+      "args": [],
+      "env": {
+        "FLUTTER_APP_PATH": "/Users/otislewis/arena2",
+        "FLUTTER_DEBUG_PORT": "8181"
+      }
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "env": {},
+      "start_on_launch": true
+    },
+    "arena-analytics": {
+      "command": "node",
+      "args": ["/Users/otislewis/arena2/arena-analytics-mcp/server.js"],
+      "env": {
+        "APPWRITE_ENDPOINT": "${APPWRITE_ENDPOINT}",
+        "APPWRITE_PROJECT_ID": "${APPWRITE_PROJECT_ID}",
+        "APPWRITE_API_KEY": "${APPWRITE_API_KEY}"
+      }
+    },
+    "arena-launch": {
+      "command": "node", 
+      "args": ["/Users/otislewis/arena2/arena-monitoring/launch-server.js"],
+      "env": {
+        "APPWRITE_ENDPOINT": "${APPWRITE_ENDPOINT}",
+        "APPWRITE_PROJECT_ID": "${APPWRITE_PROJECT_ID}",
+        "APPWRITE_API_KEY": "${APPWRITE_API_KEY}"
+      }
+    },
+    "appwrite-data": {
+      "command": "node",
+      "args": ["/Users/otislewis/arena2/arena-monitoring/appwrite-server.js"],
+      "env": {
+        "APPWRITE_ENDPOINT": "${APPWRITE_ENDPOINT}",
+        "APPWRITE_PROJECT_ID": "${APPWRITE_PROJECT_ID}",
+        "APPWRITE_API_KEY": "${APPWRITE_API_KEY}"
+      }
+    },
+    "agora-metrics": {
+      "command": "node",
+      "args": ["/Users/otislewis/arena2/arena-monitoring/agora-server.js"],
+      "env": {
+        "AGORA_APP_ID": "${AGORA_APP_ID}",
+        "AGORA_APP_CERTIFICATE": "${AGORA_APP_CERTIFICATE}"
+      }
+    },
+    "notion": {
+      "url": "https://mcp.notion.com/mcp",
+      "apiKey": "${NOTION_API_KEY}"
+    }
+  }
+}

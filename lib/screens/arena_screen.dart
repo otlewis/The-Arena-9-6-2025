@@ -8,14 +8,17 @@ import '../widgets/user_avatar.dart';
 import '../models/user_profile.dart';
 import '../models/message.dart';
 import '../models/judge_scorecard.dart';
-import '../widgets/user_profile_modal.dart';
+import '../widgets/user_profile_bottom_sheet.dart';
 import '../widgets/mattermost_chat_widget.dart';
 import '../models/discussion_chat_message.dart';
+import '../screens/email_compose_screen.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
 import '../main.dart' show ArenaApp, getIt;
 import '../core/logging/app_logger.dart';
-import '../services/websocket_webrtc_service.dart';
+import '../services/livekit_service.dart';
+import '../services/livekit_token_service.dart';
+import '../services/noise_cancellation_service.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:audio_session/audio_session.dart' as audio_session;
 import 'arena_modals.dart';
@@ -118,6 +121,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   bool _isExiting = false; // Prevent state updates during exit
   Timer? _roomStatusChecker; // Periodic room status checker
   Timer? _roomCompletionTimer; // Timer for room completion after closure
+  Timer? _muteStateSyncTimer; // Periodic mute state sync to prevent stuck states
   StreamSubscription? _realtimeSubscription; // Track realtime subscription
   StreamSubscription? _unreadMessagesSubscription; // Instant messages subscription
   int _roomStatusCheckerIterations = 0; // Track iterations to prevent infinite loops
@@ -144,10 +148,14 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   // Speaking Management
   String _currentSpeaker = '';
   
-  // WebRTC Video & Audio Management
-  final WebSocketWebRTCService _webrtcService = WebSocketWebRTCService();
+  // WebRTC Video & Audio Management  
+  final LiveKitService _webrtcService = LiveKitService();
   bool _isWebRTCConnected = false;
   bool _isMuted = false;
+  bool _isScreenSharing = false;
+  
+  // Screen sharing state
+  final RTCVideoRenderer _screenShareRenderer = RTCVideoRenderer();
   
   // Video renderers for different participants
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
@@ -175,6 +183,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   
   final List<UserProfile> _audience = [];
   
+  
   // Two-stage invitation system state
   bool _bothDebatersPresent = false;
   final bool _invitationModalShown = false;
@@ -184,8 +193,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   // StreamSubscription? _chatSubscription; // Removed with old chat system
   final TextEditingController _chatController = TextEditingController();
   
-  // Screen sharing state
-  bool _isScreenSharing = false;
   // JitsiService removed - focusing on debates_discussions_screen only
   // final JitsiService _jitsiService = JitsiService();
   
@@ -219,6 +226,14 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     
     // Use proper initialization order to prevent user ID issues
     _initializeArena();
+    
+    // Force WebRTC connection after a delay to ensure room data is loaded
+    Future.delayed(const Duration(seconds: 3), () {
+      if (!_isWebRTCConnected && mounted) {
+        AppLogger().debug('🎥 Force attempting WebRTC connection after delay...');
+        _connectToWebRTC();
+      }
+    });
   }
   
   /// Initialize arena with proper authentication and setup order
@@ -308,6 +323,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     // Step 4: Start room status checker
     _startRoomStatusChecker();
     
+    // Step 5: Load participants to get user role and connect WebRTC
+    await _loadParticipants();
+    
     // Chat service removed - now handled by floating chat button
   }
 
@@ -342,6 +360,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       AppLogger().debug('🛑 DISPOSE: Room completion timer was already null');
     }
     
+    AppLogger().debug('🛑 DISPOSE: Cancelling mute state sync timer...');
+    if (_muteStateSyncTimer != null) {
+      _muteStateSyncTimer!.cancel();
+      AppLogger().debug('🛑 DISPOSE: Mute sync timer cancelled, setting to null');
+      _muteStateSyncTimer = null;
+    } else {
+      AppLogger().debug('🛑 DISPOSE: Mute sync timer was already null');
+    }
+    
     AppLogger().debug('🛑 DISPOSE: Cancelling realtime subscription...');
     _realtimeSubscription?.cancel();
     _realtimeSubscription = null;
@@ -356,6 +383,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     
     AppLogger().debug('🛑 DISPOSE: Cleaning up WebRTC...');
     _disposeWebRTC();
+    
+    AppLogger().debug('🛑 DISPOSE: Cleaning up noise cancellation...');
+    try {
+      NoiseCancellationService().disable();
+    } catch (e) {
+      AppLogger().error('❌ Failed to disable noise cancellation during dispose: $e');
+    }
     
     _timerController.dispose();
     
@@ -537,108 +571,71 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
       // Initialize video renderers
       await _localRenderer.initialize();
+      await _screenShareRenderer.initialize();
       
-      // Set up WebRTC service callbacks
-      _webrtcService.onLocalStream = (stream) {
-        AppLogger().debug('🎥 Received local stream');
-        AppLogger().debug('🎥 Audio tracks: ${stream.getAudioTracks().length}');
-        AppLogger().debug('🎥 Video tracks: ${stream.getVideoTracks().length}');
-        
-        // Store local stream for video/audio control
-        _localStream = stream;
-        
-        if (mounted) {
-          setState(() {
-            _localStream = stream;
-            _localRenderer.srcObject = stream;
-          });
-        }
-      };
-
-      _webrtcService.onRemoteStream = (peerId, stream, userId, role) {
-        AppLogger().debug('🎥 Received remote stream from peer: $peerId (User: $userId, Role: $role)');
-        AppLogger().debug('🎥 Audio tracks in stream: ${stream.getAudioTracks().length}');
-        AppLogger().debug('🎥 Video tracks in stream: ${stream.getVideoTracks().length}');
-        
-        // Store remote stream for video display
-        _remoteStreams[peerId] = stream;
-        
-        // Store the peer-to-user mapping
-        if (userId.isNotEmpty) {
-          _userToPeerMapping[userId] = peerId;
-          _peerToUserMapping[peerId] = userId;
-          _peerRoles[peerId] = role;
-          AppLogger().debug('🎥 Mapped user $userId to peer $peerId with role $role');
-        }
-
-        // Create and initialize renderer for this peer
-        if (!_remoteRenderers.containsKey(peerId)) {
-          final renderer = RTCVideoRenderer();
-          renderer.initialize().then((_) {
-            renderer.srcObject = stream;
-            if (mounted) {
-              setState(() {
-                _remoteRenderers[peerId] = renderer;
-              });
-            }
-          });
-        }
-
-        // Enable video and audio tracks for playback
-        final videoTracks = stream.getVideoTracks();
-        final audioTracks = stream.getAudioTracks();
-        
-        for (var track in videoTracks) {
-          track.enabled = true;
-          AppLogger().debug('🎥 Enabled video track: ${track.id}');
-        }
-        
-        for (var track in audioTracks) {
-          track.enabled = true;
-          AppLogger().debug('🔊 Enabled audio track: ${track.id}');
-        }
-      };
-
-      _webrtcService.onPeerLeft = (peerId) {
-        AppLogger().debug('🎥 Peer disconnected: $peerId');
-        if (mounted) {
-          setState(() {
-            _remoteRenderers[peerId]?.dispose();
-            _remoteRenderers.remove(peerId);
-            _remoteStreams.remove(peerId);
-            
-            // Clean up mappings
-            final userId = _peerToUserMapping[peerId];
-            if (userId != null) {
-              _userToPeerMapping.remove(userId);
-            }
-            _peerToUserMapping.remove(peerId);
-            _peerRoles.remove(peerId);
-          });
-        }
-      };
-
-      // Set up connection state callbacks
+      // Set up LiveKit service callbacks
       _webrtcService.onConnected = () {
+        AppLogger().debug('✅ LiveKit connected to Arena room');
         if (mounted) {
           setState(() {
             _isWebRTCConnected = true;
+            // Sync mute state on connection
+            _isMuted = _webrtcService.isMuted;
           });
-          AppLogger().debug('🔗 Arena WebRTC connected');
-          AppLogger().debug('🔗 Current user mappings: $_userToPeerMapping');
-          AppLogger().debug('🔗 Current peer mappings: $_peerToUserMapping');
-          AppLogger().debug('🔗 Remote renderers: ${_remoteRenderers.keys.toList()}');
+        }
+        
+        // Start periodic state sync to prevent stuck states
+        _startMuteStateSyncTimer();
+      };
+
+      _webrtcService.onParticipantConnected = (participant) {
+        AppLogger().debug('👤 LiveKit participant joined Arena: ${participant.identity}');
+        if (mounted) {
+          setState(() {
+            // Update UI for new participant
+          });
+        }
+      };
+      
+      _webrtcService.onParticipantDisconnected = (participant) {
+        AppLogger().debug('👋 LiveKit participant left Arena: ${participant.identity}');
+        if (mounted) {
+          setState(() {
+            // Update UI for participant leaving
+          });
+        }
+      };
+      
+      _webrtcService.onTrackSubscribed = (publication, participant) {
+        AppLogger().debug('🎵 LiveKit track subscribed from ${participant.identity}: ${publication.kind}');
+        if (mounted) {
+          setState(() {
+            // Handle new audio/video tracks
+          });
+        }
+      };
+
+      // Additional LiveKit callbacks for Arena
+      _webrtcService.onError = (error) {
+        AppLogger().debug('❌ LiveKit error in Arena: $error');
+        if (mounted) {
+          setState(() {
+            // Handle connection errors
+          });
         }
       };
 
       _webrtcService.onDisconnected = () {
+        AppLogger().debug('🔌 LiveKit disconnected from Arena');
         if (mounted) {
           setState(() {
             _isWebRTCConnected = false;
           });
-          AppLogger().debug('🔗 Arena WebRTC disconnected');
         }
       };
+
+      // Screen sharing removed for audio-only Arena mode
+      AppLogger().debug('🎙️ Arena configured for audio-only LiveKit communication');
 
       AppLogger().debug('🎥 WebRTC initialization complete');
     } catch (e) {
@@ -646,20 +643,44 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
-  /// Connect to WebRTC server for Arena video + audio
+  /// Connect to WebRTC server for Arena audio using MediaSoup
   Future<void> _connectToWebRTC() async {
+    AppLogger().info('🎥 _connectToWebRTC() called');
+    
     if (_currentUser == null) {
       AppLogger().error('❌ Cannot connect WebRTC: No current user');
+      // Try to get current user
+      final user = await _appwrite.getCurrentUser();
+      if (user != null) {
+        // Convert User to UserProfile
+        _currentUser = UserProfile(
+          id: user.$id,
+          name: user.name.isEmpty ? 'Unknown User' : user.name,
+          email: user.email,
+          avatar: user.prefs.data['profileImage'],
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+      }
+      if (_currentUser == null) {
+        AppLogger().error('❌ Still no current user after trying to fetch');
+        return;
+      }
+    }
+    
+    // Prevent reconnection if already connected
+    if (_isWebRTCConnected) {
+      AppLogger().debug('🎥 WebRTC already connected, skipping reconnection attempt');
       return;
     }
     
     try {
-      AppLogger().debug('🎥 Connecting to WebRTC server...');
-      AppLogger().debug('🎥 Room: ${widget.roomId}');
-      AppLogger().debug('🎥 User: ${_currentUser?.id} (${_currentUser?.name})');
-      AppLogger().debug('🎥 Role: $_userRole');
+      AppLogger().info('🎥 STARTING LiveKit CONNECTION...');
+      AppLogger().info('🎥 Room: ${widget.roomId}');
+      AppLogger().info('🎥 User: ${_currentUser?.id} (${_currentUser?.name})');
+      AppLogger().info('🎥 Role: $_userRole');
       
-      // Determine role for WebRTC connection (same logic as Debates & Discussions)
+      // Determine role for WebRTC connection
       String webrtcRole = 'audience'; // Default to audience
       
       // Check if current user is room creator (auto-moderator)
@@ -671,81 +692,583 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       } else if (['judge1', 'judge2', 'judge3'].contains(_userRole)) {
         webrtcRole = 'judge';
       }
-      // All others remain as 'audience' for listen-only mode
       
-      AppLogger().debug('🎥 WebRTC Role: $webrtcRole (User Role: $_userRole)');
+      AppLogger().debug('🎥 LiveKit Role: $webrtcRole (User Role: $_userRole)');
       
-      await _webrtcService.connect(
-        '172.236.109.9:3006',  // Arena WebSocket WebRTC server on Linode
-        widget.roomId,
-        _currentUser?.id ?? 'unknown',
-        audioOnly: true, // Arena audio-only for consistent experience
-        role: webrtcRole,
+      // Generate LiveKit token with matching deployment credentials
+      final token = LiveKitTokenService.generateToken(
+        roomName: widget.roomId,
+        identity: _currentUser?.id ?? 'unknown',
+        userRole: webrtcRole,
+        roomType: 'arena',
+        userId: _currentUser?.id ?? 'unknown',
+        ttl: const Duration(hours: 2),
       );
       
-      AppLogger().debug('🎥 WebRTC connection initiated successfully');
+      AppLogger().debug('🔑 Generated LiveKit token for ${_currentUser?.id}');
+      AppLogger().debug('🔗 Connecting to LiveKit server...');
+      AppLogger().debug('📡 Server URL: ws://172.236.109.9:7880');
+      AppLogger().debug('🏠 Room: ${widget.roomId}');
+      AppLogger().debug('👤 Identity: ${_currentUser?.id}');
+      AppLogger().debug('🎭 Role: $webrtcRole');
       
-      // Configure audio session for maximum speaker output
+      // Connect to LiveKit server
+      await _webrtcService.connect(
+        serverUrl: 'ws://172.236.109.9:7880', // LiveKit production server
+        roomName: widget.roomId,
+        token: token,
+        userId: _currentUser?.id ?? 'unknown',
+        userRole: webrtcRole,
+        roomType: 'arena',
+      );
+      
+      AppLogger().debug('🔗 LiveKit connect() method completed');
+      
+      // Mark as connected (the onConnected callback will also set this)
+      if (mounted) {
+        setState(() {
+          _isWebRTCConnected = true;
+        });
+      }
+      
+      // Start muted by default to prevent feedback (like other rooms)
+      AppLogger().debug('🔇 Starting muted by default to prevent feedback');
+      await _webrtcService.disableAudio();
+      if (mounted) {
+        setState(() {
+          _isMuted = true;
+        });
+      }
+      
+      AppLogger().info('✅ LiveKit connection established successfully');
+      AppLogger().info('🎥 Connection status: $_isWebRTCConnected');
+      AppLogger().info('🎤 Audio ready for role: $webrtcRole (started muted)');
+      
+      // Configure audio session with enhanced noise cancellation for Arena
       try {
         final session = await audio_session.AudioSession.instance;
         await session.configure(audio_session.AudioSessionConfiguration(
           avAudioSessionCategory: audio_session.AVAudioSessionCategory.playAndRecord,
           avAudioSessionCategoryOptions: audio_session.AVAudioSessionCategoryOptions.defaultToSpeaker |
               audio_session.AVAudioSessionCategoryOptions.allowBluetooth |
-              audio_session.AVAudioSessionCategoryOptions.mixWithOthers,
-          avAudioSessionMode: audio_session.AVAudioSessionMode.videoChat,
+              audio_session.AVAudioSessionCategoryOptions.duckOthers, // Duck other audio when speaking
+          // REMOVED mixWithOthers to prevent feedback loops
+          avAudioSessionMode: audio_session.AVAudioSessionMode.voiceChat, // VoiceChat mode for best echo cancellation
           avAudioSessionRouteSharingPolicy: audio_session.AVAudioSessionRouteSharingPolicy.defaultPolicy,
-          avAudioSessionSetActiveOptions: audio_session.AVAudioSessionSetActiveOptions.none,
+          avAudioSessionSetActiveOptions: audio_session.AVAudioSessionSetActiveOptions.notifyOthersOnDeactivation,
           androidAudioAttributes: const audio_session.AndroidAudioAttributes(
             contentType: audio_session.AndroidAudioContentType.speech,
-            flags: audio_session.AndroidAudioFlags.audibilityEnforced,
+            flags: audio_session.AndroidAudioFlags.none,
             usage: audio_session.AndroidAudioUsage.voiceCommunication,
           ),
-          androidAudioFocusGainType: audio_session.AndroidAudioFocusGainType.gain,
-          androidWillPauseWhenDucked: false,
+          androidAudioFocusGainType: audio_session.AndroidAudioFocusGainType.gainTransientExclusive, // Exclusive audio focus
+          androidWillPauseWhenDucked: true,
         ));
         
         // Activate the audio session with high priority
         await session.setActive(true);
         
-        // Additional speaker enforcement (iOS will use defaultToSpeaker option above)
+        // Platform-specific noise cancellation enhancements
+        if (!kIsWeb) {
+          if (defaultTargetPlatform == TargetPlatform.iOS) {
+            // iOS-specific audio enhancements
+            AppLogger().debug('🍎 Configuring iOS-specific noise cancellation');
+            // iOS automatically applies noise cancellation in voiceChat mode
+          } else if (defaultTargetPlatform == TargetPlatform.android) {
+            // Android-specific audio enhancements
+            AppLogger().debug('🤖 Configuring Android-specific noise cancellation');
+            // Android voiceCommunication mode includes noise suppression
+          }
+        }
         
-        AppLogger().debug('🔊 Audio session configured for maximum speaker output');
+        AppLogger().debug('🔊 Audio session configured with enhanced noise cancellation for Arena');
       } catch (e) {
-        AppLogger().debug('❌ Failed to configure audio session: $e');
+        AppLogger().error('❌ Failed to configure audio session: $e');
         // Continue anyway - audio might still work
       }
       
+      // Initialize enhanced noise cancellation service
+      try {
+        AppLogger().debug('🎙️ Initializing enhanced noise cancellation for Arena...');
+        await NoiseCancellationService().initialize();
+        AppLogger().info('✅ Enhanced noise cancellation activated: ${NoiseCancellationService().platformInfo}');
+      } catch (e) {
+        AppLogger().error('❌ Failed to initialize noise cancellation: $e');
+        // Continue without enhanced noise cancellation
+      }
+      
     } catch (e) {
-      AppLogger().error('❌ Failed to connect WebRTC: $e');
+      AppLogger().error('❌ Failed to connect LiveKit: $e');
     }
   }
 
   /// Determine if current user should publish media (video/audio)
   bool _shouldUserPublishMedia() {
-    // Moderator, debaters and judges publish video + audio
+    // Moderator, debaters and judges publish audio
     // Audience members are view-only
     return _userRole == 'moderator' ||
-           _userRole == 'challenger' || 
-           _userRole == 'challenged' || 
-           _userRole == 'judge';
+           _userRole == 'affirmative' || 
+           _userRole == 'negative' ||
+           _userRole == 'affirmative2' ||
+           _userRole == 'negative2' ||
+           _userRole?.startsWith('judge') == true;
   }
 
-  /// Toggle local microphone
+  /// Toggle local microphone with enhanced error handling
   Future<void> _toggleAudio() async {
-    if (_localStream != null) {
-      final audioTracks = _localStream!.getAudioTracks();
-      for (final track in audioTracks) {
-        track.enabled = _isMuted; // Toggle (inverted current state)
+    AppLogger().debug('🎤 Toggle audio called - current state: ${_isMuted ? 'muted' : 'unmuted'}');
+    
+    // Ensure WebRTC is connected first
+    if (!_isWebRTCConnected) {
+      AppLogger().debug('🎤 WebRTC not connected, attempting to connect...');
+      await _connectToWebRTC();
+      
+      // Wait a moment for connection to establish
+      await Future.delayed(const Duration(seconds: 1));
+      
+      // If still not connected, show error
+      if (!_isWebRTCConnected) {
+        AppLogger().error('❌ Cannot toggle audio - WebRTC connection failed');
+        return;
       }
+    }
+    
+    try {
+      // Use LiveKit's built-in toggle mute functionality
+      await _webrtcService.toggleMute();
+      
+      // Force sync the state immediately
+      final newMuteState = _webrtcService.isMuted;
+      
       if (mounted) {
         setState(() {
-          _isMuted = !_isMuted;
+          _isMuted = newMuteState;
         });
       }
-      AppLogger().debug('🎤 Audio ${_isMuted ? 'muted' : 'unmuted'}');
+      
+      AppLogger().info('🎤 Audio toggled to: ${newMuteState ? 'MUTED' : 'UNMUTED'} via LiveKit');
+      
+    } catch (e) {
+      AppLogger().error('❌ Failed to toggle audio: $e');
+      
+      // Try emergency unmute if we were trying to unmute
+      if (_isMuted) {
+        AppLogger().debug('🚨 Attempting emergency unmute...');
+        await _forceUnmute();
+      }
     }
   }
+  
+  /// Force unmute functionality for stuck microphones
+  Future<void> _forceUnmute() async {
+    try {
+      AppLogger().debug('🚨 FORCE UNMUTE: Attempting to force enable microphone');
+      
+      // Try direct LiveKit enable
+      await _webrtcService.enableAudio();
+      
+      // Update state
+      if (mounted) {
+        setState(() {
+          _isMuted = false;
+        });
+      }
+      
+      AppLogger().info('✅ FORCE UNMUTE: Successfully enabled audio');
+      
+    } catch (e) {
+      AppLogger().error('❌ FORCE UNMUTE: Failed to force enable audio: $e');
+    }
+  }
+  
+  /// Force mute functionality 
+  Future<void> _forceMute() async {
+    try {
+      AppLogger().debug('🔇 FORCE MUTE: Attempting to force disable microphone');
+      
+      // Try direct LiveKit disable
+      await _webrtcService.disableAudio();
+      
+      // Update state
+      if (mounted) {
+        setState(() {
+          _isMuted = true;
+        });
+      }
+      
+      AppLogger().info('🔇 FORCE MUTE: Successfully disabled audio');
+      
+    } catch (e) {
+      AppLogger().error('❌ FORCE MUTE: Failed to force disable audio: $e');
+    }
+  }
+
+  // Video toggle removed - Arena is audio-only
+  
+  /// Simple, standard microphone button
+  Widget _buildEnhancedMicButton() {
+    return GestureDetector(
+      // Regular tap for normal toggle
+      onTap: _toggleAudio,
+      
+      // Long press for emergency options
+      onLongPress: () {
+        _showMicEmergencyControls();
+      },
+      
+      child: Container(
+        width: 50,
+        height: 50,
+        decoration: BoxDecoration(
+          color: _isMuted ? Colors.red : Colors.green,
+          borderRadius: BorderRadius.circular(8), // Rounded rectangle instead of circle
+        ),
+        child: Icon(
+          _isMuted ? Icons.mic_off : Icons.mic,
+          color: Colors.white,
+          size: 24,
+        ),
+      ),
+    );
+  }
+  
+  /// Show emergency microphone control options
+  void _showMicEmergencyControls() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            
+            // Title
+            const Text(
+              '🎤 Microphone Emergency Controls',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            
+            Text(
+              'Current Status: ${_isMuted ? 'MUTED' : 'UNMUTED'}',
+              style: TextStyle(
+                fontSize: 16,
+                color: _isMuted ? Colors.red : Colors.green,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Emergency controls
+            Column(
+              children: [
+                // Force Unmute
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _forceUnmute();
+                    },
+                    icon: const Icon(Icons.mic, color: Colors.white),
+                    label: const Text('FORCE UNMUTE', style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // Force Mute
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _forceMute();
+                    },
+                    icon: const Icon(Icons.mic_off, color: Colors.white),
+                    label: const Text('FORCE MUTE', style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // Normal Toggle
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _toggleAudio();
+                    },
+                    icon: Icon(_isMuted ? Icons.mic : Icons.mic_off),
+                    label: Text(_isMuted ? 'Normal Unmute' : 'Normal Mute'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Instructions
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue[200]!),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '💡 Instructions:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    '• Tap mic button: Normal toggle\n• Long press mic button: Emergency controls\n• Force controls bypass normal state checks',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.blue,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 20),
+            
+            // Close button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.grey[200],
+                  foregroundColor: Colors.black,
+                ),
+                child: const Text('Close'),
+              ),
+            ),
+            
+            // Safe area padding
+            SizedBox(height: MediaQuery.of(context).padding.bottom),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  /// Start periodic mute state sync to prevent stuck states
+  void _startMuteStateSyncTimer() {
+    // Cancel existing timer
+    _muteStateSyncTimer?.cancel();
+    
+    // Start sync every 2 seconds
+    _muteStateSyncTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (!mounted || !_isWebRTCConnected) {
+        timer.cancel();
+        return;
+      }
+      
+      _syncMuteState();
+    });
+  }
+  
+  /// Sync local mute state with LiveKit service state
+  void _syncMuteState() {
+    if (!_isWebRTCConnected) return;
+    
+    final livekitMuted = _webrtcService.isMuted;
+    if (_isMuted != livekitMuted) {
+      AppLogger().debug('🔄 Syncing mute state: local=$_isMuted, livekit=$livekitMuted');
+      
+      if (mounted) {
+        setState(() {
+          _isMuted = livekitMuted;
+        });
+      }
+    }
+  }
+
+  /// Show screen share bottom sheet
+  void _showShareScreenBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              _isScreenSharing ? Icons.stop_screen_share : Icons.screen_share,
+              size: 48,
+              color: _isScreenSharing ? Colors.red : Colors.green,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _isScreenSharing ? 'Stop Screen Sharing?' : 'Share Your Screen?',
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _isScreenSharing 
+                ? 'Your screen is currently being shared with all participants.'
+                : 'Share your screen with all participants in the arena.',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[400],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _toggleScreenShare();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isScreenSharing ? Colors.red : Colors.green,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      _isScreenSharing ? 'Stop Sharing' : 'Start Sharing',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      side: BorderSide(color: Colors.grey[600]!),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Toggle screen share
+  Future<void> _toggleScreenShare() async {
+    try {
+      if (_isScreenSharing) {
+        // TODO: Implement LiveKit screen share stop
+        AppLogger().debug('📺 Screen share stop - to be implemented with LiveKit');
+        if (mounted) {
+          setState(() {
+            _isScreenSharing = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Screen sharing stopped'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } else {
+        // TODO: Implement LiveKit screen share start
+        AppLogger().debug('📺 Screen share start - to be implemented with LiveKit');
+        if (mounted) {
+          setState(() {
+            _isScreenSharing = true;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Screen sharing started'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      AppLogger().error('Failed to toggle screen share: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to ${_isScreenSharing ? 'stop' : 'start'} screen share: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+
 
 
   /// Clean up WebRTC resources
@@ -758,6 +1281,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
       // Dispose local renderer
       _localRenderer.dispose();
+      _screenShareRenderer.dispose();
       
       // Dispose all remote renderers
       for (final renderer in _remoteRenderers.values) {
@@ -1046,13 +1570,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       if (currentUserParticipant.isNotEmpty) {
         _userRole = currentUserParticipant['role'];
         AppLogger().debug('👤 Current user role: $_userRole');
-        
-        // Immediately connect WebRTC for debaters to enable instant audio
-        final isDebater = ['affirmative', 'negative', 'affirmative2', 'negative2'].contains(_userRole);
-        if (isDebater && !_isWebRTCConnected) {
-          AppLogger().debug('🎥 DEBATER DETECTED: Connecting WebRTC immediately for peer-to-peer audio');
-          _connectToWebRTC();
-        }
       } else {
         AppLogger().warning('Current user not found in participants list');
       }
@@ -1065,19 +1582,21 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       }
       AppLogger().info('Arena participants loaded successfully');
       
-      // Connect to WebRTC after participants are loaded and user role is determined
-      // For debaters, connect immediately to enable peer-to-peer audio
+      // Only connect to WebRTC if not already connected
+      // This prevents reconnection when new participants join
       if (_userRole != null && !_isWebRTCConnected) {
         final isDebater = ['affirmative', 'negative', 'affirmative2', 'negative2'].contains(_userRole);
         final isImportantRole = ['moderator', 'judge1', 'judge2', 'judge3'].contains(_userRole);
         
         if (isDebater || isImportantRole) {
-          AppLogger().debug('🎥 Initiating immediate WebRTC connection for critical role: $_userRole');
+          AppLogger().debug('🎥 Initial WebRTC connection for critical role: $_userRole');
           await _connectToWebRTC();
         } else {
-          AppLogger().debug('🎥 Initiating WebRTC connection for role: $_userRole');
+          AppLogger().debug('🎥 Initial WebRTC connection for role: $_userRole');
           await _connectToWebRTC();
         }
+      } else if (_isWebRTCConnected) {
+        AppLogger().debug('🎥 WebRTC already connected, skipping reconnection');
       }
     } catch (e) {
       AppLogger().error('Error loading participants: $e');
@@ -1274,7 +1793,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           // Immediately connect WebRTC for debaters to enable instant audio
           final isDebater = ['affirmative', 'negative', 'affirmative2', 'negative2'].contains(_userRole);
           if (isDebater && !_isWebRTCConnected) {
-            AppLogger().debug('🎥 DEBATER DETECTED (iOS): Connecting WebRTC immediately for peer-to-peer audio');
+            AppLogger().debug('🎥 DEBATER DETECTED (iOS): Initial WebRTC connection for peer-to-peer audio');
             _connectToWebRTC();
           }
           break;
@@ -1832,14 +2351,48 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   void _showUserProfile(UserProfile userProfile, String? userRole) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      barrierColor: Colors.transparent,
-      builder: (context) => UserProfileModal(
-        userProfile: userProfile,
-        userRole: userRole,
-        currentUser: _currentUser,
-        onClose: () => Navigator.of(context).pop(),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => UserProfileBottomSheet(
+        user: userProfile,
+        onFollow: () {
+          // TODO: Implement follow functionality
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Following ${userProfile.name}'),
+                backgroundColor: const Color(0xFF10B981),
+              ),
+            );
+          }
+        },
+        onChallenge: () {
+          // TODO: Implement challenge functionality
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Challenge sent to ${userProfile.name}'),
+                backgroundColor: const Color(0xFFDC2626),
+              ),
+            );
+          }
+        },
+        onEmail: () {
+          if (mounted && _currentUser != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => EmailComposeScreen(
+                  currentUserId: _currentUser!.id,
+                  currentUsername: _currentUser!.name,
+                  recipient: userProfile,
+                ),
+              ),
+            );
+          }
+        },
       ),
     );
   }
@@ -2039,49 +2592,100 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Widget _buildMainArena() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        return SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            // Add bottom padding to allow scrolling underneath bottom navigation (approximately 100px for the control panel)
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 100),
-              child: Column(
-                children: [
-                  // Debate Title (more compact)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    margin: const EdgeInsets.only(bottom: 8),
-                    decoration: BoxDecoration(
-                      color: deepPurple.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: deepPurple.withValues(alpha: 0.3),
-                        width: 1,
+        // Use constraints.maxHeight instead of MediaQuery for more accurate available space
+        final availableHeight = constraints.maxHeight;
+        final screenHeight = MediaQuery.of(context).size.height;
+        final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
+        
+        // Debug logging
+        AppLogger().debug('🎭 ARENA LAYOUT: Screen height: $screenHeight, Available height: $availableHeight, Platform: ${isIOS ? "iOS" : "Android"}');
+        
+        // More aggressive sizing for iOS to ensure audience is visible
+        final isSmallScreen = availableHeight < 600;
+        
+        // Adjust heights based on available space - smaller on iOS
+        final debaterHeight = isIOS 
+            ? (isSmallScreen ? 120.0 : 150.0)
+            : (isSmallScreen ? 150.0 : 200.0);
+        final moderatorHeight = isIOS
+            ? (isSmallScreen ? 70.0 : 90.0)
+            : (isSmallScreen ? 90.0 : 120.0);
+        final judgeHeight = isIOS
+            ? (isSmallScreen ? 90.0 : 110.0)
+            : (isSmallScreen ? 110.0 : 150.0);
+        
+        // Calculate total debate section height dynamically
+        final debateSectionHeight = 8 + // top padding
+            35 + // title height (reduced)
+            6 + // margin after title (reduced)
+            debaterHeight + // debaters
+            4 + // spacing (reduced)
+            moderatorHeight + // moderator 
+            4 + // spacing (reduced)
+            judgeHeight + // judges
+            8 + // bottom spacing (reduced)
+            8; // bottom padding
+        
+        AppLogger().debug('🎭 ARENA LAYOUT: Debate section height: $debateSectionHeight');
+        
+        return Stack(
+          children: [
+            // Audience section as background (scrollable)
+            Positioned.fill(
+              child: Container(
+                margin: EdgeInsets.only(
+                  top: debateSectionHeight,
+                  bottom: 100, // Control panel space
+                ),
+                child: _buildAudienceScrollSection(),
+              ),
+            ),
+            
+            // Fixed debate section (floating on top)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                color: const Color(0xFF1a1a1a), // Dark background to prevent see-through
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min, // Important: minimize size
+                  children: [
+                    // Debate Title (more compact)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      margin: const EdgeInsets.only(bottom: 6),
+                      decoration: BoxDecoration(
+                        color: deepPurple.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: deepPurple.withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        widget.topic,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.normal,
+                          fontSize: 12,
+                          height: 1.1,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    child: Text(
-                      widget.topic,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.normal,
-                        fontSize: 12,
-                        height: 1.1,
-                      ),
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  
-                  // Main arena content - fixed heights instead of flexible
-                  Column(
-                    children: [
-                      // Top Row - Debaters (fixed height)
-                      SizedBox(
-                        height: 200, // Fixed height instead of flex 40
-                        child: _teamSize == 1 
+                    
+                    // Main arena content - responsive heights
+                    Column(
+                      children: [
+                        // Top Row - Debaters (responsive height)
+                        SizedBox(
+                          height: debaterHeight,
+                          child: _teamSize == 1 
                           ? Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
@@ -2106,11 +2710,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                             ),
                       ),
                       
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4), // Reduced spacing
                       
-                      // Middle Row - Moderator (fixed height, same size as judges)
+                      // Middle Row - Moderator (responsive height)
                       SizedBox(
-                        height: 120, // Fixed height instead of flex 25
+                        height: moderatorHeight,
                         child: Row(
                           children: [
                             const Expanded(child: SizedBox.shrink()),
@@ -2120,11 +2724,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                         ),
                       ),
                       
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4), // Reduced spacing
                       
-                      // Bottom Row - Judges (fixed height)
+                      // Bottom Row - Judges (responsive height)
                       SizedBox(
-                        height: 150, // Fixed height instead of flex 30
+                        height: judgeHeight,
                         child: Row(
                           children: [
                             Expanded(child: _buildJudgePosition('judge1', 'Judge 1')),
@@ -2136,121 +2740,154 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                         ),
                       ),
                       
-                      const SizedBox(height: 12),
-                      
-                      // Audience Display (no height constraints - can expand as needed)
-                      _buildCompactAudienceDisplay(),
+                      const SizedBox(height: 8), // Reduced spacing
                     ],
                   ),
                 ],
               ),
             ),
           ),
-        );
-      },
-    );
-  }
-
-  Widget _buildCompactAudienceDisplay() {
-    AppLogger().debug('🎭 AUDIENCE DISPLAY: Building compact audience display with ${_audience.length} members');
-    if (_audience.isEmpty) {
-      AppLogger().debug('🎭 AUDIENCE DISPLAY: Showing "No audience yet" message');
-      return Container(
-        height: 60,
-        alignment: Alignment.center,
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.people_outline,
-              color: Colors.white54,
-              size: 16,
-            ),
-            SizedBox(width: 8),
-            Text(
-              'No audience yet',
-              style: TextStyle(
-                color: Colors.white54,
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-        ),
+        ],
       );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.people,
-                color: accentPurple,
-                size: 16,
+    },
+  );
+}
+  
+  Widget _buildAudienceScrollSection() {
+    return Container(
+      color: const Color(0xFF1a1a1a), // Match the main arena background
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Visual separator line
+            Container(
+              height: 2,
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: accentPurple.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(1),
               ),
-              const SizedBox(width: 8),
-              Text(
-                'Audience (${_audience.length})',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-        // Grid of audience members - fixed height with scrolling
-        SizedBox(
-          height: 140, // Fixed height like Debates & Discussions
-          child: GridView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            physics: const BouncingScrollPhysics(), // Enable scrolling
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4, // 4 users across
-              crossAxisSpacing: 6, // Reduced spacing
-              mainAxisSpacing: 6, // Reduced spacing  
-              childAspectRatio: 0.85, // Adjusted for compact layout
             ),
-            itemCount: _audience.length,
-            itemBuilder: (context, index) {
-              final audience = _audience[index];
-              return Column(
-                mainAxisSize: MainAxisSize.min,
+            
+            // Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              child: Row(
                 children: [
-                  UserAvatar(
-                    avatarUrl: audience.avatar,
-                    initials: audience.name.isNotEmpty ? audience.name[0] : '?',
-                    radius: 28, // Slightly smaller to fit better with reduced spacing
-                    onTap: () => _showUserProfile(audience, 'audience'),
+                  const Icon(
+                    Icons.people,
+                    color: accentPurple,
+                    size: 18,
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(width: 8),
                   Text(
-                    audience.name.length > 7 
-                        ? '${audience.name.substring(0, 7)}...'
-                        : audience.name,
+                    'Audience (${_audience.length})',
                     style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 8,
-                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
                     ),
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
-              );
-            },
-          ),
+              ),
+            ),
+            
+            // Audience Grid
+            if (_audience.isEmpty)
+              Container(
+                height: 150,
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[900],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: accentPurple.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.people_outline,
+                      color: Colors.white54,
+                      size: 32,
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'No audience yet',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Users will appear here when they join',
+                      style: TextStyle(
+                        color: Colors.white38,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+          else
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 0.85,
+                ),
+                itemCount: _audience.length,
+                itemBuilder: (context, index) {
+                  final audience = _audience[index];
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      UserAvatar(
+                        avatarUrl: audience.avatar,
+                        initials: audience.name.isNotEmpty ? audience.name[0] : '?',
+                        radius: 30,
+                        onTap: () => _showUserProfile(audience, 'audience'),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        audience.name.length > 8
+                            ? '${audience.name.substring(0, 8)}...'
+                            : audience.name,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            
+            // Add some bottom spacing
+            const SizedBox(height: 20),
+          ],
         ),
-      ],
+      ),
     );
   }
+
 
   Widget _buildDebaterPosition(String role, String title, {bool? isWinner}) {
     final participant = _participants[role];
@@ -2403,9 +3040,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     final avatarSize = isSmall ? 16.0 : 24.0;
     final nameSize = isSmall ? 9.0 : 10.0;
     
-    // Find the peer ID for this user to get their audio stream
+    // Find the peer ID for this user to get their audio/video stream
     final peerId = _userToPeerMapping[participant.id];
     final stream = peerId != null ? _remoteStreams[peerId] : null;
+    
+    AppLogger().debug('🎥 Building tile for ${participant.name}: peerId=$peerId, stream=${stream != null}, userMapping=$_userToPeerMapping');
     
     // Check if we have audio stream
     final hasAudio = stream != null && 
@@ -2422,108 +3061,162 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     // Determine if user is speaking (for now, just show if they have audio capability)
     final isSpeaking = isLocalUser ? localHasAudio && !_isMuted : hasAudio;
     
-    return GestureDetector(
-      onTap: () {
-        showDialog(
-          context: context,
-          barrierDismissible: true,
-          builder: (context) => UserProfileModal(userProfile: participant),
-        );
-      },
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Audio participant container
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isWinner ? Colors.amber : (isSpeaking ? Colors.green : Colors.white30),
-                    width: isWinner ? 2 : (isSpeaking ? 2 : 1),
-                  ),
+    return Padding(
+      padding: const EdgeInsets.all(4),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Audio participant container
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isWinner ? Colors.amber : (isSpeaking ? Colors.green : Colors.white30),
+                  width: isWinner ? 2 : (isSpeaking ? 2 : 1),
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(7),
-                  child: Stack(
-                    children: [
-                      // Always show avatar for audio-only mode
-                      Center(
-                        child: UserAvatar(
-                          avatarUrl: participant.avatar,
-                          initials: participant.name.isNotEmpty ? participant.name[0] : '?',
-                          radius: avatarSize * 1.5, // Larger avatar for better visibility
-                        ),
-                      ),
-                      
-                      // Audio status indicators
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(7),
+                child: Stack(
+                  children: [
+                    // Video feed or avatar background
+                    _buildDebaterVideoFeed(participant, role, stream, isLocalUser, avatarSize),
+                    
+                    // Audio/Video status indicators and controls
+                    _buildDebaterControls(participant, role, isLocalUser, isSpeaking, isSmall),
+                    
+                    // Profile tap area (only for non-local users, avoiding control area)
+                    if (!isLocalUser)
                       Positioned(
-                        top: 4,
-                        right: 4,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Audio status indicator
-                            if (isLocalUser && _isMuted)
-                              Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: BoxDecoration(
-                                  color: Colors.red,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Icon(
-                                  Icons.mic_off,
-                                  color: Colors.white,
-                                  size: 8,
-                                ),
-                              )
-                            else if (isSpeaking)
-                              Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: BoxDecoration(
-                                  color: Colors.green,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Icon(
-                                  Icons.mic,
-                                  color: Colors.white,
-                                  size: 8,
-                                ),
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 40, // Leave space for controls at bottom
+                        child: GestureDetector(
+                          onTap: () {
+                            showModalBottomSheet(
+                              context: context,
+                              backgroundColor: Colors.transparent,
+                              isScrollControlled: true,
+                              builder: (context) => UserProfileBottomSheet(
+                                user: participant,
+                                onFollow: () {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Following ${participant.name}'),
+                                        backgroundColor: const Color(0xFF10B981),
+                                      ),
+                                    );
+                                  }
+                                },
+                                onChallenge: () {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Challenge sent to ${participant.name}'),
+                                        backgroundColor: const Color(0xFFDC2626),
+                                      ),
+                                    );
+                                  }
+                                },
+                                onEmail: () {
+                                  if (mounted && _currentUser != null) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => EmailComposeScreen(
+                                          currentUserId: _currentUser!.id,
+                                          currentUsername: _currentUser!.name,
+                                          recipient: participant,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
                               ),
-                          ],
-                        ),
-                      ),
-                      
-                      // Winner crown overlay
-                      if (isWinner)
-                        Positioned(
-                          top: 4,
-                          left: 4,
+                            );
+                          },
                           child: Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: Colors.amber,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Icon(
-                              Icons.emoji_events,
-                              color: Colors.black,
-                              size: 8,
-                            ),
+                            color: Colors.transparent,
                           ),
                         ),
-                    ],
-                  ),
+                      ),
+                    
+                    // Winner crown overlay
+                    if (isWinner)
+                      Positioned(
+                        top: 4,
+                        left: 4,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: Colors.amber,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Icon(
+                            Icons.emoji_events,
+                            color: Colors.black,
+                            size: 8,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(height: 2),
-            // Name label
-            Text(
+          ),
+          const SizedBox(height: 2),
+          // Name label (with profile tap for non-local users)
+          GestureDetector(
+            onTap: !isLocalUser ? () {
+              showModalBottomSheet(
+                context: context,
+                backgroundColor: Colors.transparent,
+                isScrollControlled: true,
+                builder: (context) => UserProfileBottomSheet(
+                  user: participant,
+                  onFollow: () {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Following ${participant.name}'),
+                          backgroundColor: const Color(0xFF10B981),
+                        ),
+                      );
+                    }
+                  },
+                  onChallenge: () {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Challenge sent to ${participant.name}'),
+                          backgroundColor: const Color(0xFFDC2626),
+                        ),
+                      );
+                    }
+                  },
+                  onEmail: () {
+                    if (mounted && _currentUser != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => EmailComposeScreen(
+                            currentUserId: _currentUser!.id,
+                            currentUsername: _currentUser!.name,
+                            recipient: participant,
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              );
+            } : null,
+            child: Text(
               participant.name,
               style: TextStyle(
                 color: isWinner ? Colors.amber : Colors.white,
@@ -2540,9 +3233,165 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+
+  /// Build video feed for debater (video or avatar fallback)
+  Widget _buildDebaterVideoFeed(UserProfile participant, String role, MediaStream? stream, bool isLocalUser, double avatarSize) {
+    // Check if we have video stream
+    bool hasVideo = false;
+    RTCVideoRenderer? renderer;
+    
+    AppLogger().debug('📹 Building video feed for ${participant.name} (isLocal: $isLocalUser, role: $role)');
+    
+    if (isLocalUser && _localStream != null) {
+      // Local user - show their own video if available
+      final videoTracks = _localStream!.getVideoTracks();
+      AppLogger().debug('📹 Local video tracks: ${videoTracks.length}, enabled: ${videoTracks.where((t) => t.enabled).length}');
+      if (videoTracks.isNotEmpty && videoTracks.any((track) => track.enabled)) {
+        hasVideo = true;
+        renderer = _localRenderer;
+        AppLogger().debug('📹 Using local renderer for ${participant.name}');
+      }
+    } else if (stream != null) {
+      // Remote user - check for video tracks
+      final videoTracks = stream.getVideoTracks();
+      AppLogger().debug('📹 Remote video tracks for ${participant.name}: ${videoTracks.length}, enabled: ${videoTracks.where((t) => t.enabled).length}');
+      if (videoTracks.isNotEmpty && videoTracks.any((track) => track.enabled)) {
+        hasVideo = true;
+        // Find the renderer for this participant
+        final peerId = _userToPeerMapping[participant.id];
+        AppLogger().debug('📹 Peer ID for ${participant.name}: $peerId');
+        if (peerId != null && _remoteRenderers.containsKey(peerId)) {
+          renderer = _remoteRenderers[peerId];
+          AppLogger().debug('📹 Using remote renderer for ${participant.name}');
+        } else {
+          AppLogger().debug('📹 No renderer found for ${participant.name} (peerId: $peerId)');
+        }
+      }
+    } else {
+      AppLogger().debug('📹 No stream available for ${participant.name}');
+    }
+    
+    AppLogger().debug('📹 Final decision for ${participant.name}: hasVideo=$hasVideo, renderer=${renderer != null}');
+    
+    if (hasVideo && renderer != null) {
+      // Show video feed
+      return SizedBox.expand(
+        child: RTCVideoView(
+          renderer,
+          objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+          mirror: isLocalUser, // Mirror local user's video
+        ),
+      );
+    } else {
+      // Show avatar fallback
+      return Center(
+        child: UserAvatar(
+          avatarUrl: participant.avatar,
+          initials: participant.name.isNotEmpty ? participant.name[0] : '?',
+          radius: avatarSize * 1.5,
+        ),
+      );
+    }
+  }
+  
+  /// Build controls and indicators for debater
+  Widget _buildDebaterControls(UserProfile participant, String role, bool isLocalUser, bool isSpeaking, bool isSmall) {
+    return Stack(
+      children: [
+        // Top-right: Audio status indicators
+        Positioned(
+          top: 4,
+          right: 4,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Audio status indicator
+              if (isLocalUser && _isMuted)
+                Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Icon(
+                    Icons.mic_off,
+                    color: Colors.white,
+                    size: 8,
+                  ),
+                )
+              else if (isSpeaking)
+                Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Icon(
+                    Icons.mic,
+                    color: Colors.white,
+                    size: 8,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        
+        // Moderator controls for other participants (mute/unmute buttons)
+        if (_isModerator && !isLocalUser)
+          Positioned(
+            bottom: 6,
+            right: 6,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 2,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: GestureDetector(
+                onTap: () async {
+                  // Check if participant is muted by looking at their LiveKit audio track
+                  bool isCurrentlyMuted = false;
+                  
+                  // Find the participant in LiveKit room
+                  if (_webrtcService.room != null) {
+                    final liveKitParticipant = _webrtcService.room!.remoteParticipants.values
+                        .firstWhere(
+                          (p) => p.identity == participant.id,
+                          orElse: () => _webrtcService.room!.remoteParticipants.values.first,
+                        );
+                    isCurrentlyMuted = _webrtcService.isParticipantMuted(liveKitParticipant);
+                  }
+                  
+                  // Toggle mute/unmute
+                  if (isCurrentlyMuted) {
+                    await _webrtcService.unmuteParticipant(participant.id);
+                    AppLogger().debug('🎤 Moderator unmuted ${participant.name}');
+                  } else {
+                    await _webrtcService.muteParticipant(participant.id);
+                    AppLogger().debug('🔇 Moderator muted ${participant.name}');
+                  }
+                },
+                child: Icon(
+                  Icons.volume_up,
+                  color: Colors.black,
+                  size: isSmall ? 12 : 16,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -2572,10 +3421,47 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     
     return GestureDetector(
       onTap: () {
-        showDialog(
+        showModalBottomSheet(
           context: context,
-          barrierDismissible: true,
-          builder: (context) => UserProfileModal(userProfile: participant),
+          backgroundColor: Colors.transparent,
+          isScrollControlled: true,
+          builder: (context) => UserProfileBottomSheet(
+            user: participant,
+            onFollow: () {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Following ${participant.name}'),
+                    backgroundColor: const Color(0xFF10B981),
+                  ),
+                );
+              }
+            },
+            onChallenge: () {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Challenge sent to ${participant.name}'),
+                    backgroundColor: const Color(0xFFDC2626),
+                  ),
+                );
+              }
+            },
+            onEmail: () {
+              if (mounted && _currentUser != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => EmailComposeScreen(
+                      currentUserId: _currentUser!.id,
+                      currentUsername: _currentUser!.name,
+                      recipient: participant,
+                    ),
+                  ),
+                );
+              }
+            },
+          ),
         );
       },
       child: Padding(
@@ -2645,6 +3531,57 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                           ],
                         ),
                       ),
+
+                      // Moderator controls for judges (mute/unmute buttons)
+                      if (_isModerator && !isLocalUser)
+                        Positioned(
+                          bottom: 4,
+                          right: 4,
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withValues(alpha: 0.9),
+                              borderRadius: BorderRadius.circular(4),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 1,
+                                  spreadRadius: 0.5,
+                                ),
+                              ],
+                            ),
+                            child: GestureDetector(
+                              onTap: () async {
+                                  // Check if participant is muted by looking at their LiveKit audio track
+                                bool isCurrentlyMuted = false;
+                                
+                                // Find the participant in LiveKit room
+                                if (_webrtcService.room != null) {
+                                  final liveKitParticipant = _webrtcService.room!.remoteParticipants.values
+                                      .firstWhere(
+                                        (p) => p.identity == participant.id,
+                                        orElse: () => _webrtcService.room!.remoteParticipants.values.first,
+                                      );
+                                  isCurrentlyMuted = _webrtcService.isParticipantMuted(liveKitParticipant);
+                                }
+                                
+                                // Toggle mute/unmute
+                                if (isCurrentlyMuted) {
+                                  await _webrtcService.unmuteParticipant(participant.id);
+                                  AppLogger().debug('🎤 Moderator unmuted judge ${participant.name}');
+                                } else {
+                                  await _webrtcService.muteParticipant(participant.id);
+                                  AppLogger().debug('🔇 Moderator muted judge ${participant.name}');
+                                }
+                              },
+                              child: Icon(
+                                Icons.volume_up,
+                                color: Colors.black,
+                                size: isSmall ? 10 : 12,
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -2744,8 +3681,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 ),
               ),
 
-              // Share Screen button (for moderators, debaters, and judges only - NOT audience)
-              if (_isModerator || _isDebater || _isJudge)
+
+              // Share Screen button (for moderators, debaters, and judges - ALL PLATFORMS)
+              if ((_isModerator || _isDebater || _isJudge))
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                   child: _buildControlButton(
@@ -2756,16 +3694,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   ),
                 ),
 
-              // Microphone toggle (for moderator, debaters and judges)
+              // Enhanced Microphone toggle (always visible for eligible users with emergency options)
               if (_shouldUserPublishMedia())
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: _buildControlButton(
-                    icon: _isMuted ? Icons.mic_off : Icons.mic,
-                    label: _isMuted ? 'Unmute' : 'Mute',
-                    onPressed: _isWebRTCConnected ? _toggleAudio : null,
-                    color: _isMuted ? Colors.red : Colors.green,
-                  ),
+                  child: _buildEnhancedMicButton(),
                 ),
 
 
@@ -3366,9 +4299,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         if (role == 'moderator') {
           chatRole = 'moderator';
         } else if (role.contains('judge')) {
-          chatRole = 'speaker'; // Judges can speak in chat
-        } else if (role.contains('affirmative') || role.contains('negative')) {
-          chatRole = 'speaker';
+          chatRole = 'judge'; // More specific role for judges
+        } else if (role.contains('affirmative')) {
+          chatRole = 'affirmative';
+        } else if (role.contains('negative')) {
+          chatRole = 'negative';
         }
         
         chatParticipants.add(ChatParticipant(
@@ -3377,6 +4312,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           role: chatRole,
           avatar: user.avatar,
         ));
+        AppLogger().debug('💬 CHAT: Added participant from _participants: ${user.name} (role: $chatRole, userId: ${user.id})');
       }
     });
     
@@ -3388,6 +4324,40 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         role: 'audience',
         avatar: audience.avatar,
       ));
+      AppLogger().debug('💬 CHAT: Added participant from _audience: ${audience.name} (userId: ${audience.id})');
+    }
+
+    // Enhanced Debug logging
+    AppLogger().debug('💬 CHAT: _showChatBottomSheet() called');
+    AppLogger().debug('💬 CHAT: _participants map has ${_participants.length} entries');
+    AppLogger().debug('💬 CHAT: _audience list has ${_audience.length} entries');
+    
+    // Debug the participants map
+    _participants.forEach((role, user) {
+      AppLogger().debug('💬 CHAT: _participants["$role"] = ${user?.name ?? "null"}');
+    });
+    
+    // Debug the audience list
+    for (int i = 0; i < _audience.length; i++) {
+      AppLogger().debug('💬 CHAT: _audience[$i] = ${_audience[i].name}');
+    }
+    
+    // Ensure current user is in the participants list as a fallback
+    final currentUserInList = chatParticipants.any((p) => p.userId == _currentUser!.id);
+    if (!currentUserInList) {
+      AppLogger().debug('💬 CHAT: Current user not found in participants, adding as fallback');
+      chatParticipants.add(ChatParticipant(
+        userId: _currentUser!.id,
+        username: _currentUser!.name,
+        role: _userRole ?? 'audience',
+        avatar: _currentUser!.avatar,
+      ));
+    }
+    
+    AppLogger().debug('💬 CHAT: Created ${chatParticipants.length} participants for chat');
+    AppLogger().debug('💬 CHAT: Current user ID: ${_currentUser!.id}');
+    for (final participant in chatParticipants) {
+      AppLogger().debug('💬 CHAT: Final participant: ${participant.username} (${participant.role}) - ID: ${participant.userId}');
     }
 
     showModalBottomSheet(
@@ -3409,124 +4379,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     );
   }
 
-  /// Show share screen bottom sheet
-  void _showShareScreenBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => ShareScreenBottomSheet(
-        currentUserId: _currentUserId,
-        userRole: _userRole,
-        isScreenSharing: _isScreenSharing,
-        onStartScreenShare: _startScreenShare,
-        onStopScreenShare: _stopScreenShare,
-        onRequestScreenShare: _requestScreenSharePermission,
-        // Screen sharing disabled in audio-only Jitsi mode
-        agoraEngine: null, // No longer using Agora engine
-      ),
-    );
-  }
-
-  /// Start screen sharing
-  Future<void> _startScreenShare() async {
-    try {
-      AppLogger().debug('🖥️ Starting screen share...');
-      
-      // Screen sharing disabled in audio-only Jitsi mode
-      _showSnackBar('Screen sharing is not available in audio-only mode', isError: true);
-      
-      // Close the bottom sheet
-      if (mounted) {
-        Navigator.pop(context);
-      }
-    } catch (e) {
-      AppLogger().error('❌ Error starting screen share: $e');
-      _showSnackBar('Failed to start screen sharing: ${e.toString()}', isError: true);
-    }
-  }
-
-  /// Stop screen sharing
-  Future<void> _stopScreenShare() async {
-    try {
-      AppLogger().debug('🛑 Stopping screen share...');
-      
-      // Stop screen sharing through Agora
-      // Screen sharing disabled in audio-only Jitsi mode
-      // await _jitsiService.stopScreenShare(); // Not supported
-      
-      setState(() {
-        _isScreenSharing = false;
-        // _currentScreenSharer = null; // Removed in audio-only mode
-      });
-      
-      _showSnackBar('Screen sharing stopped', isError: false);
-      
-      // Close the bottom sheet
-      if (mounted) {
-        Navigator.pop(context);
-      }
-      
-      AppLogger().info('✅ Screen share stopped successfully');
-    } catch (e) {
-      AppLogger().error('❌ Error stopping screen share: $e');
-      _showSnackBar('Failed to stop screen sharing: ${e.toString()}', isError: true);
-    }
-  }
-
-  /// Request screen share permission (for debaters, judges, and audience)
-  void _requestScreenSharePermission() {
-    if (_isModerator) {
-      // Moderators don't need to request permission
-      _showSnackBar('As a moderator, you can share your screen anytime', isError: false);
-      Navigator.pop(context);
-      return;
-    }
-    
-    // Send permission request to moderator (this would be sent via messaging service)
-    _sendScreenSharePermissionRequest();
-    _showSnackBar('Screen share permission request sent to moderator', isError: false);
-    Navigator.pop(context);
-  }
-  
-  /// Send screen share permission request to moderator
-  Future<void> _sendScreenSharePermissionRequest() async {
-    try {
-      // This would send a message to the moderator requesting permission
-      // For now, we'll just log it - in a real implementation, this would
-      // use the messaging service to notify the moderator
-      AppLogger().info('📨 Screen share permission request sent from ${_currentUser?.name} ($_userRole)');
-      
-      // TODO: Implement actual messaging to moderator
-      // await _messagingService.sendScreenShareRequest(
-      //   roomId: widget.roomId,
-      //   requesterId: _currentUserId,
-      //   requesterName: _currentUser?.name,
-      //   requesterRole: _userRole,
-      // );
-    } catch (e) {
-      AppLogger().error('❌ Error sending screen share permission request: $e');
-    }
-  }
   
   /// Check if current user is a debater
   bool get _isDebater {
     return _userRole == 'affirmative' || _userRole == 'negative';
   }
-
-  /// Show snack bar with message
-  void _showSnackBar(String message, {bool isError = false}) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: isError ? Colors.red : Colors.green,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    }
-  }
-
 
   
   /// Show read-only participant view

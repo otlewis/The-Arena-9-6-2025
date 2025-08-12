@@ -1,0 +1,260 @@
+{
+  "name": "Arena Daily Progress to Notion",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "e8f7c3a2-1234-4567-8901-abcdef123456",
+      "name": "Daily 9AM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "jsonrpc",
+              "value": "2.0"
+            },
+            {
+              "name": "method",
+              "value": "analyze_launch_readiness"
+            },
+            {
+              "name": "params",
+              "value": "={\"includeDetails\": true}"
+            },
+            {
+              "name": "id",
+              "value": "={{ $uuid() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f9e8d7c6-2345-5678-9012-bcdef234567",
+      "name": "Get Launch Readiness",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract launch readiness data\nconst response = $input.first().json;\nconst result = response.result || {};\n\n// Get current date\nconst today = new Date().toISOString().split('T')[0];\n\n// Extract key metrics\nconst launchScore = result.overallScore || 0;\nconst criticalIssues = result.criticalIssues || [];\nconst resolvedToday = result.recentImprovements || [];\nconst priorities = result.nextSteps || [];\n\n// Determine key accomplishment\nlet keyAccomplishment = 'Maintained system stability';\nif (resolvedToday.length > 0) {\n  keyAccomplishment = `Fixed: ${resolvedToday[0]}`;\n} else if (result.scoreChange > 0) {\n  keyAccomplishment = `Improved launch readiness by ${result.scoreChange} points`;\n}\n\n// Determine tomorrow's priority\nlet tomorrowPriority = 'Continue monitoring and testing';\nif (criticalIssues.length > 0) {\n  tomorrowPriority = `Resolve: ${criticalIssues[0].issue}`;\n} else if (priorities.length > 0) {\n  tomorrowPriority = priorities[0];\n}\n\n// Format for Notion\nreturn {\n  date: today,\n  launchScore: launchScore,\n  keyAccomplishment: keyAccomplishment,\n  tomorrowPriority: tomorrowPriority,\n  fullReport: JSON.stringify(result, null, 2),\n  status: launchScore >= 90 ? 'Launch Ready' : 'In Progress',\n  criticalIssuesCount: criticalIssues.length\n};"
+      },
+      "id": "a1b2c3d4-3456-6789-0123-cdef345678",
+      "name": "Format Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "create",
+        "databaseId": {
+          "__rl": true,
+          "value": "YOUR_DATABASE_ID_HERE",
+          "mode": "string"
+        },
+        "properties": {
+          "values": [
+            {
+              "key": "Date",
+              "type": "date",
+              "dateValue": "={{ $json.date }}"
+            },
+            {
+              "key": "Launch Score",
+              "type": "number",
+              "numberValue": "={{ $json.launchScore }}"
+            },
+            {
+              "key": "Key Accomplishment",
+              "type": "title",
+              "titleValue": "={{ $json.keyAccomplishment }}"
+            },
+            {
+              "key": "Tomorrow's Priority",
+              "type": "rich_text",
+              "richTextValue": "={{ $json.tomorrowPriority }}"
+            },
+            {
+              "key": "Status",
+              "type": "select",
+              "selectValue": "={{ $json.status }}"
+            },
+            {
+              "key": "Critical Issues",
+              "type": "number",
+              "numberValue": "={{ $json.criticalIssuesCount }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-4567-7890-1234-def456789",
+      "name": "Add to Notion",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.1,
+      "position": [850, 300],
+      "credentials": {
+        "notionApi": {
+          "id": "YOUR_NOTION_CREDENTIAL_ID",
+          "name": "Notion account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $node[\"Get Launch Readiness\"].json.error !== undefined }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "c3d4e5f6-5678-8901-2345-ef567890",
+      "name": "Check for Errors",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 450]
+    },
+    {
+      "parameters": {
+        "channel": "#arena-monitoring",
+        "text": "=⚠️ Arena Daily Progress Update Failed\n\nError: {{ $node[\"Get Launch Readiness\"].json.error || 'Unknown error' }}\nTime: {{ $now.toISO() }}\n\nPlease check the MCP server and n8n workflow.",
+        "additionalFields": {}
+      },
+      "id": "d4e5f6a7-6789-9012-3456-f67890ab",
+      "name": "Send Error Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [850, 550],
+      "credentials": {
+        "slackApi": {
+          "id": "YOUR_SLACK_CREDENTIAL_ID",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#arena-monitoring",
+        "text": "=✅ Arena Daily Progress Updated\n\n📊 Launch Score: {{ $node[\"Format Data\"].json.launchScore }}/100\n🎯 Status: {{ $node[\"Format Data\"].json.status }}\n🏆 Today: {{ $node[\"Format Data\"].json.keyAccomplishment }}\n📅 Tomorrow: {{ $node[\"Format Data\"].json.tomorrowPriority }}\n\nNotion database updated successfully.",
+        "additionalFields": {}
+      },
+      "id": "e5f6a7b8-7890-0123-4567-67890abc",
+      "name": "Send Success Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [1050, 300],
+      "credentials": {
+        "slackApi": {
+          "id": "YOUR_SLACK_CREDENTIAL_ID",
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily 9AM Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Launch Readiness",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Launch Readiness": {
+      "main": [
+        [
+          {
+            "node": "Format Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check for Errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Data": {
+      "main": [
+        [
+          {
+            "node": "Add to Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to Notion": {
+      "main": [
+        [
+          {
+            "node": "Send Success Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Errors": {
+      "main": [
+        [
+          {
+            "node": "Send Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "abc123def456",
+  "id": "workflow123",
+  "meta": {
+    "instanceId": "n8n-instance-123"
+  },
+  "tags": []
+}

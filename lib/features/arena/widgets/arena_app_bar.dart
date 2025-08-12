@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../screens/arena_modals.dart';
 import '../../../widgets/appwrite_timer_widget.dart';
+import '../../../widgets/challenge_bell.dart';
+import '../../../widgets/instant_message_bell.dart';
+import '../../../widgets/network_quality_indicator.dart';
 import '../../../models/timer_state.dart';
 
 /// Arena App Bar - DO NOT MODIFY LAYOUT
@@ -52,13 +55,18 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(
-                  width: 32,
-                  height: 32,
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.purple, width: 2),
+                  ),
                   child: IconButton(
                     padding: EdgeInsets.zero,
                     onPressed: onShowModeratorControls,
-                    icon: const Icon(Icons.admin_panel_settings, color: Colors.amber, size: 18),
+                    icon: const Icon(Icons.admin_panel_settings, color: Colors.purple, size: 20),
                     tooltip: 'Moderator Controls',
                   ),
                 ),
@@ -95,6 +103,33 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
         ],
       ),
       actions: [
+        // Network quality indicator
+        const SizedBox(
+          width: 32,
+          child: Center(
+            child: CompactNetworkIndicator(),
+          ),
+        ),
+        // Challenge notification bell
+        const SizedBox(
+          width: 40,
+          child: Center(
+            child: ChallengeBell(
+              iconColor: Colors.white,
+              iconSize: 20,
+            ),
+          ),
+        ),
+        // Message notification bell
+        const SizedBox(
+          width: 40,
+          child: Center(
+            child: InstantMessageBell(
+              iconColor: Colors.white,
+              iconSize: 20,
+            ),
+          ),
+        ),
         // Rules and Guidelines button
         SizedBox(
           width: 40,

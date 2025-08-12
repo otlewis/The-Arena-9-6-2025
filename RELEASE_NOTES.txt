@@ -1,0 +1,27 @@
+🎉 Arena Beta Release v1.0.0
+
+NEW FEATURES:
+✨ Real-time debate and discussion platform
+🎤 WebRTC audio integration for high-quality voice chat  
+🏛️ Arena system with 1v1 debates and judge scoring
+💬 Debates & Discussions rooms with speaker panels
+📱 Instant messaging system
+⏱️ Synchronized timers across all participants
+🔔 Real-time notifications for challenges and messages
+
+AUDIO IMPROVEMENTS:
+🔧 Fixed WebRTC audio connection stability
+🌐 Enhanced web browser audio support
+🎧 Better audio device compatibility
+
+This is a beta release for testing the core debate functionality.
+Please test all audio features and report any issues!
+
+🎯 Focus areas for testing:
+- Audio quality in debate rooms
+- Multi-user voice chat functionality  
+- Timer synchronization
+- Instant messaging
+- Challenge system
+
+Send feedback to: feedback@arena-app.com

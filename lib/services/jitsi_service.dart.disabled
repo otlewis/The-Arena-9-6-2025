@@ -1,0 +1,417 @@
+import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+// import 'package:jitsi_meet_flutter_sdk/jitsi_meet_flutter_sdk.dart';  // Disabled for WebRTC testing
+import '../core/logging/app_logger.dart';
+
+/// Service to handle Jitsi Meet voice conferencing for Arena debates
+/// Replaces AgoraService with same interface pattern
+class JitsiService extends ChangeNotifier {
+  static final JitsiService _instance = JitsiService._internal();
+  factory JitsiService() => _instance;
+  JitsiService._internal();
+
+  // Jitsi configuration - use Arena's dedicated Linode server
+  static String get _jitsiServer {
+    // Use Arena's dedicated Linode Jitsi server
+    return 'https://jitsi.dialecticlabs.com';
+  }
+  static const String _roomPrefix = 'ArenaDebate-';
+  
+  // State management
+  bool _isInitialized = false;
+  bool _isJoined = false;
+  bool _isBroadcaster = false;
+  bool _isMuted = true;
+  String? _currentRoomName;
+  String? _currentUserId;
+  String? _currentUserName;
+  
+  // Callbacks (matching AgoraService interface)
+  Function(int uid)? onUserJoined;
+  Function(int uid)? onUserLeft;
+  Function(int uid, bool muted)? onUserMuteAudio;
+  Function(bool joined)? onJoinChannel;
+  
+  // Connection state
+  final StreamController<bool> _connectionStateController = StreamController<bool>.broadcast();
+  Stream<bool> get connectionStateStream => _connectionStateController.stream;
+  
+  // Getters
+  bool get isInitialized => _isInitialized;
+  bool get isJoined => _isJoined;
+  bool get isBroadcaster => _isBroadcaster;
+  bool get isMuted => _isMuted;
+  String? get currentRoomName => _currentRoomName;
+  
+  /// Initialize Jitsi SDK
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+    
+    try {
+      AppLogger().info('🎤 Initializing Jitsi SDK...');
+      
+      // Initialize Jitsi listeners
+      _setupJitsiListeners();
+      
+      _isInitialized = true;
+      notifyListeners();
+      
+      AppLogger().info('✅ Jitsi SDK initialized successfully');
+    } catch (e) {
+      AppLogger().error('❌ Failed to initialize Jitsi: $e');
+      throw Exception('Failed to initialize Jitsi: $e');
+    }
+  }
+  
+  /// Setup Jitsi event listeners
+  void _setupJitsiListeners() {
+    // Conference joined
+    JitsiMeetEventListener(
+      conferenceJoined: (url) {
+        AppLogger().info('✅ Joined Jitsi conference: $url');
+        print('🚨 JITSI SUCCESS: Conference joined! URL: $url');
+        _isJoined = true;
+        _connectionStateController.add(true);
+        onJoinChannel?.call(true);
+        notifyListeners();
+      },
+      
+      // Conference terminated
+      conferenceTerminated: (url, error) {
+        AppLogger().info('🔚 Left Jitsi conference: $url');
+        print('🚨 JITSI TERMINATED: Conference ended. URL: $url, Error: $error');
+        _isJoined = false;
+        _isBroadcaster = false;
+        _connectionStateController.add(false);
+        onJoinChannel?.call(false);
+        notifyListeners();
+        
+        // If error exists, this was an unexpected disconnection - attempt to rejoin
+        if (error != null && _currentRoomName != null) {
+          AppLogger().error('❌ Unexpected disconnection detected: $error');
+          print('🚨 JITSI DISCONNECTION: Attempting rejoin after error: $error');
+          Future.delayed(const Duration(seconds: 3), () {
+            if (_currentRoomName != null) {
+              AppLogger().info('🔄 Attempting to rejoin after disconnection...');
+              _attemptRejoin();
+            }
+          });
+        }
+      },
+      
+      // Conference will join
+      conferenceWillJoin: (url) {
+        AppLogger().info('🔄 Joining Jitsi conference: $url');
+        print('🚨 JITSI WILL JOIN: About to join conference: $url');
+      },
+      
+      // Ready to close (when meeting ends)
+      readyToClose: () {
+        AppLogger().info('🚪 Jitsi ready to close');
+        print('🚨 JITSI READY TO CLOSE: Meeting ready to close');
+      },
+      
+      // Participant joined
+      participantJoined: (email, name, role, participantId) {
+        AppLogger().info('👤 Participant joined: $name (ID: $participantId)');
+        // Convert participantId to int for compatibility with AgoraService interface
+        final uid = participantId.hashCode;
+        onUserJoined?.call(uid);
+      },
+      
+      // Participant left
+      participantLeft: (participantId) {
+        AppLogger().info('👤 Participant left: $participantId');
+        final uid = participantId.hashCode;
+        onUserLeft?.call(uid);
+      },
+      
+      // Audio muted changed
+      audioMutedChanged: (muted) {
+        AppLogger().info('🔇 Audio muted changed: $muted');
+        _isMuted = muted;
+        notifyListeners();
+        
+        // Notify about current user's mute state
+        if (_currentUserId != null) {
+          final uid = _currentUserId.hashCode;
+          onUserMuteAudio?.call(uid, muted);
+        }
+      },
+    );
+  }
+  
+  /// Join a voice room with auto-join (moderator gets full access)
+  Future<void> joinChannel({String? roomId, String? userId, String? userName, String? userRole}) async {
+    if (!_isInitialized) {
+      await initialize();
+    }
+    
+    try {
+      // Generate unique room name - try format that bypasses lobby
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      if (userRole == 'moderator') {
+        // For moderators, use a format that might bypass lobby restrictions
+        _currentRoomName = roomId != null ? 'arena-$roomId-$timestamp' : 'arena-debate-$timestamp';
+      } else {
+        _currentRoomName = roomId != null ? '$_roomPrefix$roomId' : '$_roomPrefix$timestamp';
+      }
+      _currentUserId = userId ?? 'user-${DateTime.now().millisecondsSinceEpoch}';
+      _currentUserName = userName ?? 'Arena User';
+      
+      AppLogger().info('🎤 Joining Jitsi room: $_currentRoomName as $_currentUserName (role: $userRole)');
+      AppLogger().debug('🌐 Jitsi server URL: $_jitsiServer');
+      AppLogger().debug('🏠 Full meeting URL: ${getFormattedRoomUrl()}');
+      
+      // Configure Jitsi options for Arena's dedicated server
+      AppLogger().info('🔐 Using Arena Jitsi server: $_jitsiServer - lobby disabled, optimized for debates');
+      
+      final options = JitsiMeetConferenceOptions(
+        serverURL: _jitsiServer,
+        room: _currentRoomName!,
+        configOverrides: {
+          // Aggressive lobby bypass configuration
+          "startWithVideoMuted": true,
+          "startWithAudioMuted": false,
+          "requireDisplayName": false,
+          "subject": "Arena Debate Room",
+          "prejoinPageEnabled": false,
+          "enableLobbyChat": false,
+          "disableDeepLinking": true,
+          "enableWelcomePage": false,
+          "enableClosePage": false,
+          "lobby": {
+            "enabled": false
+          },
+          "enableInsecureRoomNameWarning": false,
+          "disableProfile": true,
+          "hideConferenceSubject": false,
+          "hideConferenceTimer": false,
+          "disableInviteFunctions": true,
+          "doNotStoreRoom": true,
+          "enableUserRolesBasedOnToken": userRole == 'moderator',
+          "enableAutoKnockForLobby": false,
+          "enableLobbyChat": false,
+        },
+        featureFlags: {
+          "chat.enabled": false,
+          "recording.enabled": false,
+          "livestreaming.enabled": false,
+          "invite.enabled": false,
+          "meeting-name.enabled": false,
+          "security-options.enabled": false,
+          "calendar.enabled": false,
+          "lobby-mode.enabled": false,
+          "prejoin-page.enabled": false,
+        },
+        userInfo: JitsiMeetUserInfo(
+          displayName: _currentUserName!,
+          email: '$_currentUserId@arena.app',
+          avatar: 'https://api.dicebear.com/7.x/avataaars/png?seed=$_currentUserId',
+        ),
+      );
+      
+      print('🚨 JITSI DEBUG: About to call JitsiMeet().join() with options');
+      print('🚨 JITSI DEBUG: Server URL: ${options.serverURL}');
+      print('🚨 JITSI DEBUG: Room name: ${options.room}');
+      print('🚨 JITSI DEBUG: User name: ${options.userInfo?.displayName}');
+      
+      try {
+        await JitsiMeet().join(options);
+        print('🚨 JITSI DEBUG: JitsiMeet().join() call completed successfully');
+      } catch (joinError) {
+        print('🚨 JITSI ERROR: JitsiMeet().join() failed with error: $joinError');
+        throw Exception('Failed to join Jitsi meeting: $joinError');
+      }
+      
+      // Auto-enable broadcaster mode for moderator and speakers
+      if (userRole == 'moderator' || userRole == 'speaker') {
+        _isBroadcaster = true;
+        AppLogger().info('🎙️ Auto-enabled broadcaster mode for $userRole');
+        
+        // For moderators using Arena's Jitsi server
+        if (userRole == 'moderator') {
+          AppLogger().info('🔑 MODERATOR: Room creator - direct join with no lobby');
+          AppLogger().info('📋 ARENA JITSI: Direct join, lobby disabled');
+        }
+      } else {
+        _isBroadcaster = false;
+        AppLogger().info('👂 Set as audience member');
+      }
+      
+    } catch (e) {
+      AppLogger().error('❌ Failed to join Jitsi room: $e');
+      throw Exception('Failed to join voice room: $e');
+    }
+  }
+  
+  /// Leave the current voice room
+  Future<void> leaveChannel() async {
+    if (!_isJoined) return;
+    
+    try {
+      AppLogger().info('🔚 Leaving Jitsi room...');
+      await JitsiMeet().hangUp();
+      
+      _isJoined = false;
+      _isBroadcaster = false;
+      _currentRoomName = null;
+      _connectionStateController.add(false);
+      notifyListeners();
+      
+    } catch (e) {
+      AppLogger().error('❌ Error leaving Jitsi room: $e');
+    }
+  }
+  
+  /// Switch to speaker role (enable audio transmission)
+  Future<void> switchToSpeaker() async {
+    if (!_isJoined) return;
+    
+    try {
+      AppLogger().info('🎙️ Switching to speaker role');
+      _isBroadcaster = true;
+      
+      // Unmute by default when becoming speaker
+      await muteLocalAudio(false);
+      notifyListeners();
+      
+    } catch (e) {
+      AppLogger().error('❌ Error switching to speaker: $e');
+    }
+  }
+  
+  /// Switch to audience role (disable audio transmission)
+  Future<void> switchToAudience() async {
+    if (!_isJoined) return;
+    
+    try {
+      AppLogger().info('👂 Switching to audience role');
+      _isBroadcaster = false;
+      
+      // Force mute when becoming audience
+      await muteLocalAudio(true);
+      notifyListeners();
+      
+    } catch (e) {
+      AppLogger().error('❌ Error switching to audience: $e');
+    }
+  }
+  
+  /// Mute or unmute local audio
+  Future<void> muteLocalAudio(bool mute) async {
+    if (!_isJoined) return;
+    
+    // Only allow unmuting if user is a broadcaster
+    if (!mute && !_isBroadcaster) {
+      AppLogger().warning('⚠️ Cannot unmute: user is not a speaker');
+      return;
+    }
+    
+    try {
+      AppLogger().info(mute ? '🔇 Muting audio' : '🔊 Unmuting audio');
+      
+      await JitsiMeet().setAudioMuted(mute);
+      _isMuted = mute;
+      notifyListeners();
+      
+    } catch (e) {
+      AppLogger().error('❌ Error setting audio mute: $e');
+    }
+  }
+  
+  /// Enable or disable speakerphone
+  Future<void> setEnableSpeakerphone(bool enabled) async {
+    try {
+      // Note: Jitsi handles audio routing internally
+      // This is kept for interface compatibility
+      AppLogger().info(enabled ? '🔊 Speakerphone enabled' : '🎧 Speakerphone disabled');
+    } catch (e) {
+      AppLogger().error('❌ Error setting speakerphone: $e');
+    }
+  }
+  
+  /// Switch to speaker output mode
+  Future<void> switchToSpeakerOutput() async {
+    await setEnableSpeakerphone(true);
+  }
+  
+  /// Attempt to rejoin after connection failure
+  Future<void> _attemptRejoin() async {
+    if (_isJoined || _currentRoomName == null) return;
+    
+    try {
+      AppLogger().info('🔄 Attempting to rejoin Jitsi room: $_currentRoomName');
+      
+      final options = JitsiMeetConferenceOptions(
+        serverURL: _jitsiServer,
+        room: _currentRoomName!,
+        configOverrides: {
+          "startWithVideoMuted": true,
+          "startWithAudioMuted": false,
+          "requireDisplayName": false,
+          "subject": "Arena Debate Room",
+          "prejoinPageEnabled": false,
+          "enableLobbyChat": false,
+          "disableDeepLinking": true,
+          "enableWelcomePage": false,
+          "enableClosePage": false,
+          "p2p": {
+            "enabled": false
+          },
+          "analytics": {
+            "disabled": true
+          },
+        },
+        featureFlags: {
+          "chat.enabled": false,
+          "recording.enabled": false,
+          "livestreaming.enabled": false,
+        },
+        userInfo: JitsiMeetUserInfo(
+          displayName: _currentUserName!,
+          email: '$_currentUserId@arena.app',
+          avatar: 'https://api.dicebear.com/7.x/avataaars/png?seed=$_currentUserId',
+        ),
+      );
+      
+      await JitsiMeet().join(options);
+      AppLogger().info('✅ Successfully rejoined Jitsi room');
+    } catch (e) {
+      AppLogger().error('❌ Failed to rejoin Jitsi room: $e');
+    }
+  }
+
+  /// Clean up resources
+  @override
+  void dispose() {
+    AppLogger().info('🧹 Disposing JitsiService');
+    
+    if (_isJoined) {
+      leaveChannel();
+    }
+    
+    _connectionStateController.close();
+    super.dispose();
+  }
+  
+
+  /// Get formatted room URL for sharing
+  String getFormattedRoomUrl() {
+    if (_currentRoomName == null) return '';
+    return '$_jitsiServer/$_currentRoomName';
+  }
+  
+  /// Check if a specific user is muted
+  /// Note: Jitsi doesn't provide per-participant mute status easily
+  /// This is kept for interface compatibility
+  bool isUserMuted(int uid) {
+    // For current user
+    if (_currentUserId != null && uid == _currentUserId.hashCode) {
+      return _isMuted;
+    }
+    // For other users, we can't determine mute status with Jitsi
+    return false;
+  }
+}

@@ -8,16 +8,24 @@ A sophisticated Flutter application for real-time debate competitions featuring 
 - **Real-time Voice Debates** - Live audio communication using Agora Voice SDK
 - **Smart Role Management** - Automatic assignment of debaters, judges, and moderators
 - **Live Chat System** - Real-time messaging during debates with role-based permissions
+- **Instant Messaging** - Private messaging between users with Agora Chat SDK integration
+- **Synchronized Timers** - Server-controlled timers with real-time sync across all devices
 - **Debate Scoring** - Comprehensive scoring system with judge evaluations
-- **Challenge System** - Send and receive debate challenges with topic proposals
+- **Challenge System** - Send and receive debate challenges with topic proposals and notifications
 - **Club Management** - Create and manage debate clubs with member hierarchies
 - **Debates & Discussions** - Open discussion rooms with moderator controls and speaker panels
+- **Hand-Raising System** - Request to speak functionality with moderator approval
+- **Notification System** - Real-time notifications for challenges, messages, and room events
+- **Scheduled Rooms** - Create and manage scheduled discussion rooms
 
 ### Technical Highlights
 - **Modular Architecture** - Feature-first architecture with clean separation of concerns
 - **State Management** - Reactive UI using Riverpod providers and state notifiers
 - **Real-time Sync** - Appwrite backend with real-time database subscriptions
 - **Voice Integration** - Cross-platform voice chat with role-based audio permissions
+- **Instant Messaging** - Agora Chat SDK for high-performance messaging
+- **Timer Synchronization** - Multiple timer implementations (Firebase & Appwrite) with offline support
+- **Audio Feedback** - Rich sound effects for timer warnings and notifications
 - **Comprehensive Testing** - Unit, widget, and integration test suites
 - **Structured Logging** - Professional logging system with categorized output
 
@@ -37,10 +45,13 @@ lib/
 │   │   ├── models/        # Arena data models
 │   │   ├── providers/     # State management for arena
 │   │   ├── screens/       # Arena UI screens
+│   │   ├── dialogs/       # Arena-specific dialogs
 │   │   └── widgets/       # Arena-specific widgets
-│   └── discussion/        # Debates & Discussions functionality
-│       ├── screens/       # Discussion room screens
-│       └── widgets/       # Discussion-specific widgets
+│   ├── discussion/        # Debates & Discussions functionality
+│   │   ├── screens/       # Discussion room screens
+│   │   └── widgets/       # Discussion-specific widgets
+│   └── notifications/     # Notification system
+│       └── widgets/       # Notification UI components
 ├── models/                # Global data models
 ├── screens/               # Application screens
 ├── services/              # Business logic and external integrations
@@ -141,6 +152,28 @@ Real-time voice communication using Agora Voice SDK:
   - Dynamic token generation for security
   - Role-based audio permissions (speaker/audience)
 
+### Instant Messaging System
+Private messaging between users with real-time delivery:
+
+- **Agora Chat Service** (`lib/services/agora_chat_service.dart`)
+  - Integration with Agora Chat SDK
+  - Real-time message delivery and presence
+  - Unread message tracking and notifications
+  - Message deduplication and caching
+
+### Timer System
+Synchronized timers across all participants:
+
+- **Timer Service** (`lib/services/timer_service.dart`)
+  - Firebase-based timer synchronization
+  - Support for different room types and timer configurations
+  - Audio feedback for warnings and expirations
+  - Offline support with automatic sync
+- **Appwrite Timer Service** (`lib/services/appwrite_timer_service.dart`)
+  - Alternative Appwrite-based implementation
+  - Server-controlled timer state
+  - Real-time updates via subscriptions
+
 ### Challenge System
 Debate invitation and matchmaking system:
 
@@ -206,14 +239,29 @@ AppLogger().error('Error conditions');
 
 ### Appwrite Backend
 - **Authentication** - User registration and login
-- **Database** - Real-time data storage and sync
+- **Database** - Real-time data storage and sync with the following collections:
+  - `users` - User profiles with social links
+  - `arena_rooms`, `arena_participants`, `arena_judgments` - Arena debate system
+  - `debate_discussion_rooms`, `debate_discussion_participants` - Discussion rooms
+  - `challenges` - Debate challenges between users
+  - `challenge_messages` - Challenge notifications and instant messages
+  - `instant_messages` - Private messaging between users
+  - `room_hand_raises` - Hand-raising system in discussion rooms
+  - `timers`, `timer_events`, `timer_configs` - Timer synchronization system
 - **Storage** - File uploads for avatars and assets
 - **Functions** - Server-side logic for complex operations
+- **Realtime** - Live subscriptions for instant updates
 
-### Agora Voice SDK
-- **Real-time Audio** - Low-latency voice communication
-- **Token Security** - Dynamic token generation
-- **Role Management** - Speaker/audience role switching
+### Agora SDK Integration
+- **Voice SDK** - Low-latency voice communication
+  - Real-time audio streaming
+  - Token-based security
+  - Role management (speaker/audience switching)
+- **Chat SDK** - High-performance instant messaging
+  - Real-time message delivery
+  - Presence tracking
+  - Message history and offline delivery
+  - Unified App ID with Voice SDK
 
 ## 📚 Additional Resources
 
@@ -245,6 +293,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   - Implemented floating speakers panel with pixel-perfect layouts
   - Added real-time moderator tools with instant notifications
   - Zero pixel overflow on all device sizes
+  - Implemented instant messaging system with Agora Chat SDK
+  - Added synchronized timer system with audio feedback
+  - Enhanced notification system with challenge and message bells
 
 ---
 
