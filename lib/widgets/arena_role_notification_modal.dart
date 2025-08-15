@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/appwrite_service.dart';
 import '../services/challenge_messaging_service.dart';
-import '../features/arena/screens/arena_screen_modular.dart';
+import '../screens/arena_screen.dart';
 import '../main.dart' show getIt;
 import '../core/logging/app_logger.dart';
 
@@ -380,7 +380,7 @@ class _ArenaRoleNotificationModalState extends State<ArenaRoleNotificationModal>
             // Navigate to the arena room - use arenaId directly as the roomId
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (context) => ArenaScreenModular(
+                builder: (context) => ArenaScreen(
                   roomId: arenaId, // Use the arenaId directly as it contains the full room ID
                   challengeId: widget.notification['challengeId'] ?? arenaId,
                   topic: widget.notification['topic'] ?? 'Debate Topic',

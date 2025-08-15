@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'speaking_indicator.dart';
 
 class UserAvatar extends StatelessWidget {
   final String? avatarUrl;
@@ -100,6 +101,8 @@ class UserAvatarStatus extends StatelessWidget {
   final double radius;
   final bool isOnline;
   final bool isSpeaking;
+  final bool isMuted;
+  final String? userRole;
   final VoidCallback? onTap;
 
   const UserAvatarStatus({
@@ -109,6 +112,8 @@ class UserAvatarStatus extends StatelessWidget {
     this.radius = 24,
     this.isOnline = false,
     this.isSpeaking = false,
+    this.isMuted = false,
+    this.userRole,
     this.onTap,
   });
 
@@ -116,14 +121,17 @@ class UserAvatarStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        UserAvatar(
-          avatarUrl: avatarUrl,
-          initials: initials,
-          radius: radius,
-          onTap: onTap,
-          showBorder: isSpeaking,
-          borderColor: const Color(0xFF4CAF50), // Green for speaking
-          borderWidth: 3,
+        SpeakingIndicator(
+          isSpeaking: isSpeaking,
+          isMuted: isMuted,
+          userRole: userRole,
+          size: radius * 2,
+          child: UserAvatar(
+            avatarUrl: avatarUrl,
+            initials: initials,
+            radius: radius,
+            onTap: onTap,
+          ),
         ),
         if (isOnline)
           Positioned(

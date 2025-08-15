@@ -449,12 +449,9 @@ class AppwriteTimerService {
 
   /// Calculate precise remaining time for a running timer
   int calculateRemainingTime(TimerState timer) {
-    if (timer.status != TimerStatus.running || timer.startTime == null) {
-      return timer.remainingSeconds;
-    }
-
-    final elapsed = DateTime.now().difference(timer.startTime!).inSeconds;
-    return (timer.remainingSeconds - elapsed).clamp(0, 999999);
+    // Always use the server's remainingSeconds as the source of truth
+    // This eliminates calculation conflicts and timing issues
+    return timer.remainingSeconds;
   }
 
   /// Ensure service is initialized

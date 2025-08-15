@@ -3063,8 +3063,13 @@ class AppwriteService {
         // 2. Room is older than 2 hours with no active participants
         // 3. Room is in "waiting" status for more than 2 hours with no moderator
         // 4. Room has only audience members for 1+ hours
+        // PROTECTION: Never cleanup rooms less than 5 minutes old to prevent race conditions
         
-        if (roomAge.inHours >= 6) {
+        if (roomAge.inMinutes < 5) {
+          // PROTECTION: Never cleanup newly created rooms to prevent race conditions
+          shouldCleanup = false;
+          AppLogger().debug('🛡️ Protecting newly created room from cleanup: $roomId (age: ${roomAge.inMinutes}m)');
+        } else if (roomAge.inHours >= 6) {
           shouldCleanup = true;
           reason = 'older than 6 hours';
         } else if (roomAge.inHours >= 2 && participants.documents.isEmpty) {
@@ -3444,6 +3449,25 @@ class AppwriteService {
         AppLogger().debug('Room $roomId does not exist, proceeding with creation');
       }
       
+      // Parse team size from metadata in description (from Arena Lobby)
+      int teamSize = 1; // Default to 1v1
+      if (description != null && description.contains('[METADATA]')) {
+        try {
+          final metadataStartIndex = description.indexOf('[METADATA]') + '[METADATA]'.length;
+          final metadataString = description.substring(metadataStartIndex);
+          // Parse the metadata string (it's formatted like a Map toString())
+          if (metadataString.contains('teamSize: 2v2')) {
+            teamSize = 2; // 2v2 team
+          } else if (metadataString.contains('teamSize: 1v1')) {
+            teamSize = 1; // 1v1 team  
+          }
+          AppLogger().info('Parsed team size from metadata: $teamSize (${teamSize}v$teamSize)');
+        } catch (e) {
+          AppLogger().warning('Failed to parse team size from metadata: $e');
+          // Keep default teamSize = 1
+        }
+      }
+
       try {
         await databases.createDocument(
           databaseId: 'arena_db',
@@ -3463,6 +3487,8 @@ class AppwriteService {
             'judgingEnabled': false,
             'totalJudges': 0,
             'judgesSubmitted': 0,
+            'teamSize': teamSize, // CRITICAL: Store team size for 2v2 support
+            'moderatorId': creatorId,
           },
         );
       } catch (e) {
@@ -3621,21 +3647,19 @@ class AppwriteService {
           'totalJudges': 0,
           'judgesSubmitted': 0,
           'moderatorId': creatorId,
+          'teamSize': 1, // Simple rooms only support 1v1
         },
       );
       AppLogger().info('✅ Room document created: $documentId');
       
-      // Assign creator as moderator
-      try {
-        await assignArenaRole(
-          roomId: documentId,
-          userId: creatorId,
-          role: 'moderator',
-        );
-        AppLogger().info('✅ Moderator role assigned');
-      } catch (e) {
-        AppLogger().error('⚠️ Failed to assign moderator role: $e');
-      }
+      // CRITICAL: Assign creator as moderator IMMEDIATELY
+      // This prevents cleanup functions from seeing the room as having no moderator
+      await assignArenaRole(
+        roomId: documentId,
+        userId: creatorId,
+        role: 'moderator',
+      );
+      AppLogger().info('✅ Moderator role assigned and confirmed before returning');
       
       // Initialize Firebase timer
       try {

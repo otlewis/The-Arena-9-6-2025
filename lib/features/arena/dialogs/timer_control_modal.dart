@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import '../models/debate_phase.dart';
 
-/// Timer Control Modal - DO NOT MODIFY UI LAYOUT
-/// This modal provides timer controls for moderators during debates
+/// Simplified Timer Control Modal
+/// Universal timer controls for all room types with 3-minute default
 class TimerControlModal extends StatefulWidget {
-  final DebatePhase currentPhase;
   final int remainingSeconds;
   final bool isTimerRunning;
   final bool isPaused;
@@ -15,11 +13,9 @@ class TimerControlModal extends StatefulWidget {
   final VoidCallback onReset;
   final Function(int) onExtendTime;
   final Function(int) onSetCustomTime;
-  final VoidCallback onAdvancePhase;
 
   const TimerControlModal({
     super.key,
-    required this.currentPhase,
     required this.remainingSeconds,
     required this.isTimerRunning,
     required this.isPaused,
@@ -30,7 +26,6 @@ class TimerControlModal extends StatefulWidget {
     required this.onReset,
     required this.onExtendTime,
     required this.onSetCustomTime,
-    required this.onAdvancePhase,
   });
 
   @override
@@ -59,80 +54,121 @@ class _TimerControlModalState extends State<TimerControlModal> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Row(
-        children: [
-          Icon(Icons.timer, color: Colors.purple),
-          SizedBox(width: 8),
-          Text('Timer Controls'),
-        ],
-      ),
-      content: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.7,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-          // Current Phase Info
+    return Material(
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+          // Handle bar
           Container(
-            padding: const EdgeInsets.all(12),
+            width: 40,
+            height: 4,
             decoration: BoxDecoration(
-              color: Colors.purple.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
             ),
-            child: Column(
-              children: [
-                Text(
-                  widget.currentPhase.displayName,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          
+          // Title with timer display if running
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.timer, color: Colors.purple),
+                  SizedBox(width: 8),
+                  Text(
+                    'Speaking Time',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              // Show live countdown if timer is running
+              if (widget.isTimerRunning)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: widget.remainingSeconds <= 30 ? Colors.red : Colors.green,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    _formatTime(widget.remainingSeconds),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-                Text(
-                  widget.currentPhase.description,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ],
+          ),
+          const SizedBox(height: 20),
+          
+          // Only show preset and custom time input when timer is NOT running
+          if (!widget.isTimerRunning) ...[
+            // Speaking Time Preset
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: [
+                  _buildPresetButton('3:00', 180), // 3 minutes default
+                  _buildPresetButton('2:00', 120), // 2 minutes
+                  _buildPresetButton('5:00', 300), // 5 minutes
+                  _buildPresetButton('1:00', 60),  // 1 minute
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Custom Time Input
+            const Text(
+              'Set Custom Time',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _minutesController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Minutes',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text(':', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _secondsController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Seconds',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
                 ),
               ],
             ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Custom Time Input
-          const Text(
-            'Set Custom Time',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _minutesController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Minutes',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text(':', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _secondsController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Seconds',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
+            
+            const SizedBox(height: 16),
+          ],
           
           // Timer Controls
           Row(
@@ -144,12 +180,14 @@ class _TimerControlModalState extends State<TimerControlModal> {
                 onPressed: () {
                   if (widget.isTimerRunning) {
                     widget.onPause();
+                    // Don't close when pausing - keep bottom sheet open
                   } else if (widget.isPaused) {
                     widget.onResume();
+                    // Don't close when resuming - keep bottom sheet open
                   } else {
                     widget.onStart();
+                    // Don't close when starting - keep bottom sheet open to show countdown
                   }
-                  Navigator.pop(context);
                 },
                 color: widget.isTimerRunning ? Colors.orange : Colors.green,
               ),
@@ -186,71 +224,70 @@ class _TimerControlModalState extends State<TimerControlModal> {
             ],
           ),
           
-          const SizedBox(height: 16),
           
-          // Advance Phase Button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: widget.currentPhase.nextPhase != null ? () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Advance Phase'),
-                    content: Text(
-                      'Are you sure you want to advance to the next phase?\n\n'
-                      'Current: ${widget.currentPhase.displayName}\n'
-                      'Next: ${widget.currentPhase.nextPhase?.displayName ?? 'None'}',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context); // Close confirmation
-                          Navigator.pop(context); // Close timer modal
-                          widget.onAdvancePhase();
-                        },
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
-                        child: const Text('Advance', style: TextStyle(color: Colors.white)),
-                      ),
-                    ],
+          const SizedBox(height: 20),
+          
+          // Action buttons - conditional based on timer state
+          if (widget.isTimerRunning)
+            // When timer is running, just show close button
+            Center(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'Close',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 16,
                   ),
-                );
-              } : null,
-              icon: const Icon(Icons.skip_next, color: Colors.white),
-              label: Text(
-                widget.currentPhase.nextPhase != null 
-                  ? 'Advance to ${widget.currentPhase.nextPhase!.displayName}'
-                  : 'Final Phase',
-                style: const TextStyle(color: Colors.white),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purple,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
+            )
+          else
+            // When timer is not running, show normal controls
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _setCustomTime,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'Set Time',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-            ],
-          ),
+          
+          // Add bottom padding for safe area
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 20),
+          
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _setCustomTime,
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
-          child: const Text('Set Time', style: TextStyle(color: Colors.white)),
-        ),
-      ],
     );
   }
 
@@ -280,6 +317,47 @@ class _TimerControlModalState extends State<TimerControlModal> {
           style: const TextStyle(fontSize: 10),
         ),
       ],
+    );
+  }
+
+  Widget _buildPresetButton(String label, int seconds) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Calculate responsive sizing based on screen width
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isSmallScreen = screenWidth < 360;
+        
+        return GestureDetector(
+          onTap: () {
+            widget.onSetCustomTime(seconds);
+            Navigator.pop(context);
+          },
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isSmallScreen ? 12 : 16,
+              vertical: 8,
+            ),
+            constraints: BoxConstraints(
+              minWidth: isSmallScreen ? 60 : 70,
+              maxWidth: isSmallScreen ? 70 : 80,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.green,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.green.shade700),
+            ),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: isSmallScreen ? 12 : 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -320,5 +398,11 @@ class _TimerControlModalState extends State<TimerControlModal> {
         const SnackBar(content: Text('Please enter a valid time')),
       );
     }
+  }
+
+  String _formatTime(int seconds) {
+    final minutes = seconds ~/ 60;
+    final remainingSeconds = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 }

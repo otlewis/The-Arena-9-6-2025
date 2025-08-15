@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/user_profile.dart';
+import '../services/challenge_messaging_service.dart';
+import '../core/logging/app_logger.dart';
 
 /// Beautiful user profile bottom sheet modal
 class UserProfileBottomSheet extends StatefulWidget {
@@ -353,17 +356,10 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                           // Challenge button
                           Expanded(
                             child: GestureDetector(
-                              onTap: () async {
-                                // Close first, then navigate
-                                final navigator = Navigator.of(context);
-                                _animationController.reverse();
-                                await Future.delayed(const Duration(milliseconds: 150));
-                                if (mounted) {
-                                  navigator.pop();
-                                  await Future.delayed(const Duration(milliseconds: 100));
-                                  widget.onChallenge?.call();
-                                  widget.onClose?.call();
-                                }
+                              onTap: () {
+                                // Show challenge dialog directly without closing the sheet
+                                HapticFeedback.lightImpact();
+                                _showChallengeDialog();
                               },
                               child: Container(
                                 padding: const EdgeInsets.symmetric(vertical: 14),
@@ -437,6 +433,130 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
         ),
       ],
     );
+  }
+
+  /// Show challenge dialog to send a challenge to this user
+  void _showChallengeDialog() {
+    final topicController = TextEditingController();
+    final descriptionController = TextEditingController();
+    String selectedPosition = 'affirmative';
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Challenge ${widget.user.displayName}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Topic input
+                TextField(
+                  controller: topicController,
+                  decoration: const InputDecoration(
+                    labelText: 'Debate Topic',
+                    hintText: 'What should you debate about?',
+                  ),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 16),
+                
+                // Description input
+                TextField(
+                  controller: descriptionController,
+                  decoration: const InputDecoration(
+                    labelText: 'Description (Optional)',
+                    hintText: 'Add context or rules...',
+                  ),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 16),
+                
+                // Position selection
+                const Text('Your Position:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: RadioListTile<String>(
+                        title: const Text('For'),
+                        value: 'affirmative',
+                        groupValue: selectedPosition,
+                        onChanged: (value) => setState(() => selectedPosition = value!),
+                      ),
+                    ),
+                    Expanded(
+                      child: RadioListTile<String>(
+                        title: const Text('Against'),
+                        value: 'negative',
+                        groupValue: selectedPosition,
+                        onChanged: (value) => setState(() => selectedPosition = value!),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (topicController.text.trim().isNotEmpty) {
+                  Navigator.pop(context);
+                  await _sendChallengeToUser(
+                    topicController.text.trim(),
+                    descriptionController.text.trim(),
+                    selectedPosition,
+                  );
+                }
+              },
+              child: const Text('Send Challenge'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Send a challenge to the user
+  Future<void> _sendChallengeToUser(String topic, String description, String position) async {
+    try {
+      AppLogger().info('Sending challenge to ${widget.user.id}: $topic');
+      
+      // Get the challenge messaging service
+      final challengeService = ChallengeMessagingService();
+      
+      await challengeService.sendChallenge(
+        challengedUserId: widget.user.id,
+        topic: topic,
+        description: description,
+        position: position,
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Challenge sent to ${widget.user.displayName}!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+      
+    } catch (e) {
+      AppLogger().error('Failed to send challenge: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error sending challenge. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   /// Static method to show the bottom sheet

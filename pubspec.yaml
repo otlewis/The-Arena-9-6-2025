@@ -1,7 +1,7 @@
 name: arena
 description: "A debate and discussion app with live streaming capabilities using Flutter."
 publish_to: 'none'
-version: 1.0.14+16
+version: 1.0.21+24
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -48,7 +48,6 @@ dependencies:
   mcp_toolkit: ^0.2.3
   liquid_glass_renderer: ^0.1.1-dev.9
   flutter_webrtc: ^0.12.12
-  mediasfu_mediasoup_client: ^0.0.7
   http: ^1.1.0
   in_app_purchase: ^3.2.0
   in_app_purchase_storekit: ^0.3.17+2

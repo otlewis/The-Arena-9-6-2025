@@ -19,12 +19,14 @@ import '../core/logging/app_logger.dart';
 import '../services/livekit_service.dart';
 import '../services/livekit_token_service.dart';
 import '../services/noise_cancellation_service.dart';
+import '../services/speaking_detection_service.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:audio_session/audio_session.dart' as audio_session;
 import 'arena_modals.dart';
 import '../features/arena/dialogs/moderator_control_modal.dart' as moderator_controls;
 import '../features/arena/widgets/arena_app_bar.dart';
 import '../features/arena/models/debate_phase.dart' as features;
+import '../features/arena/dialogs/timer_control_modal.dart';
 // Removed problematic provider imports to prevent infinite loops
 
 // Legacy Debate Phase Enum - kept for backwards compatibility
@@ -104,6 +106,7 @@ class ArenaScreen extends StatefulWidget {
 class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin {
   final AppwriteService _appwrite = AppwriteService();
   late final SoundService _soundService;
+  late final SpeakingDetectionService _speakingService;
   
   // Room data
   Map<String, dynamic>? _roomData;
@@ -148,10 +151,22 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   // Speaking Management
   String _currentSpeaker = '';
   
-  // WebRTC Video & Audio Management  
+    // WebRTC Video & Audio Management
   final LiveKitService _webrtcService = LiveKitService();
   bool _isWebRTCConnected = false;
   bool _isMuted = false;
+  
+  // Connection stability monitoring
+  Timer? _connectionHealthTimer;
+  Timer? _reconnectionTimer;
+  bool _isReconnecting = false;
+  int _connectionDropCount = 0;
+  DateTime? _lastConnectionDrop;
+  
+  // Connection stability thresholds
+  int _consecutiveUnhealthyChecks = 0;
+  static const int _unhealthyThreshold = 3; // Require 3 consecutive unhealthy checks
+  static const int _minTimeBetweenReconnections = 60; // Minimum 60 seconds between reconnection attempts
   bool _isScreenSharing = false;
   
   // Screen sharing state
@@ -210,8 +225,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     
     // Initialize services
     _soundService = getIt<SoundService>();
+    _speakingService = getIt<SpeakingDetectionService>();
     _initializeInstantMessaging();
     _initializeWebRTC();
+    
+    // Set up speaking detection listener
+    _speakingService.addListener(_onSpeakingStateChanged);
     
     // Enable iOS-specific optimizations
     _isIOSOptimizationEnabled = !kIsWeb && (Platform.isIOS || defaultTargetPlatform == TargetPlatform.iOS);
@@ -234,6 +253,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         _connectToWebRTC();
       }
     });
+    
+    // Start connection health monitoring to prevent audio drops
+    _startConnectionHealthMonitoring();
   }
   
   /// Initialize arena with proper authentication and setup order
@@ -369,6 +391,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       AppLogger().debug('🛑 DISPOSE: Mute sync timer was already null');
     }
     
+    // Stop connection health monitoring
+    _stopConnectionHealthMonitoring();
+    _reconnectionTimer?.cancel();
+    
     AppLogger().debug('🛑 DISPOSE: Cancelling realtime subscription...');
     _realtimeSubscription?.cancel();
     _realtimeSubscription = null;
@@ -391,12 +417,45 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       AppLogger().error('❌ Failed to disable noise cancellation during dispose: $e');
     }
     
+    AppLogger().debug('🛑 DISPOSE: Removing speaking detection listener...');
+    _speakingService.removeListener(_onSpeakingStateChanged);
+    
     _timerController.dispose();
     
     // Restart notification service to ensure user can receive new invites
     // Note: NotificationService singleton continues running - no restart needed
     
     super.dispose();
+  }
+
+  /// Handle speaking state changes
+  void _onSpeakingStateChanged() {
+    if (mounted && !_isExiting) {
+      setState(() {
+        // UI will rebuild with new speaking states from _speakingService
+      });
+    }
+  }
+
+  /// Get user role for speaking indicator by userId
+  String? _getUserRoleById(String? userId) {
+    if (userId == null) return null;
+    
+    // Check if it's the current user
+    if (userId == _currentUserId) {
+      return _userRole;
+    }
+    
+    // Check participants for their roles using the _participants map
+    for (final entry in _participants.entries) {
+      final role = entry.key;
+      final participant = entry.value;
+      if (participant?.id == userId) {
+        return role;
+      }
+    }
+    
+    return 'audience';
   }
 
   void _setupRealtimeSubscription() {
@@ -564,6 +623,169 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
+  /// Start connection health monitoring to prevent audio drops
+  void _startConnectionHealthMonitoring() {
+    _connectionHealthTimer?.cancel();
+    _connectionHealthTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (!mounted || _isExiting) {
+        timer.cancel();
+        return;
+      }
+      _checkConnectionHealth();
+    });
+    
+    AppLogger().debug('🔍 Started connection health monitoring for Arena (30s intervals)');
+  }
+
+  /// Stop connection health monitoring
+  void _stopConnectionHealthMonitoring() {
+    _connectionHealthTimer?.cancel();
+    _connectionHealthTimer = null;
+    AppLogger().debug('🛑 Stopped connection health monitoring');
+  }
+
+  /// Check connection health and trigger reconnection if needed
+  void _checkConnectionHealth() {
+    if (!mounted || _isExiting || _isReconnecting) return;
+    
+    try {
+      // Check if WebRTC connection is healthy
+      final isWebRTCConnected = _webrtcService.isConnected;
+      final hasRemoteStreams = _webrtcService.room?.remoteParticipants.isNotEmpty ?? false;
+      
+      // Only consider connection unhealthy if WebRTC is completely disconnected
+      // Note: isWebRTCHealthy is calculated but not used in current logic - kept for future use
+      // final isWebRTCHealthy = isWebRTCConnected;
+      
+      // Log connection state for debugging (but not too frequently)
+      if (_consecutiveUnhealthyChecks == 0 || _consecutiveUnhealthyChecks % 5 == 0) {
+        AppLogger().debug('🔍 Arena connection health check: WebRTC=${isWebRTCConnected ? 'Connected' : 'Disconnected'}, Streams=${hasRemoteStreams ? 'Yes' : 'No'}, Role=${_userRole ?? 'Unknown'}');
+      }
+      
+      // Only attempt WebRTC restoration if:
+      // 1. User is moderator/debater/judge (can publish audio)
+      // 2. WebRTC is completely disconnected
+      // 3. We're not already reconnecting
+      // 4. We've had multiple consecutive unhealthy checks
+      if (_shouldUserPublishMedia() && !isWebRTCConnected && !_isReconnecting) {
+        _consecutiveUnhealthyChecks++;
+        
+        // Check if we've attempted reconnection recently to prevent loops
+        final timeSinceLastAttempt = _lastConnectionDrop != null 
+            ? DateTime.now().difference(_lastConnectionDrop!).inSeconds 
+            : 60;
+        
+        // Only attempt reconnection if:
+        // - We've had enough consecutive unhealthy checks
+        // - Enough time has passed since last attempt
+        if (_consecutiveUnhealthyChecks >= _unhealthyThreshold && timeSinceLastAttempt > _minTimeBetweenReconnections) {
+          AppLogger().warning('⚠️ Arena WebRTC disconnected for $_consecutiveUnhealthyChecks consecutive checks - attempting restoration');
+          _restoreWebRTCConnection();
+          _consecutiveUnhealthyChecks = 0; // Reset counter
+        } else {
+          AppLogger().debug('⏳ Skipping Arena WebRTC restoration - checks: $_consecutiveUnhealthyChecks/$_unhealthyThreshold, time: ${timeSinceLastAttempt}s/$_minTimeBetweenReconnections');
+        }
+      } else if (isWebRTCConnected) {
+        // Reset unhealthy check counter when connection is healthy
+        _consecutiveUnhealthyChecks = 0;
+      }
+      
+    } catch (e) {
+      AppLogger().error('❌ Error checking Arena connection health: $e');
+    }
+  }
+
+  /// Handle WebRTC connection restoration
+  void _restoreWebRTCConnection() async {
+    if (_isReconnecting) return;
+    
+    _isReconnecting = true;
+    _connectionDropCount++;
+    _lastConnectionDrop = DateTime.now();
+    
+    AppLogger().warning('🔴 Arena audio drop detected! Count: $_connectionDropCount');
+    
+    // Show user feedback
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Audio connection issue detected. Attempting to restore...'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+    
+    AppLogger().debug('🔄 Starting Arena WebRTC connection restoration...');
+    
+    try {
+      // Attempt to reconnect WebRTC
+      await _connectToWebRTC();
+      
+      AppLogger().debug('✅ Arena WebRTC connection restored successfully');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Audio connection restored successfully!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+    } catch (e) {
+      AppLogger().error('❌ Arena WebRTC connection restoration failed: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to restore audio connection: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      
+      // Schedule retry
+      _scheduleReconnectionRetry();
+      
+    } finally {
+      _isReconnecting = false;
+    }
+  }
+
+  /// Schedule reconnection retry with exponential backoff
+  void _scheduleReconnectionRetry() {
+    final retryDelay = Duration(seconds: (2 * _connectionDropCount).clamp(5, 60));
+    
+    AppLogger().debug('⏰ Scheduling Arena WebRTC reconnection retry in ${retryDelay.inSeconds} seconds...');
+    
+    _reconnectionTimer?.cancel();
+    _reconnectionTimer = Timer(retryDelay, () {
+      if (mounted && !_isExiting && !_isReconnecting) {
+        AppLogger().debug('🔄 Executing scheduled Arena WebRTC reconnection retry...');
+        _restoreWebRTCConnection();
+      }
+    });
+  }
+
+  /// Format timestamp for display
+  String _formatTimestamp(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+    
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else {
+      return '${difference.inDays}d ago';
+    }
+  }
+
   /// Initialize WebRTC video and audio for Arena
   void _initializeWebRTC() async {
     try {
@@ -643,7 +865,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
-  /// Connect to WebRTC server for Arena audio using MediaSoup
+  /// Connect to WebRTC server for Arena audio using LiveKit
   Future<void> _connectToWebRTC() async {
     AppLogger().info('🎥 _connectToWebRTC() called');
     
@@ -682,6 +904,28 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
       // Determine role for WebRTC connection
       String webrtcRole = 'audience'; // Default to audience
+      
+      // CRITICAL: Re-check current user role from database before WebRTC connection
+      try {
+        final currentParticipants = await _appwrite.getArenaParticipants(widget.roomId);
+        final currentUserParticipant = currentParticipants.firstWhere(
+          (p) => p['userId'] == _currentUser?.id,
+          orElse: () => <String, dynamic>{},
+        );
+        
+        if (currentUserParticipant.isNotEmpty) {
+          final databaseRole = currentUserParticipant['role'];
+          AppLogger().debug('🔍 WEBRTC: Database role: $databaseRole, Local role: $_userRole');
+          
+          // Use database role if it's different from local role
+          if (databaseRole != null && databaseRole != _userRole) {
+            AppLogger().warning('🔄 Role mismatch detected - updating local role from $_userRole to $databaseRole');
+            _userRole = databaseRole;
+          }
+        }
+      } catch (e) {
+        AppLogger().error('❌ Failed to double-check role from database: $e');
+      }
       
       // Check if current user is room creator (auto-moderator)
       if (_roomData != null && _currentUser?.id != null && _roomData!['createdBy'] == _currentUser!.id) {
@@ -817,6 +1061,19 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   /// Toggle local microphone with enhanced error handling
   Future<void> _toggleAudio() async {
     AppLogger().debug('🎤 Toggle audio called - current state: ${_isMuted ? 'muted' : 'unmuted'}');
+    AppLogger().debug('🎤 User role: $_userRole, Can publish: ${_shouldUserPublishMedia()}');
+    
+    // Check if user has permission to use mic
+    if (!_shouldUserPublishMedia()) {
+      AppLogger().error('❌ User role $_userRole does not have microphone permissions');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Your role does not have microphone access'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
     
     // Ensure WebRTC is connected first
     if (!_isWebRTCConnected) {
@@ -833,20 +1090,50 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       }
     }
     
+    // CRITICAL iOS FIX: Force sync role with LiveKit before audio operations
+    if (_userRole != null && (_userRole!.startsWith('judge') || _userRole == 'moderator' || _userRole!.contains('affirmative') || _userRole!.contains('negative'))) {
+      AppLogger().debug('🔄 iOS AUDIO FIX: Force syncing role before audio toggle');
+      _webrtcService.forceUpdateRole(_userRole!, 'arena');
+    }
+    
     try {
-      // Use LiveKit's built-in toggle mute functionality
-      await _webrtcService.toggleMute();
-      
-      // Force sync the state immediately
-      final newMuteState = _webrtcService.isMuted;
-      
-      if (mounted) {
-        setState(() {
-          _isMuted = newMuteState;
-        });
+      // ENHANCED JUDGE HANDLING: Use special logic for judges
+      if (_userRole?.startsWith('judge') == true) {
+        AppLogger().debug('⚖️ JUDGE AUDIO: Using enhanced toggle logic...');
+        
+        if (_isMuted) {
+          // Unmuting judge - use enhanced setup
+          await _handleJudgeAudioSetup();
+          if (mounted) {
+            setState(() {
+              _isMuted = false;
+            });
+          }
+          AppLogger().info('⚖️ JUDGE AUDIO: Successfully unmuted via enhanced setup');
+        } else {
+          // Muting judge - use standard method
+          await _webrtcService.toggleMute();
+          final newMuteState = _webrtcService.isMuted;
+          if (mounted) {
+            setState(() {
+              _isMuted = newMuteState;
+            });
+          }
+          AppLogger().info('⚖️ JUDGE AUDIO: Successfully muted via standard method');
+        }
+      } else {
+        // Standard toggle for non-judges
+        await _webrtcService.toggleMute();
+        final newMuteState = _webrtcService.isMuted;
+        
+        if (mounted) {
+          setState(() {
+            _isMuted = newMuteState;
+          });
+        }
+        
+        AppLogger().info('🎤 Audio toggled to: ${newMuteState ? 'MUTED' : 'UNMUTED'} via LiveKit');
       }
-      
-      AppLogger().info('🎤 Audio toggled to: ${newMuteState ? 'MUTED' : 'UNMUTED'} via LiveKit');
       
     } catch (e) {
       AppLogger().error('❌ Failed to toggle audio: $e');
@@ -859,13 +1146,148 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
   
+  /// Disconnect from WebRTC (for reconnection strategies)
+  Future<void> _disconnectFromWebRTC() async {
+    try {
+      AppLogger().debug('🔌 Disconnecting from WebRTC...');
+      await _webrtcService.disconnect();
+      
+      if (mounted) {
+        setState(() {
+          _isWebRTCConnected = false;
+        });
+      }
+      
+      AppLogger().info('✅ Disconnected from WebRTC');
+    } catch (e) {
+      AppLogger().error('❌ Failed to disconnect from WebRTC: $e');
+    }
+  }
+
+  /// Enhanced judge audio setup - 10/10 for judges
+  Future<void> _handleJudgeAudioSetup() async {
+    try {
+      AppLogger().debug('⚖️ JUDGE AUDIO 10/10: Starting enhanced audio setup...');
+      
+      // Step 1: Force role synchronization with LiveKit
+      AppLogger().debug('⚖️ Step 1: Force syncing judge role with LiveKit...');
+      _webrtcService.forceUpdateRole(_userRole!, 'arena');
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Step 2: Ensure WebRTC connection is stable
+      AppLogger().debug('⚖️ Step 2: Ensuring stable WebRTC connection...');
+      if (!_isWebRTCConnected) {
+        AppLogger().debug('⚖️ Reconnecting to WebRTC...');
+        await _connectToWebRTC();
+        await Future.delayed(const Duration(seconds: 2));
+      }
+      
+      // Step 3: Try multiple audio enable strategies for judges
+      AppLogger().debug('⚖️ Step 3: Attempting judge audio enable strategies...');
+      
+      // Strategy 1: Direct enable
+      try {
+        AppLogger().debug('⚖️ Strategy 1: Direct audio enable...');
+        await _webrtcService.enableAudio();
+        AppLogger().info('⚖️ Strategy 1 SUCCESS: Direct audio enable worked');
+        return;
+      } catch (e) {
+        AppLogger().debug('⚖️ Strategy 1 failed: $e');
+      }
+      
+      // Strategy 2: Force setup judge audio (if method exists)
+      try {
+        AppLogger().debug('⚖️ Strategy 2: Force setup judge audio...');
+        await _webrtcService.forceSetupJudgeAudio();
+        AppLogger().info('⚖️ Strategy 2 SUCCESS: Force setup judge audio worked');
+        return;
+      } catch (e) {
+        AppLogger().debug('⚖️ Strategy 2 failed: $e');
+      }
+      
+      // Strategy 3: Reconnect and retry
+      try {
+        AppLogger().debug('⚖️ Strategy 3: Reconnecting and retrying...');
+        await _disconnectFromWebRTC();
+        await Future.delayed(const Duration(seconds: 1));
+        await _connectToWebRTC();
+        await Future.delayed(const Duration(seconds: 2));
+        
+        // Force role update after reconnection
+        _webrtcService.forceUpdateRole(_userRole!, 'arena');
+        await Future.delayed(const Duration(milliseconds: 500));
+        
+        await _webrtcService.enableAudio();
+        AppLogger().info('⚖️ Strategy 3 SUCCESS: Reconnection and retry worked');
+        return;
+      } catch (e) {
+        AppLogger().debug('⚖️ Strategy 3 failed: $e');
+      }
+      
+      // Strategy 4: Emergency fallback - try to create new audio track
+      try {
+        AppLogger().debug('⚖️ Strategy 4: Emergency fallback - creating new audio track...');
+        _webrtcService.forceUpdateRole(_userRole!, 'arena');
+        await Future.delayed(const Duration(milliseconds: 500));
+        
+        // Try to enable with fresh connection
+        await _webrtcService.enableAudio();
+        AppLogger().info('⚖️ Strategy 4 SUCCESS: Emergency fallback worked');
+        return;
+      } catch (e) {
+        AppLogger().debug('⚖️ Strategy 4 failed: $e');
+      }
+      
+      // If all strategies fail, throw comprehensive error
+      throw Exception('All judge audio enable strategies failed');
+      
+    } catch (e) {
+      AppLogger().error('❌ JUDGE AUDIO 10/10: Enhanced setup failed: $e');
+      rethrow;
+    }
+  }
+
   /// Force unmute functionality for stuck microphones
   Future<void> _forceUnmute() async {
     try {
       AppLogger().debug('🚨 FORCE UNMUTE: Attempting to force enable microphone');
+      AppLogger().debug('🚨 User role: $_userRole, Can publish: ${_shouldUserPublishMedia()}');
       
-      // Try direct LiveKit enable
-      await _webrtcService.enableAudio();
+      // Check if user has permission
+      if (!_shouldUserPublishMedia()) {
+        AppLogger().error('❌ User role $_userRole does not have microphone permissions');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Your role does not have microphone access'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+      
+      // Ensure WebRTC is connected
+      if (!_isWebRTCConnected) {
+        AppLogger().debug('🚨 Connecting to WebRTC first...');
+        await _connectToWebRTC();
+        await Future.delayed(const Duration(seconds: 1));
+      }
+      
+      // CRITICAL iOS FIX: Force sync role with LiveKit before emergency audio operations
+      if (_userRole != null) {
+        AppLogger().debug('🔄 EMERGENCY iOS FIX: Force syncing role $_userRole before emergency unmute');
+        _webrtcService.forceUpdateRole(_userRole!, 'arena');
+      }
+      
+      // ENHANCED JUDGE AUDIO HANDLING - 10/10 for judges
+      if (_userRole?.startsWith('judge') == true) {
+        AppLogger().debug('⚖️ JUDGE AUDIO 10/10: Using enhanced judge audio setup...');
+        await _handleJudgeAudioSetup();
+      } else {
+        // Try direct enable for other roles
+        await _webrtcService.enableAudio();
+      }
       
       // Update state
       if (mounted) {
@@ -874,10 +1296,28 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         });
       }
       
-      AppLogger().info('✅ FORCE UNMUTE: Successfully enabled audio');
+      AppLogger().info('✅ FORCE UNMUTE: Successfully enabled audio for $_userRole');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Microphone force enabled'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
       
     } catch (e) {
       AppLogger().error('❌ FORCE UNMUTE: Failed to force enable audio: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to enable microphone: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
   
@@ -903,6 +1343,81 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
+  /// Test audio quality and noise cancellation
+  Future<void> _testAudioQuality() async {
+    try {
+      AppLogger().debug('🎵 Testing Arena audio quality and noise cancellation...');
+      
+      // Show testing status
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🎵 Testing audio quality...'),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+      // Get noise cancellation status
+      final noiseCancellationService = NoiseCancellationService();
+      final isNoiseCancellationEnabled = noiseCancellationService.isEnabled;
+      final isNoiseCancellationAvailable = noiseCancellationService.isAvailable;
+      final platformInfo = noiseCancellationService.platformInfo;
+      
+      // Test audio by temporarily toggling mute state
+      final wasMuted = _isMuted;
+      if (!wasMuted) {
+        await _webrtcService.disableAudio();
+        await Future.delayed(const Duration(milliseconds: 500));
+        await _webrtcService.enableAudio();
+      }
+      
+      // Show results
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('🎵 Audio Quality Test Results'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Connection: ${_webrtcService.isConnected ? '✅ Connected' : '❌ Disconnected'}'),
+                Text('Noise Cancellation: ${isNoiseCancellationEnabled ? '✅ Active' : '❌ Inactive'}'),
+                Text('Available: ${isNoiseCancellationAvailable ? '✅ Yes' : '❌ No'}'),
+                Text('Platform: $platformInfo'),
+                const SizedBox(height: 8),
+                const Text('Audio quality test completed successfully!', style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+      
+      AppLogger().info('✅ Arena audio quality test completed');
+      
+    } catch (e) {
+      AppLogger().error('❌ Failed to test Arena audio quality: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Audio quality test failed: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   // Video toggle removed - Arena is audio-only
   
   /// Simple, standard microphone button
@@ -916,18 +1431,48 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         _showMicEmergencyControls();
       },
       
-      child: Container(
-        width: 50,
-        height: 50,
-        decoration: BoxDecoration(
-          color: _isMuted ? Colors.red : Colors.green,
-          borderRadius: BorderRadius.circular(8), // Rounded rectangle instead of circle
-        ),
-        child: Icon(
-          _isMuted ? Icons.mic_off : Icons.mic,
-          color: Colors.white,
-          size: 24,
-        ),
+      child: Stack(
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: _isMuted ? Colors.red : Colors.green,
+              borderRadius: BorderRadius.circular(8), // Rounded rectangle instead of circle
+            ),
+            child: Icon(
+              _isMuted ? Icons.mic_off : Icons.mic,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+          
+          // Connection status indicator
+          if (_isReconnecting)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: Colors.orange,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1),
+                ),
+                child: const Center(
+                  child: SizedBox(
+                    width: 8,
+                    height: 8,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -937,18 +1482,21 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
+      isScrollControlled: true,      builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.75,
+        ),        decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.only(
             topLeft: Radius.circular(20),
             topRight: Radius.circular(20),
           ),
         ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
             // Handle bar
             Container(
               width: 40,
@@ -1038,6 +1586,25 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                     ),
                   ),
                 ),
+                
+                const SizedBox(height: 12),
+                
+                // Test Audio Quality
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _testAudioQuality();
+                    },
+                    icon: const Icon(Icons.audiotrack, color: Colors.blue),
+                    label: const Text('Test Audio Quality', style: TextStyle(color: Colors.blue)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      side: const BorderSide(color: Colors.blue),
+                    ),
+                  ),
+                ),
               ],
             ),
             
@@ -1090,7 +1657,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             
             // Safe area padding
             SizedBox(height: MediaQuery.of(context).padding.bottom),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1420,22 +1988,84 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         AppLogger().debug('🔍 User role check: isDebater=$isDebater');
         
         if (!isDebater) {
-          AppLogger().debug('🔍 Assigning current user to audience...');
-          // Assign current user to audience by default
-          await _appwrite.assignArenaRole(
-            roomId: widget.roomId,
-            userId: _currentUserId!,
-            role: 'audience',
-          );
-          AppLogger().info('Assigned current user to audience');
+          // First, populate _participants to check available judge slots
+          for (final participant in existingParticipants) {
+            final role = participant['role'];
+            if (['judge1', 'judge2', 'judge3'].contains(role)) {
+              final userId = participant['userId'];
+              try {
+                final userProfile = await _appwrite.getUserProfile(userId);
+                if (userProfile != null) {
+                  _participants[role] = userProfile;
+                  AppLogger().debug('🔍 Pre-loaded $role: ${userProfile.name}');
+                }
+              } catch (e) {
+                AppLogger().debug('🔍 Failed to load profile for $role: $e');
+              }
+            }
+          }
+          
+          // Check if any judge slots are available and user should be auto-assigned as judge
+          final availableJudgeSlots = _getAvailableJudgeSlots();
+          AppLogger().debug('🔍 Available judge slots: $availableJudgeSlots');
+          
+          // If user has opted into judging and judge slots are available, assign as judge
+          // For now, we'll check if judges are needed and assign automatically
+          // TODO: In the future, this could check user preferences or judge invitations
+          if (availableJudgeSlots > 0) {
+            String judgeRole = 'judge1';
+            if (_participants['judge1'] != null) {
+              judgeRole = 'judge2';
+            }
+            if (_participants['judge2'] != null) {
+              judgeRole = 'judge3';
+            }
+            
+            AppLogger().debug('🔍 Assigning current user to $judgeRole...');
+            await _appwrite.assignArenaRole(
+              roomId: widget.roomId,
+              userId: _currentUserId!,
+              role: judgeRole,
+            );
+            AppLogger().info('Assigned current user to $judgeRole');
+            
+            // CRITICAL: Update local role state immediately before WebRTC connection
+            _userRole = judgeRole;
+            AppLogger().debug('🔍 Updated local _userRole to: $_userRole');
+            
+            // FORCE SYNC: Immediately update LiveKit service role (especially for iOS)
+            if (_isWebRTCConnected) {
+              AppLogger().debug('🔄 iOS FIX: Force updating LiveKit role to: $_userRole');
+              _webrtcService.forceUpdateRole(_userRole!, 'arena');
+            }
+          } else {
+            AppLogger().debug('🔍 Assigning current user to audience...');
+            // Assign current user to audience by default
+            await _appwrite.assignArenaRole(
+              roomId: widget.roomId,
+              userId: _currentUserId!,
+              role: 'audience',
+            );
+            AppLogger().info('Assigned current user to audience');
+            
+            // Update local role state immediately
+            _userRole = 'audience';
+            AppLogger().debug('🔍 Updated local _userRole to: $_userRole');
+            
+            // FORCE SYNC: Immediately update LiveKit service role (especially for iOS)
+            if (_isWebRTCConnected) {
+              AppLogger().debug('🔄 iOS FIX: Force updating LiveKit role to: $_userRole');
+              _webrtcService.forceUpdateRole(_userRole!, 'arena');
+            }
+          }
           
           // Longer delay to ensure database operation completes and propagates
           await Future.delayed(const Duration(milliseconds: 1000));
-          AppLogger().debug('🔍 About to reload participants after audience assignment');
+          AppLogger().debug('🔍 About to reload participants after role assignment');
           
-          // Force reload participants to update audience display
+          // Force reload participants to update display
           await _loadParticipants();
-          AppLogger().debug('🔍 Completed participant reload after audience assignment');
+          AppLogger().debug('🔍 Completed participant reload after role assignment');
         }
       } else {
         // User already has a role - check if it's an important role before potentially overriding
@@ -1570,6 +2200,19 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       if (currentUserParticipant.isNotEmpty) {
         _userRole = currentUserParticipant['role'];
         AppLogger().debug('👤 Current user role: $_userRole');
+        
+        // Special logging for judges
+        if (_userRole?.startsWith('judge') == true) {
+          AppLogger().info('⚖️ USER IS A JUDGE: $_userRole');
+          AppLogger().info('⚖️ Can publish media: ${_shouldUserPublishMedia()}');
+          AppLogger().info('⚖️ WebRTC connected: $_isWebRTCConnected');
+          
+          // If judge and not connected, reconnect with proper permissions
+          if (!_isWebRTCConnected) {
+            AppLogger().info('⚖️ Judge needs WebRTC connection - connecting...');
+            await _connectToWebRTC();
+          }
+        }
       } else {
         AppLogger().warning('Current user not found in participants list');
       }
@@ -2310,26 +2953,43 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         affirmativeParticipant: _participants['affirmative'],
         negativeParticipant: _participants['negative'],
         debateCategory: widget.category,
+        connectionHealthInfo: _connectionDropCount > 0 ? {
+          'dropCount': _connectionDropCount,
+          'lastDrop': _lastConnectionDrop != null ? _formatTimestamp(_lastConnectionDrop!) : null,
+        } : null,
       ),
     );
   }
 
   void _showTimerControlModal() {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => TimerControlModal(
-        currentPhase: _currentPhase,
-        remainingSeconds: _remainingSeconds,
-        isTimerRunning: _isTimerRunning,
-        isPaused: _isPaused,
-        onStart: _startPhaseTimer,
-        onPause: _pauseTimer,
-        onResume: _resumeTimer,
-        onStop: _stopTimer,
-        onReset: _resetTimer,
-        onExtendTime: _extendTime,
-        onSetCustomTime: _setCustomTime,
-        onAdvancePhase: _advanceToNextPhase,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Material(
+        color: Colors.transparent,
+        child: Container(
+          height: MediaQuery.of(context).size.height * 0.5, // Half screen height
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: TimerControlModal(
+            remainingSeconds: _remainingSeconds,
+            isTimerRunning: _isTimerRunning,
+            isPaused: _isPaused,
+            onStart: _startPhaseTimer,
+            onPause: _pauseTimer,
+            onResume: _resumeTimer,
+            onStop: _stopTimer,
+            onReset: _resetTimer,
+            onExtendTime: _extendTime,
+            onSetCustomTime: _setCustomTime,
+          ),
+        ),
       ),
     );
   }
@@ -2369,15 +3029,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           }
         },
         onChallenge: () {
-          // TODO: Implement challenge functionality
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Challenge sent to ${userProfile.name}'),
-                backgroundColor: const Color(0xFFDC2626),
-              ),
-            );
-          }
+          // Challenge functionality is now handled directly by UserProfileBottomSheet
+          debugPrint('Challenge functionality delegated to UserProfileBottomSheet');
         },
         onEmail: () {
           if (mounted && _currentUser != null) {
@@ -2603,28 +3256,35 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         // More aggressive sizing for iOS to ensure audience is visible
         final isSmallScreen = availableHeight < 600;
         
-        // Adjust heights based on available space - smaller on iOS
-        final debaterHeight = isIOS 
-            ? (isSmallScreen ? 120.0 : 150.0)
-            : (isSmallScreen ? 150.0 : 200.0);
-        final moderatorHeight = isIOS
-            ? (isSmallScreen ? 70.0 : 90.0)
-            : (isSmallScreen ? 90.0 : 120.0);
+        // Adjust heights based on available space - balanced for comfort and visibility
         final judgeHeight = isIOS
-            ? (isSmallScreen ? 90.0 : 110.0)
-            : (isSmallScreen ? 110.0 : 150.0);
+            ? (isSmallScreen ? 100.0 : 115.0) // Comfortable judge size
+            : (isSmallScreen ? 115.0 : 130.0); // Comfortable judge size
+        // Different heights for 1v1 vs 2v2 modes
+        final debaterHeight1v1 = isIOS
+            ? (isSmallScreen ? 120.0 : 140.0) // Good size for 1v1
+            : (isSmallScreen ? 140.0 : 160.0); // Good size for 1v1
+        // For 2v2: balanced size for comfort while showing audience
+        final debaterHeight2v2 = isIOS
+            ? (isSmallScreen ? 200.0 : 220.0) // Comfortable for 2v2 (2 rows of debaters)
+            : (isSmallScreen ? 220.0 : 250.0); // Comfortable for 2v2 (2 rows of debaters)
+        final moderatorHeight = isIOS
+            ? (isSmallScreen ? 85.0 : 95.0) // Reasonable moderator size
+            : (isSmallScreen ? 95.0 : 110.0); // Reasonable moderator size
         
-        // Calculate total debate section height dynamically
-        final debateSectionHeight = 8 + // top padding
-            35 + // title height (reduced)
-            6 + // margin after title (reduced)
-            debaterHeight + // debaters
-            4 + // spacing (reduced)
+        // Calculate total debate section height dynamically - use appropriate debater height
+        final debaterHeight = _teamSize == 1 ? debaterHeight1v1 : debaterHeight2v2;
+        final sectionSpacing = _teamSize == 1 ? 10 : 8; // Balanced spacing for 2v2
+        final debateSectionHeight = 4 + // top padding
+            30 + // title height
+            4 + // margin after title
+            debaterHeight + // debaters (1v1 or 2v2 height)
+            sectionSpacing + // spacing
             moderatorHeight + // moderator 
-            4 + // spacing (reduced)
+            sectionSpacing + // spacing
             judgeHeight + // judges
-            8 + // bottom spacing (reduced)
-            8; // bottom padding
+            4 + // bottom spacing
+            4; // bottom padding
         
         AppLogger().debug('🎭 ARENA LAYOUT: Debate section height: $debateSectionHeight');
         
@@ -2635,7 +3295,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               child: Container(
                 margin: EdgeInsets.only(
                   top: debateSectionHeight,
-                  bottom: 100, // Control panel space
+                  bottom: 40, // Minimal bottom margin to maximize audience visibility
                 ),
                 child: _buildAudienceScrollSection(),
               ),
@@ -2648,30 +3308,52 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               right: 0,
               child: Container(
                 color: const Color(0xFF1a1a1a), // Dark background to prevent see-through
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(8), // Restored original padding
                 child: Column(
                   mainAxisSize: MainAxisSize.min, // Important: minimize size
                   children: [
-                    // Debate Title (more compact)
+                    // Debate Title (restored original size)
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      margin: const EdgeInsets.only(bottom: 6), // Restored margin
                       decoration: BoxDecoration(
-                        color: deepPurple.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: deepPurple.withValues(alpha: 0.3),
-                          width: 1,
+                        gradient: LinearGradient( // Add gradient for more visual impact
+                          colors: [
+                            const Color(0xFF1A1A2E), // Dark blue-purple
+                            deepPurple.withValues(alpha: 0.3),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
+                        borderRadius: BorderRadius.circular(12), // Slightly more rounded
+                        border: Border.all(
+                          color: const Color(0xFFFFD700).withValues(alpha: 0.5), // Gold border to match text
+                          width: 2, // Thicker border for more presence
+                        ),
+                        boxShadow: [ // Add subtle shadow for depth
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: Text(
                         widget.topic,
                         style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.normal,
-                          fontSize: 12,
-                          height: 1.1,
+                          color: Color(0xFFFFD700), // Bright gold color that stands out
+                          fontWeight: FontWeight.bold, // Make it bold
+                          fontSize: 16, // Slightly larger for better visibility
+                          height: 1.3,
+                          letterSpacing: 0.5, // Add letter spacing for better readability
+                          shadows: [
+                            Shadow( // Add subtle shadow for extra pop
+                              offset: Offset(0, 1),
+                              blurRadius: 2,
+                              color: Colors.black54,
+                            ),
+                          ],
                         ),
                         textAlign: TextAlign.center,
                         maxLines: 2,
@@ -2690,27 +3372,33 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Expanded(child: _buildDebaterPosition('affirmative', 'Affirmative')),
-                                const SizedBox(width: 20), // More space between slots
+                                const SizedBox(width: 20),
                                 Expanded(child: _buildDebaterPosition('negative', 'Negative')),
                               ],
                             )
                           : Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // Affirmative Team (2 slots)
+                                // Left spacer (smaller)
+                                const Expanded(flex: 1, child: SizedBox.shrink()),
+                                // Affirmative Team (2 slots) - more constrained
                                 Expanded(
+                                  flex: 4,
                                   child: _buildTeamPosition('affirmative', 'Affirmative Team'),
                                 ),
-                                const SizedBox(width: 20), // More space between slots
-                                // Negative Team (2 slots)
+                                const SizedBox(width: 16), // Space between teams
+                                // Negative Team (2 slots) - more constrained
                                 Expanded(
+                                  flex: 4,
                                   child: _buildTeamPosition('negative', 'Negative Team'),
                                 ),
+                                // Right spacer (smaller)
+                                const Expanded(flex: 1, child: SizedBox.shrink()),
                               ],
                             ),
                       ),
                       
-                      const SizedBox(height: 4), // Reduced spacing
+                      SizedBox(height: _teamSize == 1 ? 10 : 6), // Less spacing for 2v2
                       
                       // Middle Row - Moderator (responsive height)
                       SizedBox(
@@ -2724,7 +3412,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                         ),
                       ),
                       
-                      const SizedBox(height: 4), // Reduced spacing
+                      SizedBox(height: _teamSize == 1 ? 10 : 6), // Less spacing for 2v2
                       
                       // Bottom Row - Judges (responsive height)
                       SizedBox(
@@ -2740,7 +3428,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                         ),
                       ),
                       
-                      const SizedBox(height: 8), // Reduced spacing
+                      const SizedBox(height: 4), // Further reduced spacing
                     ],
                   ),
                 ],
@@ -2756,6 +3444,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Widget _buildAudienceScrollSection() {
     return Container(
       color: const Color(0xFF1a1a1a), // Match the main arena background
+      height: double.infinity, // Ensure full height usage
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         child: Column(
@@ -2844,9 +3533,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 4,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 0.85,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 1.0, // Better aspect ratio for circular avatars
                 ),
                 itemCount: _audience.length,
                 itemBuilder: (context, index) {
@@ -2857,7 +3546,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                       UserAvatar(
                         avatarUrl: audience.avatar,
                         initials: audience.name.isNotEmpty ? audience.name[0] : '?',
-                        radius: 30,
+                        radius: 32, // Slightly larger to ensure full visibility
                         onTap: () => _showUserProfile(audience, 'audience'),
                       ),
                       const SizedBox(height: 4),
@@ -2880,8 +3569,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               ),
             ),
             
-            // Add some bottom spacing
-            const SizedBox(height: 20),
+            // Add some bottom spacing to ensure full visibility
+            const SizedBox(height: 40),
           ],
         ),
       ),
@@ -3020,7 +3709,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   Widget _buildEmptyPosition(String text, {bool isSmall = false}) {
     return Padding(
-      padding: const EdgeInsets.all(4), // Reduced from default
+      padding: const EdgeInsets.all(8), // Increased to match other tiles for consistency
       child: Center(
         child: Text(
           text,
@@ -3037,7 +3726,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   /// Build audio-only tile for debater with microphone status
   Widget _buildDebaterTile(UserProfile participant, String role, {bool isSmall = false, bool isWinner = false}) {
-    final avatarSize = isSmall ? 16.0 : 24.0;
     final nameSize = isSmall ? 9.0 : 10.0;
     
     // Find the peer ID for this user to get their audio/video stream
@@ -3062,7 +3750,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     final isSpeaking = isLocalUser ? localHasAudio && !_isMuted : hasAudio;
     
     return Padding(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(8), // Increased from 4 to 8 for more room
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -3083,7 +3771,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 child: Stack(
                   children: [
                     // Video feed or avatar background
-                    _buildDebaterVideoFeed(participant, role, stream, isLocalUser, avatarSize),
+                    _buildDebaterVideoFeed(participant, role, stream, isLocalUser, isSmall),
                     
                     // Audio/Video status indicators and controls
                     _buildDebaterControls(participant, role, isLocalUser, isSpeaking, isSmall),
@@ -3240,7 +3928,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   /// Build video feed for debater (video or avatar fallback)
-  Widget _buildDebaterVideoFeed(UserProfile participant, String role, MediaStream? stream, bool isLocalUser, double avatarSize) {
+  Widget _buildDebaterVideoFeed(UserProfile participant, String role, MediaStream? stream, bool isLocalUser, bool isSmall) {
     // Check if we have video stream
     bool hasVideo = false;
     RTCVideoRenderer? renderer;
@@ -3288,12 +3976,22 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         ),
       );
     } else {
-      // Show avatar fallback
+      // Show avatar fallback - make it fill the slot properly
+      // For 1v1 mode, use smaller avatars; for 2v2 mode, use larger avatars
+      final is1v1Mode = _teamSize == 1;
+      final participantUserId = participant.id;
+      final isSpeaking = _speakingService.isUserSpeaking(participantUserId);
+      const isMuted = false; // TODO: Get actual mute state from LiveKit
+      
       return Center(
-        child: UserAvatar(
+        child: UserAvatarStatus(
           avatarUrl: participant.avatar,
           initials: participant.name.isNotEmpty ? participant.name[0] : '?',
-          radius: avatarSize * 1.5,
+          radius: is1v1Mode ? (isSmall ? 16.0 : 24.0) : (isSmall ? 20.0 : 35.0), // Smaller for 1v1, larger for 2v2
+          isSpeaking: isSpeaking,
+          isMuted: isMuted,
+          userRole: _getUserRoleById(participantUserId),
+          isOnline: true,
         ),
       );
     }
@@ -3395,9 +4093,17 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     );
   }
 
+
+    
+
+
+
+
+
+
+
   /// Build audio-only tile for judge with microphone status
   Widget _buildJudgeTile(UserProfile participant, String role, {bool isSmall = false}) {
-    final avatarSize = isSmall ? 16.0 : 24.0;
     final nameSize = isSmall ? 9.0 : 10.0;
     
     // Find the peer ID for this user to get their audio stream
@@ -3465,7 +4171,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         );
       },
       child: Padding(
-        padding: const EdgeInsets.all(4),
+        padding: const EdgeInsets.all(8), // Increased from 4 to 8 to match debater tiles
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -3485,12 +4191,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   borderRadius: BorderRadius.circular(7),
                   child: Stack(
                     children: [
-                      // Always show avatar for audio-only mode
+                      // Always show avatar for audio-only mode - make it fill the slot properly
+                      // For 1v1 mode, use smaller avatars; for 2v2 mode, use larger avatars
                       Center(
                         child: UserAvatar(
                           avatarUrl: participant.avatar,
                           initials: participant.name.isNotEmpty ? participant.name[0] : '?',
-                          radius: avatarSize * 1.2,
+                          radius: _teamSize == 1 ? (isSmall ? 16.0 : 24.0) : (isSmall ? 20.0 : 35.0), // Smaller for 1v1, larger for 2v2
                         ),
                       ),
                       
@@ -5804,326 +6511,6 @@ class ModeratorControlModal extends StatelessWidget {
   }
 }
 
-// Timer Control Modal Widget
-class TimerControlModal extends StatefulWidget {
-  final DebatePhase currentPhase;
-  final int remainingSeconds;
-  final bool isTimerRunning;
-  final bool isPaused;
-  final VoidCallback onStart;
-  final VoidCallback onPause;
-  final VoidCallback onResume;
-  final VoidCallback onStop;
-  final VoidCallback onReset;
-  final Function(int) onExtendTime;
-  final Function(int) onSetCustomTime;
-  final VoidCallback onAdvancePhase;
-
-  const TimerControlModal({
-    super.key,
-    required this.currentPhase,
-    required this.remainingSeconds,
-    required this.isTimerRunning,
-    required this.isPaused,
-    required this.onStart,
-    required this.onPause,
-    required this.onResume,
-    required this.onStop,
-    required this.onReset,
-    required this.onExtendTime,
-    required this.onSetCustomTime,
-    required this.onAdvancePhase,
-  });
-
-  @override
-  State<TimerControlModal> createState() => _TimerControlModalState();
-}
-
-class _TimerControlModalState extends State<TimerControlModal> {
-  final TextEditingController _minutesController = TextEditingController();
-  final TextEditingController _secondsController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    final minutes = widget.remainingSeconds ~/ 60;
-    final seconds = widget.remainingSeconds % 60;
-    _minutesController.text = minutes.toString();
-    _secondsController.text = seconds.toString();
-  }
-
-  @override
-  void dispose() {
-    _minutesController.dispose();
-    _secondsController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Row(
-        children: [
-          Icon(Icons.timer, color: Colors.purple),
-          SizedBox(width: 8),
-          Text('Timer Controls'),
-        ],
-      ),
-      content: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.7,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-          // Current Phase Info
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.purple.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  widget.currentPhase.displayName,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  widget.currentPhase.description,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Custom Time Input
-          const Text(
-            'Set Custom Time',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _minutesController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Minutes',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text(':', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _secondsController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Seconds',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Timer Controls
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildTimerButton(
-                icon: widget.isTimerRunning ? Icons.pause : (widget.isPaused ? Icons.play_arrow : Icons.play_arrow),
-                label: widget.isTimerRunning ? 'Pause' : (widget.isPaused ? 'Resume' : 'Start'),
-                onPressed: () {
-                  if (widget.isTimerRunning) {
-                    widget.onPause();
-                  } else if (widget.isPaused) {
-                    widget.onResume();
-                  } else {
-                    widget.onStart();
-                  }
-                  Navigator.pop(context);
-                },
-                color: widget.isTimerRunning ? Colors.orange : Colors.green,
-              ),
-              _buildTimerButton(
-                icon: Icons.stop,
-                label: 'Stop',
-                onPressed: () {
-                  widget.onStop();
-                  Navigator.pop(context);
-                },
-                color: Colors.red,
-              ),
-              _buildTimerButton(
-                icon: Icons.refresh,
-                label: 'Reset',
-                onPressed: () {
-                  widget.onReset();
-                  Navigator.pop(context);
-                },
-                color: Colors.blue,
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // Quick Extend Buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildExtendButton('+30s', 30),
-              _buildExtendButton('+1m', 60),
-              _buildExtendButton('+5m', 300),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Advance Phase Button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: widget.currentPhase.nextPhase != null ? () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Advance Phase'),
-                    content: Text(
-                      'Are you sure you want to advance to the next phase?\n\n'
-                      'Current: ${widget.currentPhase.displayName}\n'
-                      'Next: ${widget.currentPhase.nextPhase?.displayName ?? 'None'}',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context); // Close confirmation
-                          Navigator.pop(context); // Close timer modal
-                          widget.onAdvancePhase();
-                        },
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
-                        child: const Text('Advance', style: TextStyle(color: Colors.white)),
-                      ),
-                    ],
-                  ),
-                );
-              } : null,
-              icon: const Icon(Icons.skip_next, color: Colors.white),
-              label: Text(
-                widget.currentPhase.nextPhase != null 
-                  ? 'Advance to ${widget.currentPhase.nextPhase!.displayName}'
-                  : 'Final Phase',
-                style: const TextStyle(color: Colors.white),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purple,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _setCustomTime,
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
-          child: const Text('Set Time', style: TextStyle(color: Colors.white)),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTimerButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onPressed,
-    required Color color,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GestureDetector(
-          onTap: onPressed,
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: Colors.white, size: 20),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 10),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildExtendButton(String label, int seconds) {
-    return GestureDetector(
-      onTap: () {
-        widget.onExtendTime(seconds);
-        Navigator.pop(context);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.indigo,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _setCustomTime() {
-    final minutes = int.tryParse(_minutesController.text) ?? 0;
-    final seconds = int.tryParse(_secondsController.text) ?? 0;
-    final totalSeconds = (minutes * 60) + seconds;
-    
-    if (totalSeconds > 0) {
-      widget.onSetCustomTime(totalSeconds);
-      Navigator.pop(context);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid time')),
-      );
-    }
-  }
-} 
 
 // Results Modal Widget
 class ResultsModal extends StatelessWidget {

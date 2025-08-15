@@ -486,14 +486,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.7"
-  events2:
-    dependency: transitive
-    description:
-      name: events2
-      sha256: "41eec2689af52ecd2581494b9241589769b2873359909c9260588e51fbc188e7"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.0"
   fake_async:
     dependency: transitive
     description:
@@ -821,14 +813,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.0"
-  h264_profile_level_id:
-    dependency: transitive
-    description:
-      name: h264_profile_level_id
-      sha256: "8854d223ba85da786ff6e3ade38dd447caaf1ba0094c0a5e03d368ae54a7249b"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.1"
   hive:
     dependency: "direct main"
     description:
@@ -1165,14 +1149,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.3"
-  mediasfu_mediasoup_client:
-    dependency: "direct main"
-    description:
-      name: mediasfu_mediasoup_client
-      sha256: "4d7dd74fd6032eb7fea6f372c7e71837399a9080cf372758a8193983fc6833fd"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.7"
   meta:
     dependency: transitive
     description:

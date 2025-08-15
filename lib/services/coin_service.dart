@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
 
@@ -11,28 +12,28 @@ class CoinService {
   /// Get user's current coin balance
   Future<int> getUserCoins(String userId) async {
     try {
-      print('💰 CoinService DEBUG: Getting coins for user $userId');
+      debugPrint('💰 CoinService DEBUG: Getting coins for user $userId');
       
       // Get user profile which should contain coin balance
       final userProfile = await _appwrite.getUserProfile(userId);
-      print('💰 CoinService DEBUG: User profile found: ${userProfile != null}');
+      debugPrint('💰 CoinService DEBUG: User profile found: ${userProfile != null}');
       
       if (userProfile != null) {
-        print('💰 CoinService DEBUG: User reputation: ${userProfile.reputation}');
+        debugPrint('💰 CoinService DEBUG: User reputation: ${userProfile.reputation}');
         // If coin balance exists in profile and is greater than 0, return it
         if (userProfile.reputation > 0) {
-          print('💰 CoinService DEBUG: Returning existing reputation: ${userProfile.reputation}');
+          debugPrint('💰 CoinService DEBUG: Returning existing reputation: ${userProfile.reputation}');
           return userProfile.reputation; // Using reputation as coins for now
         }
       }
       
       // Default balance for new users - automatically give them starting coins
-      print('💰 CoinService DEBUG: Initializing coins for new user');
+      debugPrint('💰 CoinService DEBUG: Initializing coins for new user');
       await _initializeUserCoins(userId);
       return 500; // Give new users 500 coins to start with for testing
     } catch (e) {
       AppLogger().error('Error getting user coins: $e');
-      print('💰 CoinService ERROR: $e');
+      debugPrint('💰 CoinService ERROR: $e');
       // Even on error, give some coins for testing
       return 500;
     }

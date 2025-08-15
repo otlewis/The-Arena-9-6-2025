@@ -3,7 +3,8 @@ import '../services/theme_service.dart';
 import '../services/in_app_purchase_service.dart';
 import '../services/coin_service.dart';
 import '../services/appwrite_service.dart';
-import 'package:in_app_purchase/in_app_purchase.dart';
+import '../widgets/challenge_bell.dart';
+// Removed unused import: package:in_app_purchase/in_app_purchase.dart
 
 /// Premium store screen for subscriptions, coins, and other premium features
 class PremiumScreen extends StatefulWidget {
@@ -20,7 +21,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
   final AppwriteService _appwriteService = AppwriteService();
   
   bool _isLoading = false;
-  List<ProductDetails> _products = [];
+  // Removed unused _products field
   String? _currentUserId;
   
   // Colors matching app theme
@@ -47,7 +48,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
     _purchaseService.onProductsLoaded = (products) {
       if (mounted) {
         setState(() {
-          _products = products;
+          // Products loaded but not stored (unused)
           _isLoading = false;
         });
       }
@@ -120,7 +121,8 @@ class _PremiumScreenState extends State<PremiumScreen> {
     // Update user's premium status in Appwrite
     // This would typically be done on your backend after receipt verification
     try {
-      final expiryDate = DateTime.now().add(
+      // Calculate expiry date but not used in current implementation
+      final _ = DateTime.now().add(
         productId.contains('yearly') ? const Duration(days: 365) : const Duration(days: 30),
       );
       
@@ -135,7 +137,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
       // );
       
     } catch (e) {
-      print('Error updating premium status: $e');
+      debugPrint('Error updating premium status: $e');
     }
   }
   
@@ -161,6 +163,12 @@ class _PremiumScreenState extends State<PremiumScreen> {
           color: _themeService.isDarkMode ? Colors.white70 : scarletRed,
         ),
         actions: [
+          // Challenge Bell
+          ChallengeBell(
+            iconColor: _themeService.isDarkMode ? Colors.white70 : deepPurple,
+            iconSize: 20,
+          ),
+          const SizedBox(width: 12),
           _buildNeumorphicIcon(
             icon: Icons.info_outline,
             onTap: () => _showComingSoonDialog(),

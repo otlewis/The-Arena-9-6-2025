@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+// Removed unnecessary import: package:flutter/foundation.dart
 import '../models/models.dart';
 import '../models/timer_state.dart' as timer_models;
-import '../services/websocket_webrtc_service.dart';
+import '../services/livekit_service.dart';
+import '../services/livekit_token_service.dart';
+import 'package:livekit_client/livekit_client.dart' hide Room;
 import '../services/appwrite_service.dart';
 import '../services/firebase_gift_service.dart';
 import '../widgets/user_avatar.dart';
@@ -36,38 +38,43 @@ class OpenDiscussionRoomScreen extends StatefulWidget {
 class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   final AppwriteService _appwriteService = AppwriteService();
   final FirebaseGiftService _firebaseGiftService = FirebaseGiftService();
-  // final SimpleWebRTCService _audioService = SimpleWebRTCService();
-  // Using WebSocketWebRTCService for Open Discussion (was connecting successfully)
-  final WebSocketWebRTCService _audioService = WebSocketWebRTCService();
+  final LiveKitService _liveKitService = LiveKitService();
+  // Removed unused _liveKitTokenService
   
-  // Wrapper properties for WebSocketWebRTCService compatibility
-  bool get _audioServiceIsMuted => _isMuted;
-  int get _audioServiceConnectedPeersCount => 0; // WebSocket doesn't track this
+
+
   
-  Future<void> _audioServiceToggleMute() async {
-    // WebSocketWebRTCService doesn't have built-in mute, handle locally
-    if (_localStream != null) {
-      final audioTracks = _localStream!.getAudioTracks();
-      for (final track in audioTracks) {
-        track.enabled = _isMuted; // Toggle
+  Future<void> _liveKitServiceToggleMute() async {
+    try {
+      if (_liveKitService.isConnected) {
+        if (_isMuted) {
+          await _liveKitService.enableAudio();
+          _isMuted = false;
+        } else {
+          await _liveKitService.disableAudio();
+          _isMuted = true;
+        }
+        if (mounted) {
+          setState(() {});
+        }
+        debugPrint('🔇 LiveKit audio ${_isMuted ? 'muted' : 'unmuted'}');
       }
-      if (mounted) {
-        setState(() {
-          _isMuted = !_isMuted;
-        });
-      }
+    } catch (e) {
+      debugPrint('❌ Error toggling LiveKit mute: $e');
+      // Sync local state with service state on error
+      _isMuted = _liveKitService.isMuted;
     }
   }
 
   Future<void> _toggleMute() async {
     if (_isAudioConnected) {
-      await _audioServiceToggleMute();
+      await _liveKitServiceToggleMute();
       if (mounted) {
         setState(() {
-          _isMuted = _audioServiceIsMuted;
+          _isMuted = _liveKitService.isMuted;
         });
       }
-      debugPrint("🔇 Audio ${_isMuted ? 'muted' : 'unmuted'}");
+      debugPrint("🔇 LiveKit audio ${_isMuted ? 'muted' : 'unmuted'}");
     }
   }
   
@@ -100,12 +107,22 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   bool _isAudioConnecting = false;
   bool _isMuted = false;
   String? _previousUserRole; // Track previous role to detect role changes
+  
+  // Moderator state
+  DateTime? _lastMuteAllTime; // Track when mute all was last used
   // Video state removed - audio-only for now
   
   // Audio stream management for SimpleMediaSoupService
   final Map<String, RTCVideoRenderer> _remoteAudioRenderers = {};
   final Map<String, MediaStream> _remoteStreams = {};
+  // ignore: unused_field
   MediaStream? _localStream;
+  
+  // Connection stability monitoring
+  Timer? _connectionHealthTimer;
+  Timer? _reconnectionTimer;
+  bool _isReconnecting = false;
+  final int _connectionDropCount = 0;
   
   // Scarlet and Purple theme colors (matching app theme)
   static const Color scarletRed = Color(0xFFFF2400);
@@ -121,6 +138,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     _initializeRoom();
     _initializeInstantMessaging();
     _initializeAudio();
+    
+    // Start connection health monitoring to prevent user drops
+    _startConnectionHealthMonitoring();
   }
 
 
@@ -128,16 +148,18 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   void dispose() {
     debugPrint('🧹 Disposing OpenDiscussionRoomScreen');
     
-    // Remove audio service listener
-    // WebSocketWebRTCService doesn't have listeners
-    // _audioService.removeListener(_onAudioServiceChanged);
+    // Stop connection health monitoring
+    _stopConnectionHealthMonitoring();
+    _reconnectionTimer?.cancel();
+    
+    // LiveKitService automatically handles cleanup
     
     _realtimeSubscription?.cancel();
     _unreadMessagesSubscription?.cancel();
     _speakingTimer?.cancel();
     _fallbackRefreshTimer?.cancel();
     _audioPlayer.dispose();
-    _audioService.disconnect();
+    _liveKitService.disconnect();
     
     // Clean up audio renderers
     for (var renderer in _remoteAudioRenderers.values) {
@@ -147,14 +169,14 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     _remoteAudioRenderers.clear();
     _remoteStreams.clear();
     
-    // Clear audio service callbacks to prevent setState after dispose
-    _audioService.onConnected = null;
-    _audioService.onError = null;
-    _audioService.onDisconnected = null;
-    _audioService.onLocalStream = null;
-    _audioService.onRemoteStream = null;
-    _audioService.onPeerJoined = null;
-    _audioService.onPeerLeft = null;
+    // Clear LiveKit service callbacks to prevent setState after dispose
+    _liveKitService.onConnected = null;
+    _liveKitService.onError = null;
+    _liveKitService.onDisconnected = null;
+    _liveKitService.onParticipantConnected = null;
+    _liveKitService.onParticipantDisconnected = null;
+    _liveKitService.onTrackSubscribed = null;
+    _liveKitService.onTrackUnsubscribed = null;
     
     _leaveRoomData();
     super.dispose();
@@ -170,62 +192,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     }
   }
 
-  Future<void> _createAudioRenderer(String peerId, MediaStream stream) async {
-    try {
-      // Create and initialize audio renderer if it doesn't exist
-      if (!_remoteAudioRenderers.containsKey(peerId)) {
-        final renderer = RTCVideoRenderer();
-        await renderer.initialize();
-        
-        debugPrint("🎧 Initialized audio renderer for $peerId");
-        
-        _remoteAudioRenderers[peerId] = renderer;
-      }
-      
-      // Assign the stream to the renderer
-      _remoteAudioRenderers[peerId]!.srcObject = stream;
-      debugPrint("🔊 Audio stream assigned to renderer for $peerId");
-      
-      // For debugging - check audio tracks
-      final audioTracks = stream.getAudioTracks();
-      debugPrint("🎵 Stream has ${audioTracks.length} audio tracks");
-      for (var track in audioTracks) {
-        debugPrint("🎵 Audio track: id=${track.id}, enabled=${track.enabled}, kind=${track.kind}");
-      }
-      
-    } catch (e) {
-      debugPrint("❌ Failed to create audio renderer for $peerId: $e");
-    }
-  }
+  // Removed duplicate _createAudioRenderer method
 
-  void _resumeWebAudioContext() async {
-    if (kIsWeb) {
-      try {
-        // On web, audio context is suspended by default and needs user interaction
-        debugPrint('🔊 [Web] Ensuring audio context is resumed for WebRTC playback');
-        
-        // Force update the UI to ensure audio renderers are properly mounted
-        if (mounted) {
-          setState(() {
-            // This triggers a rebuild which can help with audio renderer mounting
-          });
-        }
-        
-        // For each audio renderer, ensure the stream is properly assigned
-        for (var entry in _remoteAudioRenderers.entries) {
-          final peerId = entry.key;
-          final renderer = entry.value;
-          if (_remoteStreams.containsKey(peerId)) {
-            renderer.srcObject = _remoteStreams[peerId];
-            debugPrint('🔊 [Web] Re-assigned stream to renderer for $peerId');
-          }
-        }
-        
-      } catch (e) {
-        debugPrint('⚠️ [Web] Audio context warning: $e');
-      }
-    }
-  }
+  // Removed unused _resumeWebAudioContext method
 
   Future<void> _initializeInstantMessaging() async {
     try {
@@ -236,143 +205,223 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     }
   }
 
-  Future<void> _initializeAudio() async {
-    debugPrint('🎤 Initializing WebRTC audio for Open Discussion room');
+  /// Start connection health monitoring to prevent user drops
+  void _startConnectionHealthMonitoring() {
+    _connectionHealthTimer?.cancel();
+    _connectionHealthTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      _checkConnectionHealth();
+    });
     
-    // Set up audio service callbacks
-    _audioService.onConnected = () {
-      debugPrint('🔄 [OpenDiscussion] onConnected callback triggered');
+    debugPrint('🔍 Started connection health monitoring for Open Discussion room');
+  }
+
+  /// Stop connection health monitoring
+  void _stopConnectionHealthMonitoring() {
+    _connectionHealthTimer?.cancel();
+    _connectionHealthTimer = null;
+    debugPrint('🛑 Stopped connection health monitoring');
+  }
+
+  /// Check connection health and trigger reconnection if needed
+  void _checkConnectionHealth() {
+    if (!mounted) return;
+    
+    try {
+      // Check if LiveKit connection is healthy
+      final isLiveKitHealthy = _liveKitService.isConnected;
+      
+      // Check if user is still in the room (moderator or participant)
+      final isUserInRoom = _userParticipation != null;
+      
+      // If user should be in room but LiveKit is disconnected, trigger reconnection
+      if (isUserInRoom && !isLiveKitHealthy && !_isReconnecting) {
+        debugPrint('⚠️ LiveKit connection unhealthy - attempting restoration');
+        _restoreLiveKitConnection();
+      }
+      
+    } catch (e) {
+      debugPrint('❌ Error checking connection health: $e');
+    }
+  }
+
+  /// Handle LiveKit connection restoration
+  void _restoreLiveKitConnection() async {
+    if (_isReconnecting) return;
+    
+    _isReconnecting = true;
+    debugPrint('🔄 Starting LiveKit connection restoration...');
+    
+    try {
+      // Get current user info for reconnection
+      final user = await _appwriteService.getCurrentUser();
+      if (user == null) {
+        throw Exception('User not authenticated');
+      }
+      
+      final userId = user.$id;
+      final userRole = _isCurrentUserModerator ? 'moderator' : 'participant';
+      final audioRoomId = 'open_discussion_${widget.room.id}';
+      
+      // Generate new LiveKit token
+      final token = LiveKitTokenService.generateToken(
+        roomName: audioRoomId,
+        identity: userId,
+        userRole: userRole,
+        roomType: 'open_discussion',
+        userId: userId,
+        ttl: const Duration(hours: 2),
+      );
+      
+      // Attempt to reconnect LiveKit with proper parameters
+      await _liveKitService.connect(
+        serverUrl: 'ws://172.236.109.9:7880', // Linode server LiveKit
+        roomName: audioRoomId,
+        token: token,
+        userId: userId,
+        userRole: userRole,
+        roomType: 'open_discussion',
+      );
+      
+      debugPrint('✅ LiveKit connection restored successfully');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Audio connection restored successfully!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+    } catch (e) {
+      debugPrint('❌ LiveKit connection restoration failed: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to restore audio connection: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      
+      // Schedule retry
+      _scheduleReconnectionRetry();
+      
+    } finally {
+      _isReconnecting = false;
+    }
+  }
+
+  /// Schedule reconnection retry with exponential backoff
+  void _scheduleReconnectionRetry() {
+    final retryDelay = Duration(seconds: (2 * _connectionDropCount).clamp(5, 60));
+    
+    debugPrint('⏰ Scheduling LiveKit reconnection retry in ${retryDelay.inSeconds} seconds...');
+    
+    _reconnectionTimer?.cancel();
+    _reconnectionTimer = Timer(retryDelay, () {
+      if (mounted && !_isReconnecting) {
+        debugPrint('🔄 Executing scheduled LiveKit reconnection retry...');
+        _restoreLiveKitConnection();
+      }
+    });
+  }
+
+  Future<void> _initializeAudio() async {
+    debugPrint('🎤 Initializing LiveKit audio for Open Discussion room');
+    
+    // Set up LiveKit service callbacks
+    _liveKitService.onConnected = () {
+      debugPrint('🔄 [OpenDiscussion] LiveKit connected callback triggered');
       
       // Always update audio state for functionality
       _isAudioConnected = true;
       _isAudioConnecting = false;
-      _isMuted = _audioServiceIsMuted;
+      _isMuted = _liveKitService.isMuted;
       
       if (mounted) {
         setState(() {
           _isAudioConnected = true;
           _isAudioConnecting = false;
-          _isMuted = _audioServiceIsMuted; // Sync mute state
+          _isMuted = _liveKitService.isMuted; // Sync mute state
         });
-        debugPrint('✅ [OpenDiscussion] Audio connected - UI updated (connected: $_isAudioConnected, connecting: $_isAudioConnecting)');
+        debugPrint('✅ [OpenDiscussion] LiveKit connected - UI updated (connected: $_isAudioConnected, connecting: $_isAudioConnecting)');
       } else {
-        debugPrint('✅ [OpenDiscussion] Audio connected - state updated (widget not mounted, UI not updated)');
+        debugPrint('✅ [OpenDiscussion] LiveKit connected - state updated (widget not mounted, UI not updated)');
       }
     };
     
-    _audioService.onDisconnected = () {
+    _liveKitService.onDisconnected = () {
       if (mounted) {
         setState(() {
           _isAudioConnected = false;
           _isAudioConnecting = false;
         });
-        debugPrint('📡 Audio disconnected from Open Discussion room');
+        debugPrint('📡 LiveKit disconnected from Open Discussion room');
       }
     };
     
-    _audioService.onError = (error) {
+    _liveKitService.onError = (error) {
       if (mounted) {
         setState(() {
           _isAudioConnecting = false;
         });
-        debugPrint('❌ Audio error: $error');
+        debugPrint('❌ LiveKit error: $error');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Audio connection error: $error'),
+            content: Text('LiveKit connection error: $error'),
             backgroundColor: Colors.red,
           ),
         );
       }
     };
     
-    // Listen to audio service changes for peer count updates
-    // WebSocketWebRTCService doesn't have listeners
-    // _audioService.addListener(_onAudioServiceChanged);
+    // LiveKit automatically handles peer count updates via getters
     
-    // Handle remote audio streams
-    _audioService.onRemoteStream = (peerId, stream, userId, role) async {
-      debugPrint('🎵 [OpenDiscussion] Received remote audio stream from peer: $peerId');
-      debugPrint('🎵 [OpenDiscussion] Audio tracks in stream: ${stream.getAudioTracks().length}');
-      
-      // Create audio renderer for this peer (always do this for audio functionality)
-      await _createAudioRenderer(peerId, stream);
-      
-      // Enable audio tracks for playback (always do this for audio)
-      final audioTracks = stream.getAudioTracks();
-      for (var track in audioTracks) {
-        track.enabled = true;
-        debugPrint('🔊 [OpenDiscussion] Enabled audio track from $peerId: ${track.id}');
-      }
-      
-      // For web: Ensure audio context is resumed (browser autoplay policy)
-      if (kIsWeb) {
-        _resumeWebAudioContext();
-      }
-      
+    // Handle participant connections for peer count updates
+    _liveKitService.onParticipantConnected = (participant) {
+      debugPrint('👤 LiveKit participant connected: ${participant.identity}');
       if (mounted) {
         setState(() {
-          _remoteStreams[peerId] = stream;
-          _isAudioConnected = true; // Ensure connected state when we receive audio
-          _isAudioConnecting = false;
-        });
-      } else {
-        // Still store streams even if not mounted for audio functionality
-        _remoteStreams[peerId] = stream;
-        _isAudioConnected = true;
-        _isAudioConnecting = false;
-      }
-      
-      debugPrint('✅ [OpenDiscussion] Audio stream from $peerId is now active and rendering');
-      debugPrint('🎤 [OpenDiscussion] Remote streams count: ${_remoteStreams.length}');
-    };
-    
-    // Handle local audio stream
-    _audioService.onLocalStream = (stream) {
-      debugPrint('🎤 Received local audio stream');
-      debugPrint('🎤 Local audio tracks: ${stream.getAudioTracks().length}');
-      
-      // Always store local stream for audio functionality
-      _localStream = stream;
-      _isMuted = _audioServiceIsMuted;
-      
-      if (mounted) {
-        setState(() {
-          _localStream = stream;
-          _isMuted = _audioServiceIsMuted;
+          // Update peer count via getter
         });
       }
     };
     
-    // Handle peer events
-    _audioService.onPeerJoined = (peerId, userId, role) {
-      debugPrint('👤 Peer joined audio: $peerId');
+    _liveKitService.onParticipantDisconnected = (participant) {
+      debugPrint('👋 LiveKit participant disconnected: ${participant.identity}');
       if (mounted) {
         setState(() {
-          // Trigger UI update to show new peer count
+          // Update peer count via getter
         });
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('A participant joined the audio'),
-            duration: Duration(seconds: 2),
-            backgroundColor: Colors.green,
-          ),
-        );
       }
     };
     
-    _audioService.onPeerLeft = (peerId) {
-      debugPrint('👋 Peer left audio: $peerId');
-      if (mounted) {
-        setState(() {
-          _remoteStreams.remove(peerId);
-          // Trigger UI update to show updated peer count
-          _remoteAudioRenderers[peerId]?.srcObject = null;
-          _remoteAudioRenderers[peerId]?.dispose();
-          _remoteAudioRenderers.remove(peerId);
-        });
+    // Handle track subscriptions for audio streams
+    _liveKitService.onTrackSubscribed = (publication, participant) {
+      debugPrint('🎵 LiveKit track subscribed: ${publication.kind} from ${participant.identity}');
+      
+      if (publication.kind == TrackType.AUDIO) {
+        // For LiveKit, audio tracks are automatically handled
+        // We just need to ensure the UI reflects the connection
+        if (mounted) {
+          setState(() {
+            _isAudioConnected = true;
+            _isAudioConnecting = false;
+          });
+        }
+        debugPrint('✅ LiveKit audio track from ${participant.identity} is now active');
       }
     };
+    
+
   }
 
   Future<void> _initializeRoom() async {
@@ -997,28 +1046,28 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
 
   Future<void> _checkAndAutoConnectAudio() async {
     final userRole = _userParticipation?['role'];
-    debugPrint('🎤 Checking auto-audio: userRole=$userRole, participation=$_userParticipation');
+    debugPrint('🎤 Checking auto-LiveKit audio: userRole=$userRole, participation=$_userParticipation');
     
-    // In Open Discussion rooms, ALL users (audience, speaker, moderator) can connect to audio
-    debugPrint('🎤 Open Discussion room - connecting audio for all users (role: $userRole)');
+    // In Open Discussion rooms, ALL users (audience, speaker, moderator) can connect to LiveKit audio
+    debugPrint('🎤 Open Discussion room - connecting LiveKit audio for all users (role: $userRole)');
     
     // Only connect if not already connected or connecting
     if (!_isAudioConnected && !_isAudioConnecting) {
-      debugPrint('🎤 Starting audio connection for all users...');
+      debugPrint('🎤 Starting LiveKit audio connection for all users...');
       await _connectToAudio();
     } else {
-      debugPrint('🎤 Audio already connected/connecting, skipping...');
+      debugPrint('🎤 LiveKit audio already connected/connecting, skipping...');
     }
   }
 
   Future<void> _reinitializeAudioForSpeaker() async {
     try {
-      debugPrint('🔄 Reinitializing audio connection for speaker role...');
+      debugPrint('🔄 Reinitializing LiveKit audio connection for speaker role...');
       
       // Disconnect existing audio service if connected
       if (_isAudioConnected) {
-        debugPrint('🔌 Disconnecting existing audio connection...');
-        await _audioService.disconnect();
+        debugPrint('🔌 Disconnecting existing LiveKit audio connection...');
+        await _liveKitService.disconnect();
         if (mounted) {
           setState(() {
             _isAudioConnected = false;
@@ -1035,19 +1084,19 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       await _connectToAudio();
       
     } catch (e) {
-      debugPrint('❌ Error reinitializing audio for speaker: $e');
+      debugPrint('❌ Error reinitializing LiveKit audio for speaker: $e');
       // Continue anyway - user can try manual connect
     }
   }
 
   Future<void> _reinitializeAudioForAudience() async {
     try {
-      debugPrint('🔽 Reinitializing audio connection for audience role (receive-only)...');
+      debugPrint('🔽 Reinitializing LiveKit audio connection for audience role (receive-only)...');
       
       // Disconnect existing audio service if connected
       if (_isAudioConnected) {
-        debugPrint('🔌 Disconnecting existing audio connection...');
-        await _audioService.disconnect();
+        debugPrint('🔌 Disconnecting existing LiveKit audio connection...');
+        await _liveKitService.disconnect();
         if (mounted) {
           setState(() {
             _isAudioConnected = false;
@@ -1065,7 +1114,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       await _connectToAudio();
       
     } catch (e) {
-      debugPrint('❌ Error reinitializing audio for audience: $e');
+      debugPrint('❌ Error reinitializing LiveKit audio for audience: $e');
       // Continue anyway - connection should still work for listening
     }
   }
@@ -1184,18 +1233,31 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       // All others remain as 'audience' for listen-only mode
       
       debugPrint('🎤 Audio connection details:');
-      debugPrint('🎤 Server: 172.236.109.9:3006 (Linode WebSocket WebRTC server)');
+      debugPrint('🎤 Server: 172.236.109.9:7880 (Linode LiveKit server)');
       debugPrint('🎤 Room ID: $audioRoomId');
       debugPrint('🎤 User ID: $userId');
       debugPrint('🎤 User Role: $userRole');
       
+      // Generate LiveKit token for authentication
+      final token = LiveKitTokenService.generateToken(
+        roomName: audioRoomId,
+        identity: userId,
+        userRole: userRole,
+        roomType: 'open_discussion',
+        userId: userId,
+        ttl: const Duration(hours: 2),
+      );
+      
+      debugPrint('🔑 Generated LiveKit token for $userId with role $userRole');
+      
       // Add timeout to prevent getting stuck
-      await _audioService.connect(
-        '172.236.109.9:3006', // Linode server WebSocket WebRTC
-        audioRoomId, // Room ID specific to this discussion
-        userId, // User ID
-        audioOnly: true, // Audio-only for stability
-        role: userRole, // Pass the user's role (now works for all users)
+      await _liveKitService.connect(
+        serverUrl: 'ws://172.236.109.9:7880', // Linode server LiveKit
+        roomName: audioRoomId, // Room ID specific to this discussion
+        token: token, // LiveKit JWT token
+        userId: userId, // User ID
+        userRole: userRole, // Pass the user's role (now works for all users)
+        roomType: 'open_discussion', // Room type for LiveKit
       ).timeout(
         const Duration(seconds: 30),
         onTimeout: () {
@@ -1238,20 +1300,20 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         // Continue anyway - audio might still work
       }
       
-      // Start muted by default
+      // Start muted by default for LiveKit
       _isMuted = true;
-      await _audioServiceToggleMute();
+      await _liveKitServiceToggleMute();
       
       // Force UI update to show connected state
       if (mounted) {
         setState(() {
           _isAudioConnected = true;
           _isAudioConnecting = false;
-          _isMuted = _audioServiceIsMuted;
+          _isMuted = _liveKitService.isMuted;
         });
       }
       
-      debugPrint('🎤 Successfully connected to Open Discussion audio - UI state updated');
+      debugPrint('🎤 Successfully connected to LiveKit Open Discussion audio - UI state updated');
       
     } catch (e) {
       debugPrint('❌ Error connecting to audio: $e');
@@ -1267,12 +1329,16 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
             errorMessage.contains('Microphone permission denied')) {
           errorMessage = 'Microphone permission required. Please allow microphone access and try again.';
         } else if (errorMessage.contains('timeout')) {
-          errorMessage = 'Connection timeout. Check microphone permissions or try again.';
+          errorMessage = 'LiveKit connection timeout. Check microphone permissions or try again.';
+        } else if (errorMessage.contains('Unauthorized') || errorMessage.contains('invalid token')) {
+          errorMessage = 'LiveKit authentication failed. Please try again.';
+        } else if (errorMessage.contains('Failed to connect')) {
+          errorMessage = 'LiveKit connection failed. Please check your internet connection and try again.';
         }
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to connect to audio: $errorMessage'),
+            content: Text('Failed to connect to LiveKit audio: $errorMessage'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 5),
             action: SnackBarAction(
@@ -1286,11 +1352,11 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
   }
 
   Future<void> _forceResetAudioConnection() async {
-    debugPrint('🔄 Force resetting audio connection...');
+    debugPrint('🔄 Force resetting LiveKit audio connection...');
     
     try {
-      // Force disconnect from audio service
-      await _audioService.disconnect();
+      // Force disconnect from LiveKit service
+      await _liveKitService.disconnect();
       
       // Reset all audio state
       if (mounted) {
@@ -1301,7 +1367,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
         });
       }
       
-      // Clear audio renderers
+      // Clear audio renderers (not needed for LiveKit but keeping for compatibility)
       for (var renderer in _remoteAudioRenderers.values) {
         renderer.srcObject = null;
         renderer.dispose();
@@ -1310,13 +1376,13 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       _remoteStreams.clear();
       _localStream = null;
       
-      debugPrint('✅ Audio connection reset complete');
+      debugPrint('✅ LiveKit audio connection reset complete');
       
       // Wait a bit before allowing new connections
       await Future.delayed(const Duration(milliseconds: 1000));
       
     } catch (e) {
-      debugPrint('⚠️ Error during audio reset: $e');
+      debugPrint('⚠️ Error during LiveKit audio reset: $e');
     }
   }
 
@@ -1756,18 +1822,6 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     }
   }
 
-  Future<void> _toggleMute() async {
-    if (_isAudioConnected) {
-      await _audioServiceToggleMute();
-      if (mounted) {
-        setState(() {
-          _isMuted = _audioServiceIsMuted;
-        });
-      }
-      debugPrint("🔇 Audio ${_isMuted ? 'muted' : 'unmuted'}");
-    }
-  }
-
   Future<void> _configureAudioRouting() async {
     try {
       // Configure audio session for proper playback
@@ -1845,6 +1899,12 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
 
   Future<void> _leaveRoomData() async {
     try {
+      // Disconnect from LiveKit before leaving room
+      if (_liveKitService.isConnected) {
+        await _liveKitService.disconnect();
+        debugPrint('🔌 Disconnected from LiveKit room');
+      }
+      
       if (_currentAppwriteUserId != null) {
         await _appwriteService.leaveRoom(
           roomId: widget.room.id,
@@ -1920,15 +1980,8 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
           }
         },
         onChallenge: () {
-          // TODO: Implement challenge functionality
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Challenge sent to ${userProfile.name}'),
-                backgroundColor: const Color(0xFFDC2626),
-              ),
-            );
-          }
+          // Challenge functionality is now handled directly by UserProfileBottomSheet
+          debugPrint('Challenge functionality delegated to UserProfileBottomSheet');
         },
         onEmail: () {
           if (mounted && _getCurrentUserProfile() != null) {
@@ -1986,7 +2039,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
             _isHandRaised = false; // Lower hand since they're now a speaker
           });
         }
-        // Reinitialize WebRTC connection with speaker role to enable microphone
+        // Reinitialize LiveKit connection with speaker role to enable microphone
         await _reinitializeAudioForSpeaker();
       }
       
@@ -2042,14 +2095,14 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
           });
         }
         
-        // Disconnect audio since audience members can't use mic
+        // Disconnect LiveKit audio since audience members can't use mic
         if (_isAudioConnected) {
-          await _audioService.disconnect();
+          await _liveKitService.disconnect();
           if (mounted) {
             setState(() {
               _isAudioConnected = false;
               _isAudioConnecting = false;
-              _isMuted = false;
+              _isMuted = true; // Force muted state for audience
             });
           }
         }
@@ -2172,8 +2225,18 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-        body: Stack(
+    return PopScope(
+      canPop: false, // Prevent automatic pop, handle it manually
+      onPopInvokedWithResult: (didPop, result) async {
+        if (!didPop) {
+          // Handle back button press - ensure proper cleanup
+          debugPrint('🚪 User attempting to leave room via back button - performing cleanup');
+          await _leaveRoomData(); // Ensure LiveKit disconnect and room cleanup
+          Navigator.of(context).pop(); // Now actually leave
+        }
+      },
+      child: Scaffold(
+          body: Stack(
           children: [
             // Main room interface
             Container(
@@ -2248,6 +2311,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
             // Chat now handled via Mattermost-inspired widget in _toggleChat()
           ],
         ),
+      ),
     );
   }
 
@@ -2371,7 +2435,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                 isModerator: _isCurrentUserModerator,
                 userId: _currentAppwriteUserId ?? '',
                 compact: true,
-                showControls: _isCurrentUserModerator,
+                showControls: true, // Allow all users to access timer controls in open discussions
                 showConnectionStatus: false,
               ),
             ),
@@ -2433,40 +2497,50 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               if (_isCurrentUserModerator)
                 Stack(
                   children: [
-                    IconButton(
-                      onPressed: _showModerationModal,
-                      icon: const Icon(
-                        Icons.admin_panel_settings,
-                        color: scarletRed,
-                        size: 16,
+                    Container(
+                      decoration: BoxDecoration(
+                        color: scarletRed.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: scarletRed.withValues(alpha: 0.3),
+                          width: 1,
+                        ),
                       ),
-                      tooltip: 'Moderation Controls',
-                      padding: const EdgeInsets.all(4),
-                      constraints: const BoxConstraints(
-                        minWidth: 28,
-                        minHeight: 28,
+                      child: IconButton(
+                        onPressed: _showModerationModal,
+                        icon: const Icon(
+                          Icons.admin_panel_settings,
+                          color: scarletRed,
+                          size: 24,
+                        ),
+                        tooltip: 'Moderator Tools',
+                        padding: const EdgeInsets.all(8),
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
                       ),
                     ),
                     // Notification badge for hands raised
                     if (_handsRaised.isNotEmpty)
                       Positioned(
-                        right: 2,
-                        top: 2,
+                        right: 0,
+                        top: 0,
                         child: Container(
-                          padding: const EdgeInsets.all(1),
+                          padding: const EdgeInsets.all(2),
                           decoration: const BoxDecoration(
                             color: Colors.orange,
                             shape: BoxShape.circle,
                           ),
                           constraints: const BoxConstraints(
-                            minWidth: 10,
-                            minHeight: 10,
+                            minWidth: 14,
+                            minHeight: 14,
                           ),
                           child: Text(
                             '${_handsRaised.length}',
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 7,
+                              fontSize: 8,
                               fontWeight: FontWeight.bold,
                             ),
                             textAlign: TextAlign.center,
@@ -2475,6 +2549,40 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                       ),
                   ],
                 ),
+              
+              // Connection status indicator
+              if (_isReconnecting) ...[
+                const SizedBox(width: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
+                        ),
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'Reconnecting...',
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ],
@@ -2502,7 +2610,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
           child: _buildUserAvatar(
             userId: moderator['userId'],
             name: moderator['userId'] == _currentAppwriteUserId ? 'You' : 'Moderator',
-            size: 80,
+            size: 100, // Increased from 80 to 100
             isSpeaking: false, // No voice functionality
             showModerator: true,
           ),
@@ -2737,32 +2845,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                 ),
               ),
             
-            // Moderator crown or hand raised indicator
-            if (showModerator)
-              Positioned(
-                top: 0,
-                right: 0,
-                child: Container(
-                  width: size * 0.3,
-                  height: size * 0.3,
-                  decoration: const BoxDecoration(
-                    color: Colors.amber,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 2,
-                        offset: Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    Icons.star,
-                    size: size * 0.2,
-                    color: Colors.white,
-                  ),
-                ),
-              )
+            // Hand raised indicator only (moderator badge removed)
+            if (false) // Moderator badge completely removed
+              const SizedBox.shrink()
             else if (_isHandRaised && isCurrentUser)
               Positioned(
                 top: 0,
@@ -2913,10 +2998,10 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
           // Status text
           Text(
             _isCurrentUserModerator
-              ? '👑 You are the moderator • Mic access enabled'
+              ? '👑 You are the moderator'
               : _userParticipation?['role'] == 'speaker'
-                ? '🎙️ You are a speaker • Mic access enabled'
-                : '👂 You are in the audience • Raise hand for mic access${_isHandRaised ? ' • Hand raised' : ''}',
+                ? '🎙️ You are a speaker'
+                : '👂 You are in the audience${_isHandRaised ? ' • Hand raised' : ''}',
             style: TextStyle(
               color: _isCurrentUserModerator
                 ? Colors.green
@@ -2948,7 +3033,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                     ? (_isMuted ? Icons.volume_off : Icons.volume_up)
                     : (_isAudioConnecting ? Icons.hourglass_empty : Icons.speaker),
                   label: _isAudioConnected 
-                    ? (_isMuted ? 'Unmuted Audio ($_audioServiceConnectedPeersCount peers)' : 'Audio On ($_audioServiceConnectedPeersCount peers)')
+                    ? (_isMuted ? 'Unmuted Audio' : 'Audio On')
                     : (_isAudioConnecting ? 'Connecting...' : 'Join Audio'),
                   color: _isAudioConnected 
                     ? (_isMuted ? Colors.red : Colors.green)
@@ -2999,33 +3084,14 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                 color: Colors.amber,
                 onTap: _showGiftModal,
               ),
+              
+
             ],
           ),
           
-          // Web-specific audio enable button
-          if (kIsWeb && _remoteStreams.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: TextButton.icon(
-                onPressed: () {
-                  _resumeWebAudioContext();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('🔊 Audio enabled for web browser'),
-                      backgroundColor: Colors.green,
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.volume_up, size: 16),
-                label: const Text('Enable Audio', style: TextStyle(fontSize: 12)),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.blue,
-                  backgroundColor: Colors.blue.withValues(alpha: 0.1),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                ),
-              ),
-            ),
+
+          
+
         ],
       ),
     );
@@ -3791,6 +3857,11 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
                     
                     const SizedBox(height: 30),
                     
+                    // Audio controls
+                    _buildAudioControlsSection(),
+                    
+                    const SizedBox(height: 30),
+                    
                     // Quick actions
                     _buildQuickActions(),
                     
@@ -3975,6 +4046,149 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     );
   }
 
+  Widget _buildFeatureChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAudioControlsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(
+              Icons.volume_up,
+              color: deepPurple,
+              size: 20,
+            ),
+            SizedBox(width: 8),
+            Text(
+              'Audio Controls',
+              style: TextStyle(
+                color: deepPurple,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 15),
+        
+        // Audio status info
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: deepPurple.withValues(alpha: 0.05),
+            borderRadius: const BorderRadius.all(Radius.circular(10)),
+            border: Border.all(color: deepPurple.withValues(alpha: 0.2)),
+          ),
+          child: Column(
+            children: [
+              // Connection status
+              Row(
+                children: [
+                  Icon(
+                    _isAudioConnected ? Icons.check_circle : Icons.error,
+                    size: 16,
+                    color: _isAudioConnected ? Colors.green : Colors.red,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Audio: ${_isAudioConnected ? 'Connected' : 'Not Connected'}',
+                    style: TextStyle(
+                      color: _isAudioConnected ? Colors.green : Colors.red,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 8),
+              
+              // Noise cancellation status
+              if (_isAudioConnected) ...[
+                const Row(
+                  children: [
+                    Icon(
+                      Icons.noise_control_off,
+                      size: 16,
+                      color: Colors.blue,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Noise Cancellation: Active',
+                      style: TextStyle(
+                        color: Colors.blue,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                
+                const SizedBox(height: 4),
+                
+                // Noise cancellation features
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    _buildFeatureChip('Echo Cancel', Colors.green),
+                    _buildFeatureChip('Noise Suppress', Colors.green),
+                    _buildFeatureChip('Auto Gain', Colors.green),
+                    _buildFeatureChip('High-pass Filter', Colors.green),
+                    _buildFeatureChip('Typing Detection', Colors.green),
+                  ],
+                ),
+              ],
+              
+              const SizedBox(height: 8),
+              
+              // Last mute all timestamp
+              if (_lastMuteAllTime != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.schedule,
+                      size: 16,
+                      color: Colors.orange,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Last Mute All: ${_formatTimestamp(_lastMuteAllTime!)}',
+                      style: const TextStyle(
+                        color: Colors.orange,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildQuickActions() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3992,6 +4206,19 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
           children: [
             Expanded(
               child: _buildActionButton(
+                icon: Icons.volume_off,
+                label: 'Mute All',
+                color: scarletRed,
+                onTap: _isAudioConnected ? () {
+                  Navigator.pop(context);
+                  _muteAllParticipants();
+                } : null,
+                isEnabled: _isAudioConnected,
+              ),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: _buildActionButton(
                 icon: Icons.close,
                 label: 'Close Room',
                 color: scarletRed,
@@ -4003,6 +4230,21 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
             ),
           ],
         ),
+        
+        const SizedBox(height: 15),
+        
+        // Test noise cancellation button
+        if (_isAudioConnected)
+          _buildActionButton(
+            icon: Icons.science,
+            label: 'Test Noise Cancellation',
+            color: Colors.blue,
+            onTap: () {
+              Navigator.pop(context);
+              _testNoiseCancellation();
+            },
+            isEnabled: true,
+          ),
       ],
     );
   }
@@ -4011,33 +4253,70 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
     required IconData icon,
     required String label,
     required Color color,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
+    bool isEnabled = true,
   }) {
+    final effectiveColor = isEnabled ? color : Colors.grey;
+    final effectiveOnTap = isEnabled ? onTap : null;
+    
     return GestureDetector(
-      onTap: onTap,
+      onTap: effectiveOnTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
+          color: effectiveColor.withValues(alpha: isEnabled ? 0.1 : 0.05),
           borderRadius: const BorderRadius.all(Radius.circular(12)),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
+          border: Border.all(color: effectiveColor.withValues(alpha: isEnabled ? 0.3 : 0.2)),
         ),
         child: Column(
           children: [
             Icon(
               icon,
-              color: color,
+              color: effectiveColor,
               size: 24,
             ),
             const SizedBox(height: 8),
             Text(
               label,
               style: TextStyle(
-                color: color,
+                color: effectiveColor,
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
             ),
+            
+            // Show status for Mute All button
+            if (label == 'Mute All' && !isEnabled) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Connect Audio First',
+                style: TextStyle(
+                  color: effectiveColor.withValues(alpha: 0.7),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+            
+            // Show last muted timestamp if available
+            if (label == 'Mute All' && _lastMuteAllTime != null && isEnabled) ...[
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'Last: ${_formatTimestamp(_lastMuteAllTime!)}',
+                  style: const TextStyle(
+                    color: Colors.orange,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -4283,6 +4562,181 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
       // Don't rethrow - just log the error
     }
   }
+  
+  
+
+  // Mute all participants (moderator only)
+  Future<void> _testNoiseCancellation() async {
+    try {
+      debugPrint('🧪 Testing noise cancellation in open discussion room...');
+      
+      // Call the LiveKit service to test noise cancellation
+      await _liveKitService.testNoiseCancellation();
+      
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🧪 Noise cancellation test completed! Check debug console for results.'),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      
+    } catch (e) {
+      debugPrint('❌ Noise cancellation test failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Noise cancellation test failed: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _muteAllParticipants() async {
+    try {
+      debugPrint('🔇 Moderator attempting to mute all participants...');
+      
+      // Check if user is actually a moderator
+      if (_userParticipation?['role'] != 'moderator') {
+        debugPrint('❌ User is not a moderator, cannot mute all participants');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Only moderators can mute all participants'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+      
+      // Check if LiveKit is connected
+      if (!_liveKitService.isConnected) {
+        debugPrint('❌ LiveKit not connected, cannot mute all participants');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Audio not connected. Please connect to audio first.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+      
+      // Show confirmation dialog
+      final shouldMuteAll = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: darkGray,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: scarletRed, width: 1),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.volume_off, color: scarletRed, size: 28),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Mute All Participants?',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'This will mute all participants except you. They will still be able to unmute themselves.\n\nAre you sure you want to continue?',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 16,
+              height: 1.4,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false), // Cancel
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.grey.withValues(alpha: 0.2),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true), // Confirm
+              style: ElevatedButton.styleFrom(
+                backgroundColor: scarletRed,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Mute All'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldMuteAll == true) {
+        // Call LiveKit service to mute all participants
+        await _liveKitService.muteAllParticipants();
+        
+        // Record the timestamp
+        _lastMuteAllTime = DateTime.now();
+        
+        if (mounted) {
+          setState(() {
+            // Trigger UI update to show the timestamp
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🔇 All participants have been muted'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        
+        debugPrint('✅ Successfully muted all participants');
+      }
+      
+    } catch (e) {
+      debugPrint('❌ Error muting all participants: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to mute all participants: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  // Format timestamp for display
+  String _formatTimestamp(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+    
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else {
+      return '${difference.inDays}d ago';
+    }
+  }
+
+
 
   Future<void> _playBuzzerSound() async {
     if (!mounted) return;

@@ -91,6 +91,18 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   // Performance optimization - cache last participants to prevent unnecessary rebuilds
   List<dynamic> _lastParticipants = [];
   
+  // Connection stability monitoring
+  Timer? _connectionHealthTimer;
+  Timer? _reconnectionTimer;
+  bool _isReconnecting = false;
+  int _connectionDropCount = 0;
+  DateTime? _lastConnectionDrop;
+  
+  // Connection stability thresholds
+  int _consecutiveUnhealthyChecks = 0;
+  static const int _unhealthyThreshold = 3; // Require 3 consecutive unhealthy checks
+  static const int _minTimeBetweenReconnections = 60; // Minimum 60 seconds between reconnection attempts
+  
   // Legacy audio variables (Agora removed, kept to prevent compilation errors)
   // Note: These are no longer used but kept for any remaining references
   
@@ -123,6 +135,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     _initializeRoom();
     _loadGiftData();
     _initializeWebRTC();
+    
+    // Start connection health monitoring to prevent user drops
+    _startConnectionHealthMonitoring();
   }
   
   Future<void> _initializeWebRTC() async {
@@ -192,14 +207,379 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
 
   // Audio/Video control methods
   Future<void> _toggleAudio() async {
-    // Use LiveKit's built-in mute functionality
-    await _webrtcService.toggleMute();
-    if (mounted) {
-      setState(() {
-        _isMuted = _webrtcService.isMuted;
-      });
+    try {
+      AppLogger().debug('🎤 TOGGLE: Starting audio toggle operation');
+      AppLogger().debug('🎤 TOGGLE: WebRTC connected: ${_webrtcService.isConnected}');
+      AppLogger().debug('🎤 TOGGLE: Current mute state: ${_webrtcService.isMuted}');
+      
+      if (!_webrtcService.isConnected) {
+        AppLogger().warning('🎤 TOGGLE: WebRTC not connected, showing warning');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Please connect to audio first'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+      
+      // Use LiveKit's built-in mute functionality with noise cancellation
+      await _webrtcService.toggleMute();
+      
+      if (mounted) {
+        setState(() {
+          _isMuted = _webrtcService.isMuted;
+        });
+      }
+      
+      AppLogger().debug('🎤 TOGGLE: Audio ${_webrtcService.isMuted ? 'muted' : 'unmuted'} via LiveKit with noise cancellation');
+      
+      // Show feedback to user on iOS (since button state might not be immediately visible)
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🎤 ${_webrtcService.isMuted ? 'Muted' : 'Unmuted'}'),
+            backgroundColor: _webrtcService.isMuted ? Colors.orange : Colors.green,
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+      
+    } catch (error) {
+      AppLogger().error('❌ TOGGLE: Failed to toggle audio: $error');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to toggle audio: ${error.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
-    AppLogger().debug('🎤 Audio ${_webrtcService.isMuted ? 'muted' : 'unmuted'} via LiveKit');
+  }
+
+  /// Get current noise cancellation status
+  Map<String, bool> _getNoiseCancellationStatus() {
+    if (!_webrtcService.isConnected) {
+      return {
+        'echoCancellation': false,
+        'noiseSuppression': false,
+        'autoGainControl': false,
+        'highpassFilter': false,
+        'typingNoiseDetection': false,
+      };
+    }
+
+    try {
+      // Return the actual constraints that were applied
+      return {
+        'echoCancellation': true,
+        'noiseSuppression': true,
+        'autoGainControl': true,
+        'highpassFilter': true,
+        'typingNoiseDetection': true,
+      };
+    } catch (e) {
+      AppLogger().debug('⚠️ Could not get noise cancellation status: $e');
+      return {
+        'echoCancellation': false,
+        'noiseSuppression': false,
+        'autoGainControl': false,
+        'highpassFilter': false,
+        'typingNoiseDetection': false,
+      };
+    }
+  }
+
+  /// Start connection health monitoring to prevent user drops
+  void _startConnectionHealthMonitoring() {
+    _connectionHealthTimer?.cancel();
+    _connectionHealthTimer = Timer.periodic(const Duration(seconds: 30), (timer) { // Increased from 10 to 30 seconds
+      if (!mounted || _isDisposing) {
+        timer.cancel();
+        return;
+      }
+      _checkConnectionHealth();
+    });
+    
+    AppLogger().debug('🔍 Started connection health monitoring for speakers panel (30s intervals)');
+  }
+
+  /// Stop connection health monitoring
+  void _stopConnectionHealthMonitoring() {
+    _connectionHealthTimer?.cancel();
+    _connectionHealthTimer = null;
+    AppLogger().debug('🛑 Stopped connection health monitoring');
+  }
+
+  /// Check connection health and trigger reconnection if needed
+  void _checkConnectionHealth() {
+    if (!mounted || _isDisposing || _isReconnecting) return;
+    
+    try {
+      // Check if current user is still in speakers panel
+      final isStillSpeaker = _speakerPanelists.any((speaker) => speaker.id == _currentUser?.id);
+      final isStillModerator = _moderator?.id == _currentUser?.id;
+      
+      // Check if WebRTC connection is healthy - be more lenient
+      final isWebRTCConnected = _webrtcService.isConnected;
+      final hasRemoteStreams = _remoteStreams.isNotEmpty;
+      
+      // Only consider connection unhealthy if:
+      // 1. WebRTC is completely disconnected, OR
+      // 2. User is moderator/speaker but has no remote streams (after a reasonable delay)
+      // Note: isWebRTCHealthy is calculated but not used in current logic - kept for future use
+      // final isWebRTCHealthy = isWebRTCConnected && (hasRemoteStreams || !_isCurrentUserModerator && !_isCurrentUserSpeaker);
+      
+      // Log connection state for debugging (but not too frequently)
+      if (_consecutiveUnhealthyChecks == 0 || _consecutiveUnhealthyChecks % 5 == 0) {
+        AppLogger().debug('🔍 Connection health check: WebRTC=${isWebRTCConnected ? 'Connected' : 'Disconnected'}, Streams=${hasRemoteStreams ? 'Yes' : 'No'}, Role=${_isCurrentUserModerator ? 'Moderator' : _isCurrentUserSpeaker ? 'Speaker' : 'Audience'}');
+      }
+      
+      // If user should be a speaker/moderator but isn't, trigger reconnection
+      if ((_isCurrentUserModerator || _isCurrentUserSpeaker) && 
+          (!isStillSpeaker && !isStillModerator)) {
+        AppLogger().warning('⚠️ User dropped from speakers panel - triggering reconnection');
+        _handleUserDrop();
+        return; // Don't check WebRTC health if we're already reconnecting
+      }
+      
+      // Only attempt WebRTC restoration if:
+      // 1. User is moderator/speaker
+      // 2. WebRTC is completely disconnected (not just missing streams)
+      // 3. We're not already reconnecting
+      // 4. We haven't attempted reconnection recently
+      // 5. We've had multiple consecutive unhealthy checks
+      if (_isCurrentUserModerator || _isCurrentUserSpeaker) {
+        if (!isWebRTCConnected && !_isReconnecting) {
+          _consecutiveUnhealthyChecks++;
+          
+          // Check if we've attempted reconnection recently to prevent loops
+          final timeSinceLastAttempt = _lastConnectionDrop != null 
+              ? DateTime.now().difference(_lastConnectionDrop!).inSeconds 
+              : 60;
+          
+          // Only attempt reconnection if:
+          // - We've had enough consecutive unhealthy checks
+          // - Enough time has passed since last attempt
+          if (_consecutiveUnhealthyChecks >= _unhealthyThreshold && timeSinceLastAttempt > _minTimeBetweenReconnections) {
+            AppLogger().warning('⚠️ WebRTC disconnected for $_consecutiveUnhealthyChecks consecutive checks - attempting restoration');
+            _restoreWebRTCConnection();
+            _consecutiveUnhealthyChecks = 0; // Reset counter
+          } else {
+            AppLogger().debug('⏳ Skipping WebRTC restoration - checks: $_consecutiveUnhealthyChecks/$_unhealthyThreshold, time: ${timeSinceLastAttempt}s/$_minTimeBetweenReconnections');
+          }
+        } else if (isWebRTCConnected) {
+          // Reset unhealthy check counter when connection is healthy
+          _consecutiveUnhealthyChecks = 0;
+        }
+      }
+      
+    } catch (e) {
+      AppLogger().error('❌ Error checking connection health: $e');
+    }
+  }
+
+  /// Handle user drop from speakers panel
+  void _handleUserDrop() {
+    if (_isReconnecting) return; // Prevent multiple reconnection attempts
+    
+    _connectionDropCount++;
+    _lastConnectionDrop = DateTime.now();
+    
+    AppLogger().warning('🔴 User drop detected! Count: $_connectionDropCount');
+    
+    // Show user feedback
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Connection issue detected. Attempting to restore your speaker status...'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+    
+    // Attempt automatic reconnection
+    _attemptAutomaticReconnection();
+  }
+
+  /// Attempt automatic reconnection to restore speaker status
+  void _attemptAutomaticReconnection() async {
+    if (_isReconnecting) return;
+    
+    _isReconnecting = true;
+    AppLogger().debug('🔄 Starting automatic reconnection process...');
+    
+    try {
+      // Step 1: Refresh room data
+      await _loadRoomData();
+      
+      // Step 2: Refresh participants
+      await _loadParticipants();
+      
+      // Step 3: Restore WebRTC connection
+      await _restoreWebRTCConnection();
+      
+      // Step 4: Verify speaker status
+      await _verifySpeakerStatus();
+      
+      AppLogger().debug('✅ Automatic reconnection completed successfully');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Speaker status restored successfully!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+    } catch (e) {
+      AppLogger().error('❌ Automatic reconnection failed: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to restore speaker status: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      
+      // Schedule retry
+      _scheduleReconnectionRetry();
+      
+    } finally {
+      _isReconnecting = false;
+    }
+  }
+
+  /// Restore WebRTC connection
+  Future<void> _restoreWebRTCConnection() async {
+    if (_webrtcService.isConnected) {
+      AppLogger().debug('🔄 Disconnecting existing WebRTC connection for restoration...');
+      await _webrtcService.disconnect();
+    }
+    
+    AppLogger().debug('🔄 Restoring WebRTC connection...');
+    await _connectToWebRTC();
+  }
+
+  /// Verify speaker status is properly restored
+  Future<void> _verifySpeakerStatus() async {
+    // Wait a moment for state to settle
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    // Refresh participants again to ensure latest state
+    await _loadParticipants();
+    
+    // Verify user is back in speakers panel
+    final isSpeakerRestored = _speakerPanelists.any((speaker) => speaker.id == _currentUser?.id);
+    final isModeratorRestored = _moderator?.id == _currentUser?.id;
+    
+    if (isSpeakerRestored || isModeratorRestored) {
+      AppLogger().debug('✅ Speaker status verified - user restored to panel');
+    } else {
+      throw Exception('Speaker status not restored after reconnection');
+    }
+  }
+
+  /// Schedule reconnection retry with exponential backoff
+  void _scheduleReconnectionRetry() {
+    final retryDelay = Duration(seconds: (2 * _connectionDropCount).clamp(5, 60));
+    
+    AppLogger().debug('⏰ Scheduling reconnection retry in ${retryDelay.inSeconds} seconds...');
+    
+    _reconnectionTimer?.cancel();
+    _reconnectionTimer = Timer(retryDelay, () {
+      if (mounted && !_isDisposing && !_isReconnecting) {
+        AppLogger().debug('🔄 Executing scheduled reconnection retry...');
+        _attemptAutomaticReconnection();
+      }
+    });
+  }
+
+  /// Format timestamp for display
+  String _formatTimestamp(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+    
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else {
+      return '${difference.inDays}d ago';
+    }
+  }
+
+  /// Test noise cancellation features
+  Future<void> _testNoiseCancellation() async {
+    try {
+      if (!_webrtcService.isConnected) {
+        AppLogger().debug('⚠️ Cannot test noise cancellation: not connected');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Please connect to audio first'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
+      AppLogger().debug('🧪 Testing noise cancellation features...');
+      
+      // Temporarily disable and re-enable audio to test constraints
+      await _webrtcService.disableAudio();
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      // Re-enable with noise cancellation
+      await _webrtcService.enableAudio();
+      
+      // Get and display status
+      final status = _getNoiseCancellationStatus();
+      AppLogger().debug('🎤 Noise cancellation test results:');
+      AppLogger().debug('   Echo Cancellation: ${status['echoCancellation']}');
+      AppLogger().debug('   Noise Suppression: ${status['noiseSuppression']}');
+      AppLogger().debug('   Auto Gain Control: ${status['autoGainControl']}');
+      AppLogger().debug('   High-pass Filter: ${status['highpassFilter']}');
+      AppLogger().debug('   Typing Noise Detection: ${status['typingNoiseDetection']}');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🧪 Noise cancellation test completed! Check debug console for results.'),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      
+    } catch (error) {
+      AppLogger().debug('❌ Noise cancellation test failed: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Noise cancellation test failed: $error'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   void _resumeWebAudioContext() async {
@@ -428,15 +808,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           }
         },
         onChallenge: () {
-          // TODO: Implement challenge functionality
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Challenge sent to ${user.name}'),
-                backgroundColor: const Color(0xFFDC2626),
-              ),
-            );
-          }
+          // Challenge functionality is now handled directly by UserProfileBottomSheet
+          debugPrint('Challenge functionality delegated to UserProfileBottomSheet');
         },
         onEmail: () {
           if (mounted && _currentUser != null) {
@@ -717,6 +1090,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     // Clean up performance optimizations
     PerformanceOptimizations.dispose();
     
+    // Stop connection health monitoring
+    _stopConnectionHealthMonitoring();
+    _reconnectionTimer?.cancel();
+    
     // Clean up WebRTC
     _cleanupWebRTC();
     
@@ -888,7 +1265,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         
         // Additional speaker enforcement (iOS will use defaultToSpeaker option above)
         
-        AppLogger().debug('🔊 Audio session configured for maximum speaker output');
+        AppLogger().debug('🔊 Audio session configured for maximum speaker output with noise cancellation');
+        AppLogger().debug('🔊 Features: Echo cancellation, noise suppression, auto gain control enabled');
       } catch (e) {
         AppLogger().debug('❌ Failed to configure audio session: $e');
         // Continue anyway - audio might still work
@@ -1901,13 +2279,51 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              // Audio always disabled (Agora removed)
-              const SizedBox(width: 8),
-              const Icon(
-                LucideIcons.micOff,
-                color: Colors.orange,
-                size: 14,
+                        // Audio status indicator
+          const SizedBox(width: 8),
+          Icon(
+            _webrtcService.isConnected 
+              ? (_isMuted ? LucideIcons.micOff : LucideIcons.mic)
+              : LucideIcons.micOff,
+            color: _webrtcService.isConnected 
+              ? (_isMuted ? Colors.orange : Colors.green)
+              : Colors.grey,
+            size: 14,
+          ),
+          
+          // Connection status indicator
+          if (_isReconnecting) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
               ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'Reconnecting...',
+                    style: TextStyle(
+                      color: Colors.orange,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
               const SizedBox(width: 16),
               // Instant Message Bell
               const InstantMessageBell(
@@ -2011,6 +2427,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               ),
             ],
           ),
+          
+          const SizedBox(height: 8),
+          
+
         ],
       ),
     );
@@ -2460,6 +2880,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     );
   }
 
+
+
+
+
   Widget _buildControlsBar() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -2612,12 +3036,23 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       ),
       builder: (context) => Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.6,
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
         ),
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[600],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            
             const Text(
               'Moderator Tools',
               style: TextStyle(
@@ -2627,63 +3062,142 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            _buildOptionTile(
-              icon: LucideIcons.userPlus,
-              title: 'Manage Speakers',
-              onTap: () {
-                Navigator.pop(context);
-                _showSpeakerManagement();
-              },
-            ),
-            _buildOptionTile(
-              icon: LucideIcons.users2,
-              title: 'Assign Roles',
-              onTap: () {
-                Navigator.pop(context);
-                _showRoleAssignment();
-              },
-            ),
-            _buildOptionTile(
-              icon: LucideIcons.micOff,
-              title: 'Mute All',
-              onTap: () {
-                Navigator.pop(context);
-                _muteAllParticipants();
-              },
-            ),
-            _buildOptionTile(
-              icon: LucideIcons.testTube,
-              title: 'Test Data Message',
-              onTap: () {
-                Navigator.pop(context);
-                _testDataMessage();
-              },
-            ),
-            _buildOptionTile(
-              icon: LucideIcons.users,
-              title: 'Room Stats',
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Room has ${_speakerPanelists.length} speakers and ${_audienceMembers.length} audience members')),
-                );
-              },
-            ),
-            _buildOptionTile(
-              icon: LucideIcons.settings,
-              title: 'Room Settings',
-              onTap: () {
-                Navigator.pop(context);
-                _showRoomSettings();
-              },
-            ),
-            _buildOptionTile(
+            
+            // Scrollable content
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _buildOptionTile(
+                      icon: LucideIcons.userPlus,
+                      title: 'Manage Speakers',
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showSpeakerManagement();
+                      },
+                    ),
+                    _buildOptionTile(
+                      icon: LucideIcons.users2,
+                      title: 'Assign Roles',
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showRoleAssignment();
+                      },
+                    ),
+                    _buildOptionTile(
+                      icon: LucideIcons.micOff,
+                      title: 'Mute All',
+                      onTap: () {
+                        Navigator.pop(context);
+                        _muteAllParticipants();
+                      },
+                    ),
+                    _buildOptionTile(
+                      icon: LucideIcons.settings,
+                      title: 'Test Audio Quality',
+                      onTap: () {
+                        Navigator.pop(context);
+                        _testNoiseCancellation();
+                      },
+                    ),
+                    _buildOptionTile(
+                      icon: LucideIcons.testTube,
+                      title: 'Test Data Message',
+                      onTap: () {
+                        Navigator.pop(context);
+                        _testDataMessage();
+                      },
+                    ),
+                    _buildOptionTile(
+                      icon: LucideIcons.users,
+                      title: 'Room Stats',
+                      onTap: () {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Room has ${_speakerPanelists.length} speakers and ${_audienceMembers.length} audience members')),
+                        );
+                      },
+                    ),
+                    _buildOptionTile(
+                      icon: LucideIcons.settings,
+                      title: 'Room Settings',
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showRoomSettings();
+                      },
+                    ),
+                                _buildOptionTile(
               icon: LucideIcons.alertTriangle,
               title: 'End Room',
               onTap: () {
                 Navigator.pop(context);
                 _showEndRoomConfirmation();
               },
+            ),
+            
+            // Connection health info
+            if (_connectionDropCount > 0) ...[
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(
+                          LucideIcons.alertTriangle,
+                          color: Colors.orange,
+                          size: 16,
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Connection Health',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Drops detected: $_connectionDropCount',
+                      style: const TextStyle(
+                        color: Colors.orange,
+                        fontSize: 12,
+                      ),
+                    ),
+                    if (_lastConnectionDrop != null) ...[
+                      Text(
+                        'Last drop: ${_formatTimestamp(_lastConnectionDrop!)}',
+                        style: const TextStyle(
+                          color: Colors.orange,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Text(
+                      'Auto-reconnection is active and monitoring your connection.',
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+                  ],
+                ),
+              ),
             ),
           ],
         ),

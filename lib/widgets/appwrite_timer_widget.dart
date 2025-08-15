@@ -178,9 +178,9 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
     _displayUpdateTimer?.cancel();
     _displayUpdateTimer = null;
 
-    // Start timer if we have an active running timer
+    // Create local countdown timer for immediate functionality
     if (_activeTimer != null && _activeTimer!.status == TimerStatus.running) {
-      // Track the last second we triggered feedback for
+      // Track feedback triggers
       int? lastFeedbackSecond;
       
       _displayUpdateTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -189,30 +189,45 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
           return;
         }
         
-        // Calculate current remaining time
-        final currentRemainingSeconds = _timerService.calculateRemainingTime(_activeTimer!);
-        
-        // Only trigger feedback if we haven't already for this second
-        if (lastFeedbackSecond != currentRemainingSeconds) {
-          // Check for 30-second warning
-          if (currentRemainingSeconds == 30 && (lastFeedbackSecond ?? 31) > 30) {
-            _feedbackService.onTimerWarning(_activeTimer!);
-          }
+        // Local countdown - decrement remaining seconds
+        if (_activeTimer != null && _activeTimer!.remainingSeconds > 0) {
+          setState(() {
+            _activeTimer = _activeTimer!.copyWith(
+              remainingSeconds: _activeTimer!.remainingSeconds - 1
+            );
+          });
           
-          // Check for timer expiration
-          if (currentRemainingSeconds == 0 && (lastFeedbackSecond ?? 1) > 0) {
-            _feedbackService.onTimerExpired(_activeTimer!);
-          }
+          final currentRemainingSeconds = _activeTimer!.remainingSeconds;
           
-          lastFeedbackSecond = currentRemainingSeconds;
+          // Trigger feedback
+          if (lastFeedbackSecond != currentRemainingSeconds) {
+            // Check for 30-second warning
+            if (currentRemainingSeconds == 30 && (lastFeedbackSecond ?? 31) > 30) {
+              _feedbackService.onTimerWarning(_activeTimer!);
+            }
+            
+            // Check for timer expiration
+            if (currentRemainingSeconds == 0 && (lastFeedbackSecond ?? 1) > 0) {
+              _feedbackService.onTimerExpired(_activeTimer!);
+              timer.cancel(); // Stop the timer
+              widget.onTimerExpired?.call();
+            }
+            
+            lastFeedbackSecond = currentRemainingSeconds;
+          }
+        } else {
+          timer.cancel();
         }
-        
-        // Update display every second for running timers
-        setState(() {
-          // This will trigger rebuild with updated time calculation
-        });
       });
     }
+  }
+
+  /// Calculate the current display time for the timer
+  int _calculateCurrentDisplayTime() {
+    if (_activeTimer == null) return 0;
+    
+    // Always use server's remainingSeconds - it's the source of truth
+    return _activeTimer!.remainingSeconds;
   }
 
   // Timer control methods
@@ -222,24 +237,58 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
     setState(() => _isCreatingTimer = true);
     
     try {
-      // First, check if there's an expired/completed timer and delete it
+      // Create a local timer in STOPPED state (not auto-starting)
+      final localTimer = TimerState(
+        id: 'local_${DateTime.now().millisecondsSinceEpoch}',
+        roomId: widget.roomId,
+        roomType: widget.roomType,
+        timerType: timerType,
+        status: TimerStatus.stopped,
+        durationSeconds: durationSeconds,
+        remainingSeconds: durationSeconds,
+        startTime: null,
+        createdAt: DateTime.now(),
+        createdBy: widget.userId,
+        currentSpeaker: widget.currentSpeaker,
+        description: customTitle ?? '${timerType.displayName} - ${widget.currentSpeaker ?? 'Timer'}',
+      );
+      
+      setState(() {
+        _activeTimer = localTimer;
+        _showPresets = false;
+      });
+      
+      // Do NOT auto-start the timer
+      
+      // Try to create server timer in background (non-blocking)
+      _createServerTimer(timerType, durationSeconds, customTitle);
+      
+    } catch (e) {
+      _showErrorSnackBar('Failed to create timer: $e');
+    } finally {
+      setState(() => _isCreatingTimer = false);
+    }
+  }
+  
+  // Background server timer creation (non-blocking)
+  Future<void> _createServerTimer(TimerType timerType, int durationSeconds, String? customTitle) async {
+    try {
+      // Delete expired timers
       final expiredTimers = _timers.where((t) => 
         t.status == TimerStatus.completed || 
         (t.status == TimerStatus.stopped && t.remainingSeconds == 0)
       ).toList();
       
-      // Delete expired timers to make room for new one
       for (final timer in expiredTimers) {
         try {
           await _timerService.deleteTimer(timer.id, widget.userId);
-          debugPrint('Deleted expired timer: ${timer.id}');
         } catch (e) {
           debugPrint('Failed to delete expired timer: $e');
         }
       }
       
-      // Create new timer
-      await _timerService.createTimer(
+      // Create server timer (but don't auto-start it)
+      final timerId = await _timerService.createTimer(
         roomId: widget.roomId,
         roomType: widget.roomType,
         timerType: timerType,
@@ -249,11 +298,11 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
         title: customTitle ?? '${timerType.displayName} - ${widget.currentSpeaker ?? 'Timer'}',
       );
       
-      setState(() => _showPresets = false);
+      // Do NOT auto-start server timer - wait for moderator to start it
+      
     } catch (e) {
-      _showErrorSnackBar('Failed to create timer: $e');
-    } finally {
-      setState(() => _isCreatingTimer = false);
+      debugPrint('Background server timer creation failed: $e');
+      // Local timer continues working regardless
     }
   }
 
@@ -261,8 +310,37 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
     if (_activeTimer == null) return;
     
     try {
-      await _timerService.startTimer(_activeTimer!.id, widget.userId);
+      // Start timer (or restart from full duration if paused)
+      setState(() {
+        if (_activeTimer!.isPaused) {
+          // Restart from full duration
+          _activeTimer = _activeTimer!.copyWith(
+            status: TimerStatus.running,
+            remainingSeconds: _activeTimer!.durationSeconds,
+          );
+        } else {
+          // Normal start
+          _activeTimer = _activeTimer!.copyWith(status: TimerStatus.running);
+        }
+      });
+      _updateDisplayTimer();
       widget.onTimerStarted?.call();
+      
+      // Try to start server timer (non-blocking)
+      if (!_activeTimer!.id.startsWith('local_')) {
+        if (_activeTimer!.isPaused) {
+          // Reset and start on server
+          _timerService.resetTimer(_activeTimer!.id, widget.userId).then((_) {
+            _timerService.startTimer(_activeTimer!.id, widget.userId);
+          }).catchError((e) {
+            debugPrint('Server restart failed: $e');
+          });
+        } else {
+          _timerService.startTimer(_activeTimer!.id, widget.userId).catchError((e) {
+            debugPrint('Server start failed: $e');
+          });
+        }
+      }
     } catch (e) {
       _showErrorSnackBar('Failed to start timer: $e');
     }
@@ -272,9 +350,42 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
     if (_activeTimer == null) return;
     
     try {
-      await _timerService.pauseTimer(_activeTimer!.id, widget.userId);
+      // Pause local timer immediately
+      _displayUpdateTimer?.cancel();
+      setState(() {
+        _activeTimer = _activeTimer!.copyWith(status: TimerStatus.paused);
+      });
+      
+      // Try to pause server timer (non-blocking)
+      if (!_activeTimer!.id.startsWith('local_')) {
+        _timerService.pauseTimer(_activeTimer!.id, widget.userId).catchError((e) {
+          debugPrint('Server pause failed: $e');
+        });
+      }
     } catch (e) {
       _showErrorSnackBar('Failed to pause timer: $e');
+    }
+  }
+
+  Future<void> _resumeTimer() async {
+    if (_activeTimer == null) return;
+    
+    try {
+      // Resume local timer immediately from current remaining time
+      setState(() {
+        _activeTimer = _activeTimer!.copyWith(status: TimerStatus.running);
+      });
+      _updateDisplayTimer();
+      widget.onTimerStarted?.call();
+      
+      // Try to resume server timer (non-blocking)
+      if (!_activeTimer!.id.startsWith('local_')) {
+        _timerService.startTimer(_activeTimer!.id, widget.userId).catchError((e) {
+          debugPrint('Server resume failed: $e');
+        });
+      }
+    } catch (e) {
+      _showErrorSnackBar('Failed to resume timer: $e');
     }
   }
 
@@ -321,8 +432,21 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
   }
 
   bool _canControlTimer() {
-    if (_activeTimer == null) return widget.isModerator;
-    return _timerService.canControlTimer(_activeTimer!, widget.userId, widget.isModerator);
+    if (_activeTimer == null) {
+      // Allow timer creation based on showControls and room type
+      if (widget.showControls) {
+        // For debates & discussions and open discussions, allow all users to create timers
+        if (widget.roomType == RoomType.debatesDiscussions || 
+            widget.roomType == RoomType.openDiscussion) {
+          return true;
+        }
+        // For arena, only moderators can create timers
+        return widget.isModerator;
+      }
+      return false;
+    }
+    // For timer control (start/pause/stop), only moderators can control
+    return widget.isModerator;
   }
 
   Color _getTimerColor() {
@@ -459,21 +583,21 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
           children: [
             if (_activeTimer != null) ...[
               _buildTimerHeader(),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               _buildTimerDisplay(),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               _buildProgressIndicator(),
               const SizedBox(height: 24),
               if (widget.showControls && _canControlTimer()) ...[
                 _buildMainControls(),
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
                 _buildSecondaryControls(),
               ],
             ] else ...[
               _buildNoTimerState(),
             ],
             if (_showPresets) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               _buildTimerPresets(),
             ],
           ],
@@ -532,9 +656,9 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
   }
 
   Widget _buildTimerDisplay({bool compact = false}) {
-    // Calculate real-time remaining seconds for running timers
+    // Calculate current display time
     final seconds = _activeTimer != null 
-        ? _timerService.calculateRemainingTime(_activeTimer!)
+        ? _calculateCurrentDisplayTime()
         : 0;
     final timeText = _formatTime(seconds);
     final color = _getTimerColor();
@@ -615,7 +739,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
           ),
         ] else if (_activeTimer!.isPaused) ...[
           ElevatedButton.icon(
-            onPressed: _startTimer,
+            onPressed: _resumeTimer,
             icon: const Icon(Icons.play_arrow),
             label: const Text('Resume'),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
@@ -626,6 +750,13 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
             icon: const Icon(Icons.stop),
             label: const Text('Stop'),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          ),
+        ] else if (_activeTimer!.remainingSeconds == 0) ...[
+          ElevatedButton.icon(
+            onPressed: _startTimer,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Restart'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
           ),
         ],
       ],
@@ -655,6 +786,69 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildBottomSheetSecondaryControls() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = constraints.maxWidth;
+        final isSmallScreen = screenWidth < 360;
+        
+        return Wrap(
+          spacing: isSmallScreen ? 4 : 8,
+          runSpacing: 4,
+          alignment: WrapAlignment.center,
+          children: [
+            // Always show reset button in bottom sheet for easier access
+            _buildCompactButton(
+              onPressed: _resetTimer,
+              icon: Icons.refresh,
+              label: 'Reset',
+              isSmallScreen: isSmallScreen,
+            ),
+            if (TimerPresets.canAddTime(_activeTimer!.roomType, _activeTimer!.timerType)) ...[
+              _buildCompactButton(
+                onPressed: () => _addTime(30),
+                icon: Icons.add,
+                label: '+30s',
+                isSmallScreen: isSmallScreen,
+              ),
+              _buildCompactButton(
+                onPressed: () => _addTime(60),
+                icon: Icons.add,
+                label: '+1m',
+                isSmallScreen: isSmallScreen,
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildCompactButton({
+    required VoidCallback onPressed,
+    required IconData icon,
+    required String label,
+    Color? color,
+    bool isSmallScreen = false,
+  }) {
+    return TextButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: isSmallScreen ? 14 : 16),
+      label: Text(
+        label,
+        style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
+      ),
+      style: TextButton.styleFrom(
+        foregroundColor: color,
+        padding: EdgeInsets.symmetric(
+          horizontal: isSmallScreen ? 6 : 8,
+          vertical: isSmallScreen ? 4 : 8,
+        ),
+        minimumSize: Size(isSmallScreen ? 60 : 80, isSmallScreen ? 32 : 36),
+      ),
     );
   }
 
@@ -739,13 +933,34 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
   }
 
   void _showCreateTimerDialog() {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => _CreateTimerDialog(
-        roomType: widget.roomType,
-        onCreateTimer: (timerType, duration, title) {
-          _createTimer(timerType, duration, title);
-        },
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.75,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: SingleChildScrollView(
+            child: _CreateTimerDialog(
+              roomType: widget.roomType,
+              onCreateTimer: (timerType, duration, title) {
+                _createTimer(timerType, duration, title);
+              },
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -756,7 +971,6 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
     
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         decoration: const BoxDecoration(
@@ -766,7 +980,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
             topRight: Radius.circular(20),
           ),
         ),
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -779,47 +993,36 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
             
-            // Timer info
-            Text(
-              _activeTimer!.description ?? _activeTimer!.timerType.displayName,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+            // Timer info with status
+            Column(
+              children: [
+                Text(
+                  _activeTimer!.description ?? _activeTimer!.timerType.displayName,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Status: ${_activeTimer!.statusText}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: _getTimerColor(),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            
-            // Timer display
-            _buildTimerDisplay(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
             
             // Control buttons
             if (_canControlTimer()) ...[
               _buildMainControls(),
-              const SizedBox(height: 16),
-              _buildSecondaryControls(),
-              const SizedBox(height: 16),
-              const Divider(),
-              const SizedBox(height: 16),
-              // Add "Create New Timer" button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _showCreateTimerDialog();
-                  },
-                  icon: const Icon(Icons.add_alarm),
-                  label: const Text('Create New Timer'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
+              const SizedBox(height: 8),
+              _buildBottomSheetSecondaryControls(),
             ] else
               Text(
                 'Only moderators can control this timer',
@@ -829,19 +1032,36 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
                 ),
               ),
             
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             
-            // Close button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey[200],
-                  foregroundColor: Colors.black,
+            // Action buttons row
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
+                  ),
                 ),
-                child: const Text('Close'),
-              ),
+                if (_canControlTimer()) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showCreateTimerDialog();
+                      },
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('New Timer'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
             
             // Safe area padding
@@ -876,237 +1096,251 @@ class _CreateTimerDialog extends StatefulWidget {
 }
 
 class _CreateTimerDialogState extends State<_CreateTimerDialog> {
-  TimerType _selectedTimerType = TimerType.general;
-  int _minutes = 5;
+  int _minutes = 3;
   int _seconds = 0;
-  final TextEditingController _titleController = TextEditingController();
-  bool _showCustomTime = false;
+  final TextEditingController _minutesController = TextEditingController();
+  final TextEditingController _secondsController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _titleController.text = _selectedTimerType.displayName;
+    _minutesController.text = _minutes.toString();
+    _secondsController.text = _seconds.toString();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Create Timer'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+        // Handle bar
+        Container(
+          width: 40,
+          height: 4,
+          decoration: BoxDecoration(
+            color: Colors.grey[300],
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(height: 12),
+        
+        // Title
+        const Row(
           children: [
-            // Timer Type Selection
-            const Text('Timer Type:', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<TimerType>(
-              value: _selectedTimerType,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
-              items: TimerType.values.map((type) {
-                return DropdownMenuItem(
-                  value: type,
-                  child: Text(type.displayName),
-                );
-              }).toList(),
-              onChanged: (TimerType? value) {
-                if (value != null) {
-                  setState(() {
-                    _selectedTimerType = value;
-                    _titleController.text = value.displayName;
-                  });
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // Title Input
-            const Text('Title:', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'Enter timer title',
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Duration Selection
-            const Text('Duration:', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            
-            // Quick presets
-            const Text('Quick Presets:', style: TextStyle(fontSize: 12, color: Colors.grey)),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 8,
-              children: [
-                _buildPresetChip(60, '1m'),
-                _buildPresetChip(180, '3m'),
-                _buildPresetChip(300, '5m'),
-                _buildPresetChip(600, '10m'),
-                _buildPresetChip(900, '15m'),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Custom time toggle
-            Row(
-              children: [
-                Checkbox(
-                  value: _showCustomTime,
-                  onChanged: (bool? value) {
-                    setState(() => _showCustomTime = value ?? false);
-                  },
-                ),
-                const Text('Custom time'),
-                const Spacer(),
-                if (!_showCustomTime)
-                  Text(
-                    'Current: ${_formatDuration(_getTotalSeconds())}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-                    ),
-                  ),
-              ],
-            ),
-
-            // Custom time input
-            if (_showCustomTime) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Minutes', style: TextStyle(fontSize: 12)),
-                        DropdownButtonFormField<int>(
-                          value: _minutes,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          ),
-                          items: List.generate(61, (i) => i).map((min) {
-                            return DropdownMenuItem(value: min, child: Text('$min'));
-                          }).toList(),
-                          onChanged: (int? value) {
-                            setState(() => _minutes = value ?? 0);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Seconds', style: TextStyle(fontSize: 12)),
-                        DropdownButtonFormField<int>(
-                          value: _seconds,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          ),
-                          items: List.generate(60, (i) => i).map((sec) {
-                            return DropdownMenuItem(value: sec, child: Text('$sec'));
-                          }).toList(),
-                          onChanged: (int? value) {
-                            setState(() => _seconds = value ?? 0);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue[200]!),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.timer, color: Colors.blue),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Total Duration: ${_formatDuration(_getTotalSeconds())}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.blue,
-                    ),
-                  ),
-                ],
+            Icon(Icons.timer, color: Colors.purple),
+            SizedBox(width: 8),
+            Text(
+              'Speaking Time',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ],
         ),
+        const SizedBox(height: 10),
+          // Speaking Time Preset
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.green.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                _buildPresetButton('3:00', 180), // 3 minutes default
+                _buildPresetButton('2:00', 120), // 2 minutes
+                _buildPresetButton('5:00', 300), // 5 minutes
+                _buildPresetButton('1:00', 60),  // 1 minute
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 12),
+          
+          // Custom Time Input
+          const Text(
+            'Set Custom Time',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          
+          // Live preview of entered time
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.blue.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.timer, color: Colors.blue, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Preview: ${_minutesController.text.isEmpty ? '0' : _minutesController.text}:${(_secondsController.text.isEmpty ? '0' : _secondsController.text).padLeft(2, '0')}',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.blue,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _minutesController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Minutes',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (_) => setState(() {}), // Trigger rebuild for preview
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Text(':', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _secondsController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Seconds',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (_) => setState(() {}), // Trigger rebuild for preview
+                ),
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 8),
+          
+          // Action buttons
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _setCustomTime,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purple,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    'Set Time',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+          // Add bottom padding for safe area
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
+          
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _getTotalSeconds() > 0 ? () {
-            Navigator.pop(context);
-            widget.onCreateTimer(
-              _selectedTimerType,
-              _getTotalSeconds(),
-              _titleController.text.trim().isEmpty 
-                  ? _selectedTimerType.displayName 
-                  : _titleController.text.trim(),
-            );
-          } : null,
-          child: const Text('Create Timer'),
-        ),
-      ],
     );
   }
 
-  Widget _buildPresetChip(int seconds, String label) {
-    final isSelected = !_showCustomTime && _getTotalSeconds() == seconds;
-    return FilterChip(
-      label: Text(label),
-      selected: isSelected,
-      backgroundColor: Colors.grey[100],
-      selectedColor: Colors.blue[100],
-      onSelected: (selected) {
-        setState(() {
-          _showCustomTime = false;
-          _minutes = seconds ~/ 60;
-          _seconds = seconds % 60;
-        });
+  Widget _buildPresetButton(String label, int seconds) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Calculate responsive sizing based on screen width
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isSmallScreen = screenWidth < 360;
+        
+        return GestureDetector(
+          onTap: () {
+            widget.onCreateTimer(TimerType.general, seconds, 'Speaking Time - $label');
+            Navigator.pop(context);
+          },
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isSmallScreen ? 12 : 16,
+              vertical: 8,
+            ),
+            constraints: BoxConstraints(
+              minWidth: isSmallScreen ? 60 : 70,
+              maxWidth: isSmallScreen ? 70 : 80,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.green,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.green.shade700),
+            ),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: isSmallScreen ? 12 : 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        );
       },
     );
   }
 
-  int _getTotalSeconds() {
-    return (_minutes * 60) + _seconds;
+  void _setCustomTime() {
+    final minutes = int.tryParse(_minutesController.text) ?? 0;
+    final seconds = int.tryParse(_secondsController.text) ?? 0;
+    final totalSeconds = (minutes * 60) + seconds;
+    
+    if (totalSeconds > 0) {
+      widget.onCreateTimer(TimerType.general, totalSeconds, 'Speaking Time - ${_formatTime(totalSeconds)}');
+      Navigator.pop(context);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid time')),
+      );
+    }
   }
 
-  String _formatDuration(int totalSeconds) {
-    final minutes = totalSeconds ~/ 60;
-    final seconds = totalSeconds % 60;
-    return '${minutes}m ${seconds}s';
+  String _formatTime(int seconds) {
+    final minutes = seconds ~/ 60;
+    final remainingSeconds = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 
   @override
   void dispose() {
-    _titleController.dispose();
+    _minutesController.dispose();
+    _secondsController.dispose();
     super.dispose();
   }
 }

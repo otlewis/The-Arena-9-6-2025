@@ -31,6 +31,8 @@ import 'services/network_resilience_service.dart';
 import 'services/offline_data_cache.dart';
 import 'services/offline_conflict_resolver.dart';
 import 'services/background_sync_service.dart';
+import 'services/livekit_service.dart';
+import 'services/speaking_detection_service.dart';
 import 'widgets/network_quality_indicator.dart';
 import 'package:mcp_toolkit/mcp_toolkit.dart';
 
@@ -71,6 +73,10 @@ void setupServiceLocator() {
   getIt.registerLazySingleton<OfflineDataCache>(() => OfflineDataCache());
   getIt.registerLazySingleton<OfflineConflictResolver>(() => OfflineConflictResolver());
   getIt.registerLazySingleton<BackgroundSyncService>(() => BackgroundSyncService());
+  
+  // Register audio/video services
+  getIt.registerLazySingleton<LiveKitService>(() => LiveKitService());
+  getIt.registerLazySingleton<SpeakingDetectionService>(() => SpeakingDetectionService());
 }
 
 void resetMessagingService() {
@@ -171,6 +177,10 @@ void main() async {
       await getIt<OfflineDataCache>().initialize();
       await getIt<OfflineConflictResolver>().loadUnresolvedConflicts();
       await getIt<BackgroundSyncService>().initialize();
+      
+      // Initialize audio/video services
+      getIt<SpeakingDetectionService>().initialize();
+      logger.info('🗣️ Speaking detection service initialized');
       
       // Start app optimization in background (non-blocking)
       _startAppOptimization();

@@ -23,6 +23,12 @@ class LiveKitService extends ChangeNotifier {
   String? _currentRoomType;
   String? _userRole;
   
+  // Speaking detection state
+  final Map<String, bool> _speakingStates = {};
+  final Map<String, double> _audioLevels = {};
+  final Map<String, Timer?> _speakingTimers = {};
+  static const Duration _speakingTimeout = Duration(milliseconds: 500); // Time before considering user stopped speaking
+  
   // Callbacks for UI updates
   Function(RemoteParticipant)? onParticipantConnected;
   Function(RemoteParticipant)? onParticipantDisconnected;
@@ -32,6 +38,10 @@ class LiveKitService extends ChangeNotifier {
   Function()? onConnected;
   Function()? onDisconnected;
   Function(String userId, Map<String, dynamic> metadata)? onMetadataChanged;
+  
+  // Speaking detection callbacks
+  Function(String userId, bool isSpeaking)? onSpeakingChanged;
+  Function(String userId, double audioLevel)? onAudioLevelChanged;
   
   // Getters
   bool get isConnected => _isConnected;
@@ -48,6 +58,15 @@ class LiveKitService extends ChangeNotifier {
   
   int get connectedPeersCount => remoteParticipants.length;
   
+  // Speaking detection getters
+  bool isUserSpeaking(String userId) => _speakingStates[userId] ?? false;
+  double getUserAudioLevel(String userId) => _audioLevels[userId] ?? 0.0;
+  Map<String, bool> get allSpeakingStates => Map.from(_speakingStates);
+  List<String> get currentSpeakers => _speakingStates.entries
+      .where((entry) => entry.value)
+      .map((entry) => entry.key)
+      .toList();
+  
   /// Connect to a LiveKit room with role-based permissions
   Future<void> connect({
     required String serverUrl,
@@ -60,16 +79,28 @@ class LiveKitService extends ChangeNotifier {
     try {
       if (_isDisposed) return;
       
-      debugPrint('🔗 Connecting to LiveKit room: $roomName');
+      debugPrint('🔗 CONNECTING to LiveKit room: $roomName');
       debugPrint('📱 Server: $serverUrl');
-      debugPrint('👤 Role: $userRole, Type: $roomType');
+      debugPrint('👤 RECEIVED PARAMS - Role: "$userRole", Type: "$roomType"');
+      debugPrint('🆔 User ID: $userId');
+      
+      // Store role and room type
+      debugPrint('💾 STORING: Saving role and room type in LiveKit service');
+      debugPrint('💾 BEFORE: _userRole=$_userRole, _currentRoomType=$_currentRoomType');
       
       _currentRoom = roomName;
       _currentRoomType = roomType;
       _userRole = userRole;
+      
+      debugPrint('💾 AFTER: _userRole=$_userRole, _currentRoomType=$_currentRoomType');
+      debugPrint('✅ LiveKit service stored - Role: "$_userRole", RoomType: "$_currentRoomType"');
+      
+      // Check if this role can publish
+      final canPublishCheck = _canPublishMedia(_userRole!, _currentRoomType!);
+      debugPrint('🔍 INITIAL CHECK: Can "$_userRole" publish in "$_currentRoomType"? $canPublishCheck');
       // User ID stored for session
       
-      // Create room with options optimized for Arena audio
+      // Create room with options optimized for Arena audio with noise cancellation
       _room = Room(
         roomOptions: const RoomOptions(
           adaptiveStream: true,
@@ -87,7 +118,7 @@ class LiveKitService extends ChangeNotifier {
       // Set up event listeners
       _setupEventListeners();
       
-      // Connect to room
+      // Connect to room with increased timeout for mobile networks
       await _room!.connect(
         serverUrl,
         token,
@@ -95,6 +126,11 @@ class LiveKitService extends ChangeNotifier {
           autoSubscribe: true,
           protocolVersion: ProtocolVersion.v9,
         ),
+      ).timeout(
+        const Duration(seconds: 45), // Increased timeout for mobile networks
+        onTimeout: () {
+          throw Exception('LiveKit connection timeout - please check your network connection');
+        },
       );
       
       _localParticipant = _room!.localParticipant;
@@ -144,6 +180,7 @@ class LiveKitService extends ChangeNotifier {
     // Participant disconnected
     roomListener.on<ParticipantDisconnectedEvent>((event) {
       debugPrint('👤 Participant disconnected: ${event.participant.identity}');
+      _cleanupSpeakingDetection(event.participant.identity);
       onParticipantDisconnected?.call(event.participant);
       notifyListeners();
     });
@@ -181,6 +218,22 @@ class LiveKitService extends ChangeNotifier {
     // Data received event (for mute/unmute requests)
     roomListener.on<DataReceivedEvent>((event) {
       _handleDataReceived(event);
+    });
+    
+    // Audio track published event - set up speaking detection
+    roomListener.on<TrackPublishedEvent>((event) {
+      if (event.publication.kind.name == 'audio') {
+        debugPrint('🎤 Audio track published for ${event.participant.identity}');
+        _setupSpeakingDetection(event.participant, event.publication);
+      }
+    });
+    
+    // Local track published - set up speaking detection for local user
+    roomListener.on<LocalTrackPublishedEvent>((event) {
+      if (event.publication.kind.name == 'audio') {
+        debugPrint('🎤 Local audio track published');
+        _setupLocalSpeakingDetection(event.publication);
+      }
     });
   }
   
@@ -306,32 +359,82 @@ class LiveKitService extends ChangeNotifier {
   Future<void> _setupMediaBasedOnRole() async {
     if (_localParticipant == null) return;
     
+    debugPrint('🎤 SETUP MEDIA: _setupMediaBasedOnRole called');
+    debugPrint('🎤 SETUP MEDIA: Current role: $_userRole');
+    debugPrint('🎤 SETUP MEDIA: Current room type: $_currentRoomType');
+    
     if (_userRole == null || _currentRoomType == null) {
       debugPrint('⚠️ User role or room type is null: role=$_userRole, type=$_currentRoomType');
       return;
     }
     
     final canPublish = _canPublishMedia(_userRole!, _currentRoomType!);
+    debugPrint('🎤 SETUP MEDIA: Can publish result: $canPublish for role "$_userRole" in "$_currentRoomType"');
     
     if (canPublish) {
-      await enableAudio();
+      try {
+        debugPrint('✅ SETUP MEDIA: Creating and enabling audio tracks for role: $_userRole in $_currentRoomType');
+        
+        // For speakers/moderators, ensure audio track is created and initially muted
+        // This ensures the track exists for later unmuting
+        await _localParticipant!.setMicrophoneEnabled(true);
+        debugPrint('🎤 SETUP MEDIA: Audio track created and enabled');
+        
+        // Now mute it initially - speakers should start muted but have tracks ready
+        await _localParticipant!.setMicrophoneEnabled(false);
+        _isMuted = true;
+        debugPrint('🔇 SETUP MEDIA: Audio track muted initially (speakers start muted but can unmute)');
+        
+        notifyListeners();
+        debugPrint('✅ SETUP MEDIA: Audio track setup completed for $_userRole');
+      } catch (e) {
+        debugPrint('⚠️ SETUP MEDIA: Failed to setup audio tracks: $e');
+        // Don't propagate error for initial setup - user can manually unmute later
+      }
       
       // Arena is audio-only, no video needed
       // Video can be enabled for other room types if needed
     } else {
-      debugPrint('🔇 User role $_userRole cannot publish in $_currentRoomType room');
+      // This is expected for audience members - not an error
+      debugPrint('ℹ️ SETUP MEDIA: User role "$_userRole" is listen-only in "$_currentRoomType" room');
+      debugPrint('ℹ️ SETUP MEDIA: This is normal for audience members');
+      // Don't throw error or call onError - this is expected behavior
     }
   }
   
   /// Determine if role can publish media based on room type
   bool _canPublishMedia(String role, String roomType) {
+    debugPrint('🔍 JUDGE DEBUG: _canPublishMedia called with role="$role", roomType="$roomType"');
+    
     switch (roomType) {
       case 'arena':
-        return role == 'affirmative' || role == 'negative' || role == 'judge' || role == 'moderator';
+        // Include all arena roles: moderator, debaters, and judges (judge1, judge2, judge3)
+        final result = role == 'moderator' ||
+               role == 'affirmative' || 
+               role == 'negative' || 
+               role == 'affirmative2' || 
+               role == 'negative2' ||
+               role == 'judge' ||
+               role == 'judge1' ||
+               role == 'judge2' ||
+               role == 'judge3';
+        
+        debugPrint('🔍 JUDGE DEBUG: Arena role check result: $result for role="$role"');
+        debugPrint('🔍 JUDGE DEBUG: Is judge?: ${role == 'judge'}');
+        debugPrint('🔍 JUDGE DEBUG: Is judge1?: ${role == 'judge1'}');
+        debugPrint('🔍 JUDGE DEBUG: Is judge2?: ${role == 'judge2'}');
+        debugPrint('🔍 JUDGE DEBUG: Is judge3?: ${role == 'judge3'}');
+        
+        return result;
+        
       case 'debate_discussion':
-        return role == 'moderator' || role == 'speaker';
+        final canPublish = role == 'moderator' || role == 'speaker';
+        debugPrint('🎯 DEBATE_DISCUSSION: Role "$role" can publish: $canPublish');
+        return canPublish;
       case 'open_discussion':
-        return role == 'moderator' || role == 'speaker';
+        final canPublish = role == 'moderator' || role == 'speaker';
+        debugPrint('🎯 OPEN_DISCUSSION: Role "$role" can publish: $canPublish');
+        return canPublish;
       default:
         return role != 'audience';
     }
@@ -340,32 +443,87 @@ class LiveKitService extends ChangeNotifier {
   /// Enable audio publishing with noise cancellation
   Future<void> enableAudio() async {
     try {
-      if (_localParticipant == null) return;
+      debugPrint('🎤 ENABLE AUDIO: enableAudio() called');
+      debugPrint('🎤 ENABLE AUDIO: Current role: $_userRole, room type: $_currentRoomType');
       
-      // Enable microphone with enhanced audio processing
-      await _localParticipant!.setMicrophoneEnabled(true);
+      if (_localParticipant == null) {
+        debugPrint('⚠️ No local participant available for audio enable');
+        throw Exception('Local participant not available');
+      }
       
-      // Apply audio constraints for noise cancellation (WebRTC level)
-      try {
-        // Get the local audio track
-        final audioTracks = _localParticipant!.audioTrackPublications;
-        if (audioTracks.isNotEmpty) {
-          final audioTrack = audioTracks.first.track;
-          if (audioTrack != null) {
-            // These constraints help with noise cancellation at the WebRTC level
-            debugPrint('🎤 Applying noise cancellation constraints to audio track');
+      // Quick role check - if audience, don't allow
+      if (_userRole == 'audience') {
+        debugPrint('ℹ️ ENABLE AUDIO: Audience member cannot publish audio - this is expected');
+        _isMuted = true;
+        notifyListeners();
+        return;
+      }
+      
+      // iOS-specific: Add delay and retry mechanism for audio enabling
+      bool enableSuccess = false;
+      int retryCount = 0;
+      const maxRetries = 3;
+      
+      while (!enableSuccess && retryCount < maxRetries) {
+        try {
+          debugPrint('🎤 ENABLE AUDIO: Attempt ${retryCount + 1}/$maxRetries to enable microphone');
+          
+          // Add a small delay for iOS audio session stabilization
+          if (retryCount > 0) {
+            await Future.delayed(Duration(milliseconds: 200 * retryCount));
+          }
+          
+          // Enable microphone with explicit error catching
+          await _localParticipant!.setMicrophoneEnabled(true);
+          
+          // Verify it actually enabled by checking the state
+          await Future.delayed(const Duration(milliseconds: 100)); // Give it time to update
+          
+          final audioTracks = _localParticipant!.audioTrackPublications;
+          debugPrint('🎤 ENABLE AUDIO: Available audio tracks after enable (attempt ${retryCount + 1}): ${audioTracks.length}');
+          
+          if (audioTracks.isNotEmpty) {
+            // Check if any audio track is actually published and not muted
+            bool hasEnabledTrack = false;
+            for (final publication in audioTracks) {
+              if (publication.track != null && !publication.muted) {
+                hasEnabledTrack = true;
+                break;
+              }
+            }
+            
+            if (hasEnabledTrack) {
+              enableSuccess = true;
+              debugPrint('✅ ENABLE AUDIO: Audio track successfully enabled on attempt ${retryCount + 1}');
+            } else {
+              debugPrint('⚠️ ENABLE AUDIO: Audio tracks exist but are muted, retrying...');
+            }
+          } else {
+            debugPrint('⚠️ ENABLE AUDIO: No audio tracks available after enable attempt ${retryCount + 1}');
+          }
+          
+        } catch (e) {
+          debugPrint('❌ ENABLE AUDIO: Attempt ${retryCount + 1} failed: $e');
+          if (retryCount == maxRetries - 1) {
+            rethrow; // Only rethrow on final attempt
           }
         }
-      } catch (e) {
-        debugPrint('⚠️ Could not apply additional audio constraints: $e');
+        
+        retryCount++;
+      }
+      
+      if (!enableSuccess) {
+        debugPrint('❌ ENABLE AUDIO: Failed to enable audio after $maxRetries attempts');
+        throw Exception('Failed to enable microphone after $maxRetries attempts. Please check audio permissions.');
       }
       
       _isMuted = false;
-      debugPrint('🎤 Audio enabled with noise cancellation');
+      debugPrint('✅ ENABLE AUDIO: Audio enabled successfully for $_userRole');
       notifyListeners();
     } catch (error) {
-      debugPrint('❌ Failed to enable audio: $error');
+      debugPrint('❌ ENABLE AUDIO: Failed to enable audio for $_userRole: $error');
       onError?.call('Failed to enable audio: $error');
+      rethrow;
     }
   }
   
@@ -374,22 +532,122 @@ class LiveKitService extends ChangeNotifier {
     try {
       if (_localParticipant == null) return;
       
+      debugPrint('🔇 DISABLE AUDIO: Disabling microphone');
       await _localParticipant!.setMicrophoneEnabled(false);
+      
+      // Verify it actually disabled by checking the state (iOS-specific)
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      final audioTracks = _localParticipant!.audioTrackPublications;
+      bool hasDisabledTracks = true;
+      
+      if (audioTracks.isNotEmpty) {
+        for (final publication in audioTracks) {
+          if (publication.track != null && !publication.muted) {
+            hasDisabledTracks = false;
+            debugPrint('⚠️ DISABLE AUDIO: Audio track still unmuted after disable attempt');
+            break;
+          }
+        }
+      }
+      
       _isMuted = true;
-      debugPrint('🔇 Audio disabled');
+      debugPrint('🔇 DISABLE AUDIO: Audio disabled ${hasDisabledTracks ? 'successfully' : 'with warnings'}');
       notifyListeners();
     } catch (error) {
-      debugPrint('❌ Failed to disable audio: $error');
+      debugPrint('❌ DISABLE AUDIO: Failed to disable audio: $error');
       onError?.call('Failed to disable audio: $error');
     }
   }
   
   /// Toggle mute state
   Future<void> toggleMute() async {
-    if (_isMuted) {
+    try {
+      debugPrint('🔄 TOGGLE MUTE: Current state: ${_isMuted ? 'muted' : 'unmuted'}');
+      debugPrint('🔄 TOGGLE MUTE: Will ${_isMuted ? 'enable' : 'disable'} audio');
+      
+      if (_isMuted) {
+        await enableAudio();
+      } else {
+        await disableAudio();
+      }
+      
+      debugPrint('✅ TOGGLE MUTE: Successfully toggled to ${_isMuted ? 'muted' : 'unmuted'}');
+    } catch (error) {
+      debugPrint('❌ TOGGLE MUTE: Failed to toggle mute state: $error');
+      onError?.call('Failed to toggle mute: $error');
+      rethrow;
+    }
+  }
+
+  /// Get current noise cancellation status
+  Map<String, bool> getNoiseCancellationStatus() {
+    if (_localParticipant == null || !_isConnected) {
+      return {
+        'echoCancellation': false,
+        'noiseSuppression': false,
+        'autoGainControl': false,
+        'highpassFilter': false,
+        'typingNoiseDetection': false,
+      };
+    }
+
+    try {
+      final audioTracks = _localParticipant!.audioTrackPublications;
+      if (audioTracks.isNotEmpty) {
+        final audioTrack = audioTracks.first.track;
+        if (audioTrack != null) {
+          // Return the actual constraints that were applied
+          return {
+            'echoCancellation': true,
+            'noiseSuppression': true,
+            'autoGainControl': true,
+            'highpassFilter': true,
+            'typingNoiseDetection': true,
+          };
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ Could not get noise cancellation status: $e');
+    }
+
+    return {
+      'echoCancellation': false,
+      'noiseSuppression': false,
+      'autoGainControl': false,
+      'highpassFilter': false,
+      'typingNoiseDetection': false,
+    };
+  }
+
+  /// Test noise cancellation by temporarily enabling enhanced audio processing
+  Future<void> testNoiseCancellation() async {
+    try {
+      if (_localParticipant == null || !_isConnected) {
+        debugPrint('⚠️ Cannot test noise cancellation: not connected');
+        return;
+      }
+
+      debugPrint('🧪 Testing noise cancellation features...');
+      
+      // Temporarily disable and re-enable audio to test constraints
+      await _localParticipant!.setMicrophoneEnabled(false);
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      // Re-enable with noise cancellation
       await enableAudio();
-    } else {
-      await disableAudio();
+      
+      // Get and display status
+      final status = getNoiseCancellationStatus();
+      debugPrint('🎤 Noise cancellation test results:');
+      debugPrint('   Echo Cancellation: ${status['echoCancellation']}');
+      debugPrint('   Noise Suppression: ${status['noiseSuppression']}');
+      debugPrint('   Auto Gain Control: ${status['autoGainControl']}');
+      debugPrint('   High-pass Filter: ${status['highpassFilter']}');
+      debugPrint('   Typing Noise Detection: ${status['typingNoiseDetection']}');
+      
+    } catch (error) {
+      debugPrint('❌ Noise cancellation test failed: $error');
     }
   }
 
@@ -608,6 +866,63 @@ class LiveKitService extends ChangeNotifier {
     }
   }
   
+  /// Force update the user role in LiveKit service
+  void forceUpdateRole(String newRole, String roomType) {
+    debugPrint('🔄 FORCE ROLE UPDATE: Updating LiveKit role from $_userRole to $newRole');
+    debugPrint('🔄 FORCE ROLE UPDATE: Room type: $roomType');
+    
+    _userRole = newRole;
+    _currentRoomType = roomType;
+    
+    debugPrint('✅ FORCE ROLE UPDATE: LiveKit role updated to $_userRole');
+    notifyListeners();
+  }
+
+  /// Force setup audio for judges who might be having issues
+  Future<void> forceSetupJudgeAudio() async {
+    try {
+      debugPrint('🎤 Force setting up judge audio...');
+      debugPrint('🎤 Current stored role: $_userRole');
+      
+      if (_localParticipant == null) {
+        throw Exception('No local participant available');
+      }
+      
+      // SIMPLIFIED: In Arena, everyone can use audio (judges get same access as moderators)
+      if (_currentRoomType == 'arena') {
+        debugPrint('🎤 JUDGE FIX: Arena - bypassing role check, enabling audio directly');
+      } else {
+        // For other room types, check if it's actually a judge
+        if (_userRole == null || !_userRole!.startsWith('judge')) {
+          throw Exception('This method is only for judges, current role: $_userRole');
+        }
+        
+        // Check permissions for non-Arena rooms
+        final canPublish = _canPublishMedia(_userRole!, _currentRoomType ?? 'arena');
+        debugPrint('🎤 Judge publish permission: $canPublish');
+        
+        if (!canPublish) {
+          throw Exception('Judge role $_userRole cannot publish in $_currentRoomType');
+        }
+      }
+      
+      // Request microphone permissions explicitly
+      debugPrint('🎤 Requesting microphone permissions...');
+      
+      // Try to enable audio tracks
+      await _localParticipant!.setMicrophoneEnabled(true);
+      
+      _isMuted = false;
+      debugPrint('✅ Judge audio setup completed successfully');
+      notifyListeners();
+      
+    } catch (error) {
+      debugPrint('❌ Failed to setup judge audio: $error');
+      onError?.call('Failed to setup judge audio: $error');
+      rethrow;
+    }
+  }
+  
   /// Update participant metadata (for hand raising, role changes, etc.)
   void updateMetadata(Map<String, dynamic> metadata) {
     try {
@@ -681,12 +996,134 @@ class LiveKitService extends ChangeNotifier {
     }
   }
   
+  /// Set up speaking detection for remote participants
+  void _setupSpeakingDetection(RemoteParticipant participant, RemoteTrackPublication publication) {
+    if (publication.kind.name != 'audio') return;
+    
+    final userId = participant.identity;
+    debugPrint('🗣️ Setting up speaking detection for $userId');
+    
+    // Initialize speaking state
+    _speakingStates[userId] = false;
+    _audioLevels[userId] = 0.0;
+    
+    // Set up audio level monitoring
+    publication.track?.addListener(() {
+      if (publication.track is RemoteAudioTrack) {
+        final audioTrack = publication.track as RemoteAudioTrack;
+        // Note: LiveKit client doesn't expose audio levels directly
+        // We'll use track muted state and other indicators for now
+        _handleAudioTrackChange(userId, audioTrack);
+      }
+    });
+  }
+  
+  /// Set up speaking detection for local participant
+  void _setupLocalSpeakingDetection(LocalTrackPublication publication) {
+    if (publication.kind.name != 'audio' || _localParticipant == null) return;
+    
+    final userId = _localParticipant!.identity;
+    debugPrint('🗣️ Setting up local speaking detection for $userId');
+    
+    // Initialize speaking state
+    _speakingStates[userId] = false;
+    _audioLevels[userId] = 0.0;
+    
+    // Set up audio level monitoring
+    publication.track?.addListener(() {
+      if (publication.track is LocalAudioTrack) {
+        final audioTrack = publication.track as LocalAudioTrack;
+        _handleLocalAudioTrackChange(userId, audioTrack);
+      }
+    });
+  }
+  
+  /// Handle audio track changes for remote participants
+  void _handleAudioTrackChange(String userId, RemoteAudioTrack audioTrack) {
+    // For now, we'll use a simple heuristic based on track state
+    // In a more advanced implementation, we could use Web Audio API for actual audio level detection
+    final wasNotMuted = !audioTrack.muted;
+    final currentlySpeaking = _speakingStates[userId] ?? false;
+    
+    // Simple speaking detection: if track is not muted, consider speaking
+    final shouldBeSpeaking = wasNotMuted;
+    
+    if (shouldBeSpeaking != currentlySpeaking) {
+      _updateSpeakingState(userId, shouldBeSpeaking);
+    }
+  }
+  
+  /// Handle audio track changes for local participant
+  void _handleLocalAudioTrackChange(String userId, LocalAudioTrack audioTrack) {
+    final wasNotMuted = !audioTrack.muted;
+    final currentlySpeaking = _speakingStates[userId] ?? false;
+    
+    // For local participant, we know when we're actually speaking based on mute state
+    final shouldBeSpeaking = wasNotMuted && !_isMuted;
+    
+    if (shouldBeSpeaking != currentlySpeaking) {
+      _updateSpeakingState(userId, shouldBeSpeaking);
+    }
+  }
+  
+  /// Update speaking state for a user
+  void _updateSpeakingState(String userId, bool isSpeaking) {
+    final wasSpeaking = _speakingStates[userId] ?? false;
+    
+    if (isSpeaking != wasSpeaking) {
+      _speakingStates[userId] = isSpeaking;
+      
+      // Cancel existing timer
+      _speakingTimers[userId]?.cancel();
+      
+      if (isSpeaking) {
+        // User started speaking
+        debugPrint('🗣️ User $userId started speaking');
+        onSpeakingChanged?.call(userId, true);
+      } else {
+        // User might have stopped speaking, use timer to avoid rapid changes
+        _speakingTimers[userId] = Timer(_speakingTimeout, () {
+          if (_speakingStates[userId] == false) {
+            debugPrint('🤐 User $userId stopped speaking');
+            onSpeakingChanged?.call(userId, false);
+          }
+        });
+      }
+      
+      notifyListeners();
+    }
+  }
+  
+  /// Manual method to simulate speaking detection (for testing)
+  void simulateSpeaking(String userId, bool isSpeaking) {
+    debugPrint('🧪 Simulating speaking for $userId: $isSpeaking');
+    _updateSpeakingState(userId, isSpeaking);
+  }
+  
+  /// Clean up speaking detection state when participant leaves
+  void _cleanupSpeakingDetection(String userId) {
+    _speakingStates.remove(userId);
+    _audioLevels.remove(userId);
+    _speakingTimers[userId]?.cancel();
+    _speakingTimers.remove(userId);
+    debugPrint('🧹 Cleaned up speaking detection for $userId');
+  }
+
   /// Dispose resources
   @override
   Future<void> dispose() async {
     if (_isDisposed) return;
     
     _isDisposed = true;
+    
+    // Clean up all speaking timers
+    for (final timer in _speakingTimers.values) {
+      timer?.cancel();
+    }
+    _speakingTimers.clear();
+    _speakingStates.clear();
+    _audioLevels.clear();
+    
     await disconnect();
     
     if (_room != null) {

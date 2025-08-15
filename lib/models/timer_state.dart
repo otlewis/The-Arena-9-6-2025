@@ -155,10 +155,10 @@ extension TimerStateX on TimerState {
   bool get isCompleted => status == TimerStatus.completed;
   
   bool get isNearExpiry => 
-      remainingSeconds <= 30 && remainingSeconds > 0 && isActive;
+      remainingSeconds <= 10 && remainingSeconds > 0 && isActive;
   
   bool get isInWarningZone =>
-      remainingSeconds <= 10 && remainingSeconds > 0 && isActive;
+      remainingSeconds <= 30 && remainingSeconds > 0 && isActive;
   
   double get progress {
     if (durationSeconds == 0) return 0.0;

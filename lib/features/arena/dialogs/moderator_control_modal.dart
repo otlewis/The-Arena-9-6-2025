@@ -18,6 +18,7 @@ class ModeratorControlModal extends StatelessWidget {
   final UserProfile? affirmativeParticipant;
   final UserProfile? negativeParticipant;
   final String? debateCategory;
+  final Map<String, dynamic>? connectionHealthInfo;
 
   const ModeratorControlModal({
     super.key,
@@ -34,6 +35,7 @@ class ModeratorControlModal extends StatelessWidget {
     this.affirmativeParticipant,
     this.negativeParticipant,
     this.debateCategory,
+    this.connectionHealthInfo,
   });
 
   @override
@@ -98,6 +100,7 @@ class ModeratorControlModal extends StatelessWidget {
                     color: Colors.purple.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
+                  
                   child: Row(
                     children: [
                       const Icon(Icons.info, color: Colors.purple),
@@ -126,6 +129,66 @@ class ModeratorControlModal extends StatelessWidget {
                     ],
                   ),
                 ),
+                
+                // Connection Health Info (if provided)
+                if (connectionHealthInfo != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(
+                              Icons.wifi,
+                              color: Colors.orange,
+                              size: 16,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Connection Health',
+                              style: TextStyle(
+                                color: Colors.orange,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Drops: ${connectionHealthInfo!['dropCount']}',
+                          style: const TextStyle(
+                            color: Colors.orange,
+                            fontSize: 12,
+                          ),
+                        ),
+                        if (connectionHealthInfo!['lastDrop'] != null) ...[
+                          Text(
+                            'Last: ${connectionHealthInfo!['lastDrop']}',
+                            style: const TextStyle(
+                              color: Colors.orange,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                        Text(
+                          'Auto-reconnection is active and monitoring.',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 
                 const SizedBox(height: 16),
                 

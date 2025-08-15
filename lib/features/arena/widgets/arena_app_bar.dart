@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+// import 'dart:async'; // Removed - no longer needed
 import '../../../core/logging/app_logger.dart';
 import '../../../screens/arena_modals.dart';
 import '../../../widgets/appwrite_timer_widget.dart';
@@ -6,6 +7,7 @@ import '../../../widgets/challenge_bell.dart';
 import '../../../widgets/instant_message_bell.dart';
 import '../../../widgets/network_quality_indicator.dart';
 import '../../../models/timer_state.dart';
+// import '../../../services/livekit_service.dart'; // Removed unused import
 
 /// Arena App Bar - DO NOT MODIFY LAYOUT
 /// This is the exact app bar from the original arena with timer and moderator controls
@@ -162,3 +164,8 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
+// Audio Quality Indicator Widget removed - keeping original layout
+
+// Audio Quality Indicator State removed
+// All Audio Quality Indicator code removed - keeping original layout

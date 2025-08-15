@@ -35,65 +35,27 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     try {
       final appwriteService = AppwriteService();
       final currentUser = await appwriteService.getCurrentUser();
-      print('🪙 DEBUG: Current user: ${currentUser?.$id}');
+      debugPrint('🪙 DEBUG: Current user: ${currentUser?.$id}');
       
       if (currentUser != null) {
         final userProfile = await appwriteService.getUserProfile(currentUser.$id);
-        print('🪙 DEBUG: User profile found: ${userProfile != null}');
-        print('🪙 DEBUG: Current reputation: ${userProfile?.reputation}');
+        debugPrint('🪙 DEBUG: User profile found: ${userProfile != null}');
+        debugPrint('🪙 DEBUG: Current reputation: ${userProfile?.reputation}');
         
         final coins = await _coinService.getUserCoins(currentUser.$id);
-        print('🪙 DEBUG: Coin service returned: $coins');
+        debugPrint('🪙 DEBUG: Coin service returned: $coins');
         return coins;
       }
     } catch (e) {
       // If error getting current user, still try to get coins with fallback
-      print('🪙 ERROR: Error getting current user for coins: $e');
+      debugPrint('🪙 ERROR: Error getting current user for coins: $e');
     }
     // Return 500 as fallback for testing (same as coin service)
-    print('🪙 DEBUG: Returning fallback 500 coins');
+    debugPrint('🪙 DEBUG: Returning fallback 500 coins');
     return 500;
   }
 
-  // Debug method to manually initialize coins
-  Future<void> _debugInitializeCoins() async {
-    try {
-      final appwriteService = AppwriteService();
-      final currentUser = await appwriteService.getCurrentUser();
-      
-      if (currentUser != null) {
-        print('🔧 DEBUG: Manually initializing coins for ${currentUser.$id}');
-        
-        // Try to update the user profile with starting coins
-        await appwriteService.updateUserProfile(
-          userId: currentUser.$id,
-          reputation: 500,
-          coinBalance: 1000,
-        );
-        
-        print('🔧 DEBUG: Successfully updated user profile with coins');
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Debug: Initialized coins! Check your balance now.'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      print('🔧 ERROR: Failed to initialize coins: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Debug Error: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
+  // Removed unused _debugInitializeCoins method
   Map<String, int> _giftStats = {};
   List<MapEntry<Gift, int>> _topGifts = [];
   bool _loadingGifts = true;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/challenge_messaging_service.dart';
 import '../widgets/challenge_modal.dart';
+import '../widgets/challenge_bell.dart';
 import '../widgets/user_avatar.dart';
 import '../main.dart' show getIt;
 import 'dart:async';
@@ -80,6 +81,12 @@ class _MessagesScreenState extends State<MessagesScreen>
             : const Color(0xFFE8E8E8),
         elevation: 0,
         actions: [
+          // Challenge Bell
+          ChallengeBell(
+            iconColor: _themeService.isDarkMode ? Colors.white : deepPurple,
+            iconSize: 20,
+          ),
+          const SizedBox(width: 8),
           _buildNeumorphicIcon(
             icon: Icons.search,
             onTap: () {},

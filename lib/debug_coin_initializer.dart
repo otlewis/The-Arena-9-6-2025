@@ -10,22 +10,22 @@ class DebugCoinInitializer {
   /// Initialize coins for the current user with automatic field creation
   static Future<void> initializeCurrentUserCoins() async {
     try {
-      print('🚀 Starting complete coin system initialization...');
+      debugPrint('🚀 Starting complete coin system initialization...');
       
       // First, try to add missing fields to Appwrite
       await AppwriteFieldInitializer.run();
       
-      print('✅ Coin system initialization completed successfully!');
+      debugPrint('✅ Coin system initialization completed successfully!');
       
     } catch (e) {
-      print('❌ Error during initialization: $e');
+      debugPrint('❌ Error during initialization: $e');
       
       // Fallback: try manual coin setting if fields exist
       try {
-        print('🔄 Attempting fallback coin initialization...');
+        debugPrint('🔄 Attempting fallback coin initialization...');
         await _fallbackCoinInitialization();
       } catch (fallbackError) {
-        print('❌ Fallback also failed: $fallbackError');
+        debugPrint('❌ Fallback also failed: $fallbackError');
         rethrow;
       }
     }
@@ -35,11 +35,11 @@ class DebugCoinInitializer {
   static Future<void> _fallbackCoinInitialization() async {
     final currentUser = await _appwrite.getCurrentUser();
     if (currentUser == null) {
-      print('❌ No current user found');
+      debugPrint('❌ No current user found');
       return;
     }
 
-    print('🔧 Setting coins for user: ${currentUser.$id}');
+    debugPrint('🔧 Setting coins for user: ${currentUser.$id}');
     
     // Try to update with coins
     await _appwrite.databases.updateDocument(
@@ -54,7 +54,7 @@ class DebugCoinInitializer {
       },
     );
     
-    print('✅ Fallback coin initialization successful');
+    debugPrint('✅ Fallback coin initialization successful');
   }
 
   /// Widget that shows a debug button to initialize coins
