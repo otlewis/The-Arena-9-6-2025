@@ -7,9 +7,15 @@ import '../models/user_profile.dart';
 import '../screens/arena_lobby_screen.dart';
 import '../screens/find_users_screen.dart';
 import 'discussions_room_list_screen.dart';
+import 'moderator_list_screen.dart';
+import 'judge_list_screen.dart';
+import 'moderator_agreement_screen.dart';
+import 'judge_agreement_screen.dart';
 import '../services/appwrite_service.dart';
 import '../services/challenge_messaging_service.dart';
 import '../services/theme_service.dart';
+import '../constants/appwrite.dart';
+import 'package:appwrite/appwrite.dart';
 import '../widgets/arena_role_notification_modal.dart';
 import '../widgets/animated_fade_in.dart';
 import '../widgets/simple_message_bell.dart';
@@ -17,6 +23,8 @@ import '../widgets/challenge_bell.dart';
 import 'package:get_it/get_it.dart';
 import '../core/logging/app_logger.dart';
 import '../debug_coin_initializer.dart';
+import '../widgets/ping_notification_modal.dart';
+import '../models/moderator_judge.dart';
 // All test screen imports removed - files deleted
 
 class HomeScreen extends StatefulWidget {
@@ -33,6 +41,9 @@ class _HomeScreenState extends State<HomeScreen> {
   UserProfile? _currentUserProfile;
   int _arenaRoleInvitations = 0;
   bool _isLoading = true;
+  RealtimeSubscription? _pingSubscription;
+  bool _isCurrentUserModerator = false;
+  bool _isCurrentUserJudge = false;
 
   @override
   void initState() {
@@ -41,10 +52,13 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadCurrentUserProfile();
     _setupArenaRoleInvitationListener();
     _setupChallengeDeclinedListener();
+    _setupPingRequestListener();
+    _checkUserRoles();
   }
 
   @override
   void dispose() {
+    _pingSubscription?.close();
     super.dispose();
   }
 
@@ -58,6 +72,8 @@ class _HomeScreenState extends State<HomeScreen> {
             _currentUserProfile = profile;
             _isLoading = false;
           });
+          // Check roles after profile is loaded
+          _checkUserRoles();
         }
       } else {
         if (mounted) {
@@ -115,6 +131,44 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _setupPingRequestListener() async {
+    final currentUser = await _appwrite.getCurrentUser();
+    if (currentUser == null) return;
+
+    _pingSubscription = _appwrite.subscribeToPingRequests(
+      currentUser.$id,
+      (RealtimeMessage message) {
+        if (mounted && message.events.contains('databases.*.collections.*.documents.*.create')) {
+          _handlePingRequest(message.payload);
+        }
+      },
+    );
+  }
+
+  void _handlePingRequest(Map<String, dynamic> data) {
+    try {
+      final pingRequest = PingRequest.fromJson(data);
+      
+      AppLogger().info('Received ping request: ${pingRequest.id}');
+      
+      // Show the ping notification modal
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => PingNotificationModal(
+            pingRequest: pingRequest,
+            onDismiss: () {
+              Navigator.of(context).pop();
+            },
+          ),
+        );
+      }
+    } catch (e) {
+      AppLogger().error('Error handling ping request: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -138,6 +192,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   children: [
                     _buildFeatureGrid(),
+                    const SizedBox(height: 24),
+                    _buildModeratorJudgeSection(),
+                    const SizedBox(height: 24),
+                    _buildBecomeSection(),
                   ],
                 ),
               ),
@@ -155,9 +213,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ? const Color(0xFF2D2D2D)
             : const Color(0xFFE8E8E8),
         child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-          child: Column(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+            child: Column(
             children: [
               // Top row with greeting and icons
               AnimatedFadeIn(
@@ -452,12 +510,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
+          ),
         ),
-      ),
       ),
     );
   }
-
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
@@ -470,6 +527,309 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       return 'Good Evening\n$name';
     }
+  }
+
+  Future<void> _checkUserRoles() async {
+    if (_currentUserProfile == null) return;
+    
+    try {
+      // Check if user is already a moderator
+      final moderatorResponse = await _appwrite.databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.moderatorsCollection,
+        queries: [
+          Query.equal('userId', _currentUserProfile!.id),
+        ],
+      );
+      
+      // Check if user is already a judge
+      final judgeResponse = await _appwrite.databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.judgesCollection,
+        queries: [
+          Query.equal('userId', _currentUserProfile!.id),
+        ],
+      );
+      
+      if (mounted) {
+        setState(() {
+          _isCurrentUserModerator = moderatorResponse.documents.isNotEmpty;
+          _isCurrentUserJudge = judgeResponse.documents.isNotEmpty;
+        });
+      }
+    } catch (e) {
+      AppLogger().error('Error checking user roles: $e');
+    }
+  }
+
+  void _showModeratorRegistration() {
+    // Check if already a moderator
+    if (_isCurrentUserModerator) {
+      _showAlreadyRegisteredDialog('moderator');
+    } else {
+      // Show community rules and agreement for becoming a moderator
+      _showCommunityAgreement('moderator');
+    }
+  }
+
+  void _showJudgeRegistration() {
+    // Check if already a judge
+    if (_isCurrentUserJudge) {
+      _showAlreadyRegisteredDialog('judge');
+    } else {
+      // Show community rules and agreement for becoming a judge
+      _showCommunityAgreement('judge');
+    }
+  }
+
+  void _showAlreadyRegisteredDialog(String roleType) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              roleType == 'moderator' ? Icons.gavel : Icons.balance,
+              color: roleType == 'moderator' 
+                  ? const Color(0xFF8B5CF6) 
+                  : const Color(0xFFFFC107),
+            ),
+            const SizedBox(width: 8),
+            const Text('Already Registered'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'You are already registered as a ${roleType}!',
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'To view or edit your profile, please use:',
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: (roleType == 'moderator' 
+                    ? const Color(0xFF8B5CF6) 
+                    : const Color(0xFFFFC107)).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: roleType == 'moderator' 
+                      ? const Color(0xFF8B5CF6) 
+                      : const Color(0xFFFFC107),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    roleType == 'moderator' ? Icons.gavel : Icons.balance,
+                    color: roleType == 'moderator' 
+                        ? const Color(0xFF8B5CF6) 
+                        : const Color(0xFFFFC107),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '"My ${roleType == 'moderator' ? 'Moderator' : 'Judge'} Profile" in Community Roles',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: roleType == 'moderator' 
+                            ? const Color(0xFF8B5CF6) 
+                            : const Color(0xFFFFC107),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // Navigate directly to the appropriate profile
+              if (roleType == 'moderator') {
+                _navigateToModerators();
+              } else {
+                _navigateToJudges();
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: roleType == 'moderator' 
+                  ? const Color(0xFF8B5CF6) 
+                  : const Color(0xFFFFC107),
+            ),
+            child: const Text('Go to Profile'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCommunityAgreement(String roleType) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Join the Community as ${roleType.toUpperCase()}'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Community Guidelines',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                '• Maintain professionalism and respect\n'
+                '• Be fair and impartial in your role\n'
+                '• Follow all community standards\n'
+                '• Contribute positively to debates\n'
+                '• Report any violations',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '${roleType == 'moderator' ? 'Moderator' : 'Judge'} Responsibilities',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                roleType == 'moderator'
+                    ? '• Facilitate fair debates\n'
+                      '• Manage speaking time\n'
+                      '• Ensure rules compliance\n'
+                      '• Keep discussions on topic'
+                    : '• Evaluate arguments objectively\n'
+                      '• Provide constructive feedback\n'
+                      '• Score based on merit\n'
+                      '• Maintain neutrality',
+                style: const TextStyle(fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // Navigate to agreement screen
+              if (roleType == 'moderator') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ModeratorAgreementScreen(
+                      currentUserId: _currentUserProfile?.id ?? '',
+                    ),
+                  ),
+                );
+              } else {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => JudgeAgreementScreen(
+                      currentUserId: _currentUserProfile?.id ?? '',
+                    ),
+                  ),
+                );
+              }
+            },
+            child: const Text('I Agree - Continue'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommunityRoleButton({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _themeService.isDarkMode 
+              ? const Color(0xFF2D2D2D)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: color.withValues(alpha: 0.3),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: _themeService.isDarkMode 
+                  ? Colors.white.withValues(alpha: 0.03)
+                  : Colors.white.withValues(alpha: 0.7),
+              offset: const Offset(-3, -3),
+              blurRadius: 6,
+            ),
+            BoxShadow(
+              color: _themeService.isDarkMode 
+                  ? Colors.black.withValues(alpha: 0.5)
+                  : const Color(0xFFA3B1C6).withValues(alpha: 0.4),
+              offset: const Offset(3, 3),
+              blurRadius: 6,
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              color: color,
+              size: 32,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: _themeService.isDarkMode ? Colors.white : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 12,
+                color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildHeaderIcon(IconData icon, VoidCallback onTap, {Color? iconColor}) {
@@ -792,6 +1152,287 @@ class _HomeScreenState extends State<HomeScreen> {
         content: Text('Rankings feature coming soon!'),
         backgroundColor: Colors.orange,
         duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Widget _buildModeratorJudgeSection() {
+    // Only show this section if user has at least one role
+    if (!_isCurrentUserModerator && !_isCurrentUserJudge) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Section title
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 12),
+          child: Text(
+            'My Community Roles',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: _themeService.isDarkMode 
+                  ? Colors.white
+                  : Colors.black87,
+            ),
+          ),
+        ),
+        
+        // Moderator and Judge cards - only show the ones user has
+        Row(
+          children: [
+            if (_isCurrentUserModerator)
+              Expanded(
+                child: AnimatedScaleIn(
+                  delay: const Duration(milliseconds: 2000),
+                  child: _buildRoleCard(
+                    'My Moderator Profile',
+                    'View and edit your moderator profile',
+                    Icons.gavel,
+                    const Color(0xFF8B5CF6),
+                    () => _navigateToModerators(),
+                  ),
+                ),
+              ),
+            if (_isCurrentUserModerator && _isCurrentUserJudge)
+              const SizedBox(width: 12),
+            if (_isCurrentUserJudge)
+              Expanded(
+                child: AnimatedScaleIn(
+                  delay: const Duration(milliseconds: 2100),
+                  child: _buildRoleCard(
+                    'My Judge Profile',
+                    'View and edit your judge profile',
+                    Icons.balance,
+                    const Color(0xFFFFC107),
+                    () => _navigateToJudges(),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBecomeSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Section title
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 12),
+          child: Text(
+            'Join the Community',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: _themeService.isDarkMode 
+                  ? Colors.white
+                  : Colors.black87,
+            ),
+          ),
+        ),
+        
+        // Become buttons
+        Row(
+          children: [
+            Expanded(
+              child: AnimatedScaleIn(
+                delay: const Duration(milliseconds: 2200),
+                child: _buildBecomeCard(
+                  'Become Moderator',
+                  'Read rules and join as a moderator',
+                  Icons.gavel,
+                  const Color(0xFF8B5CF6),
+                  () => _showModeratorRegistration(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: AnimatedScaleIn(
+                delay: const Duration(milliseconds: 2300),
+                child: _buildBecomeCard(
+                  'Become Judge',
+                  'Read rules and join as a judge',
+                  Icons.balance,
+                  const Color(0xFFFFC107),
+                  () => _showJudgeRegistration(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRoleCard(String title, String description, IconData icon, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _themeService.isDarkMode 
+              ? const Color(0xFF3A3A3A)
+              : const Color(0xFFF8F9FA),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _themeService.isDarkMode 
+                ? const Color(0xFF555555)
+                : const Color(0xFFE0E0E0),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            // Icon
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                icon,
+                color: color,
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // Title
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: _themeService.isDarkMode 
+                    ? Colors.white
+                    : Colors.black87,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            
+            // Description
+            Text(
+              description,
+              style: TextStyle(
+                fontSize: 11,
+                color: _themeService.isDarkMode 
+                    ? Colors.white60
+                    : Colors.black54,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _navigateToModerators() {
+    // Show user's moderator profile and allow editing if they have one
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ModeratorListScreen(),
+      ),
+    );
+  }
+
+  void _navigateToJudges() {
+    // Show user's judge profile and allow editing if they have one  
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const JudgeListScreen(),
+      ),
+    );
+  }
+
+  Widget _buildBecomeCard(String title, String description, IconData icon, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _themeService.isDarkMode 
+              ? const Color(0xFF3A3A3A)
+              : const Color(0xFFF8F9FA),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: color.withValues(alpha: 0.3),
+            width: 2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            // Icon with background
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(
+                icon,
+                color: color,
+                size: 28,
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // Title
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: _themeService.isDarkMode 
+                    ? Colors.white
+                    : Colors.black87,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            
+            // Description
+            Text(
+              description,
+              style: TextStyle(
+                fontSize: 11,
+                color: _themeService.isDarkMode 
+                    ? Colors.white60
+                    : Colors.black54,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -26,6 +26,8 @@ import 'arena_modals.dart';
 import '../features/arena/dialogs/moderator_control_modal.dart' as moderator_controls;
 import '../features/arena/widgets/arena_app_bar.dart';
 import '../features/arena/models/debate_phase.dart' as features;
+import 'moderator_list_screen.dart';
+import 'judge_list_screen.dart';
 import '../features/arena/dialogs/timer_control_modal.dart';
 // Removed problematic provider imports to prevent infinite loops
 
@@ -3529,13 +3531,74 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           Expanded(
             child: judge != null
                 ? _buildJudgeTile(judge, role, isSmall: true)
-                : _buildEmptyPosition('Waiting...', isSmall: true),
+                : _buildEmptyPositionWithPing(role, title, isSmall: true),
           ),
         ],
       ),
     );
   }
 
+
+  Widget _buildEmptyPositionWithPing(String role, String title, {bool isSmall = false}) {
+    final isModeratorRole = role == 'moderator';
+    final roleType = isModeratorRole ? 'moderator' : 'judge';
+    
+    // Determine if ping button should be shown
+    bool showPingButton = false;
+    if (isModeratorRole) {
+      // Only debaters can ping moderator when no moderator is present
+      showPingButton = _isDebater && _participants['moderator'] == null;
+    } else {
+      // Only moderators can ping judges
+      showPingButton = _userRole == 'moderator';
+    }
+    
+    return Padding(
+      padding: const EdgeInsets.all(4),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            'Waiting...',
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: isSmall ? 8 : 9,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          if (showPingButton) ...[
+            const SizedBox(height: 4),
+            SizedBox(
+              width: double.infinity,
+              height: 20,
+              child: ElevatedButton(
+                onPressed: () {
+                  if (roleType == 'moderator') {
+                    // Use the proper moderator request system
+                    _requestModerator();
+                  } else {
+                    // Use the proper judge request system
+                    _requestJudge();
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isModeratorRole ? accentPurple : Colors.amber,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  textStyle: const TextStyle(fontSize: 8),
+                  minimumSize: const Size(0, 20),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                child: const Text('Ping'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   Widget _buildEmptyPosition(String text, {bool isSmall = false}) {
     return Padding(
@@ -4238,6 +4301,36 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   child: _buildEnhancedMicButton(),
                 ),
 
+              // Request Moderator button (only for debaters when no moderator present)
+              if (_isDebater && _participants['moderator'] == null && !_judgingComplete)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: _buildControlButton(
+                    icon: Icons.gavel,
+                    label: 'Request Moderator',
+                    onPressed: _requestModerator,
+                    color: const Color(0xFF8B5CF6),
+                  ),
+                ),
+
+              // Request Judge button (only for moderators when judging hasn't started)
+              // EXPLICITLY prevent debaters from seeing this button
+              if (_userRole == 'moderator' && !_isDebater && !_judgingComplete) ...[
+                // Debug logging
+                Builder(builder: (context) {
+                  AppLogger().debug('🎯 REQUEST JUDGE BUTTON: Showing for moderator (role: $_userRole)');
+                  return const SizedBox.shrink();
+                }),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: _buildControlButton(
+                    icon: Icons.balance,
+                    label: 'Request Judge',
+                    onPressed: _requestJudge,
+                    color: const Color(0xFFFFC107),
+                  ),
+                ),
+              ],
 
               // Role Manager (always available for testing)
               if (!_judgingComplete)
@@ -4573,6 +4666,102 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         );
       }
     }
+  }
+
+  void _requestModerator() {
+    // Show dialog to ping moderator with arena details
+    _showPingDialog('moderator');
+  }
+
+  void _requestJudge() {
+    // Extra safety check: Only moderators can request judges
+    if (_userRole != 'moderator') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Only moderators can request judges'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    
+    // Show dialog to ping judge with arena details
+    _showPingDialog('judge');
+  }
+
+  void _showPingDialog(String roleType) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Request ${roleType == 'moderator' ? 'Moderator' : 'Judge'}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Select a ${roleType} from the list to invite to this arena.',
+              style: const TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Debate Topic:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(widget.topic),
+                  if (widget.description != null) ...[
+                    const SizedBox(height: 8),
+                    const Text('Description:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text(widget.description!),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // Navigate to list with arena context
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => roleType == 'moderator'
+                      ? ModeratorListScreen(
+                          arenaRoomId: widget.roomId,
+                          debateTitle: widget.topic,
+                          debateDescription: widget.description ?? '',
+                          category: widget.category ?? 'general',
+                        )
+                      : JudgeListScreen(
+                          arenaRoomId: widget.roomId,
+                          debateTitle: widget.topic,
+                          debateDescription: widget.description ?? '',
+                          category: widget.category ?? 'general',
+                        ),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: roleType == 'moderator' 
+                  ? const Color(0xFF8B5CF6) 
+                  : const Color(0xFFFFC107),
+            ),
+            child: Text('Select ${roleType == 'moderator' ? 'Moderator' : 'Judge'}'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showRoleManager() {
@@ -5503,6 +5692,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       );
     }
   }
+
 }
 
 // Role Manager Panel Widget
@@ -7439,6 +7629,7 @@ class _JudgeSelectionModalState extends State<JudgeSelectionModal> {
       ),
     );
   }
+
 }
 
 // Enhanced Role Selection Modal for Moderators
@@ -7981,6 +8172,7 @@ class _RoleSelectionModalState extends State<RoleSelectionModal>
       );
     }
   }
+
 }
 
 /// Arena Chat Bottom Sheet with real-time updates
@@ -8349,4 +8541,5 @@ class _ArenaChatBottomSheetState extends State<ArenaChatBottomSheet> {
       return '${timestamp.day}/${timestamp.month}';
     }
   }
+
 }

@@ -11,8 +11,14 @@ class AppwriteConstants {
   static const String roomParticipantsCollection = "room_participants";
   static const String debateDiscussionRoomsCollection = "debate_discussion_rooms";
   static const String debateDiscussionParticipantsCollection = "debate_discussion_participants";
+  static const String arenaParticipantsCollection = "arena_participants";
   static const String arenaEmailsCollection = "arena_emails";
   static const String emailTemplatesCollection = "email_templates";
+  static const String emailDraftsCollection = "email_drafts";
+  static const String moderatorsCollection = "moderators";
+  static const String judgesCollection = "judges";
+  static const String pingRequestsCollection = "ping_requests";
+  static const String moderatorJudgeRatingsCollection = "moderator_judge_ratings";
 
   
   // Bucket IDs
