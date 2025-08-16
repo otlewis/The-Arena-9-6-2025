@@ -526,30 +526,31 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 payload['roomId'] == widget.roomId) {
             AppLogger().debug('🔄 Refreshing participants for our arena room');
               
-              // TODO: Check for completion status updates
-              // Need to add completedSelection, completedAt, metadata fields to arena_participants collection first
-              /*
-              if (payload.containsKey('completedSelection') && payload.containsKey('userId')) {
-                final completedUserId = payload['userId'];
-                final completedSelection = payload['completedSelection'] == true;
-                AppLogger().debug('🎭 Completion status update: User $completedUserId completed: $completedSelection');
+              // CRITICAL: Check for role changes that require audio reinitialization
+              bool isRoleChangeEvent = false;
+              if (payload.containsKey('userId') && payload.containsKey('role') && _currentUser?.id != null) {
+                final userId = payload['userId'];
+                final newRole = payload['role'];
                 
-                // Update local completion flags based on user role
-                if (completedUserId == widget.challengerId) {
-                  AppLogger().debug('🎭 Updated affirmative completion status: $completedSelection');
-                } else if (completedUserId == widget.challengedId) {
-                  AppLogger().debug('🎭 Updated negative completion status: $completedSelection');
-                }
-                
-                // Trigger approval modal if the other debater completed and current user hasn't
-                if (completedSelection && mounted && !_hasNavigated) {
-                  _showApprovalModalToOtherDebater();
+                if (userId == _currentUser!.id && newRole != null && newRole != _userRole) {
+                  AppLogger().info('🔄 ROLE CHANGE: Current user role changed from $_userRole to $newRole');
+                  isRoleChangeEvent = true;
                 }
               }
-              */
               
               if (mounted && !_hasNavigated) { // Check navigation state
-            _loadParticipants();
+                _loadParticipants();
+                
+                // CRITICAL: Handle role change - reinitialize LiveKit connection with new role
+                if (isRoleChangeEvent) {
+                  AppLogger().info('🔄 ROLE CHANGE: Executing LiveKit role sync for current user');
+                  // Wait a moment for participant data to be loaded, then reinitialize
+                  Future.delayed(const Duration(milliseconds: 200), () async {
+                    if (mounted) {
+                      await _reinitializeAudioForRoleChange();
+                    }
+                  });
+                }
               }
             }
             
@@ -1046,6 +1047,113 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
+  /// Auto-connect audio for users who should have microphone access
+  Future<void> _autoConnectAudio() async {
+    try {
+      AppLogger().debug('🔥 AUTO-CONNECT: _autoConnectAudio() called - attempting to connect ALL users');
+      AppLogger().debug('🔥 AUTO-CONNECT: Current user: ${_currentUser?.id}, role: $_userRole');
+      AppLogger().debug('🔥 AUTO-CONNECT: Can publish media: ${_shouldUserPublishMedia()}');
+      AppLogger().debug('🔥 AUTO-CONNECT: Audio state - connected: $_isWebRTCConnected, muted: $_isMuted');
+      
+      // Only auto-connect if user should have microphone access
+      if (!_shouldUserPublishMedia()) {
+        AppLogger().debug('🔥 AUTO-CONNECT: User role $_userRole does not need auto-connect');
+        return;
+      }
+      
+      // Only auto-connect if not already connected to LiveKit
+      if (!_isWebRTCConnected) {
+        AppLogger().debug('🔥 AUTO-CONNECT: LiveKit not connected - connecting first...');
+        await _connectToWebRTC();
+        
+        // Wait a moment for connection to establish
+        await Future.delayed(const Duration(seconds: 1));
+        
+        if (!_isWebRTCConnected) {
+          AppLogger().error('🔥 AUTO-CONNECT: Failed to establish LiveKit connection');
+          return;
+        }
+      }
+      
+      // FINAL ROLE CHECK: Verify role before connecting
+      if (_currentUser != null && _userRole != null) {
+        final shouldPublish = _shouldUserPublishMedia();
+        AppLogger().debug('🔥 AUTO-CONNECT: Final check - user should publish: $shouldPublish');
+        
+        if (!shouldPublish) {
+          AppLogger().warning('🔥 AUTO-CONNECT: ⚠️ User role $_userRole should not auto-connect audio');
+          return;
+        }
+      }
+      
+      // Try to enable audio (this will automatically unmute if successful)
+      AppLogger().debug('🔥 AUTO-CONNECT: Attempting to enable audio for $_userRole...');
+      await _webrtcService.enableAudio();
+      
+      // Update mute state to reflect successful audio enable
+      if (mounted) {
+        setState(() {
+          _isMuted = false;
+        });
+      }
+      
+      AppLogger().info('✅ AUTO-CONNECT: Successfully auto-connected audio for $_userRole');
+      
+    } catch (e) {
+      AppLogger().error('❌ AUTO-CONNECT: Failed to auto-connect audio: $e');
+      // Don't show error to user for auto-connect failures
+    }
+  }
+
+  /// Reinitialize audio connection when user's role changes (for role sync)
+  Future<void> _reinitializeAudioForRoleChange() async {
+    try {
+      AppLogger().debug('🔄 Reinitializing LiveKit audio connection for role change...');
+      
+      // Disconnect existing audio service if connected
+      if (_isWebRTCConnected) {
+        AppLogger().debug('🔌 Disconnecting existing LiveKit audio connection...');
+        await _webrtcService.disconnect();
+        if (mounted) {
+          setState(() {
+            _isWebRTCConnected = false;
+            _isMuted = true;
+          });
+        }
+        
+        // Wait a moment for disconnection to complete
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+      
+      // Reconnect with new role
+      AppLogger().debug('🔌 Reconnecting LiveKit with new role: $_userRole');
+      await _connectToWebRTC();
+      
+      // Wait for connection to establish
+      await Future.delayed(const Duration(seconds: 1));
+      
+      // Auto-connect audio if user should have microphone access
+      if (_shouldUserPublishMedia()) {
+        AppLogger().debug('🔄 Auto-connecting audio after role change for $_userRole');
+        await _autoConnectAudio();
+      }
+      
+      AppLogger().info('✅ Successfully reinitialized audio for role change to $_userRole');
+      
+    } catch (e) {
+      AppLogger().error('❌ Failed to reinitialize audio for role change: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('⚠️ Audio reconnection failed: ${e.toString()}'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    }
+  }
+
   /// Determine if current user should publish media (video/audio)
   bool _shouldUserPublishMedia() {
     // Moderator, debaters and judges publish audio
@@ -1320,103 +1428,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       }
     }
   }
-  
-  /// Force mute functionality 
-  Future<void> _forceMute() async {
-    try {
-      AppLogger().debug('🔇 FORCE MUTE: Attempting to force disable microphone');
-      
-      // Try direct LiveKit disable
-      await _webrtcService.disableAudio();
-      
-      // Update state
-      if (mounted) {
-        setState(() {
-          _isMuted = true;
-        });
-      }
-      
-      AppLogger().info('🔇 FORCE MUTE: Successfully disabled audio');
-      
-    } catch (e) {
-      AppLogger().error('❌ FORCE MUTE: Failed to force disable audio: $e');
-    }
-  }
-
-  /// Test audio quality and noise cancellation
-  Future<void> _testAudioQuality() async {
-    try {
-      AppLogger().debug('🎵 Testing Arena audio quality and noise cancellation...');
-      
-      // Show testing status
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🎵 Testing audio quality...'),
-            backgroundColor: Colors.blue,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      
-      // Get noise cancellation status
-      final noiseCancellationService = NoiseCancellationService();
-      final isNoiseCancellationEnabled = noiseCancellationService.isEnabled;
-      final isNoiseCancellationAvailable = noiseCancellationService.isAvailable;
-      final platformInfo = noiseCancellationService.platformInfo;
-      
-      // Test audio by temporarily toggling mute state
-      final wasMuted = _isMuted;
-      if (!wasMuted) {
-        await _webrtcService.disableAudio();
-        await Future.delayed(const Duration(milliseconds: 500));
-        await _webrtcService.enableAudio();
-      }
-      
-      // Show results
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('🎵 Audio Quality Test Results'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Connection: ${_webrtcService.isConnected ? '✅ Connected' : '❌ Disconnected'}'),
-                Text('Noise Cancellation: ${isNoiseCancellationEnabled ? '✅ Active' : '❌ Inactive'}'),
-                Text('Available: ${isNoiseCancellationAvailable ? '✅ Yes' : '❌ No'}'),
-                Text('Platform: $platformInfo'),
-                const SizedBox(height: 8),
-                const Text('Audio quality test completed successfully!', style: TextStyle(fontWeight: FontWeight.bold)),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
-      
-      AppLogger().info('✅ Arena audio quality test completed');
-      
-    } catch (e) {
-      AppLogger().error('❌ Failed to test Arena audio quality: $e');
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Audio quality test failed: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    }
-  }
 
   // Video toggle removed - Arena is audio-only
   
@@ -1425,11 +1436,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     return GestureDetector(
       // Regular tap for normal toggle
       onTap: _toggleAudio,
-      
-      // Long press for emergency options
-      onLongPress: () {
-        _showMicEmergencyControls();
-      },
       
       child: Stack(
         children: [
@@ -1477,192 +1483,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     );
   }
   
-  /// Show emergency microphone control options
-  void _showMicEmergencyControls() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,      builder: (context) => Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.75,
-        ),        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-          ),
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-            // Handle bar
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 20),
-            
-            // Title
-            const Text(
-              '🎤 Microphone Emergency Controls',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            
-            Text(
-              'Current Status: ${_isMuted ? 'MUTED' : 'UNMUTED'}',
-              style: TextStyle(
-                fontSize: 16,
-                color: _isMuted ? Colors.red : Colors.green,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 24),
-            
-            // Emergency controls
-            Column(
-              children: [
-                // Force Unmute
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _forceUnmute();
-                    },
-                    icon: const Icon(Icons.mic, color: Colors.white),
-                    label: const Text('FORCE UNMUTE', style: TextStyle(color: Colors.white)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                ),
-                
-                const SizedBox(height: 12),
-                
-                // Force Mute
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _forceMute();
-                    },
-                    icon: const Icon(Icons.mic_off, color: Colors.white),
-                    label: const Text('FORCE MUTE', style: TextStyle(color: Colors.white)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                ),
-                
-                const SizedBox(height: 12),
-                
-                // Normal Toggle
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _toggleAudio();
-                    },
-                    icon: Icon(_isMuted ? Icons.mic : Icons.mic_off),
-                    label: Text(_isMuted ? 'Normal Unmute' : 'Normal Mute'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                ),
-                
-                const SizedBox(height: 12),
-                
-                // Test Audio Quality
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _testAudioQuality();
-                    },
-                    icon: const Icon(Icons.audiotrack, color: Colors.blue),
-                    label: const Text('Test Audio Quality', style: TextStyle(color: Colors.blue)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      side: const BorderSide(color: Colors.blue),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Instructions
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue[200]!),
-              ),
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '💡 Instructions:',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    '• Tap mic button: Normal toggle\n• Long press mic button: Emergency controls\n• Force controls bypass normal state checks',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.blue,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 20),
-            
-            // Close button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey[200],
-                  foregroundColor: Colors.black,
-                ),
-                child: const Text('Close'),
-              ),
-            ),
-            
-            // Safe area padding
-            SizedBox(height: MediaQuery.of(context).padding.bottom),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
   
   /// Start periodic mute state sync to prevent stuck states
   void _startMuteStateSyncTimer() {
@@ -2240,6 +2060,16 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         }
       } else if (_isWebRTCConnected) {
         AppLogger().debug('🎥 WebRTC already connected, skipping reconnection');
+      }
+      
+      // Auto-connect audio for users who should have microphone access
+      if (_userRole != null && _shouldUserPublishMedia()) {
+        AppLogger().debug('🔥 AUTO-CONNECT: Triggering auto-connect for role: $_userRole');
+        Future.delayed(const Duration(milliseconds: 500), () async {
+          if (mounted) {
+            await _autoConnectAudio();
+          }
+        });
       }
     } catch (e) {
       AppLogger().error('Error loading participants: $e');
@@ -4435,6 +4265,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     bool isEnabled = true,
   }) {
     final actuallyEnabled = isEnabled && onPressed != null;
+    final buttonColor = actuallyEnabled ? color : Colors.grey;
     
     return GestureDetector(
       onTap: actuallyEnabled ? onPressed : null,
@@ -4442,25 +4273,39 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(10), // Reduced from 12
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
-              color: actuallyEnabled ? color : Colors.grey[600],
-              shape: BoxShape.circle,
+              color: const Color(0xFF2D2D2D), // Dark background like debates_discussions
+              borderRadius: const BorderRadius.all(Radius.circular(20)),
+              border: Border.all(
+                color: buttonColor.withValues(alpha: 0.3),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: buttonColor.withValues(alpha: 0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Icon(
               icon,
-              color: Colors.white,
-              size: 20, // Reduced from 24
+              color: buttonColor,
+              size: 20,
             ),
           ),
-          const SizedBox(height: 3), // Reduced from 4
+          const SizedBox(height: 3),
           Text(
             label,
             style: TextStyle(
-              color: actuallyEnabled ? Colors.white : Colors.grey[400],
-              fontSize: 10, // Reduced from 12
+              color: buttonColor,
+              fontSize: 10,
               fontWeight: FontWeight.w500,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

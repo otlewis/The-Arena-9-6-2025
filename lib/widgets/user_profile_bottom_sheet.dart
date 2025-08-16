@@ -478,19 +478,51 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                 Row(
                   children: [
                     Expanded(
-                      child: RadioListTile<String>(
-                        title: const Text('For'),
-                        value: 'affirmative',
-                        groupValue: selectedPosition,
-                        onChanged: (value) => setState(() => selectedPosition = value!),
+                      child: GestureDetector(
+                        onTap: () => setState(() => selectedPosition = 'affirmative'),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: selectedPosition == 'affirmative' ? Colors.green : Colors.grey,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                selectedPosition == 'affirmative' ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                color: Colors.green,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text('For'),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                     Expanded(
-                      child: RadioListTile<String>(
-                        title: const Text('Against'),
-                        value: 'negative',
-                        groupValue: selectedPosition,
-                        onChanged: (value) => setState(() => selectedPosition = value!),
+                      child: GestureDetector(
+                        onTap: () => setState(() => selectedPosition = 'negative'),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: selectedPosition == 'negative' ? Colors.red : Colors.grey,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                selectedPosition == 'negative' ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                color: Colors.red,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text('Against'),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ],

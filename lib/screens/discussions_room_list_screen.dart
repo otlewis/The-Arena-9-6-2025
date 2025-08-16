@@ -810,17 +810,65 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Icon(
-                      Icons.person,
-                      size: 14,
-                      color: _themeService.isDarkMode ? Colors.white54 : Colors.grey,
+                    // Moderator profile picture
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: primaryPurple.withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: ClipOval(
+                        child: roomData['moderatorAvatar'] != null && roomData['moderatorAvatar'].toString().isNotEmpty
+                          ? Image.network(
+                              roomData['moderatorAvatar'],
+                              width: 24,
+                              height: 24,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: primaryPurple.withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.person,
+                                    size: 14,
+                                    color: primaryPurple,
+                                  ),
+                                );
+                              },
+                            )
+                          : Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: primaryPurple.withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.person,
+                                size: 14,
+                                color: primaryPurple,
+                              ),
+                            ),
+                      ),
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Moderator: ${roomData['moderator'] ?? 'Unknown'}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[600],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Moderator: ${roomData['moderator'] ?? 'Unknown'}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: _themeService.isDarkMode ? Colors.white70 : Colors.grey[600],
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

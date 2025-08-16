@@ -627,7 +627,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   _isPublicProfile = value;
                 });
               },
-              activeColor: scarletRed,
+              activeThumbColor: scarletRed,
             ),
           ],
         ),

@@ -280,7 +280,7 @@ class ModeratorControlModal extends StatelessWidget {
                 trailing: Switch(
                   value: judgingEnabled,
                   onChanged: (_) => onToggleJudging(),
-                  activeColor: ArenaModalColors.accentPurple,
+                  activeThumbColor: ArenaModalColors.accentPurple,
                 ),
               ),
               
@@ -294,6 +294,84 @@ class ModeratorControlModal extends StatelessWidget {
                   onShowRoleManager();
                 },
               ),
+
+              // Audio Controls Section
+              _buildSectionHeader('Audio Controls'),
+              
+              _buildControlTile(
+                icon: Icons.volume_off,
+                title: 'Mute All Participants',
+                subtitle: 'Emergency audio control',
+                onTap: () {
+                  // TODO: Implement mute all functionality
+                  Navigator.pop(context);
+                  _showComingSoonSnackBar(context, 'Mute All');
+                },
+                color: Colors.red,
+              ),
+
+              _buildControlTile(
+                icon: Icons.noise_control_off,
+                title: 'Audio Quality',
+                subtitle: 'Toggle noise suppression',
+                onTap: () {
+                  // TODO: Implement audio quality controls
+                  Navigator.pop(context);
+                  _showComingSoonSnackBar(context, 'Audio Quality Controls');
+                },
+                color: Colors.orange,
+              ),
+
+              // Chat Moderation Section  
+              _buildSectionHeader('Chat Moderation'),
+              
+              _buildControlTile(
+                icon: Icons.clear_all,
+                title: 'Clear Chat',
+                subtitle: 'Remove all chat messages',
+                onTap: () {
+                  Navigator.pop(context);
+                  _showClearChatConfirmation(context);
+                },
+                color: Colors.orange,
+              ),
+
+              _buildControlTile(
+                icon: Icons.chat_bubble_outline,
+                title: 'Chat Settings',
+                subtitle: 'Enable/disable room chat',
+                onTap: () {
+                  // TODO: Implement chat toggle
+                  Navigator.pop(context);
+                  _showComingSoonSnackBar(context, 'Chat Controls');
+                },
+                color: Colors.blue,
+              ),
+
+              // Debate Management Section
+              _buildSectionHeader('Debate Management'),
+
+              _buildControlTile(
+                icon: Icons.analytics,
+                title: 'Speaking Analytics',
+                subtitle: 'View speaking time stats',
+                onTap: () {
+                  Navigator.pop(context);
+                  _showSpeakingAnalytics(context);
+                },
+                color: Colors.green,
+              ),
+
+              _buildControlTile(
+                icon: Icons.pause_circle_outline,
+                title: 'Pause Debate',
+                subtitle: 'Temporarily halt proceedings',
+                onTap: () {
+                  Navigator.pop(context);
+                  _showComingSoonSnackBar(context, 'Pause Debate');
+                },
+                color: Colors.amber,
+              ),
               
               // Speaking Controls
               _buildControlTile(
@@ -306,7 +384,7 @@ class ModeratorControlModal extends StatelessWidget {
                 trailing: Switch(
                   value: speakingEnabled,
                   onChanged: (_) => onToggleSpeaking(),
-                  activeColor: ArenaModalColors.accentPurple,
+                  activeThumbColor: ArenaModalColors.accentPurple,
                 ),
               ),
               
@@ -386,6 +464,144 @@ class ModeratorControlModal extends StatelessWidget {
         onTap: onTap,
         dense: true,
       ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16, bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Divider(color: Colors.grey[300]),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: ArenaModalColors.deepPurple,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Divider(color: Colors.grey[300]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static void _showComingSoonSnackBar(BuildContext context, String feature) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('🚀 $feature coming soon!'),
+        backgroundColor: ArenaModalColors.accentPurple,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  static void _showClearChatConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Clear Chat'),
+          ],
+        ),
+        content: const Text('Are you sure you want to clear all chat messages? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showComingSoonSnackBar(context, 'Clear Chat');
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Clear Chat', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static void _showSpeakingAnalytics(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.analytics, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Speaking Analytics'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildSpeakingStatRow('Affirmative', '2:45', '45%', Colors.green),
+              const SizedBox(height: 8),
+              _buildSpeakingStatRow('Negative', '3:15', '55%', ArenaModalColors.scarletRed),
+              const SizedBox(height: 16),
+              const Text(
+                'Total speaking time: 6:00',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _buildSpeakingStatRow(String role, String time, String percentage, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(6),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            role,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+        Text(
+          time,
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(width: 16),
+        Text(
+          percentage,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1536,18 +1752,12 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
         ),
         child: Row(
           children: [
-            Radio<TeamSide>(
-              value: side,
-              groupValue: _scorecard.winningTeam,
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() {
-                    _scorecard = _scorecard.copyWith(winningTeam: value);
-                  });
-                }
-              },
-              activeColor: color,
+            Icon(
+              isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              color: color,
+              size: 20,
             ),
+            const SizedBox(width: 8),
             Text(
               side.displayName,
               style: TextStyle(
@@ -2649,10 +2859,10 @@ class DebateRulesModal extends StatelessWidget {
                     _buildSection(
                       'DEBATE FORMAT',
                       [
-                        '• Opening Statements: Each side presents their main arguments (3-5 minutes each)',
-                        '• Cross-Examination: Opposing sides question each other directly (2-3 minutes each)',
-                        '• Rebuttal Phase: Address opposing arguments and reinforce your position (3-4 minutes each)',
-                        '• Closing Statements: Final opportunity to summarize and persuade (2-3 minutes each)',
+                        '• Opening Statements: Each side presents their main arguments',
+                        '• Rebuttal Phase: Address opposing arguments and reinforce your position',
+                        '• Cross-Examination: Opposing sides question each other directly',
+                        '• Closing Statements: Final opportunity to summarize and persuade',
                       ],
                     ),
                     

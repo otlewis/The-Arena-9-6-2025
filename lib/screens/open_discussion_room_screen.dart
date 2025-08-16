@@ -2232,7 +2232,9 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
           // Handle back button press - ensure proper cleanup
           debugPrint('🚪 User attempting to leave room via back button - performing cleanup');
           await _leaveRoomData(); // Ensure LiveKit disconnect and room cleanup
-          Navigator.of(context).pop(); // Now actually leave
+          if (context.mounted) {
+            Navigator.of(context).pop(); // Now actually leave
+          }
         }
       },
       child: Scaffold(
@@ -2846,9 +2848,7 @@ class _OpenDiscussionRoomScreenState extends State<OpenDiscussionRoomScreen> {
               ),
             
             // Hand raised indicator only (moderator badge removed)
-            if (false) // Moderator badge completely removed
-              const SizedBox.shrink()
-            else if (_isHandRaised && isCurrentUser)
+            if (_isHandRaised && isCurrentUser)
               Positioned(
                 top: 0,
                 right: 0,

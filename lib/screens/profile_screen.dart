@@ -1272,7 +1272,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Switch(
                   value: _userProfile?.isAvailableAsModerator ?? false,
                   onChanged: (value) => _updateAvailability(moderator: value),
-                  activeColor: accentPurple,
+                  activeThumbColor: accentPurple,
                 ),
               ],
             ),
@@ -1335,7 +1335,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Switch(
                   value: _userProfile?.isAvailableAsJudge ?? false,
                   onChanged: (value) => _updateAvailability(judge: value),
-                  activeColor: Colors.amber.shade700,
+                  activeThumbColor: Colors.amber.shade700,
                 ),
               ],
             ),

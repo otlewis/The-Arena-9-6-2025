@@ -201,31 +201,75 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                       Row(
                         children: [
                           Expanded(
-                            child: RadioListTile<String>(
-                              title: const Text('For (Affirmative)'),
-                              subtitle: const Text('You argue in favor'),
-                              value: 'affirmative',
-                              groupValue: selectedPosition,
-                              onChanged: (value) {
+                            child: GestureDetector(
+                              onTap: () {
                                 setState(() {
-                                  selectedPosition = value!;
+                                  selectedPosition = 'affirmative';
                                 });
                               },
-                              activeColor: Colors.green,
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: selectedPosition == 'affirmative' ? Colors.green : Colors.grey,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      selectedPosition == 'affirmative' ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                      color: Colors.green,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('For (Affirmative)'),
+                                          Text('You argue in favor', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                           Expanded(
-                            child: RadioListTile<String>(
-                              title: const Text('Against (Negative)'),
-                              subtitle: const Text('You argue against'),
-                              value: 'negative',
-                              groupValue: selectedPosition,
-                              onChanged: (value) {
+                            child: GestureDetector(
+                              onTap: () {
                                 setState(() {
-                                  selectedPosition = value!;
+                                  selectedPosition = 'negative';
                                 });
                               },
-                              activeColor: Colors.red,
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: selectedPosition == 'negative' ? Colors.red : Colors.grey,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      selectedPosition == 'negative' ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                      color: Colors.red,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('Against (Negative)'),
+                                          Text('You argue against', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ],

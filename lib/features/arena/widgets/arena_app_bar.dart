@@ -50,91 +50,106 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
           onExitArena();
         },
       ),
-      title: Row(
-        children: [
-          // Moderator Controls Icons (only visible to moderators)
-          if (isModerator)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: Colors.purple.withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.purple, width: 2),
-                  ),
-                  child: IconButton(
-                    padding: EdgeInsets.zero,
-                    onPressed: onShowModeratorControls,
-                    icon: const Icon(Icons.admin_panel_settings, color: Colors.purple, size: 20),
-                    tooltip: 'Moderator Controls',
-                  ),
-                ),
-                SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: IconButton(
-                    padding: EdgeInsets.zero,
-                    onPressed: onEmergencyCloseRoom,
-                    icon: const Icon(Icons.close, color: Colors.red, size: 18),
-                    tooltip: 'Emergency Close Room',
-                  ),
-                ),
-              ],
-            ),
+      title: LayoutBuilder(
+        builder: (context, constraints) {
+          // Calculate available space for timer
+          final moderatorControlsWidth = isModerator ? 58 : 0; // 28 + 2 + 24 + 4 = more accurate calculation
+          final availableWidth = constraints.maxWidth - moderatorControlsWidth;
           
-          // Appwrite Timer (synchronized across devices)
-          Expanded(
-            child: Center(
-              child: AppwriteTimerWidget(
-                roomId: roomId,
-                roomType: RoomType.arena,
-                isModerator: isModerator,
-                userId: userId,
-                compact: true,
-                showControls: isModerator,
-                showConnectionStatus: false,
-                onTimerExpired: () {
-                  // Handle timer expiration for debate phases
-                },
+          return Row(
+            children: [
+              // Moderator Controls Icons (only visible to moderators) - more compact
+              if (isModerator)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 28,  // Further reduced from 32
+                      height: 28, // Further reduced from 32
+                      decoration: BoxDecoration(
+                        color: Colors.purple.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.purple, width: 1.5), // Thinner border
+                      ),
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        onPressed: onShowModeratorControls,
+                        icon: const Icon(Icons.admin_panel_settings, color: Colors.purple, size: 16), // Further reduced
+                        tooltip: 'Moderator Controls',
+                      ),
+                    ),
+                    const SizedBox(width: 2), // Minimal spacing
+                    SizedBox(
+                      width: 24,  // Further reduced from 28
+                      height: 24, // Further reduced from 28
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        onPressed: onEmergencyCloseRoom,
+                        icon: const Icon(Icons.close, color: Colors.red, size: 14), // Further reduced
+                        tooltip: 'Emergency Close Room',
+                      ),
+                    ),
+                    const SizedBox(width: 4), // Minimal space after controls
+                  ],
+                ),
+              
+              // Appwrite Timer (synchronized across devices) - constrained to available space
+              Expanded(
+                child: Container(
+                  constraints: BoxConstraints(
+                    maxWidth: availableWidth * 0.9, // Allow more space for larger timer
+                  ),
+                  child: Center(
+                    child: AppwriteTimerWidget(
+                      roomId: roomId,
+                      roomType: RoomType.arena,
+                      isModerator: isModerator,
+                      userId: userId,
+                      compact: true,
+                      showControls: isModerator,
+                      showConnectionStatus: false,
+                      onTimerExpired: () {
+                        // Handle timer expiration for debate phases
+                      },
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
       actions: [
-        // Network quality indicator
+        // Network quality indicator - more compact
         const SizedBox(
-          width: 32,
+          width: 28, // Reduced from 32
           child: Center(
             child: CompactNetworkIndicator(),
           ),
         ),
-        // Challenge notification bell
+        // Challenge notification bell - more compact
         const SizedBox(
-          width: 40,
+          width: 32, // Reduced from 40
           child: Center(
             child: ChallengeBell(
               iconColor: Colors.white,
-              iconSize: 20,
+              iconSize: 18, // Reduced from 20
             ),
           ),
         ),
-        // Message notification bell
+        // Message notification bell - more compact
         const SizedBox(
-          width: 40,
+          width: 32, // Reduced from 40
           child: Center(
             child: InstantMessageBell(
               iconColor: Colors.white,
-              iconSize: 20,
+              iconSize: 18, // Reduced from 20
             ),
           ),
         ),
-        // Rules and Guidelines button
+        // Rules and Guidelines button - more compact
         SizedBox(
-          width: 40,
+          width: 32, // Reduced from 40
           child: IconButton(
             padding: EdgeInsets.zero,
             onPressed: () {
@@ -143,20 +158,20 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
                 builder: (context) => const DebateRulesModal(),
               );
             },
-            icon: const Icon(Icons.info, color: Colors.white, size: 20),
+            icon: const Icon(Icons.info, color: Colors.white, size: 18), // Reduced from 20
             tooltip: 'Debate Rules & Guidelines',
           ),
         ),
-        // Leave button
+        // Leave button - more compact
         SizedBox(
-          width: 40,
+          width: 32, // Reduced from 40
           child: IconButton(
             padding: EdgeInsets.zero,
             onPressed: () {
               AppLogger().info('🚪 EXIT: Exit button clicked in ArenaAppBar');
               onExitArena();
             },
-            icon: const Icon(Icons.exit_to_app, color: Colors.white, size: 20),
+            icon: const Icon(Icons.exit_to_app, color: Colors.white, size: 18), // Reduced from 20
             tooltip: 'Leave Arena',
           ),
         ),

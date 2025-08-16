@@ -625,7 +625,7 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
         Switch(
           value: value,
           onChanged: onChanged,
-          activeColor: primaryPurple,
+          activeThumbColor: primaryPurple,
           activeTrackColor: primaryPurple.withValues(alpha: 0.5),
           inactiveThumbColor: const Color(0xFFF4F3F4),
           inactiveTrackColor: const Color(0xFF767577),

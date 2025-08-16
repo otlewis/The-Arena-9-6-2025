@@ -17,6 +17,7 @@ class ArenaRoom {
   final int currentParticipants;
   final bool isManual;
   final String? moderatorId;
+  final Map<String, dynamic>? moderatorProfile;
 
   const ArenaRoom({
     required this.id,
@@ -30,6 +31,7 @@ class ArenaRoom {
     required this.currentParticipants,
     required this.isManual,
     this.moderatorId,
+    this.moderatorProfile,
   });
 
   factory ArenaRoom.fromMap(Map<String, dynamic> map) {
@@ -45,6 +47,7 @@ class ArenaRoom {
       currentParticipants: map['currentParticipants'] ?? 0,
       isManual: (map['challengeId'] ?? '').isEmpty,
       moderatorId: map['moderatorId'],
+      moderatorProfile: map['moderatorProfile'] as Map<String, dynamic>?,
     );
   }
 
@@ -60,6 +63,7 @@ class ArenaRoom {
     int? currentParticipants,
     bool? isManual,
     String? moderatorId,
+    Map<String, dynamic>? moderatorProfile,
   }) {
     return ArenaRoom(
       id: id ?? this.id,
@@ -73,6 +77,7 @@ class ArenaRoom {
       currentParticipants: currentParticipants ?? this.currentParticipants,
       isManual: isManual ?? this.isManual,
       moderatorId: moderatorId ?? this.moderatorId,
+      moderatorProfile: moderatorProfile ?? this.moderatorProfile,
     );
   }
 }
@@ -245,23 +250,38 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
   Future<List<ArenaRoom>> _batchProcessRooms(List<Map<String, dynamic>> rooms) async {
     final activeRooms = <ArenaRoom>[];
     final participantFutures = <Future<List<Map<String, dynamic>>>>[];
+    final moderatorFutures = <Future<dynamic>>[];
     final roomIds = <String>[];
 
-    // Batch participant queries to reduce individual requests
+    // Batch participant queries and moderator profile queries to reduce individual requests
     for (final arena in rooms) {
       final roomId = arena['id'] ?? '';
+      final moderatorId = arena['moderatorId'] ?? arena['createdBy'];
       if (roomId.isNotEmpty) {
         roomIds.add(roomId);
         participantFutures.add(_appwrite.getArenaParticipants(roomId));
+        
+        // Fetch moderator profile if we have a moderator ID
+        if (moderatorId != null && moderatorId.toString().isNotEmpty) {
+          moderatorFutures.add(_appwrite.getUserProfile(moderatorId.toString()));
+        } else {
+          moderatorFutures.add(Future.value(null));
+        }
       }
     }
 
-    // Execute all participant queries in parallel
+    // Execute all queries in parallel
     List<List<Map<String, dynamic>>> allParticipants;
+    List<dynamic> allModerators;
     try {
-      allParticipants = await Future.wait(participantFutures);
+      final results = await Future.wait([
+        Future.wait(participantFutures),
+        Future.wait(moderatorFutures),
+      ]);
+      allParticipants = results[0] as List<List<Map<String, dynamic>>>;
+      allModerators = results[1];
     } catch (e) {
-      _logger.warning('Error batch loading participants: $e');
+      _logger.warning('Error batch loading participants and moderators: $e');
       return activeRooms; // Return empty list if batch fails
     }
 
@@ -269,6 +289,7 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
     for (int i = 0; i < rooms.length && i < allParticipants.length; i++) {
       final arena = rooms[i];
       final participants = allParticipants[i];
+      final moderatorProfile = i < allModerators.length ? allModerators[i] : null;
       final roomId = roomIds[i];
       final status = arena['status'] ?? 'waiting';
 
@@ -286,6 +307,18 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
 
         // Update the participant count
         arena['currentParticipants'] = activeParticipants;
+        
+        // Add moderator profile data
+        if (moderatorProfile != null) {
+          arena['moderatorProfile'] = {
+            'name': moderatorProfile.name,
+            'avatar': moderatorProfile.avatar,
+            'email': moderatorProfile.email,
+          };
+          _logger.debug('👤 MODERATOR: Added profile for ${moderatorProfile.name} to room $roomId');
+        } else {
+          _logger.debug('👤 MODERATOR: No profile found for room $roomId');
+        }
 
         // More permissive filtering logic - include most rooms to prevent users getting kicked
         bool shouldInclude = true; // Default to include

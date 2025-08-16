@@ -326,7 +326,7 @@ class _LiveKitTestScreenState extends State<LiveKitTestScreen> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: _selectedRole,
+                            initialValue: _selectedRole,
                             decoration: const InputDecoration(
                               labelText: 'Role',
                               prefixIcon: Icon(Icons.badge),
@@ -341,7 +341,7 @@ class _LiveKitTestScreenState extends State<LiveKitTestScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: _selectedRoomType,
+                            initialValue: _selectedRoomType,
                             decoration: const InputDecoration(
                               labelText: 'Room Type',
                               prefixIcon: Icon(Icons.category),

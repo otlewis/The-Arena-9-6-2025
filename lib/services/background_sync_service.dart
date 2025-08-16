@@ -108,9 +108,17 @@ class BackgroundSyncService {
     try {
       AppLogger().info('🔄 Starting sync operation...');
       
-      // Check network connectivity
-      final networkService = GetIt.instance<NetworkResilienceService>();
-      if (!networkService.isOnline) {
+      // Check network connectivity (with background task safety)
+      bool isOnline = true; // Default to online for background tasks
+      try {
+        final networkService = GetIt.instance<NetworkResilienceService>();
+        isOnline = networkService.isOnline;
+      } catch (e) {
+        // GetIt services might not be available in background isolate
+        AppLogger().warning('🔄 Network service not available in background context, assuming online');
+      }
+      
+      if (!isOnline) {
         AppLogger().warning('🔄 No network connection, postponing sync');
         result.success = false;
         result.message = 'No network connection';

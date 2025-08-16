@@ -369,12 +369,56 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
                       children: [
                         Row(
                           children: [
-                            Icon(
-                              LucideIcons.user,
-                              size: 16,
-                              color: Colors.grey[500],
+                            // Moderator profile picture
+                            Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: accentPurple.withValues(alpha: 0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: ClipOval(
+                                child: room['moderatorProfile']?['avatar'] != null && room['moderatorProfile']['avatar'].toString().isNotEmpty
+                                  ? Image.network(
+                                      room['moderatorProfile']['avatar'],
+                                      width: 20,
+                                      height: 20,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return Container(
+                                          width: 20,
+                                          height: 20,
+                                          decoration: BoxDecoration(
+                                            color: accentPurple.withValues(alpha: 0.1),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            LucideIcons.user,
+                                            size: 12,
+                                            color: accentPurple,
+                                          ),
+                                        );
+                                      },
+                                    )
+                                  : Container(
+                                      width: 20,
+                                      height: 20,
+                                      decoration: BoxDecoration(
+                                        color: accentPurple.withValues(alpha: 0.1),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        LucideIcons.user,
+                                        size: 12,
+                                        color: accentPurple,
+                                      ),
+                                    ),
+                              ),
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 'by $creatorName',
@@ -420,12 +464,56 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
                     // Single row on wider screens
                     return Row(
                       children: [
-                        Icon(
-                          LucideIcons.user,
-                          size: 16,
-                          color: Colors.grey[500],
+                        // Moderator profile picture
+                        Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: accentPurple.withValues(alpha: 0.3),
+                              width: 1,
+                            ),
+                          ),
+                          child: ClipOval(
+                            child: room['moderatorProfile']?['avatar'] != null && room['moderatorProfile']['avatar'].toString().isNotEmpty
+                              ? Image.network(
+                                  room['moderatorProfile']['avatar'],
+                                  width: 20,
+                                  height: 20,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      width: 20,
+                                      height: 20,
+                                      decoration: BoxDecoration(
+                                        color: accentPurple.withValues(alpha: 0.1),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        LucideIcons.user,
+                                        size: 12,
+                                        color: accentPurple,
+                                      ),
+                                    );
+                                  },
+                                )
+                              : Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    color: accentPurple.withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    LucideIcons.user,
+                                    size: 12,
+                                    color: accentPurple,
+                                  ),
+                                ),
+                          ),
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 8),
                         Flexible(
                           child: Text(
                             'by $creatorName',

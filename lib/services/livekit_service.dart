@@ -459,6 +459,23 @@ class LiveKitService extends ChangeNotifier {
         return;
       }
       
+      // Check if audio is already enabled to avoid conflicts
+      final existingTracks = _localParticipant!.audioTrackPublications;
+      bool hasActiveAudio = false;
+      for (final publication in existingTracks) {
+        if (publication.track != null && !publication.muted) {
+          hasActiveAudio = true;
+          break;
+        }
+      }
+      
+      if (hasActiveAudio) {
+        debugPrint('✅ ENABLE AUDIO: Audio already enabled and active');
+        _isMuted = false;
+        notifyListeners();
+        return;
+      }
+      
       // iOS-specific: Add delay and retry mechanism for audio enabling
       bool enableSuccess = false;
       int retryCount = 0;
@@ -471,6 +488,16 @@ class LiveKitService extends ChangeNotifier {
           // Add a small delay for iOS audio session stabilization
           if (retryCount > 0) {
             await Future.delayed(Duration(milliseconds: 200 * retryCount));
+            
+            // On retry attempts, reset audio state first
+            debugPrint('🔄 RETRY: Resetting audio state before retry');
+            try {
+              await _localParticipant!.setMicrophoneEnabled(false);
+              await Future.delayed(const Duration(milliseconds: 200));
+              debugPrint('🔄 RETRY: Audio disabled, will re-enable');
+            } catch (e) {
+              debugPrint('⚠️ RETRY: Failed to disable audio: $e');
+            }
           }
           
           // Enable microphone with explicit error catching

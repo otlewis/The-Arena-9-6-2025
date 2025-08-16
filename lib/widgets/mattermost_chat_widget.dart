@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:timeago/timeago.dart' as timeago;
+import 'package:intl/intl.dart';
 import '../models/discussion_chat_message.dart';
 import '../models/user_profile.dart';
 import '../services/unified_chat_service.dart';
@@ -149,6 +149,14 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
     });
   }
 
+  void _scrollToBottomImmediate() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
+  }
+
   Future<void> _sendMessage() async {
     final content = _messageController.text.trim();
     if (content.isEmpty) return;
@@ -173,6 +181,8 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
       
       _messageController.clear();
       _clearReply();
+      // Ensure scroll to bottom after sending message, even with keyboard open
+      _scrollToBottomImmediate();
     } catch (e) {
       AppLogger().error('Error sending message: $e');
       debugPrint('❌ Error sending message: $e');
@@ -237,18 +247,31 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
           FocusScope.of(context).unfocus();
         },
         child: Container(
-          height: MediaQuery.of(context).size.height * 0.7,
+          height: MediaQuery.of(context).viewInsets.bottom > 0 
+            ? _calculateKeyboardOpenHeight(context)  // Dynamic height when keyboard is open
+            : MediaQuery.of(context).size.height * 0.7, // Normal height when keyboard is closed
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.9,
+            minHeight: 320, // Minimum height to show at least 4 messages
+            maxHeight: MediaQuery.of(context).viewInsets.bottom > 0
+              ? _calculateKeyboardOpenHeight(context)  // Max height when keyboard is open
+              : MediaQuery.of(context).size.height * 0.9, // Max height when keyboard is closed
           ),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFFF8F7FF),
+                Colors.white,
+              ],
+            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 10,
-                offset: const Offset(0, -2),
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 20,
+                spreadRadius: 2,
+                offset: const Offset(0, -4),
               ),
             ],
           ),
@@ -286,10 +309,24 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(
-        color: Color(0xFF8B5CF6),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF6B46C1), // Royal Purple
+            Color(0xFFDC2626), // Scarlet
+          ],
+        ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF6B46C1).withValues(alpha: 0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -335,9 +372,9 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
       color: const Color(0xFFF5F5F5),
       child: TabBar(
         controller: _tabController,
-        labelColor: const Color(0xFF8B5CF6),
+        labelColor: const Color(0xFF6B46C1),
         unselectedLabelColor: Colors.grey,
-        indicatorColor: const Color(0xFF8B5CF6),
+        indicatorColor: const Color(0xFF6B46C1),
         tabs: [
           Tab(
             child: Row(
@@ -351,7 +388,7 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
                     margin: const EdgeInsets.only(left: 4),
                     padding: const EdgeInsets.all(4),
                     decoration: const BoxDecoration(
-                      color: Color(0xFF8B5CF6),
+                      color: Color(0xFF6B46C1),
                       shape: BoxShape.circle,
                     ),
                     child: Text(
@@ -439,10 +476,11 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          timeago.format(message.timestamp),
+                          _formatMessageTime(message.timestamp),
                           style: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 10,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
@@ -451,10 +489,38 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
                 GestureDetector(
                   onLongPress: () => _showMessageOptions(message, isOwn),
                   child: Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
-                      color: isOwn ? const Color(0xFF8B5CF6) : Colors.grey[100],
-                      borderRadius: BorderRadius.circular(12),
+                      gradient: isOwn 
+                        ? const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Color(0xFF6B46C1), // Royal Purple
+                              Color(0xFFDC2626), // Scarlet
+                            ],
+                          )
+                        : null,
+                      color: isOwn ? null : Colors.grey[50],
+                      borderRadius: BorderRadius.only(
+                        topLeft: const Radius.circular(18),
+                        topRight: const Radius.circular(18),
+                        bottomLeft: isOwn ? const Radius.circular(18) : const Radius.circular(4),
+                        bottomRight: isOwn ? const Radius.circular(4) : const Radius.circular(18),
+                      ),
+                      border: isOwn ? null : Border.all(
+                        color: Colors.grey.withValues(alpha: 0.2),
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: isOwn 
+                            ? const Color(0xFF6B46C1).withValues(alpha: 0.3)
+                            : Colors.grey.withValues(alpha: 0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -486,10 +552,11 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                      timeago.format(message.timestamp),
+                      _formatMessageTime(message.timestamp),
                       style: TextStyle(
                         color: Colors.grey[600],
                         fontSize: 10,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -516,44 +583,98 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
 
   Widget _buildReplyPreview() {
     return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.blue[50],
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blue[200]!),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF6B46C1).withValues(alpha: 0.1),
+            const Color(0xFFDC2626).withValues(alpha: 0.1),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF6B46C1).withValues(alpha: 0.3),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF6B46C1).withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          Icon(Icons.reply, color: Colors.blue[600], size: 16),
-          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF6B46C1), // Royal Purple
+                  Color(0xFFDC2626), // Scarlet
+                ],
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.reply_rounded,
+              color: Colors.white,
+              size: 16,
+            ),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Replying to ${_replyToMessage!.senderName}',
-                  style: TextStyle(
-                    color: Colors.blue[600],
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
+                  style: const TextStyle(
+                    color: Color(0xFF6B46C1),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
                   ),
                 ),
+                const SizedBox(height: 4),
                 Text(
                   _replyToMessage!.content.length > 50
                       ? '${_replyToMessage!.content.substring(0, 50)}...'
                       : _replyToMessage!.content,
-                  style: TextStyle(
-                    color: Colors.grey[600],
+                  style: const TextStyle(
+                    color: Color(0xFF6B7280),
                     fontSize: 12,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
               ],
             ),
           ),
-          IconButton(
-            onPressed: _clearReply,
-            icon: Icon(Icons.close, color: Colors.grey[600], size: 16),
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: const Color(0xFF6B46C1).withValues(alpha: 0.2),
+                width: 1,
+              ),
+            ),
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              onPressed: _clearReply,
+              icon: const Icon(
+                Icons.close_rounded,
+                color: Color(0xFF6B7280),
+                size: 16,
+              ),
+            ),
           ),
         ],
       ),
@@ -598,22 +719,70 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
 
   Widget _buildDateSeparator(DateTime date) {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 16),
+      margin: const EdgeInsets.symmetric(vertical: 20),
       child: Row(
         children: [
-          Expanded(child: Divider(color: Colors.grey[300])),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              _formatDate(date),
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
+          Expanded(
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Colors.transparent,
+                    const Color(0xFF6B46C1).withValues(alpha: 0.3),
+                  ],
+                ),
               ),
             ),
           ),
-          Expanded(child: Divider(color: Colors.grey[300])),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF6B46C1), // Royal Purple
+                  Color(0xFFDC2626), // Scarlet
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6B46C1).withValues(alpha: 0.3),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Text(
+              _formatDate(date),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    const Color(0xFF6B46C1).withValues(alpha: 0.3),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -624,17 +793,32 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.chat_bubble_outline,
-            size: 64,
-            color: Colors.grey[400],
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF6B46C1).withValues(alpha: 0.1),
+                  const Color(0xFFDC2626).withValues(alpha: 0.1),
+                ],
+              ),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.chat_bubble_outline,
+              size: 48,
+              color: const Color(0xFF6B46C1).withValues(alpha: 0.6),
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           Text(
             message,
-            style: TextStyle(
-              color: Colors.grey[600],
+            style: const TextStyle(
+              color: Color(0xFF6B7280),
               fontSize: 16,
+              fontWeight: FontWeight.w500,
             ),
             textAlign: TextAlign.center,
           ),
@@ -652,12 +836,31 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
       padding: const EdgeInsets.only(
         left: 16,
         right: 16,
-        top: 8,
-        bottom: 8,
+        top: 12,
+        bottom: 12,
       ),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey[300]!)),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.white,
+            Colors.grey[50]!,
+          ],
+        ),
+        border: Border(
+          top: BorderSide(
+            color: const Color(0xFF6B46C1).withValues(alpha: 0.2),
+            width: 1,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -666,35 +869,55 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
             child: Container(
               constraints: const BoxConstraints(
                 minHeight: 40,
-                maxHeight: 100,
+                maxHeight: 80,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: const Color(0xFF6B46C1).withValues(alpha: 0.2),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF6B46C1).withValues(alpha: 0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: TextField(
                 controller: _messageController,
                 focusNode: _messageFocusNode,
                 style: const TextStyle(
                   fontSize: 16,
-                  color: Colors.black,
+                  color: Color(0xFF1F2937),
+                  fontWeight: FontWeight.w400,
                 ),
                 decoration: InputDecoration(
                   hintText: 'Type a message to the room...',
-                  hintStyle: TextStyle(
-                    color: Colors.grey[500],
+                  hintStyle: const TextStyle(
+                    color: Color(0xFF9CA3AF),
                     fontSize: 16,
+                    fontWeight: FontWeight.w400,
                   ),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(25),
-                    borderSide: BorderSide(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(28),
+                    borderSide: BorderSide.none,
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(25),
-                    borderSide: const BorderSide(color: Color(0xFF8B5CF6), width: 2),
+                    borderRadius: BorderRadius.circular(28),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF6B46C1),
+                      width: 2,
+                    ),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 12,
                   ),
                   filled: true,
-                  fillColor: Colors.grey[50],
+                  fillColor: Colors.transparent,
                 ),
                 maxLines: null,
                 keyboardType: TextInputType.multiline,
@@ -703,18 +926,32 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Container(
             height: 40,
             width: 40,
-            decoration: const BoxDecoration(
-              color: Color(0xFF8B5CF6),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF6B46C1), // Royal Purple
+                  Color(0xFFDC2626), // Scarlet
+                ],
+              ),
               shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6B46C1).withValues(alpha: 0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: IconButton(
               onPressed: _sendMessage,
               icon: const Icon(
-                Icons.send,
+                Icons.send_rounded,
                 color: Colors.white,
                 size: 18,
               ),
@@ -791,5 +1028,40 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
     return date1.year == date2.year &&
            date1.month == date2.month &&
            date1.day == date2.day;
+  }
+
+  double _calculateKeyboardOpenHeight(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final availableHeight = screenHeight - keyboardHeight;
+    
+    // Calculate height that ensures at least 4 messages are visible
+    // Header (~80px) + Tab bar (~48px) + Message input (~64px) + 4 messages (~240px) = ~432px minimum
+    const minRequiredHeight = 400.0;
+    
+    // Use 60% of available height but ensure minimum for 4 messages
+    final calculatedHeight = availableHeight * 0.6;
+    
+    return calculatedHeight > minRequiredHeight ? calculatedHeight : minRequiredHeight;
+  }
+
+  String _formatMessageTime(DateTime timestamp) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDate = DateTime(timestamp.year, timestamp.month, timestamp.day);
+    
+    if (messageDate == today) {
+      // Show time for today's messages
+      return DateFormat('h:mm a').format(timestamp);
+    } else if (messageDate == today.subtract(const Duration(days: 1))) {
+      // Show "Yesterday" + time for yesterday's messages
+      return 'Yesterday ${DateFormat('h:mm a').format(timestamp)}';
+    } else if (now.difference(messageDate).inDays < 7) {
+      // Show day name + time for this week
+      return DateFormat('EEEE h:mm a').format(timestamp);
+    } else {
+      // Show date + time for older messages
+      return DateFormat('MMM d, h:mm a').format(timestamp);
+    }
   }
 }

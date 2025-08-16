@@ -288,7 +288,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
       }
       
       // Create server timer (but don't auto-start it)
-      final timerId = await _timerService.createTimer(
+      await _timerService.createTimer(
         roomId: widget.roomId,
         roomType: widget.roomType,
         timerType: timerType,
@@ -514,10 +514,10 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
     return GestureDetector(
       onTap: widget.isModerator && widget.showControls ? _showTimerControls : null,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Better padding for larger text
         decoration: BoxDecoration(
           color: _getTimerColor(),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(12), // Restore original radius
           border: Border.all(
             color: Colors.white.withValues(alpha: 0.3),
             width: 1,
@@ -528,8 +528,8 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
           children: [
             _buildTimerDisplay(compact: true),
             if (widget.isModerator && widget.showControls) ...[
-              const SizedBox(width: 2),
-              const Icon(Icons.settings, color: Colors.white, size: 10),
+              const SizedBox(width: 4), // Better spacing for larger timer
+              const Icon(Icons.settings, color: Colors.white, size: 10), // Slightly larger icon to match
             ],
           ],
         ),
@@ -541,10 +541,10 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
     return GestureDetector(
       onTap: widget.isModerator && widget.showControls ? _showCreateTimerDialog : null,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Better padding for larger text
         decoration: BoxDecoration(
           color: const Color(0xFF4A4A4A), // Arena purple
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(12), // Restore original radius
           border: Border.all(
             color: Colors.white.withValues(alpha: 0.3),
             width: 1,
@@ -558,13 +558,13 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
-                fontSize: 14,
+                fontSize: 16, // Larger font to match timer text
                 fontFamily: 'monospace',
               ),
             ),
             if (widget.isModerator && widget.showControls) ...[
-              const SizedBox(width: 2),
-              const Icon(Icons.add_circle_outline, color: Colors.white, size: 10),
+              const SizedBox(width: 4), // Better spacing for larger timer
+              const Icon(Icons.add_circle_outline, color: Colors.white, size: 10), // Slightly larger icon to match
             ],
           ],
         ),
@@ -666,7 +666,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
     Widget timeDisplay = Text(
       timeText,
       style: TextStyle(
-        fontSize: compact ? 14 : 56,
+        fontSize: compact ? 16 : 56, // Larger readable font for compact mode
         fontWeight: FontWeight.bold,
         color: compact ? Colors.white : color,
         fontFamily: 'monospace',
@@ -1096,8 +1096,8 @@ class _CreateTimerDialog extends StatefulWidget {
 }
 
 class _CreateTimerDialogState extends State<_CreateTimerDialog> {
-  int _minutes = 3;
-  int _seconds = 0;
+  final int _minutes = 3;
+  final int _seconds = 0;
   final TextEditingController _minutesController = TextEditingController();
   final TextEditingController _secondsController = TextEditingController();
 

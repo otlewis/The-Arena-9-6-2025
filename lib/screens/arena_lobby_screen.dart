@@ -707,12 +707,24 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
           ],
         ),
         const SizedBox(height: 12),
-        ...activeArenas.map((arena) => _buildArenaCard(arena.id, arena.topic, arena.status, arena.challengeId ?? '', arena.description ?? '', arena.currentParticipants, arena.isManual, arena.category ?? '', arena.teamSize)),
+        ...activeArenas.map((arena) => _buildArenaCard(
+          arena.id, 
+          arena.topic, 
+          arena.status, 
+          arena.challengeId ?? '', 
+          arena.description ?? '', 
+          arena.currentParticipants, 
+          arena.isManual, 
+          arena.category ?? '', 
+          arena.teamSize, 
+          arena.moderatorId,
+          arena.moderatorProfile,
+        )),
       ],
     );
   }
 
-  Widget _buildArenaCard(String roomId, String topic, String status, String challengeId, String description, int currentParticipants, bool isManual, String category, int teamSize) {
+  Widget _buildArenaCard(String roomId, String topic, String status, String challengeId, String description, int currentParticipants, bool isManual, String category, int teamSize, String? moderatorId, Map<String, dynamic>? moderatorProfile) {
     const maxParticipants = 1000; // Allow unlimited participants
     
     // Check if room is private by looking in the description metadata
@@ -911,6 +923,77 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
+                const SizedBox(height: 8),
+                // Moderator info - always show for arena rooms
+                Row(
+                  children: [
+                    // Moderator profile picture
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: accentPurple.withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: ClipOval(
+                        child: moderatorProfile?['avatar'] != null && moderatorProfile!['avatar'].toString().isNotEmpty
+                          ? Image.network(
+                              moderatorProfile['avatar'],
+                              width: 20,
+                              height: 20,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    color: accentPurple.withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.person,
+                                    size: 12,
+                                    color: accentPurple,
+                                  ),
+                                );
+                              },
+                            )
+                          : Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                color: accentPurple.withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.person,
+                                size: 12,
+                                color: accentPurple,
+                              ),
+                            ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        moderatorProfile != null && moderatorProfile['name'] != null
+                          ? 'Moderator: ${moderatorProfile['name']}'
+                          : moderatorId != null && moderatorId.isNotEmpty 
+                              ? 'Moderator' 
+                              : 'Moderator: Unknown',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: _themeService.isDarkMode ? Colors.white70 : Colors.grey[600],
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -1929,7 +2012,7 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: _selectedCategory,
+              initialValue: _selectedCategory,
               hint: const Text('Select a category'),
               decoration: InputDecoration(
                 border: OutlineInputBorder(

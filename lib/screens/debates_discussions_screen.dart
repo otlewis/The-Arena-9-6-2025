@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package:audio_session/audio_session.dart' as audio_session;
 import '../services/appwrite_service.dart';
 import '../services/firebase_gift_service.dart';
 import '../services/livekit_service.dart';
@@ -21,7 +20,6 @@ import '../widgets/user_profile_bottom_sheet.dart';
 import '../widgets/instant_message_bell.dart';
 import '../widgets/challenge_bell.dart';
 import '../widgets/mattermost_chat_widget.dart';
-import '../widgets/neon_mic_icon.dart';
 import 'email_compose_screen.dart';
 import '../models/discussion_chat_message.dart';
 // import '../widgets/floating_im_widget.dart'; // Unused import
@@ -55,7 +53,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   
   // Video/Audio WebRTC state
   bool _isWebRTCConnected = false;
-  bool _isWebRTCConnecting = false;
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
   final Map<String, RTCVideoRenderer> _remoteRenderers = {};
@@ -157,7 +154,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       if (mounted) {
         setState(() {
           _isWebRTCConnected = true;
-          _isWebRTCConnecting = false;
         });
         _debugVideoState();
       }
@@ -195,7 +191,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       if (mounted) {
         setState(() {
           _isWebRTCConnected = false;
-          _isWebRTCConnecting = false;
         });
       }
     };
@@ -204,7 +199,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       AppLogger().debug('❌ LiveKit error: $error');
       if (mounted) {
         setState(() {
-          _isWebRTCConnecting = false;
         });
       }
     };
@@ -213,29 +207,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   }
 
   // Audio/Video control methods (simplified like open discussion)
-  Future<void> _toggleAudio() async {
-    try {
-      if (_webrtcService.isConnected) {
-        if (_isMuted) {
-          await _webrtcService.enableAudio();
-          _isMuted = false;
-        } else {
-          await _webrtcService.disableAudio();
-          _isMuted = true;
-        }
-        if (mounted) {
-          setState(() {
-            _isMuted = _webrtcService.isMuted;
-          });
-        }
-        AppLogger().debug('🔇 LiveKit audio ${_isMuted ? 'muted' : 'unmuted'}');
-      }
-    } catch (e) {
-      AppLogger().error('❌ Error toggling LiveKit mute: $e');
-      // Sync local state with service state on error
-      _isMuted = _webrtcService.isMuted;
-    }
-  }
   
   Future<void> _toggleMute() async {
     try {
@@ -1195,37 +1166,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     super.dispose();
   }
 
-  Future<void> _cleanupWebRTC() async {
-    try {
-      _isWebRTCConnected = false;
-      _isWebRTCConnecting = false;
-      
-      // Clear mappings
-      _userToPeerMapping.clear();
-      _peerToUserMapping.clear();
-      
-      // Disconnect MediaSoup service
-      await _webrtcService.disconnect();
-      
-      // Dispose video renderers
-      await _localRenderer.dispose();
-      await _remoteRenderer.dispose();
-      
-      // Dispose all remote participant renderers
-      for (final renderer in _remoteRenderers.values) {
-        try {
-          await renderer.dispose();
-        } catch (e) {
-          AppLogger().warning("Error disposing remote renderer: $e");
-        }
-      }
-      _remoteRenderers.clear();
-      
-      AppLogger().debug("🧹 WebRTC cleanup completed for Debates & Discussions");
-    } catch (e) {
-      AppLogger().error("❌ WebRTC cleanup error: $e");
-    }
-  }
 
   Future<void> _connectToAudio() async {
     AppLogger().debug('🔥 CONNECT-AUDIO: _connectToAudio called - connecting: $_isAudioConnecting, connected: $_isAudioConnected');
@@ -3207,8 +3147,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     required String label,
     required Color color,
     required VoidCallback onTap,
-    bool isActive = false, // Keep for backward compatibility
-    bool isDestructive = false, // Keep for backward compatibility  
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -5267,61 +5205,6 @@ Join the conversation now in the Arena app!
     AppLogger().info('Money gift processed successfully: \$${amount.toStringAsFixed(2)}');
   }
 
-  /// Custom neon microphone button with glow effects
-  Widget _buildNeonMicButton() {
-    return Container(
-      width: 50,
-      height: 50,
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(25),
-        border: Border.all(
-          color: _isMuted 
-            ? ArenaColors.scarletRed.withValues(alpha: 0.3)
-            : ArenaColors.accentPurple.withValues(alpha: 0.5), 
-          width: 1,
-        ),
-      ),
-      child: NeonMicIcon(
-        isMuted: _isMuted,
-        size: 28,
-        isActive: !_isMuted,
-        onTap: _toggleMute,
-        animationDuration: const Duration(milliseconds: 250),
-      ),
-    );
-  }
-
-  /// Disabled neon microphone button for audience members
-  Widget _buildDisabledNeonMicButton() {
-    return Container(
-      width: 50,
-      height: 50,
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(25),
-        border: Border.all(
-          color: Colors.grey.withValues(alpha: 0.3), 
-          width: 1,
-        ),
-      ),
-      child: NeonMicIcon(
-        isMuted: true,
-        size: 28,
-        isActive: false,
-        onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Only speakers and moderators can use audio in debates & discussions!'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        },
-        animationDuration: const Duration(milliseconds: 250),
-      ),
-    );
-  }
 
   Widget _buildGiftButton() {
     return GestureDetector(

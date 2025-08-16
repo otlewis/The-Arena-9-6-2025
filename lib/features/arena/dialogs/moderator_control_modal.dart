@@ -282,6 +282,102 @@ class ModeratorControlModal extends StatelessWidget {
                     ],
                   ),
                 ],
+
+                // Additional Moderator Tools Section
+                const SizedBox(height: 20),
+                _buildSectionDivider('Audio Controls'),
+                
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildControlButton(
+                        icon: Icons.volume_off,
+                        label: 'Mute All',
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showComingSoonSnackBar(context, 'Mute All Participants');
+                        },
+                        color: Colors.red,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildControlButton(
+                        icon: Icons.noise_control_off,
+                        label: 'Audio Quality',
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showComingSoonSnackBar(context, 'Audio Quality Controls');
+                        },
+                        color: Colors.orange,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+                _buildSectionDivider('Chat Moderation'),
+                
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildControlButton(
+                        icon: Icons.clear_all,
+                        label: 'Clear Chat',
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showClearChatConfirmation(context);
+                        },
+                        color: Colors.orange,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildControlButton(
+                        icon: Icons.chat_bubble_outline,
+                        label: 'Chat Settings',
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showComingSoonSnackBar(context, 'Chat Controls');
+                        },
+                        color: Colors.blue,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+                _buildSectionDivider('Debate Management'),
+                
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildControlButton(
+                        icon: Icons.analytics,
+                        label: 'Analytics',
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showSpeakingAnalytics(context);
+                        },
+                        color: Colors.green,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildControlButton(
+                        icon: Icons.pause_circle_outline,
+                        label: 'Pause Debate',
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showComingSoonSnackBar(context, 'Pause Debate');
+                        },
+                        color: Colors.amber,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
                 ],
               ),
             ),
@@ -352,6 +448,164 @@ class ModeratorControlModal extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
       ),
+    );
+  }
+
+  Widget _buildSectionDivider(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 1,
+              color: Colors.grey[600],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              height: 1,
+              color: Colors.grey[600],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static void _showComingSoonSnackBar(BuildContext context, String feature) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('🚀 $feature coming soon!'),
+        backgroundColor: Colors.purple,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  static void _showClearChatConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[800],
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Clear Chat', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to clear all chat messages? This action cannot be undone.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showComingSoonSnackBar(context, 'Clear Chat');
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Clear Chat', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static void _showSpeakingAnalytics(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[800],
+        title: const Row(
+          children: [
+            Icon(Icons.analytics, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Speaking Analytics', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildSpeakingStatRow('Affirmative', '2:45', '45%', Colors.green),
+              const SizedBox(height: 8),
+              _buildSpeakingStatRow('Negative', '3:15', '55%', Colors.red),
+              const SizedBox(height: 16),
+              const Text(
+                'Total speaking time: 6:00',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _buildSpeakingStatRow(String role, String time, String percentage, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(6),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            role,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        Text(
+          time,
+          style: const TextStyle(
+            fontWeight: FontWeight.w500,
+            color: Colors.white70,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Text(
+          percentage,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 
