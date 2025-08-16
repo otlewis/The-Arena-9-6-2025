@@ -423,7 +423,7 @@ class _ParticipantCard extends StatelessWidget {
             color: _getRoleColor(role),
             borderRadius: BorderRadius.circular(12),
             border: role == 'speaker' 
-              ? Border.all(color: Colors.blue, width: 2)
+              ? Border.all(color: Colors.purple, width: 2)
               : null,
           ),
           child: Column(
@@ -445,7 +445,7 @@ class _ParticipantCard extends StatelessWidget {
       case 'moderator':
         return Colors.red.withValues(alpha: 0.1);
       case 'speaker':
-        return Colors.blue.withValues(alpha: 0.1);
+        return Colors.purple.withValues(alpha: 0.1);
       case 'pending':
         return Colors.orange.withValues(alpha: 0.1);
       default:
@@ -559,7 +559,7 @@ class _RoleBadge extends StatelessWidget {
         icon = Icons.gavel;
         break;
       case 'speaker':
-        badgeColor = Colors.blue;
+        badgeColor = Colors.purple;
         icon = Icons.mic;
         break;
       case 'pending':
@@ -964,22 +964,22 @@ class _VideoTile extends StatelessWidget {
                       const Color(0xFF991B1B), // Deep red
                     ]
                   : [
-                      const Color(0xFF1E3A8A), // Dark blue
-                      const Color(0xFF3B82F6), // Bright blue
+                      const Color(0xFF5B21B6), // Dark purple
+                      const Color(0xFF8B5CF6), // Bright purple
                     ],
             ),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: isModeratorRole
                   ? const Color(0xFFDC2626)  // Red border for moderator
-                  : const Color(0xFF3B82F6), // Blue border for speaker
+                  : const Color(0xFF8B5CF6), // Purple border for speaker
               width: 2,
             ),
             boxShadow: [
               BoxShadow(
                 color: (isModeratorRole 
                     ? const Color(0xFFDC2626) 
-                    : const Color(0xFF3B82F6)).withValues(alpha: 0.3),
+                    : const Color(0xFF8B5CF6)).withValues(alpha: 0.3),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),

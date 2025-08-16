@@ -14,12 +14,14 @@ import '../services/livekit_token_service.dart';
 import '../models/user_profile.dart';
 import '../models/gift.dart';
 import '../models/timer_state.dart';
+import '../features/arena/constants/arena_colors.dart';
 import '../widgets/animated_fade_in.dart';
 import '../widgets/appwrite_timer_widget.dart';
 import '../widgets/user_profile_bottom_sheet.dart';
 import '../widgets/instant_message_bell.dart';
 import '../widgets/challenge_bell.dart';
 import '../widgets/mattermost_chat_widget.dart';
+import '../widgets/neon_mic_icon.dart';
 import 'email_compose_screen.dart';
 import '../models/discussion_chat_message.dart';
 // import '../widgets/floating_im_widget.dart'; // Unused import
@@ -68,6 +70,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   
   bool _isMuted = false;
   bool _isVideoEnabled = false;
+  
+  // Simple audio state (replacing complex WebRTC logic)
+  bool _isAudioConnected = false;
+  bool _isAudioConnecting = false;
+  final LiveKitService _liveKitService = LiveKitService();
   
   // Room data
   Map<String, dynamic>? _roomData;
@@ -205,60 +212,60 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     AppLogger().debug('📹 WebRTC renderers and MediaSoup service initialized for Debates & Discussions');
   }
 
-  // Audio/Video control methods
+  // Audio/Video control methods (simplified like open discussion)
   Future<void> _toggleAudio() async {
     try {
-      AppLogger().debug('🎤 TOGGLE: Starting audio toggle operation');
-      AppLogger().debug('🎤 TOGGLE: WebRTC connected: ${_webrtcService.isConnected}');
-      AppLogger().debug('🎤 TOGGLE: Current mute state: ${_webrtcService.isMuted}');
-      
-      if (!_webrtcService.isConnected) {
-        AppLogger().warning('🎤 TOGGLE: WebRTC not connected, showing warning');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('⚠️ Please connect to audio first'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 2),
-            ),
-          );
+      if (_webrtcService.isConnected) {
+        if (_isMuted) {
+          await _webrtcService.enableAudio();
+          _isMuted = false;
+        } else {
+          await _webrtcService.disableAudio();
+          _isMuted = true;
         }
+        if (mounted) {
+          setState(() {
+            _isMuted = _webrtcService.isMuted;
+          });
+        }
+        AppLogger().debug('🔇 LiveKit audio ${_isMuted ? 'muted' : 'unmuted'}');
+      }
+    } catch (e) {
+      AppLogger().error('❌ Error toggling LiveKit mute: $e');
+      // Sync local state with service state on error
+      _isMuted = _webrtcService.isMuted;
+    }
+  }
+  
+  Future<void> _toggleMute() async {
+    try {
+      // Connect to audio first if not connected
+      if (!_isAudioConnected) {
+        await _connectToAudio();
         return;
       }
       
-      // Use LiveKit's built-in mute functionality with noise cancellation
-      await _webrtcService.toggleMute();
+      // Toggle mute state using LiveKit service
+      if (_isMuted) {
+        await _liveKitService.enableAudio();
+      } else {
+        await _liveKitService.disableAudio();
+      }
       
       if (mounted) {
         setState(() {
-          _isMuted = _webrtcService.isMuted;
+          _isMuted = _liveKitService.isMuted;
         });
       }
       
-      AppLogger().debug('🎤 TOGGLE: Audio ${_webrtcService.isMuted ? 'muted' : 'unmuted'} via LiveKit with noise cancellation');
-      
-      // Show feedback to user on iOS (since button state might not be immediately visible)
+      AppLogger().debug('🔇 LiveKit audio ${_isMuted ? 'muted' : 'unmuted'}');
+    } catch (e) {
+      AppLogger().error('❌ Error toggling mute: $e');
+      // Sync local state with service state on error
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('🎤 ${_webrtcService.isMuted ? 'Muted' : 'Unmuted'}'),
-            backgroundColor: _webrtcService.isMuted ? Colors.orange : Colors.green,
-            duration: const Duration(seconds: 1),
-          ),
-        );
-      }
-      
-    } catch (error) {
-      AppLogger().error('❌ TOGGLE: Failed to toggle audio: $error');
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Failed to toggle audio: ${error.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        setState(() {
+          _isMuted = _liveKitService.isMuted;
+        });
       }
     }
   }
@@ -369,7 +376,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           // - Enough time has passed since last attempt
           if (_consecutiveUnhealthyChecks >= _unhealthyThreshold && timeSinceLastAttempt > _minTimeBetweenReconnections) {
             AppLogger().warning('⚠️ WebRTC disconnected for $_consecutiveUnhealthyChecks consecutive checks - attempting restoration');
-            _restoreWebRTCConnection();
+            // Reconnect to audio if user should be connected
+            if ((_isCurrentUserModerator || _isCurrentUserSpeaker) && !_isAudioConnected) {
+              _connectToAudio();
+            }
             _consecutiveUnhealthyChecks = 0; // Reset counter
           } else {
             AppLogger().debug('⏳ Skipping WebRTC restoration - checks: $_consecutiveUnhealthyChecks/$_unhealthyThreshold, time: ${timeSinceLastAttempt}s/$_minTimeBetweenReconnections');
@@ -423,8 +433,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       // Step 2: Refresh participants
       await _loadParticipants();
       
-      // Step 3: Restore WebRTC connection
-      await _restoreWebRTCConnection();
+      // Step 3: Restore audio connection
+      if ((_isCurrentUserModerator || _isCurrentUserSpeaker) && !_isAudioConnected) {
+        await _connectToAudio();
+      }
       
       // Step 4: Verify speaker status
       await _verifySpeakerStatus();
@@ -463,15 +475,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   }
 
   /// Restore WebRTC connection
-  Future<void> _restoreWebRTCConnection() async {
-    if (_webrtcService.isConnected) {
-      AppLogger().debug('🔄 Disconnecting existing WebRTC connection for restoration...');
-      await _webrtcService.disconnect();
-    }
-    
-    AppLogger().debug('🔄 Restoring WebRTC connection...');
-    await _connectToWebRTC();
-  }
 
   /// Verify speaker status is properly restored
   Future<void> _verifySpeakerStatus() async {
@@ -639,11 +642,66 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     }
   }
 
-  void _autoEnableVideoAndAudio() {
-    AppLogger().debug('🎬 _autoEnableVideoAndAudio() called - isModerator: $_isCurrentUserModerator, isSpeaker: $_isCurrentUserSpeaker');
-    // Connect all users to WebRTC for video viewing
-    // Moderators and speakers publish video, audience only receives
-    _connectToWebRTC();
+  void _autoConnectAudio() {
+    AppLogger().debug('🔥 AUTO-CONNECT: _autoConnectAudio() called - attempting to connect ALL users');
+    AppLogger().debug('🔥 AUTO-CONNECT: Current user: ${_currentUser?.id}, isModerator: $_isCurrentUserModerator, isSpeaker: $_isCurrentUserSpeaker');
+    AppLogger().debug('🔥 AUTO-CONNECT: Audio state - connected: $_isAudioConnected, connecting: $_isAudioConnecting');
+    AppLogger().debug('🔥 AUTO-CONNECT: Participant roles: $_participantRoles');
+    
+    // Safety check - make sure we have current user data
+    if (_currentUser == null) {
+      AppLogger().warning('🔥 AUTO-CONNECT: ⚠️ Cannot auto-connect audio - current user is null');
+      return;
+    }
+    
+    // FINAL ROLE CHECK: Verify role before connecting
+    if (_currentUser != null) {
+      final isInSpeakerPanel = _speakerPanelists.any((speaker) => speaker.id == _currentUser!.id);
+      AppLogger().debug('🔥 AUTO-CONNECT: Final check - user in speaker panel: $isInSpeakerPanel');
+      
+      if (isInSpeakerPanel && !_isCurrentUserSpeaker && !_isCurrentUserModerator) {
+        AppLogger().warning('🔥 AUTO-CONNECT: ⚠️ User in speaker panel but not marked as speaker - correcting role immediately');
+        _isCurrentUserSpeaker = true;
+      }
+    }
+    
+    // Connect ALL users to audio automatically when room loads
+    AppLogger().debug('🔥 AUTO-CONNECT: Proceeding with auto-connect for user: ${_currentUser!.name} (final role: moderator=$_isCurrentUserModerator, speaker=$_isCurrentUserSpeaker)');
+    _connectToAudio().then((_) {
+      AppLogger().debug('🔥 AUTO-CONNECT: _connectToAudio() completed successfully');
+    }).catchError((error) {
+      AppLogger().error('🔥 AUTO-CONNECT: _connectToAudio() failed: $error');
+    });
+  }
+
+  /// Reinitialize audio connection for newly promoted speakers
+  Future<void> _reinitializeAudioForSpeaker() async {
+    try {
+      AppLogger().debug('🔄 Reinitializing LiveKit audio connection for speaker role...');
+      
+      // Disconnect existing audio service if connected
+      if (_isAudioConnected) {
+        AppLogger().debug('🔌 Disconnecting existing LiveKit audio connection...');
+        await _liveKitService.disconnect();
+        if (mounted) {
+          setState(() {
+            _isAudioConnected = false;
+            _isAudioConnecting = false;
+          });
+        }
+      }
+      
+      // Brief delay to ensure cleanup
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Reconnect with speaker role
+      AppLogger().debug('🎤 Reconnecting with speaker role...');
+      await _connectToAudio();
+      
+    } catch (e) {
+      AppLogger().error('❌ Error reinitializing LiveKit audio for speaker: $e');
+      // Continue anyway - user can try manual connect
+    }
   }
   
   void _debugVideoState() {
@@ -696,8 +754,27 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       // Set up real-time subscriptions
       _setupRealTimeUpdates();
       
-      // Auto-enable video/audio for moderators and speakers
-      _autoEnableVideoAndAudio();
+      // RACE CONDITION FIX: Longer delay to ensure fallback role checks complete
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      // DEBUG: Check role states before auto-connecting
+      AppLogger().debug('🔍 PRE-AUDIO-CONNECT DEBUG:');
+      AppLogger().debug('🔍 Current user: ${_currentUser?.id} (${_currentUser?.name})');
+      AppLogger().debug('🔍 _isCurrentUserModerator: $_isCurrentUserModerator');
+      AppLogger().debug('🔍 _isCurrentUserSpeaker: $_isCurrentUserSpeaker');
+      AppLogger().debug('🔍 Participant roles map: $_participantRoles');
+      AppLogger().debug('🔍 Speaker panel members: ${_speakerPanelists.map((s) => s.id).toList()}');
+      if (_currentUser != null) {
+        final currentUserRole = _participantRoles[_currentUser!.id];
+        AppLogger().debug('🔍 Current user role in map: $currentUserRole');
+        final isInSpeakerPanel = _speakerPanelists.any((speaker) => speaker.id == _currentUser!.id);
+        AppLogger().debug('🔍 Current user in speaker panel: $isInSpeakerPanel');
+      }
+      
+      // Auto-connect all users to audio (now with correct roles)
+      AppLogger().debug('🚀 About to call _autoConnectAudio() after role determination...');
+      _autoConnectAudio();
+      AppLogger().debug('✅ _autoConnectAudio() call completed');
       
       // Room initialization complete
       if (mounted && !_isDisposing) {
@@ -1094,8 +1171,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     _stopConnectionHealthMonitoring();
     _reconnectionTimer?.cancel();
     
-    // Clean up WebRTC
-    _cleanupWebRTC();
+    // Clean up audio connection
+    if (_liveKitService.isConnected) {
+      _liveKitService.disconnect();
+    }
     
     // Clean up performance optimizations
     OptimizedStateManager.clearKey('participants_${widget.roomId}');
@@ -1148,171 +1227,106 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     }
   }
 
-  Future<void> _connectToWebRTC() async {
-    AppLogger().debug('🔍 _connectToWebRTC called - connecting: $_isWebRTCConnecting, connected: $_isWebRTCConnected');
+  Future<void> _connectToAudio() async {
+    AppLogger().debug('🔥 CONNECT-AUDIO: _connectToAudio called - connecting: $_isAudioConnecting, connected: $_isAudioConnected');
     
-    // Check if we need video capabilities (moderator or speaker)
-    bool needsVideoCapabilities = _isCurrentUserModerator || _isCurrentUserSpeaker;
-    bool hasVideoCapabilities = _localStream?.getVideoTracks().isNotEmpty ?? false;
-    
-    // Force disconnect if already connected but not working properly
-    if (_isWebRTCConnected && (_remoteStreams.isEmpty)) {
-      AppLogger().debug('🔄 Forcing fresh connection - current connection has no streams');
-      await _webrtcService.disconnect();
-      setState(() {
-        _isWebRTCConnected = false;
-        _isWebRTCConnecting = false;
-      });
-    }
-    
-    // Force reconnection if role capabilities changed (audience -> speaker/moderator)
-    if (_isWebRTCConnected && needsVideoCapabilities && !hasVideoCapabilities) {
-      AppLogger().debug('🔄 Role upgrade detected - forcing reconnection with video capabilities');
-      await _webrtcService.disconnect();
-      setState(() {
-        _isWebRTCConnected = false;
-        _isWebRTCConnecting = false;
-      });
-    }
-    
-    AppLogger().debug('🔍 _connectToWebRTC called - connecting: $_isWebRTCConnecting, connected: $_isWebRTCConnected');
-    
-    if (_isWebRTCConnecting || _isWebRTCConnected) {
-      AppLogger().debug('⚠️ WebRTC connection skipped - already connecting or connected');
+    // Don't connect if already connected or connecting
+    if (_isAudioConnected || _isAudioConnecting) {
+      AppLogger().debug('🔥 CONNECT-AUDIO: ⚠️ Audio connection skipped - already connecting or connected');
       return;
     }
     
-    AppLogger().debug('🚀 Starting WebRTC connection process...');
+    AppLogger().debug('🔥 CONNECT-AUDIO: 🚀 Starting audio connection process...');
     setState(() {
-      _isWebRTCConnecting = true;
+      _isAudioConnecting = true;
     });
 
-    // Determine user role and connection mode (declare outside try block)
-    String userRole;
-    bool shouldPublishVideo;
-    
+    // Determine user role for audio connection
+    String userRole = 'audience'; // Default
+    AppLogger().debug('🔥 CONNECT-AUDIO: Role determination - isModerator: $_isCurrentUserModerator, isSpeaker: $_isCurrentUserSpeaker');
     if (_isCurrentUserModerator) {
       userRole = 'moderator';
-      shouldPublishVideo = true;
+      AppLogger().debug('🔥 CONNECT-AUDIO: ✅ Assigned MODERATOR role');
     } else if (_isCurrentUserSpeaker) {
       userRole = 'speaker';
-      shouldPublishVideo = true;
+      AppLogger().debug('🔥 CONNECT-AUDIO: ✅ Assigned SPEAKER role');
     } else {
-      userRole = 'audience';
-      shouldPublishVideo = false; // Audience only receives video streams
+      AppLogger().debug('🔥 CONNECT-AUDIO: ⚠️ Assigned default AUDIENCE role');
     }
 
     try {
-      
       final roomId = 'debates-discussion-${widget.roomId}';
+      final userId = _currentUser?.id ?? 'unknown';
       
-      AppLogger().debug('🎥 Connecting to LiveKit for Debates & Discussions');
-      AppLogger().debug('🎥 Room: $roomId');
-      AppLogger().debug('🎥 User: ${_currentUser?.id} (${_currentUser?.name})');
-      AppLogger().debug('🎥 Role: $userRole, Publish: $shouldPublishVideo');
-      AppLogger().debug('🎥 Widget Room ID: ${widget.roomId}');
+      AppLogger().debug('🔥 CONNECT-AUDIO: 🎤 Connecting to LiveKit Audio for Debates & Discussions');
+      AppLogger().debug('🔥 CONNECT-AUDIO: 🎤 Room: $roomId, User: $userId, Role: $userRole');
       
       // Generate LiveKit token
+      AppLogger().debug('🔥 CONNECT-AUDIO: 🔑 Generating LiveKit token for $userId with role $userRole');
       final token = LiveKitTokenService.generateToken(
         roomName: roomId,
-        identity: _currentUser?.id ?? 'unknown',
+        identity: userId,
         userRole: userRole,
         roomType: 'debate_discussion',
-        userId: _currentUser?.id ?? 'unknown',
+        userId: userId,
         ttl: const Duration(hours: 2),
       );
+      AppLogger().debug('🔥 CONNECT-AUDIO: 🔑 Generated LiveKit token successfully: ${token.substring(0, 50)}...');
+      AppLogger().debug('🔥 CONNECT-AUDIO: 🔑 Token contains role: $userRole');
       
-      await _webrtcService.connect(
-        serverUrl: 'ws://172.236.109.9:7880', // LiveKit production server
+      // Connect using LiveKit service with timeout
+      await _liveKitService.connect(
+        serverUrl: 'ws://172.236.109.9:7880',
         roomName: roomId,
         token: token,
-        userId: _currentUser?.id ?? 'unknown',
+        userId: userId,
         userRole: userRole,
         roomType: 'debate_discussion',
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          AppLogger().error('❌ Audio connection timeout after 30 seconds');
+          throw Exception('Audio connection timeout. Please check your internet connection and try again.');
+        },
       );
       
-      // Log specific connection behavior
-      if (shouldPublishVideo) {
-        AppLogger().debug('🎥 Connected as $userRole - PUBLISHING video/audio');
-      } else {
-        AppLogger().debug('📹 Connected as $userRole - RECEIVING video feeds only');
-      }
+      AppLogger().debug('🔥 CONNECT-AUDIO: ✅ Audio connected successfully as $userRole');
+      AppLogger().debug('🔥 CONNECT-AUDIO: ✅ LiveKit service connected: ${_liveKitService.isConnected}');
+      AppLogger().debug('🔥 CONNECT-AUDIO: ✅ LiveKit service role: ${_liveKitService.userRole}');
       
-      AppLogger().debug('🎥 WebRTC connected successfully for Debates & Discussions');
-      
-      // Configure audio session for maximum speaker output
-      try {
-        final session = await audio_session.AudioSession.instance;
-        await session.configure(audio_session.AudioSessionConfiguration(
-          avAudioSessionCategory: audio_session.AVAudioSessionCategory.playAndRecord,
-          avAudioSessionCategoryOptions: audio_session.AVAudioSessionCategoryOptions.defaultToSpeaker |
-              audio_session.AVAudioSessionCategoryOptions.allowBluetooth |
-              audio_session.AVAudioSessionCategoryOptions.mixWithOthers,
-          avAudioSessionMode: audio_session.AVAudioSessionMode.videoChat,
-          avAudioSessionRouteSharingPolicy: audio_session.AVAudioSessionRouteSharingPolicy.defaultPolicy,
-          avAudioSessionSetActiveOptions: audio_session.AVAudioSessionSetActiveOptions.none,
-          androidAudioAttributes: const audio_session.AndroidAudioAttributes(
-            contentType: audio_session.AndroidAudioContentType.speech,
-            flags: audio_session.AndroidAudioFlags.audibilityEnforced,
-            usage: audio_session.AndroidAudioUsage.voiceCommunication,
-          ),
-          androidAudioFocusGainType: audio_session.AndroidAudioFocusGainType.gain,
-          androidWillPauseWhenDucked: false,
-        ));
-        
-        // Activate the audio session with high priority
-        await session.setActive(true);
-        
-        // Additional speaker enforcement (iOS will use defaultToSpeaker option above)
-        
-        AppLogger().debug('🔊 Audio session configured for maximum speaker output with noise cancellation');
-        AppLogger().debug('🔊 Features: Echo cancellation, noise suppression, auto gain control enabled');
-      } catch (e) {
-        AppLogger().debug('❌ Failed to configure audio session: $e');
-        // Continue anyway - audio might still work
+      if (mounted) {
+        setState(() {
+          _isAudioConnected = true;
+          _isAudioConnecting = false;
+          _isMuted = _liveKitService.isMuted;
+        });
+        AppLogger().debug('🔥 CONNECT-AUDIO: ✅ UI state updated - connected: $_isAudioConnected, muted: $_isMuted');
       }
       
     } catch (e) {
-      AppLogger().error('❌ Failed to connect WebRTC: $e');
+      AppLogger().error('🔥 CONNECT-AUDIO: ❌ Failed to connect to audio: $e');
       
-      // Check if it's a Socket.IO WebSocket upgrade error
-      if (e.toString().contains('WebSocketException') || e.toString().contains('not upgraded to websocket')) {
-        AppLogger().warning('🔄 Socket.IO WebSocket error detected - trying HTTP fallback...');
-        await _tryHttpWebRTCFallback(userRole, shouldPublishVideo);
-      } else {
-        setState(() {
-          _isWebRTCConnecting = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _tryHttpWebRTCFallback(String userRole, bool shouldPublishVideo) async {
-    try {
-      AppLogger().debug('🌐 Attempting HTTP WebRTC fallback connection...');
-      
-      // Import and use HTTP WebRTC service (to be implemented)
-      // For now, just show an error message that HTTP fallback is being attempted
       if (mounted) {
+        setState(() {
+          _isAudioConnecting = false;
+          _isAudioConnected = false;
+        });
+        
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('WebSocket connection failed. Attempting HTTP fallback...'),
-            duration: Duration(seconds: 3),
+          SnackBar(
+            content: Text('Failed to connect to audio: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: () => _connectToAudio(),
+            ),
           ),
         );
       }
-      
-      setState(() {
-        _isWebRTCConnecting = false;
-      });
-      
-    } catch (e) {
-      AppLogger().error('❌ HTTP WebRTC fallback also failed: $e');
-      setState(() {
-        _isWebRTCConnecting = false;
-      });
     }
   }
+
 
   Future<void> _loadParticipants() async {
     try {
@@ -1363,14 +1377,23 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                 newSpeakers.add(userProfile);
               }
               if (userProfile.id == _currentUser?.id) {
-                operations.add(() => _isCurrentUserModerator = true);
+                AppLogger().debug('🔍 ROLE ASSIGNMENT: Adding moderator operation for ${userProfile.name}');
+                operations.add(() {
+                  _isCurrentUserModerator = true;
+                  AppLogger().debug('🔍 ROLE ASSIGNMENT: Set _isCurrentUserModerator = true');
+                });
               }
             } else if (role == 'speaker' || role == 'affirmative' || role == 'negative') {
               if (!newSpeakers.any((p) => p.id == userProfile.id)) {
                 newSpeakers.add(userProfile);
               }
               if (userProfile.id == _currentUser?.id) {
-                operations.add(() => _isCurrentUserSpeaker = true);
+                AppLogger().info('🎤 SPEAKER ROLE: Current user found as speaker with role: $role');
+                AppLogger().debug('🔍 ROLE ASSIGNMENT: Adding speaker operation for ${userProfile.name}');
+                operations.add(() {
+                  _isCurrentUserSpeaker = true;
+                  AppLogger().debug('🔍 ROLE ASSIGNMENT: Set _isCurrentUserSpeaker = true');
+                });
               }
             } else if (role == 'pending') {
               if (!newRequests.any((p) => p.id == userProfile.id)) {
@@ -1397,10 +1420,18 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           _speakerRequests.addAll(newRequests);
         });
         
-        // Execute all operations in batch and trigger single rebuild
-        PerformanceOptimizations.batchedSetState(operations, () {
-          if (mounted) setState(() {});
-        });
+        // RACE CONDITION FIX: Execute role operations immediately instead of batching
+        // This ensures role flags are set before _autoConnectAudio() is called
+        AppLogger().debug('🔍 IMMEDIATE OPERATIONS: About to execute ${operations.length} operations immediately');
+        for (final operation in operations) {
+          operation();
+        }
+        AppLogger().debug('🔍 IMMEDIATE OPERATIONS: All operations completed immediately');
+        
+        // Single setState for UI update
+        if (mounted) {
+          setState(() {});
+        }
         
         // Preload avatar images for better scroll performance
         final avatarUrls = newAudience.map((p) => p.avatar).toList() +
@@ -1409,8 +1440,43 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         PerformanceOptimizations.preloadAvatarImages(avatarUrls, context);
       }
       
+      // ENHANCED FALLBACK: If current user is in the speaker panelists but not marked as speaker, mark them as speaker
+      // This handles cases where guest speakers might not have explicit roles but are on the panel
+      if (_currentUser != null) {
+        bool isInSpeakerPanel = _speakerPanelists.any((speaker) => speaker.id == _currentUser!.id);
+        AppLogger().debug('🔍 FALLBACK CHECK: User in speaker panel: $isInSpeakerPanel, isModerator: $_isCurrentUserModerator, isSpeaker: $_isCurrentUserSpeaker');
+        AppLogger().debug('🔍 FALLBACK CHECK: Speaker panel contains: ${_speakerPanelists.map((s) => s.id).toList()}');
+        AppLogger().debug('🔍 FALLBACK CHECK: Current user ID: ${_currentUser!.id}');
+        
+        if (!_isCurrentUserModerator && !_isCurrentUserSpeaker && isInSpeakerPanel) {
+          AppLogger().info('🎤 FALLBACK: Current user found in speaker panel without explicit speaker role - granting speaker permissions');
+          _isCurrentUserSpeaker = true;
+          
+          // CRITICAL: Reinitialize LiveKit connection with speaker role
+          AppLogger().info('🔄 FALLBACK: Speaker detected - reinitializing audio connection with speaker role');
+          await _reinitializeAudioForSpeaker();
+        }
+        
+        // ADDITIONAL CHECK: Even if user thinks they're a speaker, verify they're actually on the panel
+        if (_isCurrentUserSpeaker && !isInSpeakerPanel && !_isCurrentUserModerator) {
+          AppLogger().warning('⚠️ ROLE MISMATCH: User marked as speaker but not in speaker panel - reverting to audience');
+          _isCurrentUserSpeaker = false;
+        }
+      }
+      
       AppLogger().debug('Loaded ${participants.length} participants: ${_speakerPanelists.length} speakers, ${_audienceMembers.length} audience, ${_speakerRequests.length} pending requests');
-      AppLogger().debug('Current user status: moderator=$_isCurrentUserModerator, speaker=$_isCurrentUserSpeaker, requested=$_hasRequestedSpeaker');
+      AppLogger().info('🎤 ROLE DEBUG: Current user status: moderator=$_isCurrentUserModerator, speaker=$_isCurrentUserSpeaker, requested=$_hasRequestedSpeaker');
+      
+      // Additional debug: Show current user's actual role in database
+      if (_currentUser != null) {
+        final currentUserParticipant = participants.firstWhere(
+          (p) => p['userProfile']?['userId'] == _currentUser!.id || p['userProfile']?['id'] == _currentUser!.id,
+          orElse: () => <String, dynamic>{},
+        );
+        final currentUserRole = currentUserParticipant['role'] ?? 'not found';
+        AppLogger().info('🎤 ROLE DEBUG: Current user database role: $currentUserRole');
+        AppLogger().info('🎤 ROLE DEBUG: Current user in speaker panel: ${_speakerPanelists.any((s) => s.id == _currentUser!.id)}');
+      }
     } catch (e) {
       AppLogger().error('Error loading participants: $e');
       // Fallback to mock data if real data fails
@@ -1478,6 +1544,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             // Check for specific participant role changes
             bool isHandRaiseEvent = false;
             bool isHandLowerEvent = false;
+            bool isSpeakerPromotionEvent = false;
             
             for (var event in response.events) {
               // Check if this is an update event
@@ -1486,6 +1553,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                 if (response.payload['roomId'] == widget.roomId) {
                   final newRole = response.payload['role'];
                   final userId = response.payload['userId'];
+                  
+                  AppLogger().debug('🔄 ROLE UPDATE: User $userId role changed to: $newRole');
                   
                   if (newRole == 'pending') {
                     AppLogger().info('Hand-raise detected: $userId requested to speak');
@@ -1496,6 +1565,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                       AppLogger().info('Hand-lower detected: $userId lowered their hand');
                       isHandLowerEvent = true;
                     }
+                  } else if ((newRole == 'speaker' || newRole == 'affirmative' || newRole == 'negative') && userId == _currentUser?.id) {
+                    // CRITICAL: Current user was promoted to speaker - need to reinitialize LiveKit connection
+                    AppLogger().info('🔄 SPEAKER PROMOTION: Current user promoted to speaker role - will reinitialize audio');
+                    isSpeakerPromotionEvent = true;
                   }
                 }
               }
@@ -1505,6 +1578,17 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             PerformanceOptimizations.throttledSetState(() async {
               await _loadParticipants();
             });
+            
+            // CRITICAL: Handle speaker promotion - reinitialize LiveKit connection with new role
+            if (isSpeakerPromotionEvent) {
+              AppLogger().info('🔄 SPEAKER PROMOTION: Executing LiveKit role sync for current user');
+              // Wait a moment for participant data to be loaded, then reinitialize
+              Future.delayed(const Duration(milliseconds: 200), () async {
+                if (mounted) {
+                  await _reinitializeAudioForSpeaker();
+                }
+              });
+            }
             
             // Show immediate notification for hand-raise events (only for moderators)
             if (isHandRaiseEvent && _isCurrentUserModerator) {
@@ -1912,7 +1996,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
 
 
   void _requestToJoinSpeakers() async {
-    if (_isCurrentUserModerator || _isCurrentUserSpeaker || _currentUser == null) {
+    if (_isCurrentUserModerator || _currentUser == null) {
       return;
     }
     
@@ -1975,6 +2059,89 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             backgroundColor: Colors.red,
           ),
         );
+      }
+    }
+  }
+
+  /// Handle speaker leaving the panel with warning dialog
+  Future<void> _requestToLeaveSpeakerPanel() async {
+    if (_currentUser == null) return;
+
+    // Show warning dialog
+    final shouldLeave = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF2D2D2D),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          title: const Row(
+            children: [
+              Icon(LucideIcons.alertTriangle, color: Colors.amber, size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Leave Speaker Panel?',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: const Text(
+            'You will be moved back to the audience and lose speaking privileges. You can raise your hand again to rejoin the panel.',
+            style: TextStyle(color: Colors.white70, fontSize: 16),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amber,
+                foregroundColor: Colors.black,
+              ),
+              child: const Text('Leave Panel'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldLeave == true) {
+      try {
+        // Move user back to audience
+        await _appwrite.updateDebateDiscussionParticipantRole(
+          roomId: widget.roomId,
+          userId: _currentUser!.id,
+          newRole: 'audience',
+        );
+
+        if (mounted) {
+          setState(() {
+            _isCurrentUserSpeaker = false;
+            _hasRequestedSpeaker = false;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('📤 You have left the speaker panel'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+
+        AppLogger().info('User ${_currentUser!.name} left the speaker panel');
+      } catch (e) {
+        AppLogger().error('Error leaving speaker panel: $e');
+        if (mounted && !_isDisposing) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error leaving panel: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -2085,8 +2252,20 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         );
       }
       
-      // If the approved user is the current user, offer to enable video/audio
+      // If the approved user is the current user, update their role and permissions immediately
       if (user.id == _currentUser?.id) {
+        AppLogger().info('🔄 ROLE ASSIGNMENT: Current user assigned to role: $role');
+        
+        // Update local role state
+        if (role == 'speaker' || role == 'affirmative' || role == 'negative') {
+          _isCurrentUserSpeaker = true;
+          AppLogger().info('🔄 ROLE ASSIGNMENT: Updated local speaker status to true');
+          
+          // CRITICAL: Reinitialize LiveKit connection with new speaker role
+          AppLogger().info('🔄 ROLE ASSIGNMENT: User promoted to speaker - reinitializing audio connection');
+          await _reinitializeAudioForSpeaker();
+        }
+        
         _showSpeakerActivationDialog();
       }
       
@@ -2166,16 +2345,28 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             TextButton(
               onPressed: () async {
                 Navigator.of(context).pop();
-                // Enable audio only
-                _toggleAudio();
+                // Connect to audio if not connected, then unmute
+                if (!_isAudioConnected) {
+                  await _connectToAudio();
+                }
+                // Then unmute
+                if (_isAudioConnected && _isMuted) {
+                  _toggleMute();
+                }
               },
               child: const Text('Audio Only', style: TextStyle(color: Colors.green)),
             ),
             ElevatedButton(
               onPressed: () async {
                 Navigator.of(context).pop();
-                // Enable both video and audio
-                _toggleAudio();
+                // Connect to audio if not connected, then unmute
+                if (!_isAudioConnected) {
+                  await _connectToAudio();
+                }
+                // Then unmute
+                if (_isAudioConnected && _isMuted) {
+                  _toggleMute();
+                }
                 _toggleVideo();
               },
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6)),
@@ -2887,34 +3078,98 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   Widget _buildControlsBar() {
     return Container(
       padding: const EdgeInsets.all(16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
+          // Status text (similar to open discussion)
+          Text(
+            _isCurrentUserModerator
+              ? '👑 You are the moderator'
+              : _isCurrentUserSpeaker
+                ? '🎙️ You are a speaker'
+                : '👂 You are in the audience${_hasRequestedSpeaker ? ' • Speaker request pending' : ''}',
+            style: TextStyle(
+              color: _isCurrentUserModerator
+                ? Colors.green
+                : _isCurrentUserSpeaker
+                  ? Colors.green
+                  : ArenaColors.accentPurple,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          
+          // Control buttons
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
           _buildControlButton(
             icon: LucideIcons.messageCircle,
-            isActive: false,
+            label: 'Chat',
+            color: const Color(0xFF8B5CF6), // Purple to match theme
             onTap: _showChat,
           ),
-          // Hand raise button (only for audience members)
-          if (!_isCurrentUserModerator && !_isCurrentUserSpeaker)
+          // Hand raise button (for all non-moderators - highlighted when speaker)
+          if (!_isCurrentUserModerator)
             _buildControlButton(
               icon: LucideIcons.hand,
-              isActive: _hasRequestedSpeaker,
-              onTap: _requestToJoinSpeakers,
+              label: _isCurrentUserSpeaker 
+                ? 'Leave Panel' 
+                : (_hasRequestedSpeaker ? 'Pending' : 'Raise Hand'),
+              color: _isCurrentUserSpeaker 
+                ? Colors.amber // Highlighted amber when on speaker panel
+                : (_hasRequestedSpeaker ? Colors.orange : ArenaColors.accentPurple),
+              onTap: _isCurrentUserSpeaker ? _requestToLeaveSpeakerPanel : _requestToJoinSpeakers,
             ),
           _buildControlButton(
             icon: LucideIcons.share2,
-            isActive: false,
+            label: 'Share',
+            color: Colors.blue,
             onTap: _shareRoom,
           ),
           _buildGiftButton(),
-          // Audio controls only - debates & discussions is audio-only
-          if (_isCurrentUserModerator || _isCurrentUserSpeaker)
-            _buildControlButton(
-              icon: _isMuted ? LucideIcons.micOff : LucideIcons.mic,
-              isActive: !_isMuted,
-              onTap: _toggleAudio,
-            ),
+          // Audio controls - ALL users can join audio (like open discussion)
+          // But only speakers and moderators can unmute
+          _buildControlButton(
+            icon: _isAudioConnected 
+              ? (_isMuted ? Icons.volume_off : Icons.volume_up)
+              : (_isAudioConnecting ? Icons.hourglass_empty : Icons.speaker),
+            label: _isAudioConnected 
+              ? ((_isCurrentUserModerator || _isCurrentUserSpeaker) 
+                  ? (_isMuted ? 'Unmute' : 'Mute')
+                  : 'Listening')
+              : (_isAudioConnecting ? 'Connecting...' : 'Join Audio'),
+            color: _isAudioConnected 
+              ? ((_isCurrentUserModerator || _isCurrentUserSpeaker)
+                  ? (_isMuted ? Colors.red : Colors.green)
+                  : Colors.grey)
+              : (_isAudioConnecting ? Colors.orange : Colors.blue),
+            onTap: _isAudioConnected 
+              ? ((_isCurrentUserModerator || _isCurrentUserSpeaker) 
+                  ? () => _toggleMute()
+                  : () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Only speakers and moderators can use mic. Raise your hand to become a speaker!'),
+                          backgroundColor: Colors.orange,
+                          duration: Duration(seconds: 3),
+                        ),
+                      );
+                    })
+              : (_isAudioConnecting ? () {} : () {
+                  AppLogger().debug('🔥 MANUAL-CONNECT: Join Audio button pressed');
+                  AppLogger().debug('🔥 MANUAL-CONNECT: Current user: ${_currentUser?.id}, isModerator: $_isCurrentUserModerator, isSpeaker: $_isCurrentUserSpeaker');
+                  AppLogger().debug('🔥 MANUAL-CONNECT: Audio state - connected: $_isAudioConnected, connecting: $_isAudioConnecting');
+                  AppLogger().debug('🔥 MANUAL-CONNECT: Participant roles: $_participantRoles');
+                  _connectToAudio().then((_) {
+                    AppLogger().debug('🔥 MANUAL-CONNECT: _connectToAudio() completed successfully');
+                  }).catchError((error) {
+                    AppLogger().error('🔥 MANUAL-CONNECT: _connectToAudio() failed: $error');
+                  });
+                }),
+          ),
           // Web audio activation button
           if (kIsWeb && _remoteStreams.isNotEmpty)
             Container(
@@ -2934,44 +3189,68 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             ),
           _buildControlButton(
             icon: LucideIcons.logOut,
-            isActive: false,
-            isDestructive: true,
+            label: 'Leave',
+            color: Colors.red,
             onTap: () {
               Navigator.pop(context);
             },
           ),
-        ],
-      ),
-    );
+        ], // End of Row children
+      ), // End of Row
+      ], // End of Column children
+    ), // End of Column
+  ); // End of Container
   }
 
   Widget _buildControlButton({
     required IconData icon,
-    required bool isActive,
+    required String label,
+    required Color color,
     required VoidCallback onTap,
-    bool isDestructive = false,
+    bool isActive = false, // Keep for backward compatibility
+    bool isDestructive = false, // Keep for backward compatibility  
   }) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 50,
-        height: 50,
-        decoration: BoxDecoration(
-          color: isDestructive
-              ? Colors.red
-              : isActive
-                  ? const Color(0xFF8B5CF6)
-                  : Colors.white.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(25),
-          border: isActive
-              ? null
-              : Border.all(color: Colors.grey[600]!, width: 1),
-        ),
-        child: Icon(
-          icon,
-          color: Colors.white,
-          size: 24,
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFF2D2D2D), // Dark background like arena theme
+              borderRadius: const BorderRadius.all(Radius.circular(20)),
+              border: Border.all(
+                color: color.withValues(alpha: 0.3),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 20,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
@@ -4986,6 +5265,62 @@ Join the conversation now in the Arena app!
     
     // Simulate success for demonstration
     AppLogger().info('Money gift processed successfully: \$${amount.toStringAsFixed(2)}');
+  }
+
+  /// Custom neon microphone button with glow effects
+  Widget _buildNeonMicButton() {
+    return Container(
+      width: 50,
+      height: 50,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(
+          color: _isMuted 
+            ? ArenaColors.scarletRed.withValues(alpha: 0.3)
+            : ArenaColors.accentPurple.withValues(alpha: 0.5), 
+          width: 1,
+        ),
+      ),
+      child: NeonMicIcon(
+        isMuted: _isMuted,
+        size: 28,
+        isActive: !_isMuted,
+        onTap: _toggleMute,
+        animationDuration: const Duration(milliseconds: 250),
+      ),
+    );
+  }
+
+  /// Disabled neon microphone button for audience members
+  Widget _buildDisabledNeonMicButton() {
+    return Container(
+      width: 50,
+      height: 50,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(
+          color: Colors.grey.withValues(alpha: 0.3), 
+          width: 1,
+        ),
+      ),
+      child: NeonMicIcon(
+        isMuted: true,
+        size: 28,
+        isActive: false,
+        onTap: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Only speakers and moderators can use audio in debates & discussions!'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        },
+        animationDuration: const Duration(milliseconds: 250),
+      ),
+    );
   }
 
   Widget _buildGiftButton() {
