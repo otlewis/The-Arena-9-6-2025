@@ -32,12 +32,8 @@ mixin _$InstantMessage {
       throw _privateConstructorUsedError; // For grouping messages
   Map<String, dynamic>? get metadata => throw _privateConstructorUsedError;
 
-  /// Serializes this InstantMessage to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of InstantMessage
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $InstantMessageCopyWith<InstantMessage> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -71,8 +67,6 @@ class _$InstantMessageCopyWithImpl<$Res, $Val extends InstantMessage>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of InstantMessage
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -161,8 +155,6 @@ class __$$InstantMessageImplCopyWithImpl<$Res>
       _$InstantMessageImpl _value, $Res Function(_$InstantMessageImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of InstantMessage
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -299,7 +291,7 @@ class _$InstantMessageImpl implements _InstantMessage {
             const DeepCollectionEquality().equals(other._metadata, _metadata));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(
       runtimeType,
@@ -314,9 +306,7 @@ class _$InstantMessageImpl implements _InstantMessage {
       conversationId,
       const DeepCollectionEquality().hash(_metadata));
 
-  /// Create a copy of InstantMessage
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$InstantMessageImplCopyWith<_$InstantMessageImpl> get copyWith =>
@@ -364,14 +354,11 @@ abstract class _InstantMessage implements InstantMessage {
   @override
   String? get senderAvatar;
   @override
-  String? get conversationId; // For grouping messages
-  @override
+  String? get conversationId;
+  @override // For grouping messages
   Map<String, dynamic>? get metadata;
-
-  /// Create a copy of InstantMessage
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$InstantMessageImplCopyWith<_$InstantMessageImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -390,12 +377,8 @@ mixin _$Conversation {
   Map<String, UserInfo> get participants => throw _privateConstructorUsedError;
   Map<String, dynamic>? get metadata => throw _privateConstructorUsedError;
 
-  /// Serializes this Conversation to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of Conversation
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $ConversationCopyWith<Conversation> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -426,8 +409,6 @@ class _$ConversationCopyWithImpl<$Res, $Val extends Conversation>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of Conversation
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -498,8 +479,6 @@ class __$$ConversationImplCopyWithImpl<$Res>
       _$ConversationImpl _value, $Res Function(_$ConversationImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of Conversation
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -620,7 +599,7 @@ class _$ConversationImpl implements _Conversation {
             const DeepCollectionEquality().equals(other._metadata, _metadata));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(
       runtimeType,
@@ -632,9 +611,7 @@ class _$ConversationImpl implements _Conversation {
       const DeepCollectionEquality().hash(_participants),
       const DeepCollectionEquality().hash(_metadata));
 
-  /// Create a copy of Conversation
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$ConversationImplCopyWith<_$ConversationImpl> get copyWith =>
@@ -675,11 +652,8 @@ abstract class _Conversation implements Conversation {
   Map<String, UserInfo> get participants;
   @override
   Map<String, dynamic>? get metadata;
-
-  /// Create a copy of Conversation
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$ConversationImplCopyWith<_$ConversationImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -696,12 +670,8 @@ mixin _$UserInfo {
   bool? get isOnline => throw _privateConstructorUsedError;
   DateTime? get lastSeen => throw _privateConstructorUsedError;
 
-  /// Serializes this UserInfo to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of UserInfo
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $UserInfoCopyWith<UserInfo> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -729,8 +699,6 @@ class _$UserInfoCopyWithImpl<$Res, $Val extends UserInfo>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of UserInfo
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -789,8 +757,6 @@ class __$$UserInfoImplCopyWithImpl<$Res>
       _$UserInfoImpl _value, $Res Function(_$UserInfoImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of UserInfo
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -869,14 +835,12 @@ class _$UserInfoImpl implements _UserInfo {
                 other.lastSeen == lastSeen));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode =>
       Object.hash(runtimeType, id, username, avatar, isOnline, lastSeen);
 
-  /// Create a copy of UserInfo
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$UserInfoImplCopyWith<_$UserInfoImpl> get copyWith =>
@@ -911,11 +875,8 @@ abstract class _UserInfo implements UserInfo {
   bool? get isOnline;
   @override
   DateTime? get lastSeen;
-
-  /// Create a copy of UserInfo
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$UserInfoImplCopyWith<_$UserInfoImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

@@ -59,9 +59,7 @@ mixin _$ArenaRoomState {
   bool get isExiting => throw _privateConstructorUsedError; // Error state
   String? get error => throw _privateConstructorUsedError;
 
-  /// Create a copy of ArenaRoomState
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $ArenaRoomStateCopyWith<ArenaRoomState> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -120,8 +118,6 @@ class _$ArenaRoomStateCopyWithImpl<$Res, $Val extends ArenaRoomState>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of ArenaRoomState
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -360,8 +356,6 @@ class __$$ArenaRoomStateImplCopyWithImpl<$Res>
       _$ArenaRoomStateImpl _value, $Res Function(_$ArenaRoomStateImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of ArenaRoomState
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -844,9 +838,7 @@ class _$ArenaRoomStateImpl extends _ArenaRoomState {
         error
       ]);
 
-  /// Create a copy of ArenaRoomState
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$ArenaRoomStateImplCopyWith<_$ArenaRoomStateImpl> get copyWith =>
@@ -893,8 +885,7 @@ abstract class _ArenaRoomState extends ArenaRoomState {
       final String? error}) = _$ArenaRoomStateImpl;
   const _ArenaRoomState._() : super._();
 
-// Room information
-  @override
+  @override // Room information
   String get roomId;
   @override
   String get challengeId;
@@ -905,40 +896,40 @@ abstract class _ArenaRoomState extends ArenaRoomState {
   @override
   String? get category;
   @override
-  String get status; // Participants
-  @override
+  String get status;
+  @override // Participants
   Map<String, UserProfile> get participants;
   @override
-  List<UserProfile> get audience; // Current user
-  @override
+  List<UserProfile> get audience;
+  @override // Current user
   UserProfile? get currentUser;
   @override
-  ParticipantRole get currentUserRole; // Debate state
-  @override
+  ParticipantRole get currentUserRole;
+  @override // Debate state
   DebatePhase get currentPhase;
   @override
   String? get currentSpeaker;
   @override
   bool get speakingEnabled;
   @override
-  bool get bothDebatersPresent; // Timer state
-  @override
+  bool get bothDebatersPresent;
+  @override // Timer state
   int get remainingSeconds;
   @override
   bool get isTimerRunning;
   @override
   bool get isTimerPaused;
   @override
-  bool get hasPlayed30SecWarning; // Judging state
-  @override
+  bool get hasPlayed30SecWarning;
+  @override // Judging state
   bool get judgingEnabled;
   @override
   bool get judgingComplete;
   @override
   bool get hasCurrentUserSubmittedVote;
   @override
-  String? get winner; // Invitation state
-  @override
+  String? get winner;
+  @override // Invitation state
   bool get invitationsInProgress;
   @override
   List<String> get affirmativeSelections;
@@ -951,8 +942,8 @@ abstract class _ArenaRoomState extends ArenaRoomState {
   @override
   bool get invitationModalShown;
   @override
-  bool get waitingForOtherDebater; // UI state
-  @override
+  bool get waitingForOtherDebater;
+  @override // UI state
   bool get isLoading;
   @override
   bool get resultsModalShown;
@@ -961,14 +952,11 @@ abstract class _ArenaRoomState extends ArenaRoomState {
   @override
   bool get hasNavigated;
   @override
-  bool get isExiting; // Error state
-  @override
+  bool get isExiting;
+  @override // Error state
   String? get error;
-
-  /// Create a copy of ArenaRoomState
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$ArenaRoomStateImplCopyWith<_$ArenaRoomStateImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

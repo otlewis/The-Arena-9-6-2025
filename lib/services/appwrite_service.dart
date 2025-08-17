@@ -2132,7 +2132,7 @@ class AppwriteService {
     }
   }
 
-  Future<void> assignArenaRole({
+  Future<String> assignArenaRole({
     required String roomId,
     required String userId,
     required String role, // affirmative, negative, moderator, judge1, judge2, judge3, audience
@@ -2140,23 +2140,40 @@ class AppwriteService {
     try {
       String finalRole = role;
       
+      // Get existing participants for role conflict checking
+      final existingRolesResponse = await databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'arena_participants',
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('isActive', true),
+        ],
+      );
+      
+      final existingRoles = existingRolesResponse.documents
+          .map((doc) => doc.data['role'] as String)
+          .toList();
+      
+      // Special handling for moderator role - enforce first-come-first-serve
+      if (role == 'moderator') {
+        AppLogger().debug('🔍 Processing moderator role assignment for user $userId in room $roomId');
+        AppLogger().debug('🔍 Existing roles: $existingRoles');
+        
+        // Check if moderator slot is already taken
+        if (existingRoles.contains('moderator')) {
+          AppLogger().warning('⚠️ Moderator slot already taken in room $roomId - assigning user $userId as audience');
+          finalRole = 'audience';
+        } else {
+          AppLogger().debug('✅ Moderator slot available - assigning user $userId as moderator');
+          finalRole = 'moderator';
+        }
+      }
       // Special handling for judge role - assign to next available judge slot
-      if (role == 'judge') {
+      else if (role == 'judge') {
         AppLogger().debug('🔍 Processing judge role assignment for user $userId in room $roomId');
         
-        // Get existing participants roles only (not full profiles to avoid circular dependency)
-        final existingRolesResponse = await databases.listDocuments(
-          databaseId: 'arena_db',
-          collectionId: 'arena_participants',
-          queries: [
-            Query.equal('roomId', roomId),
-            Query.equal('isActive', true),
-          ],
-        );
-        
         final judgeRoles = ['judge1', 'judge2', 'judge3'];
-        final takenJudgeRoles = existingRolesResponse.documents
-            .map((doc) => doc.data['role'] as String)
+        final takenJudgeRoles = existingRoles
             .where((r) => judgeRoles.contains(r))
             .toSet();
         
@@ -2197,6 +2214,7 @@ class AppwriteService {
       AppLogger().info('✅ Created new participant: user $userId as $finalRole in room $roomId (duplicates cleaned)');
 
       AppLogger().info('Assigned $finalRole to user $userId in room $roomId');
+      return finalRole; // Return the actual role assigned (might be different from requested)
     } catch (e) {
       AppLogger().error('Error assigning Arena role: $e');
       rethrow;
@@ -3515,11 +3533,12 @@ class AppwriteService {
       }
 
       // Automatically assign creator as moderator
-      await assignArenaRole(
+      final assignedRole = await assignArenaRole(
         roomId: roomId,
         userId: creatorId,
         role: 'moderator',
       );
+      AppLogger().info('📝 Creator assigned as: $assignedRole');
 
       // Initialize Firebase timer for this room
       try {
@@ -3574,11 +3593,12 @@ class AppwriteService {
       );
       
       // Assign creator as moderator
-      await assignArenaRole(
+      final assignedRole = await assignArenaRole(
         roomId: roomId,
         userId: creatorId,
         role: 'moderator',
       );
+      AppLogger().info('📅 Scheduled room creator assigned as: $assignedRole');
       
       AppLogger().info('Scheduled arena room created: $roomId for $scheduledTime');
       return roomId;
@@ -3654,11 +3674,12 @@ class AppwriteService {
       
       // CRITICAL: Assign creator as moderator IMMEDIATELY
       // This prevents cleanup functions from seeing the room as having no moderator
-      await assignArenaRole(
+      final assignedRole = await assignArenaRole(
         roomId: documentId,
         userId: creatorId,
         role: 'moderator',
       );
+      AppLogger().info('⚡ Simple room creator assigned as: $assignedRole');
       AppLogger().info('✅ Moderator role assigned and confirmed before returning');
       
       // Initialize Firebase timer
@@ -3766,11 +3787,12 @@ class AppwriteService {
       }
 
       // Join as audience by default (moderator can assign roles later)
-      await assignArenaRole(
+      final assignedRole = await assignArenaRole(
         roomId: roomId,
         userId: userId,
         role: 'audience',
       );
+      AppLogger().info('👥 Joined user assigned as: $assignedRole');
 
       AppLogger().info('User $userId joined arena room $roomId as audience');
     } catch (e) {
@@ -4197,6 +4219,158 @@ class AppwriteService {
     } catch (e) {
       AppLogger().error('Error adding coins to user: $e');
       return false;
+    }
+  }
+
+  // ===== PING REQUEST METHODS =====
+
+  /// Create a ping request to a moderator or judge
+  Future<String?> createPingRequest({
+    required String fromUserId,
+    required String fromUsername,
+    required String toUserId,
+    required String toUsername,
+    required String roleType, // 'moderator' or 'judge'
+    required String debateTitle,
+    required String debateDescription,
+    required String category,
+    required String arenaRoomId,
+    String? message,
+  }) async {
+    try {
+      final pingData = {
+        'fromUserId': fromUserId,
+        'fromUsername': fromUsername,
+        'toUserId': toUserId,
+        'toUsername': toUsername,
+        'roleType': roleType,
+        'debateTitle': debateTitle,
+        'debateDescription': debateDescription,
+        'category': category,
+        'scheduledTime': DateTime.now().toIso8601String(),
+        'status': 'pending',
+        'message': message,
+        'createdAt': DateTime.now().toIso8601String(),
+        'arenaRoomId': arenaRoomId,
+      };
+
+      final response = await databases.createDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.pingRequestsCollection,
+        documentId: ID.unique(),
+        data: pingData,
+      );
+
+      AppLogger().info('Created ping request: ${response.$id}');
+      return response.$id;
+    } catch (e) {
+      AppLogger().error('Error creating ping request: $e');
+      return null;
+    }
+  }
+
+  /// Get pending ping requests for a user
+  Future<List<Map<String, dynamic>>> getPendingPingRequests(String userId) async {
+    try {
+      final response = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.pingRequestsCollection,
+        queries: [
+          Query.equal('toUserId', userId),
+          Query.equal('status', 'pending'),
+          Query.orderDesc('\$createdAt'),
+          Query.limit(10),
+        ],
+      );
+
+      return response.documents.map((doc) {
+        final data = Map<String, dynamic>.from(doc.data);
+        data['id'] = doc.$id;
+        return data;
+      }).toList();
+    } catch (e) {
+      AppLogger().error('Error getting pending ping requests: $e');
+      return [];
+    }
+  }
+
+  /// Update ping request status
+  Future<bool> updatePingRequestStatus({
+    required String pingId,
+    required String status,
+    String? response,
+  }) async {
+    try {
+      await databases.updateDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.pingRequestsCollection,
+        documentId: pingId,
+        data: {
+          'status': status,
+          'response': response,
+          'respondedAt': DateTime.now().toIso8601String(),
+        },
+      );
+
+      AppLogger().info('Updated ping request $pingId status to $status');
+      return true;
+    } catch (e) {
+      AppLogger().error('Error updating ping request status: $e');
+      return false;
+    }
+  }
+
+  /// Subscribe to ping requests for a user
+  RealtimeSubscription subscribeToPingRequests(String userId, Function(RealtimeMessage) callback) {
+    final subscription = realtime.subscribe([
+      'databases.${AppwriteConstants.databaseId}.collections.${AppwriteConstants.pingRequestsCollection}.documents'
+    ]);
+
+    subscription.stream.listen((response) {
+      try {
+        // Filter for documents where toUserId matches the current user
+        final data = response.payload;
+        if (data['toUserId'] == userId && data['status'] == 'pending') {
+          callback(response);
+        }
+      } catch (e) {
+        AppLogger().error('Error processing ping request subscription: $e');
+      }
+    });
+
+    return subscription;
+  }
+
+  /// Clean up expired ping requests (older than 2 minutes)
+  Future<void> cleanupExpiredPingRequests() async {
+    try {
+      final twoMinutesAgo = DateTime.now().subtract(const Duration(minutes: 2));
+      
+      final response = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.pingRequestsCollection,
+        queries: [
+          Query.equal('status', 'pending'),
+          Query.lessThan('createdAt', twoMinutesAgo.toIso8601String()),
+        ],
+      );
+
+      for (final doc in response.documents) {
+        await databases.updateDocument(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: AppwriteConstants.pingRequestsCollection,
+          documentId: doc.$id,
+          data: {
+            'status': 'expired',
+            'response': 'Request expired',
+            'respondedAt': DateTime.now().toIso8601String(),
+          },
+        );
+      }
+
+      AppLogger().info('Cleaned up ${response.documents.length} expired ping requests');
+    } catch (e) {
+      AppLogger().error('Error cleaning up expired ping requests: $e');
     }
   }
 } 

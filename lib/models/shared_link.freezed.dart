@@ -31,12 +31,8 @@ mixin _$SharedLink {
   bool get isActive => throw _privateConstructorUsedError;
   String get type => throw _privateConstructorUsedError;
 
-  /// Serializes this SharedLink to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of SharedLink
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $SharedLinkCopyWith<SharedLink> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -70,8 +66,6 @@ class _$SharedLinkCopyWithImpl<$Res, $Val extends SharedLink>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of SharedLink
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -160,8 +154,6 @@ class __$$SharedLinkImplCopyWithImpl<$Res>
       _$SharedLinkImpl _value, $Res Function(_$SharedLinkImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of SharedLink
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -289,14 +281,12 @@ class _$SharedLinkImpl implements _SharedLink {
             (identical(other.type, type) || other.type == type));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(runtimeType, id, roomId, url, title,
       description, sharedBy, sharedByName, sharedAt, isActive, type);
 
-  /// Create a copy of SharedLink
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$SharedLinkImplCopyWith<_$SharedLinkImpl> get copyWith =>
@@ -346,11 +336,8 @@ abstract class _SharedLink implements SharedLink {
   bool get isActive;
   @override
   String get type;
-
-  /// Create a copy of SharedLink
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$SharedLinkImplCopyWith<_$SharedLinkImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

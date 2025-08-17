@@ -28,9 +28,7 @@ mixin _$ArenaParticipant {
   DateTime? get joinedAt => throw _privateConstructorUsedError;
   int? get score => throw _privateConstructorUsedError;
 
-  /// Create a copy of ArenaParticipant
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $ArenaParticipantCopyWith<ArenaParticipant> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -65,8 +63,6 @@ class _$ArenaParticipantCopyWithImpl<$Res, $Val extends ArenaParticipant>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of ArenaParticipant
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -161,8 +157,6 @@ class __$$ArenaParticipantImplCopyWithImpl<$Res>
       $Res Function(_$ArenaParticipantImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of ArenaParticipant
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -302,9 +296,7 @@ class _$ArenaParticipantImpl implements _ArenaParticipant {
   int get hashCode => Object.hash(runtimeType, userId, name, role, avatar,
       isReady, isSpeaking, hasMicrophone, hasCamera, isMuted, joinedAt, score);
 
-  /// Create a copy of ArenaParticipant
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$ArenaParticipantImplCopyWith<_$ArenaParticipantImpl> get copyWith =>
@@ -348,11 +340,8 @@ abstract class _ArenaParticipant implements ArenaParticipant {
   DateTime? get joinedAt;
   @override
   int? get score;
-
-  /// Create a copy of ArenaParticipant
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$ArenaParticipantImplCopyWith<_$ArenaParticipantImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -407,9 +396,7 @@ mixin _$ArenaState {
   bool get isLoading => throw _privateConstructorUsedError;
   String? get error => throw _privateConstructorUsedError;
 
-  /// Create a copy of ArenaState
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $ArenaStateCopyWith<ArenaState> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -475,8 +462,6 @@ class _$ArenaStateCopyWithImpl<$Res, $Val extends ArenaState>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of ArenaState
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -757,8 +742,6 @@ class __$$ArenaStateImplCopyWithImpl<$Res>
       _$ArenaStateImpl _value, $Res Function(_$ArenaStateImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of ArenaState
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -1320,9 +1303,7 @@ class _$ArenaStateImpl extends _ArenaState {
         error
       ]);
 
-  /// Create a copy of ArenaState
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$ArenaStateImplCopyWith<_$ArenaStateImpl> get copyWith =>
@@ -1408,20 +1389,20 @@ abstract class _ArenaState extends ArenaState {
   @override
   bool get hasPlayed30SecWarning;
   @override
-  bool get speakingEnabled; // Network and connection state
-  @override
+  bool get speakingEnabled;
+  @override // Network and connection state
   bool get isRealtimeHealthy;
   @override
-  int get reconnectAttempts; // Judging state
-  @override
+  int get reconnectAttempts;
+  @override // Judging state
   bool get judgingEnabled;
   @override
   bool get judgingComplete;
   @override
   bool get hasCurrentUserSubmittedVote;
   @override
-  String? get winner; // UI state
-  @override
+  String? get winner;
+  @override // UI state
   bool get bothDebatersPresent;
   @override
   bool get invitationModalShown;
@@ -1444,12 +1425,12 @@ abstract class _ArenaState extends ArenaState {
   @override
   bool get hasNavigated;
   @override
-  bool get isExiting; // User context
-  @override
+  bool get isExiting;
+  @override // User context
   String? get currentUserId;
   @override
-  String? get userRole; // Room management
-  @override
+  String? get userRole;
+  @override // Room management
   Map<String, dynamic>? get roomData;
   @override
   DateTime? get startTime;
@@ -1459,11 +1440,8 @@ abstract class _ArenaState extends ArenaState {
   bool get isLoading;
   @override
   String? get error;
-
-  /// Create a copy of ArenaState
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$ArenaStateImplCopyWith<_$ArenaStateImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

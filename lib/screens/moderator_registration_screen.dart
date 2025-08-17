@@ -270,7 +270,7 @@ class _ModeratorRegistrationScreenState extends State<ModeratorRegistrationScree
                   onChanged: (value) {
                     setState(() => _isAvailable = value);
                   },
-                  activeColor: const Color(0xFF8B5CF6),
+                  activeThumbColor: const Color(0xFF8B5CF6),
                 ),
               ],
             ),

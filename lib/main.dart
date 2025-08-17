@@ -33,6 +33,9 @@ import 'services/offline_conflict_resolver.dart';
 import 'services/background_sync_service.dart';
 import 'services/livekit_service.dart';
 import 'services/speaking_detection_service.dart';
+import 'services/persistent_audio_service.dart';
+import 'services/audio_initialization_service.dart';
+import 'services/room_audio_adapter.dart';
 import 'widgets/network_quality_indicator.dart';
 import 'package:mcp_toolkit/mcp_toolkit.dart';
 
@@ -77,6 +80,11 @@ void setupServiceLocator() {
   // Register audio/video services
   getIt.registerLazySingleton<LiveKitService>(() => LiveKitService());
   getIt.registerLazySingleton<SpeakingDetectionService>(() => SpeakingDetectionService());
+  
+  // Register persistent audio service (singleton for app-wide usage)
+  getIt.registerLazySingleton<PersistentAudioService>(() => PersistentAudioService());
+  getIt.registerLazySingleton<AudioInitializationService>(() => AudioInitializationService());
+  getIt.registerLazySingleton<RoomAudioAdapter>(() => RoomAudioAdapter());
 }
 
 void resetMessagingService() {
@@ -182,6 +190,9 @@ void main() async {
       getIt<SpeakingDetectionService>().initialize();
       logger.info('🗣️ Speaking detection service initialized');
       
+      // Initialize persistent audio infrastructure early (non-blocking)
+      _initializeAudioInfrastructure();
+      
       // Start app optimization in background (non-blocking)
       _startAppOptimization();
       
@@ -229,6 +240,60 @@ void main() async {
     }
     
     if (kDebugMode) throw error;
+  });
+}
+
+/// Initialize audio infrastructure early for instant room connections
+void _initializeAudioInfrastructure() {
+  Timer(const Duration(milliseconds: 100), () async {
+    try {
+      AppLogger().info('🎵 STARTUP: Initializing persistent audio infrastructure...');
+      
+      // Check network connectivity first
+      final networkService = getIt<NetworkResilienceService>();
+      if (!networkService.isOnline) {
+        AppLogger().warning('⚠️ STARTUP: No internet connection - delaying audio initialization');
+        // Schedule retry when network is available
+        _scheduleAudioInitRetry();
+        return;
+      }
+      
+      // Wait for AppwriteService to be ready first (since we need user auth)
+      await getIt.isReady<AppwriteService>();
+      
+      // Initialize audio service for authenticated users
+      final audioInitService = getIt<AudioInitializationService>();
+      await audioInitService.initializeForUser();
+      
+      AppLogger().info('✅ STARTUP: Persistent audio infrastructure ready - instant room connections enabled');
+    } catch (e) {
+      AppLogger().warning('⚠️ STARTUP: Audio infrastructure initialization failed (will retry on first room join): $e');
+      // Schedule a retry in case it was a temporary network issue
+      _scheduleAudioInitRetry();
+    }
+  });
+}
+
+/// Schedule audio initialization retry when network becomes available
+void _scheduleAudioInitRetry() {
+  Timer.periodic(const Duration(seconds: 10), (timer) async {
+    try {
+      final networkService = getIt<NetworkResilienceService>();
+      if (networkService.isOnline) {
+        AppLogger().info('🔄 STARTUP: Network available - retrying audio initialization');
+        timer.cancel();
+        
+        // Wait for services and retry audio init
+        await getIt.isReady<AppwriteService>();
+        final audioInitService = getIt<AudioInitializationService>();
+        await audioInitService.initializeForUser();
+        
+        AppLogger().info('✅ STARTUP: Audio infrastructure initialized on retry');
+      }
+    } catch (e) {
+      AppLogger().warning('⚠️ STARTUP: Audio retry failed: $e');
+      // Continue retrying - timer will try again in 10 seconds
+    }
   });
 }
 
@@ -341,8 +406,17 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     
+    // Always notify persistent audio service of lifecycle changes
+    try {
+      if (getIt.isRegistered<PersistentAudioService>()) {
+        getIt<PersistentAudioService>().onAppLifecycleChanged(state);
+      }
+    } catch (e) {
+      AppLogger().warning('Failed to notify audio service of lifecycle change: $e');
+    }
+    
     if (state == AppLifecycleState.resumed) {
-      AppLogger().debug('🔄 App resumed - refreshing messaging service...');
+      AppLogger().debug('🔄 App resumed - refreshing services...');
       ref.read(navigationProvider.notifier).refreshMessaging();
     }
   }
@@ -401,7 +475,7 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
     AppLogger().debug('📱 ✅ UI message stream listening setup complete');
   }
 
-  void _navigateToArena(Map<String, dynamic> challenge) {
+  void _navigateToArena(Map<String, dynamic> challenge) async {
     // Remove any existing challenge overlay
     _challengeOverlay?.remove();
     _challengeOverlay = null;
@@ -409,16 +483,33 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
     // Get the actual room ID from the challenge (it should have arenaRoomId after acceptance)
     final roomId = challenge['arenaRoomId'] ?? 'arena_${challenge['id']}';
     
+    AppLogger().info('🚀 CHALLENGE: Preparing to navigate to Arena room: $roomId');
+    
+    // Ensure persistent audio is ready before navigation
+    try {
+      final audioInitService = getIt<AudioInitializationService>();
+      if (!audioInitService.isInitialized) {
+        AppLogger().info('🚀 CHALLENGE: Waiting for persistent audio initialization...');
+        await audioInitService.initializeForUser();
+        // Give it a moment to fully establish connection
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+      AppLogger().info('✅ CHALLENGE: Persistent audio ready, navigating to Arena');
+    } catch (e) {
+      AppLogger().warning('⚠️ CHALLENGE: Audio preparation failed, proceeding anyway: $e');
+    }
+    
     // Navigate to Arena
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ArenaScreen(
-          roomId: roomId,
-          challengeId: challenge['id'],
-          topic: challenge['topic'] ?? 'Debate Topic',
-          description: challenge['description'],
-          category: challenge['category'],
-          challengerId: challenge['challengerId'],
+    if (mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ArenaScreen(
+            roomId: roomId,
+            challengeId: challenge['id'],
+            topic: challenge['topic'] ?? 'Debate Topic',
+            description: challenge['description'],
+            category: challenge['category'],
+            challengerId: challenge['challengerId'],
           challengedId: challenge['challengedId'],
         ),
       ),
@@ -433,14 +524,17 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
         });
       }
     });
+    }
     
     // Show notification that challenge was accepted
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('⚡ ${challenge['challengedName'] ?? 'Opponent'} accepted your challenge!'),
-        backgroundColor: Colors.green,
-      ),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('⚡ ${challenge['challengedName'] ?? 'Opponent'} accepted your challenge!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
   }
 
   void _showChallengeModal(Map<String, dynamic> challenge) {

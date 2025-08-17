@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'dart:async';
 import '../screens/debate_clubs_screen.dart';
 import '../screens/profile_screen.dart';
 import 'create_open_screen.dart';
@@ -20,6 +21,7 @@ import '../widgets/arena_role_notification_modal.dart';
 import '../widgets/animated_fade_in.dart';
 import '../widgets/simple_message_bell.dart';
 import '../widgets/challenge_bell.dart';
+import '../widgets/audio_status_indicator.dart';
 import 'package:get_it/get_it.dart';
 import '../core/logging/app_logger.dart';
 import '../debug_coin_initializer.dart';
@@ -34,7 +36,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final AppwriteService _appwrite = AppwriteService();
   final ThemeService _themeService = ThemeService();
   late final ChallengeMessagingService _messagingService;
@@ -48,18 +50,39 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _messagingService = GetIt.instance<ChallengeMessagingService>();
     _loadCurrentUserProfile();
     _setupArenaRoleInvitationListener();
     _setupChallengeDeclinedListener();
     _setupPingRequestListener();
     _checkUserRoles();
+    
+    // Periodic role check for debugging (every 30 seconds)
+    Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted) {
+        AppLogger().debug('⏰ Periodic role check triggered');
+        _checkUserRoles();
+      } else {
+        timer.cancel();
+      }
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pingSubscription?.close();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      AppLogger().debug('📱 App resumed - checking user roles');
+      _checkUserRoles();
+    }
   }
 
   Future<void> _loadCurrentUserProfile() async {
@@ -222,32 +245,35 @@ class _HomeScreenState extends State<HomeScreen> {
                 delay: const Duration(milliseconds: 100),
                 child: Row(
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _getGreeting(),
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w400,
-                            color: Color(0xFF8B5CF6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _getGreeting(),
+                            style: const TextStyle(
+                              fontSize: 18, // Reduced from 20
+                              fontWeight: FontWeight.w400,
+                              color: Color(0xFF8B5CF6),
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                        Text(
-                          '@${_currentUserProfile?.name ?? 'User'}',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
+                          Text(
+                            '@${_currentUserProfile?.name ?? 'User'}',
+                            style: TextStyle(
+                              fontSize: 13, // Reduced from 14
+                              color: Colors.grey[600],
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                    const Spacer(),
                     AnimatedScaleIn(
                       delay: const Duration(milliseconds: 300),
                       child: Container(
-                        width: 44,
-                        height: 44,
+                        width: 36, // Reduced from 44
+                        height: 36, // Reduced from 44
                         decoration: BoxDecoration(
                           color: _themeService.isDarkMode 
                               ? const Color(0xFF3A3A3A)
@@ -273,17 +299,17 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: const Center(
                           child: ChallengeBell(
                             iconColor: Color(0xFFDC143C), // Scarlet red
-                            iconSize: 24,
+                            iconSize: 20, // Reduced from 24
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4), // Reduced from 8
                     AnimatedScaleIn(
                       delay: const Duration(milliseconds: 350),
                       child: Container(
-                        width: 44,
-                        height: 44,
+                        width: 36, // Reduced from 44
+                        height: 36, // Reduced from 44
                         decoration: BoxDecoration(
                           color: _themeService.isDarkMode 
                               ? const Color(0xFF3A3A3A)
@@ -309,12 +335,47 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: const Center(
                           child: SimpleMessageBell(
                             iconColor: Color(0xFF8B5CF6), // Purple
-                            iconSize: 24,
+                            iconSize: 20, // Reduced from 24
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4), // Reduced from 8
+                    AnimatedScaleIn(
+                      delay: const Duration(milliseconds: 375),
+                      child: Container(
+                        width: 36, // Reduced from 44
+                        height: 36, // Reduced from 44
+                        decoration: BoxDecoration(
+                          color: _themeService.isDarkMode 
+                              ? const Color(0xFF3A3A3A)
+                              : const Color(0xFFF0F0F3),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: _themeService.isDarkMode 
+                                  ? Colors.white.withValues(alpha: 0.03)
+                                  : Colors.white.withValues(alpha: 0.7),
+                              offset: const Offset(-4, -4),
+                              blurRadius: 8,
+                            ),
+                            BoxShadow(
+                              color: _themeService.isDarkMode 
+                                  ? Colors.black.withValues(alpha: 0.5)
+                                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                              offset: const Offset(4, 4),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                        child: const Center(
+                          child: AudioStatusIndicator(
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4), // Reduced from 8
                     AnimatedScaleIn(
                       delay: const Duration(milliseconds: 400),
                       child: _buildHeaderIcon(
@@ -325,7 +386,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4), // Reduced from 8
                     AnimatedScaleIn(
                       delay: const Duration(milliseconds: 500),
                       child: GestureDetector(
@@ -518,14 +579,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
-    final name = _currentUserProfile?.name ?? 'User';
     
     if (hour < 12) {
-      return 'Good Morning\n$name';
+      return 'Good Morning';
     } else if (hour < 17) {
-      return 'Good Afternoon\n$name';
+      return 'Good Afternoon';
     } else {
-      return 'Good Evening\n$name';
+      return 'Good Evening';
     }
   }
 
@@ -533,6 +593,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_currentUserProfile == null) return;
     
     try {
+      AppLogger().debug('🔍 Checking user roles for: ${_currentUserProfile!.id}');
+      
       // Check if user is already a moderator
       final moderatorResponse = await _appwrite.databases.listDocuments(
         databaseId: AppwriteConstants.databaseId,
@@ -551,11 +613,18 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       );
       
+      final isModerator = moderatorResponse.documents.isNotEmpty;
+      final isJudge = judgeResponse.documents.isNotEmpty;
+      
+      AppLogger().debug('🔍 Role check results - Moderator: $isModerator (${moderatorResponse.documents.length} docs), Judge: $isJudge (${judgeResponse.documents.length} docs)');
+      
       if (mounted) {
         setState(() {
-          _isCurrentUserModerator = moderatorResponse.documents.isNotEmpty;
-          _isCurrentUserJudge = judgeResponse.documents.isNotEmpty;
+          _isCurrentUserModerator = isModerator;
+          _isCurrentUserJudge = isJudge;
         });
+        
+        AppLogger().debug('🔍 UI state updated - Showing moderator card: $_isCurrentUserModerator, Showing judge card: $_isCurrentUserJudge');
       }
     } catch (e) {
       AppLogger().error('Error checking user roles: $e');
@@ -603,7 +672,7 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'You are already registered as a ${roleType}!',
+              'You are already registered as a $roleType!',
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 12),
@@ -765,80 +834,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildCommunityRoleButton({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: _themeService.isDarkMode 
-              ? const Color(0xFF2D2D2D)
-              : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: color.withValues(alpha: 0.3),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: _themeService.isDarkMode 
-                  ? Colors.white.withValues(alpha: 0.03)
-                  : Colors.white.withValues(alpha: 0.7),
-              offset: const Offset(-3, -3),
-              blurRadius: 6,
-            ),
-            BoxShadow(
-              color: _themeService.isDarkMode 
-                  ? Colors.black.withValues(alpha: 0.5)
-                  : const Color(0xFFA3B1C6).withValues(alpha: 0.4),
-              offset: const Offset(3, 3),
-              blurRadius: 6,
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              color: color,
-              size: 32,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: _themeService.isDarkMode ? Colors.white : Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 12,
-                color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[600],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // _buildCommunityRoleButton method removed - unused
 
-  Widget _buildHeaderIcon(IconData icon, VoidCallback onTap, {Color? iconColor}) {
+  Widget _buildHeaderIcon(IconData icon, VoidCallback onTap, {Color? iconColor, double size = 36}) {
     final color = iconColor ?? const Color(0xFF8B5CF6);
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 44,
-        height: 44,
+        width: size,
+        height: size,
         decoration: BoxDecoration(
           color: _themeService.isDarkMode 
               ? const Color(0xFF3A3A3A)
@@ -864,7 +868,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Icon(
           icon,
           color: color,
-          size: 24,
+          size: size * 0.6, // Proportional to container size
         ),
       ),
     );
@@ -1008,6 +1012,19 @@ class _HomeScreenState extends State<HomeScreen> {
     
     final iconAsset = iconMap[feature];
     
+    // Get screen dimensions for responsive sizing
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isSmallScreen = screenWidth < 380 || screenHeight < 700;
+    
+    // Responsive sizing based on screen size
+    final iconContainerSize = isSmallScreen ? 45.0 : 60.0;
+    final iconSize = isSmallScreen ? 24.0 : 32.0;
+    final imageSize = isSmallScreen ? 30.0 : 40.0;
+    final fontSize = isSmallScreen ? 10.0 : 12.0;
+    final verticalSpacing = isSmallScreen ? 8.0 : 12.0;
+    final horizontalPadding = isSmallScreen ? 4.0 : 8.0;
+    
     return AspectRatio(
       aspectRatio: 1.0,
       child: GestureDetector(
@@ -1039,81 +1056,87 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: _themeService.isDarkMode 
-                      ? const Color(0xFF2D2D2D)
-                      : const Color(0xFFE8E8E8),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: _themeService.isDarkMode 
-                          ? Colors.black.withValues(alpha: 0.6)
-                          : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
-                      offset: const Offset(3, 3),
-                      blurRadius: 6,
-                      spreadRadius: -2,
-                    ),
-                    BoxShadow(
-                      color: _themeService.isDarkMode 
-                          ? Colors.white.withValues(alpha: 0.02)
-                          : Colors.white.withValues(alpha: 0.8),
-                      offset: const Offset(-3, -3),
-                      blurRadius: 6,
-                      spreadRadius: -2,
-                    ),
-                  ],
-                ),
-                child: iconAsset is IconData
-                  ? Icon(
-                      iconAsset,
-                      size: 32,
-                      color: const Color(0xFF8B5CF6),
-                    )
-                  : iconAsset is String
-                    ? Image.asset(
-                        iconAsset,
-                        width: 40,
-                        height: 40,
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) {
-                          return const Icon(
-                            Icons.category_rounded,
-                            size: 32,
-                            color: Color(0xFF8B5CF6),
-                          );
-                        },
-                      )
-                    : const Icon(
-                        Icons.category_rounded,
-                        size: 32,
-                        color: Color(0xFF8B5CF6),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: horizontalPadding,
+              vertical: isSmallScreen ? 8.0 : 12.0,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: iconContainerSize,
+                  height: iconContainerSize,
+                  decoration: BoxDecoration(
+                    color: _themeService.isDarkMode 
+                        ? const Color(0xFF2D2D2D)
+                        : const Color(0xFFE8E8E8),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: _themeService.isDarkMode 
+                            ? Colors.black.withValues(alpha: 0.6)
+                            : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                        offset: const Offset(3, 3),
+                        blurRadius: 6,
+                        spreadRadius: -2,
                       ),
-              ),
-              const SizedBox(height: 12),
-              if (title.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: _themeService.isDarkMode 
-                          ? Colors.white70
-                          : Colors.black87,
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                      BoxShadow(
+                        color: _themeService.isDarkMode 
+                            ? Colors.white.withValues(alpha: 0.02)
+                            : Colors.white.withValues(alpha: 0.8),
+                        offset: const Offset(-3, -3),
+                        blurRadius: 6,
+                        spreadRadius: -2,
+                      ),
+                    ],
                   ),
+                  child: iconAsset is IconData
+                    ? Icon(
+                        iconAsset,
+                        size: iconSize,
+                        color: const Color(0xFF8B5CF6),
+                      )
+                    : iconAsset is String
+                      ? Image.asset(
+                          iconAsset,
+                          width: imageSize,
+                          height: imageSize,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Icon(
+                              Icons.category_rounded,
+                              size: iconSize,
+                              color: const Color(0xFF8B5CF6),
+                            );
+                          },
+                        )
+                      : Icon(
+                          Icons.category_rounded,
+                          size: iconSize,
+                          color: const Color(0xFF8B5CF6),
+                        ),
                 ),
-            ],
+                SizedBox(height: verticalSpacing),
+                if (title.isNotEmpty)
+                  Flexible(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: fontSize,
+                        fontWeight: FontWeight.w600,
+                        color: _themeService.isDarkMode 
+                            ? Colors.white70
+                            : Colors.black87,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

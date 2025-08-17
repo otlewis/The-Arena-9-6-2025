@@ -30,12 +30,8 @@ mixin _$InstantChatMessage {
   String? get senderAvatar => throw _privateConstructorUsedError;
   InstantChatMessageType get type => throw _privateConstructorUsedError;
 
-  /// Serializes this InstantChatMessage to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of InstantChatMessage
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $InstantChatMessageCopyWith<InstantChatMessage> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -68,8 +64,6 @@ class _$InstantChatMessageCopyWithImpl<$Res, $Val extends InstantChatMessage>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of InstantChatMessage
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -152,8 +146,6 @@ class __$$InstantChatMessageImplCopyWithImpl<$Res>
       $Res Function(_$InstantChatMessageImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of InstantChatMessage
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -289,14 +281,12 @@ class _$InstantChatMessageImpl
             (identical(other.type, type) || other.type == type));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(runtimeType, id, senderId, receiverId,
       content, timestamp, isRead, senderName, senderAvatar, type);
 
-  /// Create a copy of InstantChatMessage
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$InstantChatMessageImplCopyWith<_$InstantChatMessageImpl> get copyWith =>
@@ -344,11 +334,8 @@ abstract class _InstantChatMessage implements InstantChatMessage {
   String? get senderAvatar;
   @override
   InstantChatMessageType get type;
-
-  /// Create a copy of InstantChatMessage
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$InstantChatMessageImplCopyWith<_$InstantChatMessageImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

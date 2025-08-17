@@ -3,11 +3,11 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 /// Service for generating LiveKit JWT tokens with role-based permissions
-/// This handles token generation for Arena, Debates & Discussions, and Open Discussion rooms
+/// This handles token generation for Arena, Debates & Discussions, Open Discussion rooms, and lobby connections
 class LiveKitTokenService {
   // Development/Production credentials matching Linode deployment
-  static const String _apiKey = 'LKAPI1234567890'; // Matches deployment script
-  static const String _secretKey = 'your-secret-key-here'; // Matches deployment script
+  static const String _apiKey = 'APIkey123'; // Updated to match server config
+  static const String _secretKey = '7e9fb42854e466daf92dabbc9b88e98f7811486704338e062d30815a592de45d'; // Production secret from server
   
   /// Generate a JWT token for a user with specific permissions
   static String generateToken({
@@ -36,7 +36,7 @@ class LiveKitTokenService {
         ...?additionalMetadata,
       };
       
-      // Create video grants based on role and room type
+      // Create WebRTC grants based on role and room type (audio-only app)
       final videoGrants = _createVideoGrants(userRole, roomType, roomName);
       
       // Create JWT payload
@@ -66,7 +66,7 @@ class LiveKitTokenService {
     }
   }
   
-  /// Create video grants based on user role and room type
+  /// Create WebRTC grants based on user role and room type (audio-only permissions)
   static Map<String, dynamic> _createVideoGrants(String userRole, String roomType, String roomName) {
     final grants = <String, dynamic>{
       'roomJoin': true,
@@ -100,13 +100,18 @@ class LiveKitTokenService {
     switch (userRole) {
       case 'affirmative':
       case 'negative':
-        // Debaters can publish audio (video optional)
+      case 'affirmative2':
+      case 'negative2':
+        // Debaters can publish audio (audio-only app) - supports both 1v1 and 2v2
         grants['canPublish'] = true;
         grants['canPublishData'] = true;
         break;
         
       case 'judge':
-        // Judges can publish and moderate
+      case 'judge1':
+      case 'judge2':
+      case 'judge3':
+        // Judges can publish and moderate - supports multiple judges for 2v2
         grants['canPublish'] = true;
         grants['canPublishData'] = true;
         grants['hidden'] = false; // Judges are visible
@@ -188,6 +193,53 @@ class LiveKitTokenService {
     }
   }
   
+  /// Generate a lobby token for persistent connection
+  /// This allows connection to the service but no room-specific permissions
+  Future<String> generateLobbyToken(String userId) async {
+    try {
+      debugPrint('🏠 Generating lobby token for user: $userId');
+      
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final expiry = now + (24 * 60 * 60); // 24 hours for persistent connection
+      
+      // Lobby metadata - minimal permissions
+      final metadata = {
+        'role': 'lobby',
+        'roomType': 'lobby',
+        'userId': userId,
+      };
+      
+      // Universal arena grants - allow access to any Arena room
+      final videoGrants = {
+        'roomJoin': true,
+        'roomList': true,
+        'canPublish': true, // Allow publishing for all Arena roles
+        'canSubscribe': true, // Can receive all audio
+        'canPublishData': true, // Can send metadata updates
+        'roomAdmin': false, // Not an admin
+        'roomRecord': false, // Cannot record
+        // Note: No specific 'room' field means can join any room
+      };
+      
+      final payload = {
+        'iss': _apiKey,
+        'sub': userId,
+        'iat': now,
+        'exp': expiry,
+        'video': videoGrants,
+        'metadata': jsonEncode(metadata),
+      };
+      
+      final token = _generateJWT(payload);
+      debugPrint('✅ Generated lobby token successfully');
+      return token;
+      
+    } catch (error) {
+      debugPrint('❌ Failed to generate lobby token: $error');
+      rethrow;
+    }
+  }
+
   /// Generate a test token for connectivity testing
   static String generateTestToken({
     required String roomName,
@@ -328,18 +380,18 @@ class LiveKitConfig {
   
   /// Default development configuration
   static const LiveKitConfig development = LiveKitConfig(
-    serverUrl: 'wss://localhost:7880',
-    apiKey: 'LKAPI1234567890',
-    secretKey: 'your-secret-key-here',
+    serverUrl: 'ws://172.236.109.9:7880',
+    apiKey: 'APIkey123',
+    secretKey: '7e9fb42854e466daf92dabbc9b88e98f7811486704338e062d30815a592de45d',
   );
   
   /// Production configuration (set via environment variables)
   static LiveKitConfig production = const LiveKitConfig(
     serverUrl: String.fromEnvironment('LIVEKIT_SERVER_URL', 
-        defaultValue: 'wss://your-domain.com'),
+        defaultValue: 'ws://172.236.109.9:7880'),
     apiKey: String.fromEnvironment('LIVEKIT_API_KEY', 
-        defaultValue: 'LKAPI1234567890'),
+        defaultValue: 'APIkey123'),
     secretKey: String.fromEnvironment('LIVEKIT_SECRET_KEY', 
-        defaultValue: 'your-secret-key-here'),
+        defaultValue: '7e9fb42854e466daf92dabbc9b88e98f7811486704338e062d30815a592de45d'),
   );
 }

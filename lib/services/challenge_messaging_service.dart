@@ -561,6 +561,16 @@ class ChallengeMessagingService {
       final response = accept ? 'accepted' : 'declined';
       AppLogger().debug('📱 🏛️ Responding to arena role invitation $invitationId: $response');
       
+      // First get the invitation details to extract the role and arena room ID
+      final invitation = await _appwrite.databases.getDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'challenge_messages',
+        documentId: invitationId,
+      );
+      
+      final role = invitation.data['position'] as String; // Role is stored in position field
+      final arenaRoomId = invitation.data['arenaRoomId'] as String;
+      
       // Update invitation status in database
       await _appwrite.databases.updateDocument(
         databaseId: AppwriteConstants.databaseId,
@@ -571,6 +581,37 @@ class ChallengeMessagingService {
           'respondedAt': DateTime.now().toIso8601String(),
         },
       );
+      
+      // If accepting, actually assign the role to the user in the arena room
+      if (accept) {
+        AppLogger().debug('📱 🏛️ Assigning role "$role" to user $_currentUserId in arena room $arenaRoomId');
+        
+        try {
+          final assignedRole = await _appwrite.assignArenaRole(
+            roomId: arenaRoomId,
+            userId: _currentUserId!,
+            role: role,
+          );
+          
+          if (assignedRole == role) {
+            AppLogger().info('📱 🏛️ ✅ Successfully assigned requested role "$role" to user in arena room $arenaRoomId');
+          } else {
+            AppLogger().warning('📱 🏛️ ⚠️ Role conflict: Requested "$role" but assigned "$assignedRole" in arena room $arenaRoomId');
+            
+            // If user requested moderator but got audience, it means the moderator slot was taken
+            if (role == 'moderator' && assignedRole == 'audience') {
+              AppLogger().info('📱 🏛️ 📋 Moderator slot was already taken - user assigned as audience member');
+              
+              // TODO: Consider showing a user notification here
+              // "The moderator position was already filled. You've been added as an audience member."
+            }
+          }
+          
+        } catch (e) {
+          AppLogger().error('📱 🏛️ ❌ Failed to assign role in arena room: $e');
+          // Don't rethrow - the invitation response was recorded successfully
+        }
+      }
       
       AppLogger().debug('📱 🏛️ ✅ Arena role invitation response recorded: $response');
       
@@ -599,15 +640,17 @@ class ChallengeMessagingService {
       // Assign roles based on challenger's position
       AppLogger().debug('📱 Assigning roles: challenger position = ${challenge.position}');
       if (challenge.position == 'affirmative') {
-        AppLogger().info('Assigned affirmative to user ${challenge.challengerId} in room $roomId');
-        await _appwrite.assignArenaRole(roomId: roomId, userId: challenge.challengerId, role: 'affirmative');
-        AppLogger().info('Assigned negative to user ${challenge.challengedId} in room $roomId');
-        await _appwrite.assignArenaRole(roomId: roomId, userId: challenge.challengedId, role: 'negative');
+        final challengerRole = await _appwrite.assignArenaRole(roomId: roomId, userId: challenge.challengerId, role: 'affirmative');
+        AppLogger().info('Challenger assigned as: $challengerRole to user ${challenge.challengerId} in room $roomId');
+        
+        final challengedRole = await _appwrite.assignArenaRole(roomId: roomId, userId: challenge.challengedId, role: 'negative');
+        AppLogger().info('Challenged assigned as: $challengedRole to user ${challenge.challengedId} in room $roomId');
       } else {
-        AppLogger().info('Assigned negative to user ${challenge.challengerId} in room $roomId');
-        await _appwrite.assignArenaRole(roomId: roomId, userId: challenge.challengerId, role: 'negative');
-        AppLogger().info('Assigned affirmative to user ${challenge.challengedId} in room $roomId');
-        await _appwrite.assignArenaRole(roomId: roomId, userId: challenge.challengedId, role: 'affirmative');
+        final challengerRole = await _appwrite.assignArenaRole(roomId: roomId, userId: challenge.challengerId, role: 'negative');
+        AppLogger().info('Challenger assigned as: $challengerRole to user ${challenge.challengerId} in room $roomId');
+        
+        final challengedRole = await _appwrite.assignArenaRole(roomId: roomId, userId: challenge.challengedId, role: 'affirmative');
+        AppLogger().info('Challenged assigned as: $challengedRole to user ${challenge.challengedId} in room $roomId');
       }
       
       AppLogger().debug('📱 Arena room setup complete - invitations will be sent by debaters after their selection process');

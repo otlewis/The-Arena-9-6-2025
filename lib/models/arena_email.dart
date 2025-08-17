@@ -1,3 +1,53 @@
+/// Email Draft model for saving unsent emails
+class EmailDraft {
+  final String id;
+  final String userId;
+  final String? recipientId;
+  final String? recipientUsername;
+  final String subject;
+  final String body;
+  final DateTime lastModified;
+  final String? recipientEmail;
+
+  EmailDraft({
+    required this.id,
+    required this.userId,
+    this.recipientId,
+    this.recipientUsername,
+    required this.subject,
+    required this.body,
+    required this.lastModified,
+    this.recipientEmail,
+  });
+
+  factory EmailDraft.fromJson(Map<String, dynamic> json) {
+    return EmailDraft(
+      id: json['\$id'] ?? json['id'] ?? '',
+      userId: json['userId'] ?? '',
+      recipientId: json['recipientId'],
+      recipientUsername: json['recipientUsername'],
+      subject: json['subject'] ?? '',
+      body: json['body'] ?? '',
+      lastModified: json['lastModified'] != null 
+        ? DateTime.parse(json['lastModified'])
+        : DateTime.now(),
+      recipientEmail: json['recipientEmail'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'userId': userId,
+      'recipientId': recipientId,
+      'recipientUsername': recipientUsername,
+      'subject': subject,
+      'body': body,
+      'lastModified': lastModified.toIso8601String(),
+      'recipientEmail': recipientEmail,
+    };
+  }
+}
+
 /// Arena Email model for internal email system
 class ArenaEmail {
   final String id;

@@ -40,12 +40,8 @@ mixin _$ReceivedGift {
       throw _privateConstructorUsedError; // Whether recipient has seen the gift
   bool get isNotified => throw _privateConstructorUsedError;
 
-  /// Serializes this ReceivedGift to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of ReceivedGift
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $ReceivedGiftCopyWith<ReceivedGift> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -83,8 +79,6 @@ class _$ReceivedGiftCopyWithImpl<$Res, $Val extends ReceivedGift>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of ReceivedGift
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -197,8 +191,6 @@ class __$$ReceivedGiftImplCopyWithImpl<$Res>
       _$ReceivedGiftImpl _value, $Res Function(_$ReceivedGiftImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of ReceivedGift
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -371,7 +363,7 @@ class _$ReceivedGiftImpl implements _ReceivedGift {
                 other.isNotified == isNotified));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(
       runtimeType,
@@ -390,9 +382,7 @@ class _$ReceivedGiftImpl implements _ReceivedGift {
       isRead,
       isNotified);
 
-  /// Create a copy of ReceivedGift
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$ReceivedGiftImplCopyWith<_$ReceivedGiftImpl> get copyWith =>
@@ -441,24 +431,21 @@ abstract class _ReceivedGift implements ReceivedGift {
   @override
   String get receiverName;
   @override
-  String? get message; // Optional message from sender
-  @override
-  String? get roomId; // If sent during a room session
-  @override
-  String? get roomType; // arena, debate_discussion, open_discussion
-  @override
-  String? get roomName; // Name of the room where gift was sent
-  @override
+  String? get message;
+  @override // Optional message from sender
+  String? get roomId;
+  @override // If sent during a room session
+  String? get roomType;
+  @override // arena, debate_discussion, open_discussion
+  String? get roomName;
+  @override // Name of the room where gift was sent
   DateTime get createdAt;
   @override
-  bool get isRead; // Whether recipient has seen the gift
-  @override
+  bool get isRead;
+  @override // Whether recipient has seen the gift
   bool get isNotified;
-
-  /// Create a copy of ReceivedGift
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$ReceivedGiftImplCopyWith<_$ReceivedGiftImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

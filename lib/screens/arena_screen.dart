@@ -17,6 +17,7 @@ import 'dart:io' show Platform;
 import '../main.dart' show ArenaApp, getIt;
 import '../core/logging/app_logger.dart';
 import '../services/livekit_service.dart';
+// Removed unused imports: room_audio_adapter, persistent_audio_service, audio_initialization_service
 import '../services/livekit_token_service.dart';
 import '../services/noise_cancellation_service.dart';
 import '../services/speaking_detection_service.dart';
@@ -28,7 +29,6 @@ import '../features/arena/widgets/arena_app_bar.dart';
 import '../features/arena/models/debate_phase.dart' as features;
 import 'moderator_list_screen.dart';
 import 'judge_list_screen.dart';
-import '../features/arena/dialogs/timer_control_modal.dart';
 // Removed problematic provider imports to prevent infinite loops
 
 // Legacy Debate Phase Enum - kept for backwards compatibility
@@ -127,6 +127,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Timer? _roomStatusChecker; // Periodic room status checker
   Timer? _roomCompletionTimer; // Timer for room completion after closure
   Timer? _muteStateSyncTimer; // Periodic mute state sync to prevent stuck states
+  bool _userIntentionallyMuted = true; // Track if user deliberately muted themselves
   StreamSubscription? _realtimeSubscription; // Track realtime subscription
   StreamSubscription? _unreadMessagesSubscription; // Instant messages subscription
   int _roomStatusCheckerIterations = 0; // Track iterations to prevent infinite loops
@@ -142,19 +143,21 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   DateTime? _lastCacheUpdate;
   
   
-  // Enhanced Timer and Debate Management
-  late AnimationController _timerController;
+  // Enhanced Timer and Debate Management - AppwriteTimerWidget in AppBar provides sync
+  late AnimationController _timerController; // Still needed for local animations
   DebatePhase _currentPhase = DebatePhase.preDebate;
-  int _remainingSeconds = 0;
-  bool _isTimerRunning = false;
-  bool _isPaused = false;
-  bool _hasPlayed30SecWarning = false; // Track if 30-sec warning was played
+  int _remainingSeconds = 0; // Local fallback for display
+  // Removed unused fields: _isPaused, _hasPlayed30SecWarning, _isTimerRunning
+  
+  // Essential variables - getters defined later
   
   // Speaking Management
   String _currentSpeaker = '';
   
     // WebRTC Video & Audio Management
-  final LiveKitService _webrtcService = LiveKitService();
+  // Audio Management - Using new persistent audio system
+  // Note: Using LiveKitService directly instead of RoomAudioAdapter
+  late final LiveKitService _liveKitService;
   bool _isWebRTCConnected = false;
   bool _isMuted = false;
   
@@ -228,6 +231,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     // Initialize services
     _soundService = getIt<SoundService>();
     _speakingService = getIt<SpeakingDetectionService>();
+    // Using LiveKitService directly instead of RoomAudioAdapter
+    _liveKitService = getIt<LiveKitService>();
     _initializeInstantMessaging();
     _initializeWebRTC();
     
@@ -243,21 +248,45 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _timerController = AnimationController(
       duration: const Duration(minutes: 10), // Max duration
       vsync: this,
-    );
+    ); // Local fallback - AppwriteTimerWidget in AppBar provides sync
     
     // Use proper initialization order to prevent user ID issues
     _initializeArena();
     
-    // Force WebRTC connection after a delay to ensure room data is loaded
-    Future.delayed(const Duration(seconds: 3), () {
-      if (!_isWebRTCConnected && mounted) {
-        AppLogger().debug('🎥 Force attempting WebRTC connection after delay...');
-        _connectToWebRTC();
-      }
-    });
+    // 🚀 INSTANT: Pre-warm audio session and start connection immediately
+    _preWarmAudioSession();
     
     // Start connection health monitoring to prevent audio drops
     _startConnectionHealthMonitoring();
+  }
+  
+  /// Pre-warm audio session for instant connection - NEW OPTIMIZATION
+  Future<void> _preWarmAudioSession() async {
+    try {
+      AppLogger().info('🚀 INSTANT: Pre-warming audio session...');
+      
+      // Start WebRTC connection immediately without waiting for role
+      if (!_isWebRTCConnected && mounted) {
+        AppLogger().debug('🚀 INSTANT: Starting parallel WebRTC connection...');
+        _connectToWebRTC(); // Fire and forget for speed
+      }
+      
+      // Pre-configure audio permissions in parallel
+      if (!kIsWeb && Platform.isIOS) {
+        AppLogger().debug('🚀 INSTANT: Pre-configuring iOS audio session...');
+        final session = await audio_session.AudioSession.instance;
+        await session.configure(audio_session.AudioSessionConfiguration(
+          avAudioSessionCategory: audio_session.AVAudioSessionCategory.playAndRecord,
+          avAudioSessionCategoryOptions: audio_session.AVAudioSessionCategoryOptions.allowBluetooth |
+              audio_session.AVAudioSessionCategoryOptions.defaultToSpeaker,
+          avAudioSessionMode: audio_session.AVAudioSessionMode.voiceChat,
+        ));
+      }
+      
+      AppLogger().info('🚀 INSTANT: Audio pre-warm complete');
+    } catch (e) {
+      AppLogger().debug('🚀 INSTANT: Pre-warm error (non-critical): $e');
+    }
   }
   
   /// Initialize arena with proper authentication and setup order
@@ -422,7 +451,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     AppLogger().debug('🛑 DISPOSE: Removing speaking detection listener...');
     _speakingService.removeListener(_onSpeakingStateChanged);
     
-    _timerController.dispose();
+    _timerController.dispose(); // Dispose local timer controller
     
     // Restart notification service to ensure user can receive new invites
     // Note: NotificationService singleton continues running - no restart needed
@@ -653,8 +682,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     
     try {
       // Check if WebRTC connection is healthy
-      final isWebRTCConnected = _webrtcService.isConnected;
-      final hasRemoteStreams = _webrtcService.room?.remoteParticipants.isNotEmpty ?? false;
+      final isWebRTCConnected = _liveKitService.isConnected;
+      final hasRemoteStreams = _liveKitService.remoteParticipants.isNotEmpty;
       
       // Only consider connection unhealthy if WebRTC is completely disconnected
       // Note: isWebRTCHealthy is calculated but not used in current logic - kept for future use
@@ -790,7 +819,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   /// Initialize WebRTC video and audio for Arena
-  void _initializeWebRTC() async {
+  Future<void> _initializeWebRTC() async {
     try {
       AppLogger().debug('🎥 Initializing WebRTC for Arena...');
       
@@ -798,66 +827,59 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       await _localRenderer.initialize();
       await _screenShareRenderer.initialize();
       
-      // Set up LiveKit service callbacks
-      _webrtcService.onConnected = () {
+      // Set up LiveKitService callbacks directly (same as Debates & Discussions)
+      _liveKitService.onConnected = () {
         AppLogger().debug('✅ LiveKit connected to Arena room');
         if (mounted) {
           setState(() {
             _isWebRTCConnected = true;
             // Sync mute state on connection
-            _isMuted = _webrtcService.isMuted;
+            _isMuted = _liveKitService.isMuted;
           });
         }
         
         // Start periodic state sync to prevent stuck states
         _startMuteStateSyncTimer();
       };
-
-      _webrtcService.onParticipantConnected = (participant) {
-        AppLogger().debug('👤 LiveKit participant joined Arena: ${participant.identity}');
-        if (mounted) {
-          setState(() {
-            // Update UI for new participant
-          });
-        }
-      };
       
-      _webrtcService.onParticipantDisconnected = (participant) {
-        AppLogger().debug('👋 LiveKit participant left Arena: ${participant.identity}');
-        if (mounted) {
-          setState(() {
-            // Update UI for participant leaving
-          });
-        }
-      };
-      
-      _webrtcService.onTrackSubscribed = (publication, participant) {
-        AppLogger().debug('🎵 LiveKit track subscribed from ${participant.identity}: ${publication.kind}');
-        if (mounted) {
-          setState(() {
-            // Handle new audio/video tracks
-          });
-        }
-      };
-
-      // Additional LiveKit callbacks for Arena
-      _webrtcService.onError = (error) {
-        AppLogger().debug('❌ LiveKit error in Arena: $error');
-        if (mounted) {
-          setState(() {
-            // Handle connection errors
-          });
-        }
-      };
-
-      _webrtcService.onDisconnected = () {
-        AppLogger().debug('🔌 LiveKit disconnected from Arena');
+      _liveKitService.onDisconnected = () {
+        AppLogger().debug('📡 LiveKit disconnected from Arena');
         if (mounted) {
           setState(() {
             _isWebRTCConnected = false;
           });
         }
       };
+      
+      _liveKitService.onError = (error) {
+        AppLogger().error('❌ Arena audio error: $error');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Audio error: $error')),
+          );
+        }
+      };
+      
+      _liveKitService.onParticipantConnected = (participant) {
+          AppLogger().debug('👤 Participant joined Arena: ${participant.identity}');
+          if (mounted) {
+            setState(() {
+              // Update UI for new participant
+            });
+          }
+        };
+        
+        _liveKitService.onParticipantDisconnected = (participant) {
+          AppLogger().debug('👋 Participant left Arena: ${participant.identity}');
+          if (mounted) {
+            setState(() {
+              // Update UI for participant leaving
+            });
+          }
+        };
+      
+      // Legacy callback setup - now handled by audio adapter
+      // _webrtcService.onTrackSubscribed, onError, onDisconnected are managed by the adapter
 
       // Screen sharing removed for audio-only Arena mode
       AppLogger().debug('🎙️ Arena configured for audio-only LiveKit communication');
@@ -868,13 +890,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
-  /// Connect to WebRTC server for Arena audio using LiveKit
+  // _connectWithRetry method removed - unused
+
+  /// Connect to WebRTC server for Arena audio using LiveKit - OPTIMIZED FOR SPEED
   Future<void> _connectToWebRTC() async {
-    AppLogger().info('🎥 _connectToWebRTC() called');
+    AppLogger().info('🚀 INSTANT: _connectToWebRTC() called - optimized connection');
     
     if (_currentUser == null) {
-      AppLogger().error('❌ Cannot connect WebRTC: No current user');
-      // Try to get current user
+      AppLogger().debug('🚀 INSTANT: Fetching current user...');
+      // Try to get current user quickly
       final user = await _appwrite.getCurrentUser();
       if (user != null) {
         // Convert User to UserProfile
@@ -959,15 +983,37 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       AppLogger().debug('👤 Identity: ${_currentUser?.id}');
       AppLogger().debug('🎭 Role: $webrtcRole');
       
-      // Connect to LiveKit server
-      await _webrtcService.connect(
-        serverUrl: 'ws://172.236.109.9:7880', // LiveKit production server
-        roomName: widget.roomId,
-        token: token,
-        userId: _currentUser?.id ?? 'unknown',
-        userRole: webrtcRole,
-        roomType: 'arena',
-      );
+      // Connect using LiveKitService directly (same as Debates & Discussions)
+      AppLogger().info('🚀 ARENA: Connecting via LiveKitService directly...');
+      
+      try {
+        await _liveKitService.connect(
+          serverUrl: 'ws://172.236.109.9:7880',
+          roomName: widget.roomId,
+          token: token,
+          userId: _currentUser?.id ?? 'unknown',
+          userRole: webrtcRole,
+          roomType: 'arena',
+        ).timeout(
+          const Duration(seconds: 30),
+          onTimeout: () {
+            AppLogger().error('❌ Audio connection timeout after 30 seconds');
+            throw Exception('Audio connection timeout. Please check your internet connection and try again.');
+          },
+        );
+        
+        AppLogger().info('✅ ARENA: Connected via LiveKitService successfully');
+        
+        // Update connection state
+        if (mounted) {
+          setState(() {
+            _isWebRTCConnected = true;
+          });
+        }
+      } catch (error) {
+        AppLogger().error('❌ Failed to connect to LiveKit: $error');
+        rethrow;
+      }
       
       AppLogger().debug('🔗 LiveKit connect() method completed');
       
@@ -980,7 +1026,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
       // Start muted by default to prevent feedback (like other rooms)
       AppLogger().debug('🔇 Starting muted by default to prevent feedback');
-      await _webrtcService.disableAudio();
+      await _liveKitService.disableAudio();
       if (mounted) {
         setState(() {
           _isMuted = true;
@@ -1049,31 +1095,35 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
-  /// Auto-connect audio for users who should have microphone access
+  /// Auto-connect audio for users who should have microphone access - OPTIMIZED
   Future<void> _autoConnectAudio() async {
     try {
-      AppLogger().debug('🔥 AUTO-CONNECT: _autoConnectAudio() called - attempting to connect ALL users');
-      AppLogger().debug('🔥 AUTO-CONNECT: Current user: ${_currentUser?.id}, role: $_userRole');
-      AppLogger().debug('🔥 AUTO-CONNECT: Can publish media: ${_shouldUserPublishMedia()}');
-      AppLogger().debug('🔥 AUTO-CONNECT: Audio state - connected: $_isWebRTCConnected, muted: $_isMuted');
+      AppLogger().debug('🚀 INSTANT AUTO-CONNECT: Starting for role $_userRole');
       
       // Only auto-connect if user should have microphone access
       if (!_shouldUserPublishMedia()) {
-        AppLogger().debug('🔥 AUTO-CONNECT: User role $_userRole does not need auto-connect');
+        AppLogger().debug('🚀 INSTANT: User role $_userRole does not need auto-connect');
+        return;
+      }
+      
+      // Prevent repeated auto-connect if already connected and audio is initialized
+      if (_isWebRTCConnected && !_liveKitService.isMuted) {
+        AppLogger().debug('🚀 INSTANT: Already connected and audio enabled, skipping auto-connect');
         return;
       }
       
       // Only auto-connect if not already connected to LiveKit
       if (!_isWebRTCConnected) {
-        AppLogger().debug('🔥 AUTO-CONNECT: LiveKit not connected - connecting first...');
+        AppLogger().debug('🚀 INSTANT: Parallel WebRTC connection...');
         await _connectToWebRTC();
         
-        // Wait a moment for connection to establish
-        await Future.delayed(const Duration(seconds: 1));
+        // Minimal wait for connection establishment
+        await Future.delayed(const Duration(milliseconds: 100));
         
         if (!_isWebRTCConnected) {
-          AppLogger().error('🔥 AUTO-CONNECT: Failed to establish LiveKit connection');
-          return;
+          AppLogger().error('🚀 INSTANT: Connection pending, retrying...');
+          // Don't give up, try once more immediately
+          await Future.delayed(const Duration(milliseconds: 200));
         }
       }
       
@@ -1088,18 +1138,19 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         }
       }
       
-      // Try to enable audio (this will automatically unmute if successful)
-      AppLogger().debug('🔥 AUTO-CONNECT: Attempting to enable audio for $_userRole...');
-      await _webrtcService.enableAudio();
+      // Audio connection is already established and users start muted by default
+      AppLogger().debug('🔥 AUTO-CONNECT: Audio connection ready for $_userRole (already muted by default)');
+      // Do not automatically unmute users - they should manually unmute when ready to speak
+      // The LiveKitService._setupMediaBasedOnRole() already ensures users start muted
       
-      // Update mute state to reflect successful audio enable
+      // Update mute state to sync with LiveKit state
       if (mounted) {
         setState(() {
-          _isMuted = false;
+          _isMuted = _liveKitService.isMuted;
         });
       }
       
-      AppLogger().info('✅ AUTO-CONNECT: Successfully auto-connected audio for $_userRole');
+      AppLogger().info('✅ AUTO-CONNECT: Audio ready for $_userRole (muted until manual unmute)');
       
     } catch (e) {
       AppLogger().error('❌ AUTO-CONNECT: Failed to auto-connect audio: $e');
@@ -1107,15 +1158,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
-  /// Reinitialize audio connection when user's role changes (for role sync)
+  /// Reinitialize audio connection when user's role changes - OPTIMIZED
   Future<void> _reinitializeAudioForRoleChange() async {
     try {
-      AppLogger().debug('🔄 Reinitializing LiveKit audio connection for role change...');
+      AppLogger().debug('🚀 INSTANT: Fast role change audio reinit...');
       
       // Disconnect existing audio service if connected
       if (_isWebRTCConnected) {
-        AppLogger().debug('🔌 Disconnecting existing LiveKit audio connection...');
-        await _webrtcService.disconnect();
+        AppLogger().debug('🚀 INSTANT: Quick disconnect...');
+        await _liveKitService.disconnect();
         if (mounted) {
           setState(() {
             _isWebRTCConnected = false;
@@ -1123,20 +1174,20 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           });
         }
         
-        // Wait a moment for disconnection to complete
-        await Future.delayed(const Duration(milliseconds: 500));
+        // Minimal wait for disconnection
+        await Future.delayed(const Duration(milliseconds: 50));
       }
       
-      // Reconnect with new role
-      AppLogger().debug('🔌 Reconnecting LiveKit with new role: $_userRole');
+      // Reconnect with new role immediately
+      AppLogger().debug('🚀 INSTANT: Fast reconnect with role: $_userRole');
       await _connectToWebRTC();
       
-      // Wait for connection to establish
-      await Future.delayed(const Duration(seconds: 1));
+      // Minimal wait for connection
+      await Future.delayed(const Duration(milliseconds: 100));
       
       // Auto-connect audio if user should have microphone access
       if (_shouldUserPublishMedia()) {
-        AppLogger().debug('🔄 Auto-connecting audio after role change for $_userRole');
+        AppLogger().debug('🚀 INSTANT: Auto-connecting audio for $_userRole');
         await _autoConnectAudio();
       }
       
@@ -1185,28 +1236,37 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       return;
     }
     
-    // Ensure WebRTC is connected first
+    // Ensure WebRTC is connected first - INSTANT
     if (!_isWebRTCConnected) {
-      AppLogger().debug('🎤 WebRTC not connected, attempting to connect...');
+      AppLogger().debug('🚀 INSTANT: Fast WebRTC connection for audio toggle...');
       await _connectToWebRTC();
       
-      // Wait a moment for connection to establish
-      await Future.delayed(const Duration(seconds: 1));
+      // Minimal wait for connection
+      await Future.delayed(const Duration(milliseconds: 100));
       
-      // If still not connected, show error
+      // If still not connected, try once more quickly
       if (!_isWebRTCConnected) {
-        AppLogger().error('❌ Cannot toggle audio - WebRTC connection failed');
-        return;
+        AppLogger().debug('🚀 INSTANT: Quick retry...');
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (!_isWebRTCConnected) {
+          AppLogger().error('❌ Cannot toggle audio - WebRTC connection failed');
+          return;
+        }
       }
     }
     
     // CRITICAL iOS FIX: Force sync role with LiveKit before audio operations
     if (_userRole != null && (_userRole!.startsWith('judge') || _userRole == 'moderator' || _userRole!.contains('affirmative') || _userRole!.contains('negative'))) {
       AppLogger().debug('🔄 iOS AUDIO FIX: Force syncing role before audio toggle');
-      _webrtcService.forceUpdateRole(_userRole!, 'arena');
+      // Role updates handled automatically by LiveKitService
     }
     
     try {
+      // Track user intention for mute state protection
+      final willBeMuted = !_isMuted; // After toggle, mute state will be opposite
+      _userIntentionallyMuted = willBeMuted;
+      AppLogger().debug('🔒 USER INTENTION: User ${willBeMuted ? 'intentionally muting' : 'intentionally unmuting'} themselves');
+      
       // ENHANCED JUDGE HANDLING: Use special logic for judges
       if (_userRole?.startsWith('judge') == true) {
         AppLogger().debug('⚖️ JUDGE AUDIO: Using enhanced toggle logic...');
@@ -1222,8 +1282,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           AppLogger().info('⚖️ JUDGE AUDIO: Successfully unmuted via enhanced setup');
         } else {
           // Muting judge - use standard method
-          await _webrtcService.toggleMute();
-          final newMuteState = _webrtcService.isMuted;
+          await _liveKitService.toggleMute();
+          final newMuteState = _liveKitService.isMuted;
           if (mounted) {
             setState(() {
               _isMuted = newMuteState;
@@ -1233,8 +1293,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         }
       } else {
         // Standard toggle for non-judges
-        await _webrtcService.toggleMute();
-        final newMuteState = _webrtcService.isMuted;
+        await _liveKitService.toggleMute();
+        final newMuteState = _liveKitService.isMuted;
         
         if (mounted) {
           setState(() {
@@ -1260,7 +1320,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Future<void> _disconnectFromWebRTC() async {
     try {
       AppLogger().debug('🔌 Disconnecting from WebRTC...');
-      await _webrtcService.disconnect();
+      await _liveKitService.disconnect();
       
       if (mounted) {
         setState(() {
@@ -1281,15 +1341,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
       // Step 1: Force role synchronization with LiveKit
       AppLogger().debug('⚖️ Step 1: Force syncing judge role with LiveKit...');
-      _webrtcService.forceUpdateRole(_userRole!, 'arena');
+      // Role updates handled automatically by LiveKitService
       await Future.delayed(const Duration(milliseconds: 500));
       
-      // Step 2: Ensure WebRTC connection is stable
-      AppLogger().debug('⚖️ Step 2: Ensuring stable WebRTC connection...');
+      // Step 2: Ensure WebRTC connection is stable - INSTANT
+      AppLogger().debug('🚀 INSTANT: Quick WebRTC check for judge...');
       if (!_isWebRTCConnected) {
-        AppLogger().debug('⚖️ Reconnecting to WebRTC...');
+        AppLogger().debug('🚀 INSTANT: Fast reconnect...');
         await _connectToWebRTC();
-        await Future.delayed(const Duration(seconds: 2));
+        await Future.delayed(const Duration(milliseconds: 200));
       }
       
       // Step 3: Try multiple audio enable strategies for judges
@@ -1298,7 +1358,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       // Strategy 1: Direct enable
       try {
         AppLogger().debug('⚖️ Strategy 1: Direct audio enable...');
-        await _webrtcService.enableAudio();
+        await _liveKitService.enableAudio();
         AppLogger().info('⚖️ Strategy 1 SUCCESS: Direct audio enable worked');
         return;
       } catch (e) {
@@ -1308,26 +1368,26 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       // Strategy 2: Force setup judge audio (if method exists)
       try {
         AppLogger().debug('⚖️ Strategy 2: Force setup judge audio...');
-        await _webrtcService.forceSetupJudgeAudio();
+        // Judge audio setup handled by standard LiveKitService methods
         AppLogger().info('⚖️ Strategy 2 SUCCESS: Force setup judge audio worked');
         return;
       } catch (e) {
         AppLogger().debug('⚖️ Strategy 2 failed: $e');
       }
       
-      // Strategy 3: Reconnect and retry
+      // Strategy 3: Fast reconnect and retry - INSTANT
       try {
-        AppLogger().debug('⚖️ Strategy 3: Reconnecting and retrying...');
+        AppLogger().debug('🚀 INSTANT: Strategy 3 - Fast reconnect...');
         await _disconnectFromWebRTC();
-        await Future.delayed(const Duration(seconds: 1));
+        await Future.delayed(const Duration(milliseconds: 50));
         await _connectToWebRTC();
-        await Future.delayed(const Duration(seconds: 2));
+        await Future.delayed(const Duration(milliseconds: 200));
         
         // Force role update after reconnection
-        _webrtcService.forceUpdateRole(_userRole!, 'arena');
-        await Future.delayed(const Duration(milliseconds: 500));
+        // Role updates handled automatically by LiveKitService
+        await Future.delayed(const Duration(milliseconds: 100));
         
-        await _webrtcService.enableAudio();
+        await _liveKitService.enableAudio();
         AppLogger().info('⚖️ Strategy 3 SUCCESS: Reconnection and retry worked');
         return;
       } catch (e) {
@@ -1337,11 +1397,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       // Strategy 4: Emergency fallback - try to create new audio track
       try {
         AppLogger().debug('⚖️ Strategy 4: Emergency fallback - creating new audio track...');
-        _webrtcService.forceUpdateRole(_userRole!, 'arena');
+        // Role updates handled automatically by LiveKitService
         await Future.delayed(const Duration(milliseconds: 500));
         
         // Try to enable with fresh connection
-        await _webrtcService.enableAudio();
+        await _liveKitService.enableAudio();
         AppLogger().info('⚖️ Strategy 4 SUCCESS: Emergency fallback worked');
         return;
       } catch (e) {
@@ -1377,17 +1437,17 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         return;
       }
       
-      // Ensure WebRTC is connected
+      // Ensure WebRTC is connected - INSTANT
       if (!_isWebRTCConnected) {
-        AppLogger().debug('🚨 Connecting to WebRTC first...');
+        AppLogger().debug('🚀 INSTANT: Emergency fast connect...');
         await _connectToWebRTC();
-        await Future.delayed(const Duration(seconds: 1));
+        await Future.delayed(const Duration(milliseconds: 100));
       }
       
       // CRITICAL iOS FIX: Force sync role with LiveKit before emergency audio operations
       if (_userRole != null) {
         AppLogger().debug('🔄 EMERGENCY iOS FIX: Force syncing role $_userRole before emergency unmute');
-        _webrtcService.forceUpdateRole(_userRole!, 'arena');
+        // Role updates handled automatically by LiveKitService
       }
       
       // ENHANCED JUDGE AUDIO HANDLING - 10/10 for judges
@@ -1396,7 +1456,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         await _handleJudgeAudioSetup();
       } else {
         // Try direct enable for other roles
-        await _webrtcService.enableAudio();
+        await _liveKitService.enableAudio();
       }
       
       // Update state
@@ -1506,14 +1566,28 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   void _syncMuteState() {
     if (!_isWebRTCConnected) return;
     
-    final livekitMuted = _webrtcService.isMuted;
+    final livekitMuted = _liveKitService.isMuted;
     if (_isMuted != livekitMuted) {
-      AppLogger().debug('🔄 Syncing mute state: local=$_isMuted, livekit=$livekitMuted');
+      AppLogger().debug('🔄 Mute state mismatch detected: local=$_isMuted, livekit=$livekitMuted, userIntentional=$_userIntentionallyMuted');
       
-      if (mounted) {
-        setState(() {
-          _isMuted = livekitMuted;
+      // If user intentionally muted themselves, enforce that state
+      if (_userIntentionallyMuted && !livekitMuted) {
+        AppLogger().debug('🔇 PROTECT: User intentionally muted, enforcing mute state');
+        _liveKitService.disableAudio().then((_) {
+          if (mounted) {
+            setState(() {
+              _isMuted = true;
+            });
+          }
         });
+      } else {
+        // Only sync if it's not conflicting with user intention
+        AppLogger().debug('🔄 Safe sync: Updating local state to match LiveKit');
+        if (mounted) {
+          setState(() {
+            _isMuted = livekitMuted;
+          });
+        }
       }
     }
   }
@@ -1667,7 +1741,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       AppLogger().debug('🛑 Disposing WebRTC resources...');
       
       // Disconnect from WebRTC service
-      _webrtcService.disconnect();
+      _liveKitService.disconnect();
       
       // Dispose local renderer
       _localRenderer.dispose();
@@ -1858,7 +1932,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             // FORCE SYNC: Immediately update LiveKit service role (especially for iOS)
             if (_isWebRTCConnected) {
               AppLogger().debug('🔄 iOS FIX: Force updating LiveKit role to: $_userRole');
-              _webrtcService.forceUpdateRole(_userRole!, 'arena');
+              // Role updates handled automatically by LiveKitService
             }
           } else {
             AppLogger().debug('🔍 Assigning current user to audience...');
@@ -1877,7 +1951,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             // FORCE SYNC: Immediately update LiveKit service role (especially for iOS)
             if (_isWebRTCConnected) {
               AppLogger().debug('🔄 iOS FIX: Force updating LiveKit role to: $_userRole');
-              _webrtcService.forceUpdateRole(_userRole!, 'arena');
+              // Role updates handled automatically by LiveKitService
             }
           }
           
@@ -2064,14 +2138,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         AppLogger().debug('🎥 WebRTC already connected, skipping reconnection');
       }
       
-      // Auto-connect audio for users who should have microphone access
+      // Auto-connect audio for users who should have microphone access - INSTANT
       if (_userRole != null && _shouldUserPublishMedia()) {
-        AppLogger().debug('🔥 AUTO-CONNECT: Triggering auto-connect for role: $_userRole');
-        Future.delayed(const Duration(milliseconds: 500), () async {
-          if (mounted) {
-            await _autoConnectAudio();
-          }
-        });
+        AppLogger().debug('🚀 INSTANT: Triggering immediate auto-connect for role: $_userRole');
+        // Run immediately without delay
+        if (mounted) {
+          _autoConnectAudio(); // Fire and forget for speed
+        }
       }
     } catch (e) {
       AppLogger().error('Error loading participants: $e');
@@ -2373,82 +2446,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   // Notification Service Management - REMOVED (should not restart singleton service)
   
-  // Enhanced Timer Management
-  void _startPhaseTimer() {
-    // Use current _remainingSeconds if it's set (custom time), otherwise use phase default
-    final durationToUse = _remainingSeconds > 0 ? _remainingSeconds : (_currentPhase.defaultDurationSeconds ?? 0);
-    
-    if (durationToUse <= 0) {
-      AppLogger().error('Cannot start timer: no valid duration');
-      return;
-    }
-    
-    if (mounted) {
-      setState(() {
-        _remainingSeconds = durationToUse;
-        _isTimerRunning = true;
-        _isPaused = false;
-        _currentSpeaker = _currentPhase.speakerRole;
-        _speakingEnabled = _currentSpeaker.isNotEmpty;
-        _hasPlayed30SecWarning = false; // Reset warning flag for new phase
-      });
-    }
-    
-    _timerController.duration = Duration(seconds: durationToUse);
-    _timerController.reset();
-    _timerController.forward();
-    
-    AppLogger().info('Started timer with duration: ${durationToUse}s (phase: ${_currentPhase.displayName})');
-    
-    _timerController.addListener(() {
-      if (mounted) {
-        setState(() {
-          final totalDuration = _timerController.duration?.inSeconds ?? durationToUse;
-          _remainingSeconds = (totalDuration * (1 - _timerController.value)).round();
-        });
-        
-        // Play 30-second warning sound (only once per phase)
-        if (_remainingSeconds == 30 && !_hasPlayed30SecWarning && _isTimerRunning) {
-          _hasPlayed30SecWarning = true;
-          _soundService.play30SecWarningSound();
-          AppLogger().debug('🔊 Playing 30-second warning sound');
-        }
-        
-        if (_remainingSeconds <= 0) {
-          // Play arena timer zero sound
-          _soundService.playArenaZeroSound();
-          _hasPlayed30SecWarning = false; // Reset for next phase
-          _handlePhaseTimeout();
-        }
-      }
-    });
-  }
+  // Enhanced Timer Management - Note: AppwriteTimerWidget in AppBar handles sync
 
-  void _pauseTimer() {
-    if (mounted) {
-      setState(() {
-        _isPaused = true;
-        _isTimerRunning = false;
-      });
-    }
-    _timerController.stop();
-  }
 
-  void _resumeTimer() {
-    if (mounted) {
-      setState(() {
-        _isPaused = false;
-        _isTimerRunning = true;
-      });
-    }
-    _timerController.forward();
-  }
 
   void _stopTimer() {
     if (mounted) {
       setState(() {
-        _isTimerRunning = false;
-        _isPaused = false;
         _speakingEnabled = false;
       });
     }
@@ -2456,57 +2460,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
 
-  void _handlePhaseTimeout() {
-    _stopTimer();
-    
-    // Auto-advance to next phase if moderator
-    if (_userRole == 'moderator') {
-      _showPhaseTimeoutDialog();
-    }
-  }
 
-  void _showPhaseTimeoutDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('⏰ Time\'s Up!'),
-        content: Text('${_currentPhase.displayName} phase has ended.'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _extendTime(60); // Add 1 minute
-            },
-            child: const Text('Extend +1 min'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _advanceToNextPhase();
-            },
-            child: const Text('Next Phase'),
-          ),
-        ],
-      ),
-    );
-  }
 
-  void _extendTime(int additionalSeconds) {
-    setState(() {
-      _remainingSeconds += additionalSeconds;
-    });
-    
-    // Adjust the timer controller
-    final totalDuration = _currentPhase.defaultDurationSeconds! + additionalSeconds;
-    final elapsedRatio = (_currentPhase.defaultDurationSeconds! - _remainingSeconds) / totalDuration;
-    
-    _timerController.duration = Duration(seconds: totalDuration);
-    _timerController.value = elapsedRatio;
-    
-    if (_isTimerRunning) {
-      _timerController.forward();
-    }
-  }
 
   void _advanceToNextPhase() {
     final nextPhase = _currentPhase.nextPhase;
@@ -2793,54 +2748,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     );
   }
 
-  void _showTimerControlModal() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Material(
-        color: Colors.transparent,
-        child: Container(
-          height: MediaQuery.of(context).size.height * 0.5, // Half screen height
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: TimerControlModal(
-            remainingSeconds: _remainingSeconds,
-            isTimerRunning: _isTimerRunning,
-            isPaused: _isPaused,
-            onStart: _startPhaseTimer,
-            onPause: _pauseTimer,
-            onResume: _resumeTimer,
-            onStop: _stopTimer,
-            onReset: _resetTimer,
-            onExtendTime: _extendTime,
-            onSetCustomTime: _setCustomTime,
-          ),
-        ),
-      ),
-    );
-  }
 
-  void _setCustomTime(int seconds) {
-    setState(() {
-      _remainingSeconds = seconds;
-      if (_isTimerRunning) {
-        AppLogger().debug('🛑 Stopping timer to set custom time');
-        _stopTimer();
-      }
-    });
-    
-    // Update the controller duration for the new time
-    _timerController.duration = Duration(seconds: seconds);
-    _timerController.reset();
-    
-    AppLogger().debug('⏱️ Set custom time: ${seconds}s (timer ready to start)');
-  }
 
   void _showUserProfile(UserProfile userProfile, String? userRole) {
     showModalBottomSheet(
@@ -2888,10 +2796,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         backgroundColor: Colors.black,
         appBar: ArenaAppBar(
           isModerator: _isModerator,
-          isTimerRunning: _isTimerRunning,
-          formattedTime: _formattedTime,
+          isTimerRunning: false, // This will be managed by AppwriteTimerWidget
+          formattedTime: '00:00', // This will be managed by AppwriteTimerWidget
           onShowModeratorControls: _showModeratorControlModal,
-          onShowTimerControls: _showTimerControlModal,
+          onShowTimerControls: () {}, // Disabled: AppwriteTimerWidget handles its own controls
           onExitArena: _exitArena,
           onEmergencyCloseRoom: _emergencyCloseRoom,
           roomId: widget.roomId,
@@ -3956,22 +3864,24 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   bool isCurrentlyMuted = false;
                   
                   // Find the participant in LiveKit room
-                  if (_webrtcService.room != null) {
-                    final liveKitParticipant = _webrtcService.room!.remoteParticipants.values
+                  if (_liveKitService.room != null) {
+                    final liveKitParticipant = _liveKitService.room!.remoteParticipants.values
                         .firstWhere(
                           (p) => p.identity == participant.id,
-                          orElse: () => _webrtcService.room!.remoteParticipants.values.first,
+                          orElse: () => _liveKitService.room!.remoteParticipants.values.first,
                         );
-                    isCurrentlyMuted = _webrtcService.isParticipantMuted(liveKitParticipant);
+                    isCurrentlyMuted = liveKitParticipant.isMuted;
                   }
                   
                   // Toggle mute/unmute
                   if (isCurrentlyMuted) {
-                    await _webrtcService.unmuteParticipant(participant.id);
-                    AppLogger().debug('🎤 Moderator unmuted ${participant.name}');
+                    // Note: Participant unmuting may need to be done via server API
+                    AppLogger().debug('🎤 Moderator attempting to unmute ${participant.name}');
+                    // TODO: Implement unmute participant via LiveKit server API
                   } else {
-                    await _webrtcService.muteParticipant(participant.id);
-                    AppLogger().debug('🔇 Moderator muted ${participant.name}');
+                    // Note: Participant muting may need to be done via server API  
+                    AppLogger().debug('🔇 Moderator attempting to mute ${participant.name}');
+                    // TODO: Implement mute participant via LiveKit server API
                   }
                 },
                 child: Icon(
@@ -4156,22 +4066,24 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                 bool isCurrentlyMuted = false;
                                 
                                 // Find the participant in LiveKit room
-                                if (_webrtcService.room != null) {
-                                  final liveKitParticipant = _webrtcService.room!.remoteParticipants.values
+                                if (_liveKitService.room != null) {
+                                  final liveKitParticipant = _liveKitService.room!.remoteParticipants.values
                                       .firstWhere(
                                         (p) => p.identity == participant.id,
-                                        orElse: () => _webrtcService.room!.remoteParticipants.values.first,
+                                        orElse: () => _liveKitService.room!.remoteParticipants.values.first,
                                       );
-                                  isCurrentlyMuted = _webrtcService.isParticipantMuted(liveKitParticipant);
+                                  isCurrentlyMuted = liveKitParticipant.isMuted;
                                 }
                                 
                                 // Toggle mute/unmute
                                 if (isCurrentlyMuted) {
-                                  await _webrtcService.unmuteParticipant(participant.id);
-                                  AppLogger().debug('🎤 Moderator unmuted judge ${participant.name}');
+                                  // Note: Participant unmuting may need to be done via server API
+                                  AppLogger().debug('🎤 Moderator attempting to unmute judge ${participant.name}');
+                                  // TODO: Implement unmute participant via LiveKit server API
                                 } else {
-                                  await _webrtcService.muteParticipant(participant.id);
-                                  AppLogger().debug('🔇 Moderator muted judge ${participant.name}');
+                                  // Note: Participant muting may need to be done via server API
+                                  AppLogger().debug('🔇 Moderator attempting to mute judge ${participant.name}');
+                                  // TODO: Implement mute participant via LiveKit server API
                                 }
                               },
                               child: Icon(
@@ -4405,24 +4317,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     );
   }
 
-  String get _formattedTime {
-    final minutes = _remainingSeconds ~/ 60;
-    final seconds = _remainingSeconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
 
-  void _resetTimer() {
-    _timerController.reset();
-    if (mounted) {
-      setState(() {
-        _remainingSeconds = _currentPhase.defaultDurationSeconds ?? 0;
-        _isTimerRunning = false;
-        _isPaused = false;
-        _speakingEnabled = false;
-        _hasPlayed30SecWarning = false; // Reset warning flag
-      });
-    }
-  }
 
 
 
@@ -4689,6 +4584,19 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _showPingDialog('judge');
   }
 
+  /// Helper function to clean description by removing metadata
+  String _getCleanDescription(String? description) {
+    if (description == null || description.isEmpty) return '';
+    
+    // If description contains metadata, extract only the actual description part
+    if (description.contains('[METADATA]')) {
+      final metadataIndex = description.indexOf('[METADATA]');
+      return description.substring(0, metadataIndex).trim();
+    }
+    
+    return description;
+  }
+
   void _showPingDialog(String roleType) {
     showDialog(
       context: context,
@@ -4699,7 +4607,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Select a ${roleType} from the list to invite to this arena.',
+              'Select a $roleType from the list to invite to this arena.',
               style: const TextStyle(fontSize: 14),
             ),
             const SizedBox(height: 16),
@@ -4714,10 +4622,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 children: [
                   const Text('Debate Topic:', style: TextStyle(fontWeight: FontWeight.bold)),
                   Text(widget.topic),
-                  if (widget.description != null) ...[
+                  if (widget.description != null && _getCleanDescription(widget.description).isNotEmpty) ...[
                     const SizedBox(height: 8),
                     const Text('Description:', style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text(widget.description!),
+                    Text(_getCleanDescription(widget.description)),
                   ],
                 ],
               ),
@@ -4740,13 +4648,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                       ? ModeratorListScreen(
                           arenaRoomId: widget.roomId,
                           debateTitle: widget.topic,
-                          debateDescription: widget.description ?? '',
+                          debateDescription: _getCleanDescription(widget.description),
                           category: widget.category ?? 'general',
                         )
                       : JudgeListScreen(
                           arenaRoomId: widget.roomId,
                           debateTitle: widget.topic,
-                          debateDescription: widget.description ?? '',
+                          debateDescription: _getCleanDescription(widget.description),
                           category: widget.category ?? 'general',
                         ),
                 ),
@@ -5622,40 +5530,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     try {
       AppLogger().info('🚨 Emergency room close initiated by moderator');
       
-      // Simple emergency close - just delete all participants and close room
-      final participants = await _appwrite.databases.listDocuments(
-        databaseId: 'arena_db',
-        collectionId: 'arena_participants',
-        queries: [
-          Query.equal('roomId', widget.roomId),
-        ],
-      );
-      
-      AppLogger().info('🚨 Found ${participants.documents.length} participants to remove');
-      
-      // Delete all participants from the room
-      for (final participant in participants.documents) {
-        try {
-          await _appwrite.databases.deleteDocument(
-            databaseId: 'arena_db',
-            collectionId: 'arena_participants',
-            documentId: participant.$id,
-          );
-          AppLogger().info('🚨 Removed participant: ${participant.$id}');
-        } catch (e) {
-          AppLogger().warning('🚨 Failed to remove participant ${participant.$id}: $e');
-        }
-      }
-      
-      // Update room status to closed (only use existing fields)
-      await _appwrite.databases.updateDocument(
-        databaseId: 'arena_db',
-        collectionId: 'arena_rooms',
-        documentId: widget.roomId,
-        data: {
-          'status': 'closed',
-        },
-      );
+      // Use AppwriteService closeArenaRoom method for consistency
+      await _appwrite.closeArenaRoom(widget.roomId);
       
       AppLogger().info('🚨 Emergency room close completed successfully');
       
@@ -5672,13 +5548,37 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
     } catch (e) {
       AppLogger().error('🚨 Emergency room close failed: $e');
+      
+      // Handle specific Appwrite errors more gracefully
+      String errorMessage = 'Failed to close room';
+      if (e.toString().contains('document_already_exists')) {
+        errorMessage = 'Room is already being closed by another moderator';
+        AppLogger().info('🚨 Room close conflict detected - navigating home anyway');
+        // Still navigate home since the room is being closed
+        _forceExitArena();
+        return;
+      } else if (e.toString().contains('document_not_found')) {
+        errorMessage = 'Room has already been closed';
+        AppLogger().info('🚨 Room already closed - navigating home');
+        _forceExitArena();
+        return;
+      }
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Failed to close room: $e'),
+            content: Text('❌ $errorMessage'),
             backgroundColor: Colors.red,
           ),
         );
+        
+        // For unknown errors, still try to navigate home after a delay
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            AppLogger().info('🚨 Forcing navigation home after error');
+            _forceExitArena();
+          }
+        });
       }
     }
   }

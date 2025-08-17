@@ -271,7 +271,7 @@ class _JudgeRegistrationScreenState extends State<JudgeRegistrationScreen> {
                   onChanged: (value) {
                     setState(() => _isAvailable = value);
                   },
-                  activeColor: const Color(0xFFFFC107),
+                  activeThumbColor: const Color(0xFFFFC107),
                 ),
               ],
             ),

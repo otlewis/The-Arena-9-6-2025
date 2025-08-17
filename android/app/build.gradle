@@ -66,7 +66,21 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.release
+            // Memory optimizations for low-memory Android devices
+            minifyEnabled false
+            shrinkResources false
         }
+        debug {
+            // Memory optimizations for development
+            minifyEnabled false
+            shrinkResources false
+        }
+    }
+    
+    // Additional memory configurations
+    dexOptions {
+        javaMaxHeapSize "2g"
+        preDexLibraries false
     }
 }
 

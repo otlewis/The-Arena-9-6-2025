@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
+import 'dart:async';
+import 'package:intl/intl.dart';
 import '../services/appwrite_service.dart';
 import '../constants/appwrite.dart';
 import '../models/arena_email.dart';
@@ -10,7 +12,9 @@ class EmailComposeScreen extends StatefulWidget {
   final String currentUsername;
   final UserProfile? recipient;
   final ArenaEmail? replyTo;
+  final ArenaEmail? forwardEmail;
   final EmailTemplate? template;
+  final EmailDraft? draft;
   
   const EmailComposeScreen({
     super.key,
@@ -18,7 +22,9 @@ class EmailComposeScreen extends StatefulWidget {
     required this.currentUsername,
     this.recipient,
     this.replyTo,
+    this.forwardEmail,
     this.template,
+    this.draft,
   });
 
   @override
@@ -36,6 +42,9 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
   bool _isSending = false;
   List<EmailTemplate> _templates = [];
   UserProfile? _selectedRecipient;
+  String? _draftId;
+  Timer? _autoSaveTimer;
+  bool _hasChanges = false;
   
   // Colors
   static const Color darkBackground = Color(0xFF0A0A0A);
@@ -48,23 +57,92 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
     super.initState();
     _initializeCompose();
     _loadTemplates();
+    _setupAutoSave();
+    _setupTextListeners();
+  }
+  
+  void _setupTextListeners() {
+    _toController.addListener(_onTextChanged);
+    _subjectController.addListener(_onTextChanged);
+    _bodyController.addListener(_onTextChanged);
+  }
+  
+  void _onTextChanged() {
+    _hasChanges = true;
+  }
+  
+  void _setupAutoSave() {
+    _autoSaveTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (_hasChanges) {
+        _saveDraft();
+      }
+    });
   }
   
   void _initializeCompose() {
+    // Load from draft if available
+    if (widget.draft != null) {
+      _draftId = widget.draft!.id;
+      _toController.text = widget.draft!.recipientEmail ?? '';
+      _subjectController.text = widget.draft!.subject;
+      _bodyController.text = widget.draft!.body;
+      // TODO: Load recipient profile if recipientId is available
+    }
+    
     if (widget.recipient != null) {
       _selectedRecipient = widget.recipient;
       _toController.text = '${widget.recipient!.name.toLowerCase()}@arena.dtd';
     }
     
     if (widget.replyTo != null) {
+      // Set recipient from the reply
+      _selectedRecipient = widget.recipient;
       _toController.text = widget.replyTo!.senderEmail;
-      _subjectController.text = 'Re: ${widget.replyTo!.subject}';
-      _bodyController.text = '\n\n---\nOn ${widget.replyTo!.createdAt}, ${widget.replyTo!.senderEmail} wrote:\n${widget.replyTo!.body}';
+      
+      // Format subject with Re: prefix if not already present
+      String subject = widget.replyTo!.subject;
+      if (!subject.startsWith('Re: ')) {
+        subject = 'Re: $subject';
+      }
+      _subjectController.text = subject;
+      
+      // Format reply body with original message quoted
+      final formattedDate = _formatDateTime(widget.replyTo!.createdAt);
+      _bodyController.text = '\n\n---\nOn $formattedDate, ${widget.replyTo!.senderEmail} wrote:\n${widget.replyTo!.body}';
+    }
+    
+    if (widget.forwardEmail != null) {
+      // For forward, leave recipient empty to be selected
+      _toController.text = '';
+      
+      // Format subject with Fwd: prefix if not already present
+      String subject = widget.forwardEmail!.subject;
+      if (!subject.startsWith('Fwd: ')) {
+        subject = 'Fwd: $subject';
+      }
+      _subjectController.text = subject;
+      
+      // Format forward body with original message
+      final formattedDate = _formatDateTime(widget.forwardEmail!.createdAt);
+      _bodyController.text = '''
+
+---------- Forwarded message ----------
+From: ${widget.forwardEmail!.senderEmail}
+Date: $formattedDate
+Subject: ${widget.forwardEmail!.subject}
+To: ${widget.forwardEmail!.recipientEmail}
+
+${widget.forwardEmail!.body}''';
     }
     
     if (widget.template != null) {
       _applyTemplate(widget.template!);
     }
+  }
+  
+  String _formatDateTime(DateTime dateTime) {
+    // Format: MM/dd/yy h:mm a (e.g., "8/16/25 1:00 PM")
+    return DateFormat('M/d/yy h:mm a').format(dateTime);
   }
   
   Future<void> _loadTemplates() async {
@@ -115,6 +193,64 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
     }
   }
   
+  Future<void> _saveDraft() async {
+    if (_subjectController.text.isEmpty && _bodyController.text.isEmpty) {
+      return; // Don't save empty drafts
+    }
+    
+    try {
+      final draft = EmailDraft(
+        id: _draftId ?? '',
+        userId: widget.currentUserId,
+        recipientId: _selectedRecipient?.id,
+        recipientUsername: _selectedRecipient?.name,
+        recipientEmail: _toController.text,
+        subject: _subjectController.text,
+        body: _bodyController.text,
+        lastModified: DateTime.now(),
+      );
+      
+      if (_draftId != null) {
+        // Update existing draft
+        await _appwrite.databases.updateDocument(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: AppwriteConstants.emailDraftsCollection,
+          documentId: _draftId!,
+          data: draft.toJson(),
+        );
+      } else {
+        // Create new draft
+        final doc = await _appwrite.databases.createDocument(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: AppwriteConstants.emailDraftsCollection,
+          documentId: ID.unique(),
+          data: draft.toJson(),
+        );
+        _draftId = doc.$id;
+      }
+      
+      _hasChanges = false;
+      debugPrint('Draft saved successfully');
+    } catch (e) {
+      debugPrint('Error saving draft: $e');
+    }
+  }
+  
+  Future<void> _deleteDraft() async {
+    if (_draftId == null) return;
+    
+    try {
+      await _appwrite.databases.deleteDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.emailDraftsCollection,
+        documentId: _draftId!,
+      );
+      debugPrint('Draft deleted successfully');
+    } catch (e) {
+      debugPrint('Error deleting draft: $e');
+    }
+  }
+  
   Future<void> _sendEmail() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedRecipient == null) {
@@ -132,6 +268,13 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
     try {
       debugPrint('Sending email from ${widget.currentUserId} to ${_selectedRecipient!.id}');
       
+      // Determine thread ID for email threading
+      String? threadId;
+      if (widget.replyTo != null) {
+        // Use the original thread ID if it exists, otherwise use the replied email's ID
+        threadId = widget.replyTo!.threadId ?? widget.replyTo!.id;
+      }
+      
       final email = ArenaEmail(
         id: '', // Will be generated by Appwrite
         senderId: widget.currentUserId,
@@ -141,6 +284,7 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
         subject: _subjectController.text,
         body: _bodyController.text,
         createdAt: DateTime.now(),
+        threadId: threadId,
       );
       
       await _appwrite.databases.createDocument(
@@ -150,6 +294,9 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
         data: email.toJson(),
       );
       
+      // Delete draft after sending
+      await _deleteDraft();
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -157,7 +304,7 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(context);
+        Navigator.pop(context, 'sent'); // Return 'sent' to indicate success
       }
     } catch (e) {
       debugPrint('Error sending email: $e');
@@ -181,9 +328,13 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
       appBar: AppBar(
         backgroundColor: darkBackground,
         elevation: 0,
-        title: const Text(
-          'Compose Email',
-          style: TextStyle(color: Colors.white),
+        title: Text(
+          widget.replyTo != null 
+              ? 'Reply' 
+              : widget.forwardEmail != null 
+                  ? 'Forward Email' 
+                  : 'Compose Email',
+          style: const TextStyle(color: Colors.white),
         ),
         actions: [
           TextButton.icon(
@@ -345,6 +496,10 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
   
   @override
   void dispose() {
+    _autoSaveTimer?.cancel();
+    if (_hasChanges) {
+      _saveDraft(); // Save draft one last time
+    }
     _toController.dispose();
     _subjectController.dispose();
     _bodyController.dispose();

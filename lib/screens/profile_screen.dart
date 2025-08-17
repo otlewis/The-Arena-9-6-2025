@@ -82,6 +82,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           AppLogger().error('Error loading follow counts', e);
         }
 
+
         setState(() => _isLoading = false);
       } else {
         setState(() => _isLoading = false);
@@ -196,45 +197,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _updateAvailability({bool? moderator, bool? judge}) async {
-    if (_currentUser == null || _userProfile == null) return;
-    
-    try {
-      await _appwrite.updateUserProfile(
-        userId: _currentUser!.$id,
-        isAvailableAsModerator: moderator,
-        isAvailableAsJudge: judge,
-      );
-      
-      // Update local state
-      setState(() {
-        _userProfile = _userProfile!.copyWith(
-          isAvailableAsModerator: moderator,
-          isAvailableAsJudge: judge,
-        );
-      });
-      
-      // Show success message
-      if (mounted) {
-        final String message = moderator != null 
-            ? 'Moderator availability ${moderator ? 'enabled' : 'disabled'}'
-            : 'Judge availability ${judge! ? 'enabled' : 'disabled'}';
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ $message'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Error updating availability: $e')),
-        );
-      }
-    }
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -285,7 +248,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _buildSocialLinksCard(),
                   if (_currentUser != null) ...[
                     const SizedBox(height: 24),
-                    _buildAvailabilitySettingsCard(),
+                    const SizedBox(height: 24),
+                    _buildCommunityRolesCard(),
                     _buildMyClubsSection(),
                     const SizedBox(height: 24),
                   ],
@@ -1157,16 +1121,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildAvailabilitySettingsCard() {
+
+  Widget _buildCommunityRolesCard() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: _themeService.isDarkMode 
             ? const Color(0xFF3A3A3A)
             : const Color(0xFFF0F0F3),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: scarletRed.withValues(alpha: 0.2),
+          color: accentPurple.withValues(alpha: 0.2),
           width: 1.5,
         ),
         boxShadow: [
@@ -1192,13 +1157,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Row(
             children: [
               Icon(
-                Icons.gavel, 
-                color: _themeService.isDarkMode ? Colors.white70 : accentPurple, 
+                Icons.workspace_premium,
+                color: _themeService.isDarkMode ? Colors.white70 : accentPurple,
                 size: 20,
               ),
               const SizedBox(width: 8),
               Text(
-                'Arena Availability',
+                'Community Roles',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -1209,141 +1174,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Get notified when debates need moderators or judges',
+            'Join the Arena community as a certified moderator or judge',
             style: TextStyle(
               color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[600],
               fontSize: 12,
             ),
           ),
           const SizedBox(height: 16),
-          
-          // Moderator availability toggle
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: _themeService.isDarkMode 
-                  ? const Color(0xFF2D2D2D)
-                  : accentPurple.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: accentPurple.withValues(alpha: 0.2),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: _themeService.isDarkMode 
-                      ? Colors.black.withValues(alpha: 0.3)
-                      : Colors.grey.withValues(alpha: 0.1),
-                  offset: const Offset(2, 2),
-                  blurRadius: 4,
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.person_pin_circle, 
-                  color: _themeService.isDarkMode ? Colors.white70 : accentPurple, 
-                  size: 20,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Available as Moderator',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: _themeService.isDarkMode ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      Text(
-                        'Help facilitate debates and keep discussions on track',
-                        style: TextStyle(
-                          color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[600],
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
+
+          // Navigation to Home for signup
+          Center(
+            child: ElevatedButton.icon(
+              onPressed: () {
+                // Show a simple message since navigation to specific tabs
+                // requires a different approach in this context
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please go to the Home tab to sign up as Moderator or Judge'),
+                    duration: Duration(seconds: 3),
                   ),
+                );
+              },
+              icon: const Icon(Icons.home, size: 18),
+              label: const Text('Go to Home to Sign Up'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accentPurple,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                Switch(
-                  value: _userProfile?.isAvailableAsModerator ?? false,
-                  onChanged: (value) => _updateAvailability(moderator: value),
-                  activeThumbColor: accentPurple,
-                ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // Judge availability toggle
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: _themeService.isDarkMode 
-                  ? const Color(0xFF2D2D2D)
-                  : Colors.amber.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.amber.withValues(alpha: 0.3),
-                width: 1,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: _themeService.isDarkMode 
-                      ? Colors.black.withValues(alpha: 0.3)
-                      : Colors.grey.withValues(alpha: 0.1),
-                  offset: const Offset(2, 2),
-                  blurRadius: 4,
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.balance, 
-                  color: _themeService.isDarkMode ? Colors.white70 : Colors.amber.shade700, 
-                  size: 20,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Available as Judge',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: _themeService.isDarkMode ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      Text(
-                        'Evaluate debates and provide fair scoring',
-                        style: TextStyle(
-                          color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[600],
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Switch(
-                  value: _userProfile?.isAvailableAsJudge ?? false,
-                  onChanged: (value) => _updateAvailability(judge: value),
-                  activeThumbColor: Colors.amber.shade700,
-                ),
-              ],
             ),
           ),
         ],
       ),
     );
   }
+
 
   Widget _buildNeumorphicIcon({
     required IconData icon,

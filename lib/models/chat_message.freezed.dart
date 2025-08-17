@@ -35,12 +35,8 @@ mixin _$ChatMessage {
       throw _privateConstructorUsedError; // 'text', 'image', 'system_notification'
   Map<String, dynamic>? get metadata => throw _privateConstructorUsedError;
 
-  /// Serializes this ChatMessage to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of ChatMessage
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $ChatMessageCopyWith<ChatMessage> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -76,8 +72,6 @@ class _$ChatMessageCopyWithImpl<$Res, $Val extends ChatMessage>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of ChatMessage
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -178,8 +172,6 @@ class __$$ChatMessageImplCopyWithImpl<$Res>
       _$ChatMessageImpl _value, $Res Function(_$ChatMessageImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of ChatMessage
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -356,7 +348,7 @@ class _$ChatMessageImpl with DiagnosticableTreeMixin implements _ChatMessage {
             const DeepCollectionEquality().equals(other._metadata, _metadata));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(
       runtimeType,
@@ -373,9 +365,7 @@ class _$ChatMessageImpl with DiagnosticableTreeMixin implements _ChatMessage {
       messageType,
       const DeepCollectionEquality().hash(_metadata));
 
-  /// Create a copy of ChatMessage
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$ChatMessageImplCopyWith<_$ChatMessageImpl> get copyWith =>
@@ -424,18 +414,15 @@ abstract class _ChatMessage implements ChatMessage {
   @override
   String? get userAvatar;
   @override
-  String? get userRole; // 'moderator', 'speaker', 'judge', 'participant'
-  @override
+  String? get userRole;
+  @override // 'moderator', 'speaker', 'judge', 'participant'
   bool? get isSystemMessage;
   @override
-  String? get messageType; // 'text', 'image', 'system_notification'
-  @override
+  String? get messageType;
+  @override // 'text', 'image', 'system_notification'
   Map<String, dynamic>? get metadata;
-
-  /// Create a copy of ChatMessage
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$ChatMessageImplCopyWith<_$ChatMessageImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -454,12 +441,8 @@ mixin _$ChatUserPresence {
   String? get userRole => throw _privateConstructorUsedError;
   bool? get isOnline => throw _privateConstructorUsedError;
 
-  /// Serializes this ChatUserPresence to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of ChatUserPresence
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $ChatUserPresenceCopyWith<ChatUserPresence> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -490,8 +473,6 @@ class _$ChatUserPresenceCopyWithImpl<$Res, $Val extends ChatUserPresence>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of ChatUserPresence
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -562,8 +543,6 @@ class __$$ChatUserPresenceImplCopyWithImpl<$Res>
       $Res Function(_$ChatUserPresenceImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of ChatUserPresence
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -679,14 +658,12 @@ class _$ChatUserPresenceImpl
                 other.isOnline == isOnline));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(runtimeType, userId, username, chatRoomId,
       lastSeen, userAvatar, userRole, isOnline);
 
-  /// Create a copy of ChatUserPresence
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$ChatUserPresenceImplCopyWith<_$ChatUserPresenceImpl> get copyWith =>
@@ -728,11 +705,8 @@ abstract class _ChatUserPresence implements ChatUserPresence {
   String? get userRole;
   @override
   bool? get isOnline;
-
-  /// Create a copy of ChatUserPresence
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$ChatUserPresenceImplCopyWith<_$ChatUserPresenceImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

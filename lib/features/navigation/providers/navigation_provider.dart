@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../services/appwrite_service.dart';
 import '../../../services/challenge_messaging_service.dart';
 import '../../../services/sound_service.dart';
+import '../../../services/audio_initialization_service.dart';
 import '../../../core/logging/app_logger.dart';
+import 'package:get_it/get_it.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../screens/home_screen.dart';
 import '../../../screens/login_screen.dart';
@@ -114,6 +116,15 @@ class NavigationNotifier extends StateNotifier<NavigationState> {
       _logger.debug('🔍 User authenticated - staying on Account tab (HomeScreen)');
       await _messagingService.initialize(user.$id);
       _setupMessageListening();
+      
+      // Initialize persistent audio service for authenticated user
+      try {
+        final audioInitService = GetIt.instance<AudioInitializationService>();
+        await audioInitService.initializeForUser();
+      } catch (e) {
+        _logger.warning('Failed to initialize audio service: $e');
+        // Don't block authentication for audio issues
+      }
     } else {
       _logger.debug('🔍 User not authenticated - staying on Account tab (LoginScreen)');
     }
@@ -124,6 +135,14 @@ class NavigationNotifier extends StateNotifier<NavigationState> {
 
     // Clean up messaging service
     _messagingService.dispose();
+    
+    // Clean up audio service
+    try {
+      final audioInitService = GetIt.instance<AudioInitializationService>();
+      await audioInitService.dispose();
+    } catch (e) {
+      _logger.warning('Failed to dispose audio service: $e');
+    }
 
     // Update local state - navigate to login tab
     state = state.copyWith(

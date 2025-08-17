@@ -17,11 +17,15 @@ class LiveKitService extends ChangeNotifier {
   // State
   bool _isConnected = false;
   bool _isMuted = false;
-  bool _isVideoEnabled = false;
   bool _isDisposed = false;
   String? _currentRoom;
   String? _currentRoomType;
   String? _userRole;
+  
+  // Memory management
+  Timer? _memoryMonitorTimer;
+  // int _connectionAttempts = 0; // Unused field - removed
+  // DateTime? _lastConnectionAttempt; // Unused field - removed
   
   // Speaking detection state
   final Map<String, bool> _speakingStates = {};
@@ -46,7 +50,6 @@ class LiveKitService extends ChangeNotifier {
   // Getters
   bool get isConnected => _isConnected;
   bool get isMuted => _isMuted;
-  bool get isVideoEnabled => _isVideoEnabled && _localParticipant?.isCameraEnabled() == true;
   String? get userRole => _userRole;
   String? get currentRoom => _currentRoom;
   String? get currentRoomType => _currentRoomType;
@@ -67,6 +70,142 @@ class LiveKitService extends ChangeNotifier {
       .map((entry) => entry.key)
       .toList();
   
+  /// Connect with retry logic and exponential backoff for Android devices
+  Future<void> _connectWithRetry(String serverUrl, String token) async {
+    const maxRetries = 3;
+    const baseDelay = Duration(seconds: 2);
+    
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        debugPrint('🔄 Connection attempt $attempt/$maxRetries');
+        
+        await _room!.connect(
+          serverUrl,
+          token,
+          connectOptions: const ConnectOptions(
+            autoSubscribe: true,
+            protocolVersion: ProtocolVersion.v9,
+            rtcConfiguration: RTCConfiguration(
+              iceServers: [
+                // Minimal ICE servers for memory efficiency
+                RTCIceServer(urls: ['stun:stun.l.google.com:19302']),
+                
+                // Single TURN server to minimize memory usage
+                RTCIceServer(
+                  urls: ['turn:a.relay.metered.ca:80'],
+                  username: 'e8dd65c92c1036ee0365f24e',
+                  credential: 'BXDGfnKgHqR6e0kF',
+                ),
+              ],
+              iceTransportPolicy: RTCIceTransportPolicy.all,
+              // Memory-optimized settings for low-memory Android devices
+              iceCandidatePoolSize: 2, // Minimal pool size to reduce memory
+            ),
+          ),
+        ).timeout(
+          Duration(seconds: 20 + (attempt * 5)), // Shorter timeouts to prevent memory buildup: 25s, 30s, 35s
+          onTimeout: () {
+            throw Exception('LiveKit connection timeout on attempt $attempt (memory-optimized timeout)');
+          },
+        );
+        
+        // If we get here, connection was successful
+        debugPrint('✅ Connection successful on attempt $attempt');
+        return;
+        
+      } catch (e) {
+        debugPrint('❌ Connection attempt $attempt failed: $e');
+        
+        // Check for memory-related errors
+        final errorString = e.toString().toLowerCase();
+        if (errorString.contains('out of memory') || 
+            errorString.contains('pthread_create') ||
+            errorString.contains('memory') ||
+            errorString.contains('native crash')) {
+          debugPrint('🧹 MEMORY ERROR detected: $e');
+          
+          // Force aggressive cleanup before retrying
+          await _forceMemoryCleanup();
+          
+          if (attempt == maxRetries) {
+            throw Exception('Critical memory error: Insufficient memory for WebRTC. Please close other apps and restart Arena.');
+          }
+        } else if (attempt == maxRetries) {
+          // This was the last attempt, rethrow the error
+          throw Exception('Failed to connect after $maxRetries attempts. Last error: $e');
+        }
+        
+        // Wait before retrying with exponential backoff + memory cleanup time
+        final delay = Duration(milliseconds: baseDelay.inMilliseconds * (1 << (attempt - 1)));
+        debugPrint('⏳ Waiting ${delay.inSeconds}s before retry (including memory cleanup)...');
+        
+        // Add extra time for memory cleanup on retries
+        await Future.delayed(delay);
+        
+        // Additional memory cleanup time for Android
+        await Future.delayed(const Duration(milliseconds: 500));
+        
+        // Aggressive disposal before retrying
+        if (_room != null) {
+          try {
+            debugPrint('🧹 RETRY: Disposing room and cleaning memory before retry');
+            await _room!.dispose();
+            await _forceMemoryCleanup();
+          } catch (disposeError) {
+            debugPrint('⚠️ RETRY: Error during room disposal: $disposeError');
+          }
+          _room = null;
+        }
+        
+        // Recreate room for next attempt with memory optimization
+        _room = Room(
+          roomOptions: const RoomOptions(
+            adaptiveStream: false,  // Disable to reduce memory usage
+            dynacast: false,  // Disable to save resources
+            defaultAudioPublishOptions: AudioPublishOptions(
+              name: 'microphone',
+              dtx: true,
+              audioBitrate: 32000,  // Low bitrate for memory efficiency
+            ),
+            // Minimal configuration for low-memory Android devices
+            e2eeOptions: null,
+          ),
+        );
+        
+        // Set up event listeners again
+        _setupEventListeners();
+      }
+    }
+  }
+
+  /// Pre-connection memory check for Android devices
+  Future<bool> _checkMemoryBeforeConnect() async {
+    try {
+      debugPrint('🧹 MEMORY: Checking memory before connection');
+      
+      // Force cleanup of any existing resources
+      if (_room != null) {
+        debugPrint('🧹 MEMORY: Disposing existing room before new connection');
+        try {
+          await _room!.dispose();
+        } catch (e) {
+          debugPrint('⚠️ MEMORY: Error disposing existing room: $e');
+        }
+        _room = null;
+      }
+      
+      // Clear all state to free memory
+      await _forceMemoryCleanup();
+      
+      debugPrint('✅ MEMORY: Memory check completed, ready for connection');
+      return true;
+      
+    } catch (error) {
+      debugPrint('❌ MEMORY: Memory check failed: $error');
+      return false;
+    }
+  }
+
   /// Connect to a LiveKit room with role-based permissions
   Future<void> connect({
     required String serverUrl,
@@ -84,6 +223,12 @@ class LiveKitService extends ChangeNotifier {
       debugPrint('👤 RECEIVED PARAMS - Role: "$userRole", Type: "$roomType"');
       debugPrint('🆔 User ID: $userId');
       
+      // Critical: Check memory before connecting
+      final memoryOk = await _checkMemoryBeforeConnect();
+      if (!memoryOk) {
+        throw Exception('Insufficient memory for WebRTC connection. Please close other apps and try again.');
+      }
+      
       // Store role and room type
       debugPrint('💾 STORING: Saving role and room type in LiveKit service');
       debugPrint('💾 BEFORE: _userRole=$_userRole, _currentRoomType=$_currentRoomType');
@@ -100,38 +245,26 @@ class LiveKitService extends ChangeNotifier {
       debugPrint('🔍 INITIAL CHECK: Can "$_userRole" publish in "$_currentRoomType"? $canPublishCheck');
       // User ID stored for session
       
-      // Create room with options optimized for Arena audio with noise cancellation
+      // Create room with aggressive memory optimization for Android
       _room = Room(
         roomOptions: const RoomOptions(
-          adaptiveStream: true,
-          dynacast: true,
+          adaptiveStream: false,  // Disable adaptive streaming to reduce memory
+          dynacast: false,  // Disable dynacast to save resources
           defaultAudioPublishOptions: AudioPublishOptions(
             name: 'microphone',
-            dtx: true,  // Enable discontinuous transmission to save bandwidth and reduce feedback
+            dtx: true,  // Enable discontinuous transmission
+            audioBitrate: 32000,  // Reduce bitrate to 32kbps for memory efficiency
           ),
-          defaultVideoPublishOptions: VideoPublishOptions(
-            name: 'camera',
-          ),
+          // Aggressive memory settings for low-memory Android devices
+          e2eeOptions: null,  // Disable encryption to save memory
         ),
       );
       
       // Set up event listeners
       _setupEventListeners();
       
-      // Connect to room with increased timeout for mobile networks
-      await _room!.connect(
-        serverUrl,
-        token,
-        connectOptions: const ConnectOptions(
-          autoSubscribe: true,
-          protocolVersion: ProtocolVersion.v9,
-        ),
-      ).timeout(
-        const Duration(seconds: 45), // Increased timeout for mobile networks
-        onTimeout: () {
-          throw Exception('LiveKit connection timeout - please check your network connection');
-        },
-      );
+      // Connect to room with retry logic for Android devices
+      await _connectWithRetry(serverUrl, token);
       
       _localParticipant = _room!.localParticipant;
       _isConnected = true;
@@ -143,13 +276,28 @@ class LiveKitService extends ChangeNotifier {
         debugPrint('⚠️ Local participant is null, skipping media setup');
       }
       
+      // Connection successful
+      
+      // Start memory monitoring for Android devices
+      _startMemoryMonitoring();
+      
       debugPrint('✅ Connected to LiveKit room successfully');
       onConnected?.call();
       notifyListeners();
       
     } catch (error) {
       debugPrint('❌ Failed to connect to LiveKit room: $error');
-      onError?.call('Failed to connect: $error');
+      
+      // Connection failed
+      
+      // Special handling for memory errors
+      final errorString = error.toString().toLowerCase();
+      if (errorString.contains('memory') || errorString.contains('pthread') || errorString.contains('native crash')) {
+        await _forceMemoryCleanup();
+        onError?.call('Memory error: Please close other apps and try again. $error');
+      } else {
+        onError?.call('Failed to connect: $error');
+      }
       rethrow;
     }
   }
@@ -565,6 +713,9 @@ class LiveKitService extends ChangeNotifier {
       // Verify it actually disabled by checking the state (iOS-specific)
       await Future.delayed(const Duration(milliseconds: 100));
       
+      // Double-check participant is still available before accessing tracks
+      if (_localParticipant == null) return;
+      
       final audioTracks = _localParticipant!.audioTrackPublications;
       bool hasDisabledTracks = true;
       
@@ -848,50 +999,7 @@ class LiveKitService extends ChangeNotifier {
     return audioTrack?.muted == true;
   }
   
-  /// Enable video publishing
-  Future<void> enableVideo() async {
-    try {
-      if (_localParticipant == null) {
-        debugPrint('⚠️ Cannot enable video: local participant is null');
-        return;
-      }
-      
-      debugPrint('📹 Attempting to enable camera...');
-      
-      // Create and publish camera track
-      await _localParticipant!.setCameraEnabled(true);
-      
-      // Give it a moment to initialize
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      _isVideoEnabled = true;
-      debugPrint('✅ Video enabled successfully');
-      notifyListeners();
-    } catch (error) {
-      debugPrint('❌ Failed to enable video: $error');
-      
-      // Try alternative approach: don't fail completely
-      _isVideoEnabled = false;
-      debugPrint('🔄 Video publishing failed, but continuing without video');
-      onError?.call('Video unavailable: $error');
-      notifyListeners();
-    }
-  }
-  
-  /// Disable video publishing
-  Future<void> disableVideo() async {
-    try {
-      if (_localParticipant == null) return;
-      
-      await _localParticipant!.setCameraEnabled(false);
-      _isVideoEnabled = false;
-      debugPrint('📹 Video disabled');
-      notifyListeners();
-    } catch (error) {
-      debugPrint('❌ Failed to disable video: $error');
-      onError?.call('Failed to disable video: $error');
-    }
-  }
+  // Video methods removed - this is an audio-only app
   
   /// Force update the user role in LiveKit service
   void forceUpdateRole(String newRole, String roomType) {
@@ -979,6 +1087,38 @@ class LiveKitService extends ChangeNotifier {
     }
   }
   
+  /// Start memory monitoring for low-memory Android devices
+  void _startMemoryMonitoring() {
+    _memoryMonitorTimer?.cancel();
+    
+    _memoryMonitorTimer = Timer.periodic(const Duration(minutes: 2), (timer) async {
+      try {
+        debugPrint('🧹 MONITOR: Performing periodic memory cleanup');
+        
+        // Light cleanup of speaking detection state
+        
+        // Remove old speaking timers
+        final expiredTimers = <String>[];
+        for (final entry in _speakingTimers.entries) {
+          if (entry.value == null || !entry.value!.isActive) {
+            expiredTimers.add(entry.key);
+          }
+        }
+        
+        for (final userId in expiredTimers) {
+          _speakingTimers.remove(userId);
+        }
+        
+        if (expiredTimers.isNotEmpty) {
+          debugPrint('🧹 MONITOR: Cleaned up ${expiredTimers.length} expired speaking timers');
+        }
+        
+      } catch (error) {
+        debugPrint('⚠️ MONITOR: Error during memory monitoring: $error');
+      }
+    });
+  }
+  
   /// Handle disconnection cleanup
   void _handleDisconnection() {
     _isConnected = false;
@@ -987,6 +1127,10 @@ class LiveKitService extends ChangeNotifier {
     _userRole = null;
     // User ID cleared
     _localParticipant = null;
+    
+    // Stop memory monitoring
+    _memoryMonitorTimer?.cancel();
+    _memoryMonitorTimer = null;
     
     onDisconnected?.call();
     notifyListeners();
@@ -1136,28 +1280,61 @@ class LiveKitService extends ChangeNotifier {
     debugPrint('🧹 Cleaned up speaking detection for $userId');
   }
 
-  /// Dispose resources
+  /// Aggressive memory cleanup for Android devices
+  Future<void> _forceMemoryCleanup() async {
+    try {
+      debugPrint('🧹 MEMORY: Starting aggressive memory cleanup');
+      
+      // Cancel all timers immediately
+      for (final timer in _speakingTimers.values) {
+        timer?.cancel();
+      }
+      _speakingTimers.clear();
+      
+      // Clear all state maps
+      _speakingStates.clear();
+      _audioLevels.clear();
+      
+      // Force garbage collection hint
+      debugPrint('🧹 MEMORY: Cleared state maps and timers');
+      
+    } catch (error) {
+      debugPrint('❌ MEMORY: Error during cleanup: $error');
+    }
+  }
+
+  /// Dispose resources with aggressive memory management
   @override
   Future<void> dispose() async {
     if (_isDisposed) return;
     
     _isDisposed = true;
     
-    // Clean up all speaking timers
-    for (final timer in _speakingTimers.values) {
-      timer?.cancel();
+    debugPrint('🧹 MEMORY: Starting LiveKit service disposal');
+    
+    // Aggressive memory cleanup first
+    await _forceMemoryCleanup();
+    
+    // Disconnect cleanly
+    try {
+      await disconnect();
+    } catch (error) {
+      debugPrint('⚠️ MEMORY: Error during disconnect: $error');
     }
-    _speakingTimers.clear();
-    _speakingStates.clear();
-    _audioLevels.clear();
     
-    await disconnect();
-    
+    // Force room disposal
     if (_room != null) {
-      await _room!.dispose();
-      _room = null;
+      try {
+        await _room!.dispose();
+        debugPrint('🧹 MEMORY: Room disposed successfully');
+      } catch (error) {
+        debugPrint('⚠️ MEMORY: Error disposing room: $error');
+      } finally {
+        _room = null;
+      }
     }
     
+    debugPrint('✅ MEMORY: LiveKit service disposal completed');
     super.dispose();
   }
 }

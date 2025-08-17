@@ -25,9 +25,7 @@ mixin _$DiscussionParticipant {
   bool get isMuted => throw _privateConstructorUsedError;
   Map<String, dynamic> get metadata => throw _privateConstructorUsedError;
 
-  /// Create a copy of DiscussionParticipant
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $DiscussionParticipantCopyWith<DiscussionParticipant> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -60,8 +58,6 @@ class _$DiscussionParticipantCopyWithImpl<$Res,
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of DiscussionParticipant
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -140,8 +136,6 @@ class __$$DiscussionParticipantImplCopyWithImpl<$Res>
       $Res Function(_$DiscussionParticipantImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of DiscussionParticipant
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -265,9 +259,7 @@ class _$DiscussionParticipantImpl implements _DiscussionParticipant {
       isMuted,
       const DeepCollectionEquality().hash(_metadata));
 
-  /// Create a copy of DiscussionParticipant
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$DiscussionParticipantImplCopyWith<_$DiscussionParticipantImpl>
@@ -302,11 +294,8 @@ abstract class _DiscussionParticipant implements DiscussionParticipant {
   bool get isMuted;
   @override
   Map<String, dynamic> get metadata;
-
-  /// Create a copy of DiscussionParticipant
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$DiscussionParticipantImplCopyWith<_$DiscussionParticipantImpl>
       get copyWith => throw _privateConstructorUsedError;
 }
@@ -321,9 +310,7 @@ mixin _$VoiceState {
   Set<int> get speakingUsers => throw _privateConstructorUsedError;
   Set<String> get handsRaised => throw _privateConstructorUsedError;
 
-  /// Create a copy of VoiceState
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $VoiceStateCopyWith<VoiceState> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -354,8 +341,6 @@ class _$VoiceStateCopyWithImpl<$Res, $Val extends VoiceState>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of VoiceState
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -426,8 +411,6 @@ class __$$VoiceStateImplCopyWithImpl<$Res>
       _$VoiceStateImpl _value, $Res Function(_$VoiceStateImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of VoiceState
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -562,9 +545,7 @@ class _$VoiceStateImpl implements _VoiceState {
       const DeepCollectionEquality().hash(_speakingUsers),
       const DeepCollectionEquality().hash(_handsRaised));
 
-  /// Create a copy of VoiceState
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$VoiceStateImplCopyWith<_$VoiceStateImpl> get copyWith =>
@@ -595,11 +576,8 @@ abstract class _VoiceState implements VoiceState {
   Set<int> get speakingUsers;
   @override
   Set<String> get handsRaised;
-
-  /// Create a copy of VoiceState
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$VoiceStateImplCopyWith<_$VoiceStateImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -614,9 +592,7 @@ mixin _$TimerState {
   bool get isTimerPaused => throw _privateConstructorUsedError;
   bool get thirtySecondChimePlayed => throw _privateConstructorUsedError;
 
-  /// Create a copy of TimerState
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $TimerStateCopyWith<TimerState> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -645,8 +621,6 @@ class _$TimerStateCopyWithImpl<$Res, $Val extends TimerState>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of TimerState
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -705,8 +679,6 @@ class __$$TimerStateImplCopyWithImpl<$Res>
       _$TimerStateImpl _value, $Res Function(_$TimerStateImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of TimerState
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -796,9 +768,7 @@ class _$TimerStateImpl implements _TimerState {
   int get hashCode => Object.hash(runtimeType, speakingTime, speakingTimeLimit,
       isTimerRunning, isTimerPaused, thirtySecondChimePlayed);
 
-  /// Create a copy of TimerState
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$TimerStateImplCopyWith<_$TimerStateImpl> get copyWith =>
@@ -814,20 +784,17 @@ abstract class _TimerState implements TimerState {
       final bool thirtySecondChimePlayed}) = _$TimerStateImpl;
 
   @override
-  int get speakingTime; // countdown in seconds
-  @override
-  int get speakingTimeLimit; // default 5 minutes
-  @override
+  int get speakingTime;
+  @override // countdown in seconds
+  int get speakingTimeLimit;
+  @override // default 5 minutes
   bool get isTimerRunning;
   @override
   bool get isTimerPaused;
   @override
   bool get thirtySecondChimePlayed;
-
-  /// Create a copy of TimerState
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$TimerStateImplCopyWith<_$TimerStateImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -838,9 +805,7 @@ mixin _$NetworkState {
   int get reconnectAttempts => throw _privateConstructorUsedError;
   int get maxReconnectAttempts => throw _privateConstructorUsedError;
 
-  /// Create a copy of NetworkState
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $NetworkStateCopyWith<NetworkState> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -867,8 +832,6 @@ class _$NetworkStateCopyWithImpl<$Res, $Val extends NetworkState>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of NetworkState
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -915,8 +878,6 @@ class __$$NetworkStateImplCopyWithImpl<$Res>
       _$NetworkStateImpl _value, $Res Function(_$NetworkStateImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of NetworkState
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -981,9 +942,7 @@ class _$NetworkStateImpl implements _NetworkState {
   int get hashCode => Object.hash(
       runtimeType, isRealtimeHealthy, reconnectAttempts, maxReconnectAttempts);
 
-  /// Create a copy of NetworkState
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$NetworkStateImplCopyWith<_$NetworkStateImpl> get copyWith =>
@@ -1002,11 +961,8 @@ abstract class _NetworkState implements NetworkState {
   int get reconnectAttempts;
   @override
   int get maxReconnectAttempts;
-
-  /// Create a copy of NetworkState
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$NetworkStateImplCopyWith<_$NetworkStateImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -1036,9 +992,7 @@ mixin _$DiscussionState {
   bool get isExiting => throw _privateConstructorUsedError;
   String? get error => throw _privateConstructorUsedError;
 
-  /// Create a copy of DiscussionState
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $DiscussionStateCopyWith<DiscussionState> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -1082,8 +1036,6 @@ class _$DiscussionStateCopyWithImpl<$Res, $Val extends DiscussionState>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of DiscussionState
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -1172,8 +1124,6 @@ class _$DiscussionStateCopyWithImpl<$Res, $Val extends DiscussionState>
     ) as $Val);
   }
 
-  /// Create a copy of DiscussionState
-  /// with the given fields replaced by the non-null parameter values.
   @override
   @pragma('vm:prefer-inline')
   $VoiceStateCopyWith<$Res> get voiceState {
@@ -1182,8 +1132,6 @@ class _$DiscussionStateCopyWithImpl<$Res, $Val extends DiscussionState>
     });
   }
 
-  /// Create a copy of DiscussionState
-  /// with the given fields replaced by the non-null parameter values.
   @override
   @pragma('vm:prefer-inline')
   $TimerStateCopyWith<$Res> get timerState {
@@ -1192,8 +1140,6 @@ class _$DiscussionStateCopyWithImpl<$Res, $Val extends DiscussionState>
     });
   }
 
-  /// Create a copy of DiscussionState
-  /// with the given fields replaced by the non-null parameter values.
   @override
   @pragma('vm:prefer-inline')
   $NetworkStateCopyWith<$Res> get networkState {
@@ -1245,8 +1191,6 @@ class __$$DiscussionStateImplCopyWithImpl<$Res>
       _$DiscussionStateImpl _value, $Res Function(_$DiscussionStateImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of DiscussionState
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -1492,9 +1436,7 @@ class _$DiscussionStateImpl implements _DiscussionState {
       isExiting,
       error);
 
-  /// Create a copy of DiscussionState
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$DiscussionStateImplCopyWith<_$DiscussionStateImpl> get copyWith =>
@@ -1524,26 +1466,26 @@ abstract class _DiscussionState implements DiscussionState {
   @override
   String get roomId;
   @override
-  Room get room; // Current user state
-  @override
+  Room get room;
+  @override // Current user state
   String? get currentUserId;
   @override
   String? get userRole;
   @override
-  int get coinBalance; // Room data
-  @override
+  int get coinBalance;
+  @override // Room data
   List<DiscussionParticipant> get participants;
   @override
   Map<String, UserProfile> get userProfiles;
   @override
-  Map<String, dynamic>? get userParticipation; // Voice state
-  @override
-  VoiceState get voiceState; // Timer state
-  @override
-  TimerState get timerState; // Network state
-  @override
-  NetworkState get networkState; // UI state
-  @override
+  Map<String, dynamic>? get userParticipation;
+  @override // Voice state
+  VoiceState get voiceState;
+  @override // Timer state
+  TimerState get timerState;
+  @override // Network state
+  NetworkState get networkState;
+  @override // UI state
   bool get isChatOpen;
   @override
   bool get showModerationPanel;
@@ -1553,11 +1495,8 @@ abstract class _DiscussionState implements DiscussionState {
   bool get isExiting;
   @override
   String? get error;
-
-  /// Create a copy of DiscussionState
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$DiscussionStateImplCopyWith<_$DiscussionStateImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

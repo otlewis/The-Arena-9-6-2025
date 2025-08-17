@@ -22,7 +22,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
   
   List<ArenaEmail> _inboxEmails = [];
   List<ArenaEmail> _sentEmails = [];
-  final List<ArenaEmail> _drafts = [];
+  List<EmailDraft> _drafts = [];
   
   String? _currentUserId;
   String? _currentUsername;
@@ -39,8 +39,14 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _initializeSoundService();
     _loadCurrentUser();
     _subscribeToEmails();
+  }
+  
+  Future<void> _initializeSoundService() async {
+    await _soundService.initialize();
+    debugPrint('SoundService initialized for email inbox');
   }
   
   @override
@@ -102,16 +108,19 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
       debugPrint('Filtered inbox emails: ${newInboxEmails.length} for user $_currentUserId');
       debugPrint('Filtered sent emails: ${newSentEmails.length} for user $_currentUserId');
       
-      // Check for new emails and play sound
-      final hasNewEmails = newInboxEmails.length > _inboxEmails.length;
-      if (hasNewEmails && _inboxEmails.isNotEmpty) {
-        debugPrint('New email received! Playing sound...');
-        _soundService.playEmailSound();
+      // Debug sent emails
+      for (var email in newSentEmails) {
+        debugPrint('Sent email: to=${email.recipientUsername}, subject=${email.subject}, date=${email.createdAt}');
       }
+      
+      // Note: Sound is now played in the real-time subscription when a new email arrives
       
       for (var email in newInboxEmails) {
         debugPrint('Inbox email: sender=${email.senderId}, recipient=${email.recipientId}, subject=${email.subject}');
       }
+      
+      // Load drafts
+      await _loadDrafts();
       
       setState(() {
         _inboxEmails = newInboxEmails;
@@ -124,6 +133,36 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
     }
   }
   
+  Future<void> _loadDrafts() async {
+    try {
+      final draftsResponse = await _appwrite.databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.emailDraftsCollection,
+        queries: [
+          Query.equal('userId', _currentUserId!),
+          Query.orderDesc('lastModified'),
+          Query.limit(50),
+        ],
+      );
+      
+      final drafts = draftsResponse.documents
+          .map((doc) => EmailDraft.fromJson(doc.data))
+          .toList();
+      
+      setState(() {
+        _drafts = drafts;
+      });
+      
+      debugPrint('Loaded ${drafts.length} drafts');
+    } catch (e) {
+      debugPrint('Error loading drafts: $e');
+      // Collection might not exist yet
+      setState(() {
+        _drafts = [];
+      });
+    }
+  }
+  
   void _subscribeToEmails() {
     try {
       final realtime = _appwrite.realtime;
@@ -132,6 +171,18 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
       ]);
       
       _subscription!.stream.listen((response) {
+        debugPrint('Email subscription event received: ${response.events}');
+        
+        // Check if this is a new email for the current user
+        if (response.events.contains('databases.${AppwriteConstants.databaseId}.collections.${AppwriteConstants.arenaEmailsCollection}.documents.*.create')) {
+          // New email created, check if it's for current user
+          final payload = response.payload;
+          if (payload['recipientId'] == _currentUserId) {
+            debugPrint('New email received for current user! Playing sound...');
+            _soundService.playEmailSound();
+          }
+        }
+        
         _loadEmails(); // Reload emails on any change
       });
     } catch (e) {
@@ -154,8 +205,8 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
     }
   }
   
-  void _composeEmail({UserProfile? recipient}) {
-    Navigator.push(
+  void _composeEmail({UserProfile? recipient}) async {
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => EmailComposeScreen(
@@ -165,6 +216,11 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
         ),
       ),
     );
+    
+    // If email was sent, switch to sent tab
+    if (result == 'sent' && mounted) {
+      _tabController.animateTo(1); // Switch to Sent tab
+    }
   }
   
   void _openEmail(ArenaEmail email) {
@@ -230,6 +286,79 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
                         ),
                       ),
                       IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () async {
+                          final nav = Navigator.of(context);
+                          final messenger = ScaffoldMessenger.of(context);
+                          
+                          // Show confirmation dialog
+                          final shouldDelete = await showDialog<bool>(
+                            context: context,
+                            builder: (BuildContext context) {
+                              return AlertDialog(
+                                backgroundColor: cardBackground,
+                                title: const Text(
+                                  'Delete Email',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                                content: const Text(
+                                  'Are you sure you want to delete this email?',
+                                  style: TextStyle(color: Colors.white70),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.of(context).pop(false),
+                                    child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.of(context).pop(true),
+                                    child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                          
+                          if (shouldDelete == true && mounted) {
+                            
+                            try {
+                              await _appwrite.databases.deleteDocument(
+                                databaseId: AppwriteConstants.databaseId,
+                                collectionId: AppwriteConstants.arenaEmailsCollection,
+                                documentId: email.id,
+                              );
+                              
+                              if (mounted) {
+                                setState(() {
+                                  _inboxEmails.removeWhere((e) => e.id == email.id);
+                                  _sentEmails.removeWhere((e) => e.id == email.id);
+                                });
+                                
+                                nav.pop(); // Close the modal
+                                messenger.showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Email deleted'),
+                                    backgroundColor: Colors.red,
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              debugPrint('Error deleting email: $e');
+                              if (mounted) {
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text('Failed to delete email: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          }
+                        },
+                        tooltip: 'Delete email',
+                      ),
+                      IconButton(
                         icon: const Icon(Icons.close, color: Colors.white70),
                         onPressed: () => Navigator.pop(context),
                       ),
@@ -285,9 +414,23 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        // TODO: Implement reply
+                      onPressed: () async {
+                        final nav = Navigator.of(context);
+                        nav.pop();
+                        // Get sender's profile for reply
+                        final senderProfile = await _appwrite.getUserProfile(email.senderId);
+                        if (mounted) {
+                          nav.push(
+                            MaterialPageRoute(
+                              builder: (context) => EmailComposeScreen(
+                                currentUserId: _currentUserId!,
+                                currentUsername: _currentUsername!,
+                                replyTo: email,
+                                recipient: senderProfile,
+                              ),
+                            ),
+                          );
+                        }
                       },
                       icon: const Icon(Icons.reply),
                       label: const Text('Reply'),
@@ -302,7 +445,16 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
                     child: OutlinedButton.icon(
                       onPressed: () {
                         Navigator.pop(context);
-                        // TODO: Implement forward
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EmailComposeScreen(
+                              currentUserId: _currentUserId!,
+                              currentUsername: _currentUsername!,
+                              forwardEmail: email,
+                            ),
+                          ),
+                        );
                       },
                       icon: const Icon(Icons.forward),
                       label: const Text('Forward'),
@@ -322,18 +474,8 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
   }
   
   String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-    
-    if (difference.inDays == 0) {
-      return 'Today ${DateFormat('HH:mm').format(date)}';
-    } else if (difference.inDays == 1) {
-      return 'Yesterday ${DateFormat('HH:mm').format(date)}';
-    } else if (difference.inDays < 7) {
-      return DateFormat('EEEE HH:mm').format(date);
-    } else {
-      return DateFormat('MMM d, y').format(date);
-    }
+    // Format: MM/dd/yy h:mm a (e.g., "8/16/25 1:00 PM")
+    return DateFormat('M/d/yy h:mm a').format(date);
   }
   
   @override
@@ -364,6 +506,23 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
               ),
           ],
         ),
+        actions: [
+          // Debug button to test email sound
+          IconButton(
+            icon: const Icon(Icons.volume_up, color: Colors.white54),
+            onPressed: () {
+              debugPrint('Testing email sound...');
+              _soundService.playEmailSound();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Email sound played'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            },
+            tooltip: 'Test email sound',
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: accentPurple,
@@ -408,14 +567,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
                 _buildEmailList(_sentEmails, isInbox: false),
                 
                 // Drafts tab
-                _drafts.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No drafts',
-                          style: TextStyle(color: Colors.white54),
-                        ),
-                      )
-                    : _buildEmailList(_drafts, isDraft: true),
+                _buildDraftsList(),
               ],
             ),
       floatingActionButton: FloatingActionButton(
@@ -452,77 +604,154 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
     return Card(
       color: cardBackground,
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-      child: ListTile(
-        onTap: () => _openEmail(email),
-        leading: CircleAvatar(
-          backgroundColor: accentPurple.withValues(alpha: 0.2),
-          child: Text(
-            (isInbox ? email.senderUsername : email.recipientUsername)[0].toUpperCase(),
+      child: Dismissible(
+        key: Key(email.id),
+        direction: DismissDirection.endToStart,
+        background: Container(
+          color: Colors.red,
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20),
+          child: const Icon(Icons.delete, color: Colors.white),
+        ),
+        confirmDismiss: (direction) async {
+          // Show confirmation dialog
+          return await showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                backgroundColor: cardBackground,
+                title: const Text(
+                  'Delete Email',
+                  style: TextStyle(color: Colors.white),
+                ),
+                content: const Text(
+                  'Are you sure you want to delete this email?',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+        onDismissed: (direction) async {
+          // Delete email from database
+          try {
+            await _appwrite.databases.deleteDocument(
+              databaseId: AppwriteConstants.databaseId,
+              collectionId: AppwriteConstants.arenaEmailsCollection,
+              documentId: email.id,
+            );
+            
+            setState(() {
+              if (isInbox) {
+                _inboxEmails.removeWhere((e) => e.id == email.id);
+              } else {
+                _sentEmails.removeWhere((e) => e.id == email.id);
+              }
+            });
+            
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('${isInbox ? 'Inbox' : 'Sent'} email deleted'),
+                  backgroundColor: Colors.red,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          } catch (e) {
+            debugPrint('Error deleting email: $e');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Failed to delete email: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
+        },
+        child: ListTile(
+          onTap: () => _openEmail(email),
+          leading: CircleAvatar(
+            backgroundColor: accentPurple.withValues(alpha: 0.2),
+            child: Text(
+              (isInbox ? email.senderUsername : email.recipientUsername)[0].toUpperCase(),
+              style: TextStyle(
+                color: accentPurple,
+                fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+          title: Text(
+            isInbox ? email.senderUsername : 'To: ${email.recipientUsername}',
             style: TextStyle(
-              color: accentPurple,
+              color: Colors.white,
               fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
             ),
           ),
-        ),
-        title: Text(
-          isInbox ? email.senderUsername : 'To: ${email.recipientUsername}',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              email.subject,
-              style: TextStyle(
-                color: Colors.white70,
-                fontWeight: isUnread ? FontWeight.w600 : FontWeight.normal,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              email.body,
-              style: const TextStyle(
-                color: Colors.white54,
-                fontSize: 12,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              _formatDate(email.createdAt),
-              style: const TextStyle(
-                color: Colors.white54,
-                fontSize: 11,
-              ),
-            ),
-            if (email.emailType != 'personal')
-              Container(
-                margin: const EdgeInsets.only(top: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _getTypeColor(email.emailType).withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                email.subject,
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontWeight: isUnread ? FontWeight.w600 : FontWeight.normal,
                 ),
-                child: Text(
-                  email.emailType,
-                  style: TextStyle(
-                    color: _getTypeColor(email.emailType),
-                    fontSize: 10,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                email.body,
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 12,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+          trailing: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                _formatDate(email.createdAt),
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 11,
+                ),
+              ),
+              if (email.emailType != 'personal')
+                Container(
+                  margin: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _getTypeColor(email.emailType).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    email.emailType,
+                    style: TextStyle(
+                      color: _getTypeColor(email.emailType),
+                      fontSize: 10,
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -541,5 +770,134 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
       default:
         return accentPurple;
     }
+  }
+  
+  Widget _buildDraftsList() {
+    if (_drafts.isEmpty) {
+      return const Center(
+        child: Text(
+          'No drafts',
+          style: TextStyle(color: Colors.white54),
+        ),
+      );
+    }
+    
+    return ListView.builder(
+      padding: const EdgeInsets.all(8),
+      itemCount: _drafts.length,
+      itemBuilder: (context, index) {
+        final draft = _drafts[index];
+        return _buildDraftCard(draft);
+      },
+    );
+  }
+  
+  Widget _buildDraftCard(EmailDraft draft) {
+    return Card(
+      color: cardBackground,
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: Dismissible(
+        key: Key(draft.id),
+        direction: DismissDirection.endToStart,
+        background: Container(
+          color: Colors.red,
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20),
+          child: const Icon(Icons.delete, color: Colors.white),
+        ),
+        onDismissed: (direction) async {
+          // Delete draft
+          try {
+            await _appwrite.databases.deleteDocument(
+              databaseId: AppwriteConstants.databaseId,
+              collectionId: AppwriteConstants.emailDraftsCollection,
+              documentId: draft.id,
+            );
+            setState(() {
+              _drafts.removeWhere((d) => d.id == draft.id);
+            });
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Draft deleted'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          } catch (e) {
+            debugPrint('Error deleting draft: $e');
+          }
+        },
+        child: ListTile(
+          onTap: () async {
+            // Open draft in compose screen
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => EmailComposeScreen(
+                  currentUserId: _currentUserId!,
+                  currentUsername: _currentUsername!,
+                  draft: draft,
+                ),
+              ),
+            );
+            
+            // Reload drafts after returning
+            _loadDrafts();
+            
+            // If email was sent, switch to sent tab
+            if (result == 'sent' && mounted) {
+              _tabController.animateTo(1);
+            }
+          },
+          leading: CircleAvatar(
+            backgroundColor: Colors.orange.withValues(alpha: 0.2),
+            child: const Icon(
+              Icons.drafts,
+              color: Colors.orange,
+            ),
+          ),
+          title: Text(
+            draft.recipientEmail?.isNotEmpty == true 
+                ? 'To: ${draft.recipientEmail}'
+                : 'New Draft',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                draft.subject.isNotEmpty ? draft.subject : '(No subject)',
+                style: const TextStyle(
+                  color: Colors.white70,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                draft.body.isNotEmpty ? draft.body : '(No content)',
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 12,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+          trailing: Text(
+            _formatDate(draft.lastModified),
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 11,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

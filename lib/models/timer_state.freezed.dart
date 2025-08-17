@@ -41,12 +41,8 @@ mixin _$TimerState {
   bool get vibrationEnabled => throw _privateConstructorUsedError;
   Map<String, dynamic>? get metadata => throw _privateConstructorUsedError;
 
-  /// Serializes this TimerState to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of TimerState
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $TimerStateCopyWith<TimerState> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -87,8 +83,6 @@ class _$TimerStateCopyWithImpl<$Res, $Val extends TimerState>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of TimerState
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -219,8 +213,6 @@ class __$$TimerStateImplCopyWithImpl<$Res>
       _$TimerStateImpl _value, $Res Function(_$TimerStateImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of TimerState
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -431,7 +423,7 @@ class _$TimerStateImpl implements _TimerState {
             const DeepCollectionEquality().equals(other._metadata, _metadata));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(
       runtimeType,
@@ -453,9 +445,7 @@ class _$TimerStateImpl implements _TimerState {
       vibrationEnabled,
       const DeepCollectionEquality().hash(_metadata));
 
-  /// Create a copy of TimerState
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$TimerStateImplCopyWith<_$TimerStateImpl> get copyWith =>
@@ -529,11 +519,8 @@ abstract class _TimerState implements TimerState {
   bool get vibrationEnabled;
   @override
   Map<String, dynamic>? get metadata;
-
-  /// Create a copy of TimerState
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$TimerStateImplCopyWith<_$TimerStateImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -559,12 +546,8 @@ mixin _$TimerConfiguration {
   String get warningColor => throw _privateConstructorUsedError;
   String get expiredColor => throw _privateConstructorUsedError;
 
-  /// Serializes this TimerConfiguration to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of TimerConfiguration
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $TimerConfigurationCopyWith<TimerConfiguration> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -602,8 +585,6 @@ class _$TimerConfigurationCopyWithImpl<$Res, $Val extends TimerConfiguration>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of TimerConfiguration
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -716,8 +697,6 @@ class __$$TimerConfigurationImplCopyWithImpl<$Res>
       $Res Function(_$TimerConfigurationImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of TimerConfiguration
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -901,7 +880,7 @@ class _$TimerConfigurationImpl implements _TimerConfiguration {
                 other.expiredColor == expiredColor));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(
       runtimeType,
@@ -920,9 +899,7 @@ class _$TimerConfigurationImpl implements _TimerConfiguration {
       warningColor,
       expiredColor);
 
-  /// Create a copy of TimerConfiguration
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$TimerConfigurationImplCopyWith<_$TimerConfigurationImpl> get copyWith =>
@@ -985,11 +962,8 @@ abstract class _TimerConfiguration implements TimerConfiguration {
   String get warningColor;
   @override
   String get expiredColor;
-
-  /// Create a copy of TimerConfiguration
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$TimerConfigurationImplCopyWith<_$TimerConfigurationImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -1007,12 +981,8 @@ mixin _$RoomTimerPreset {
   int get maxConcurrentTimers => throw _privateConstructorUsedError;
   bool get moderatorOnly => throw _privateConstructorUsedError;
 
-  /// Serializes this RoomTimerPreset to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of RoomTimerPreset
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $RoomTimerPresetCopyWith<RoomTimerPreset> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -1042,8 +1012,6 @@ class _$RoomTimerPresetCopyWithImpl<$Res, $Val extends RoomTimerPreset>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of RoomTimerPreset
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -1108,8 +1076,6 @@ class __$$RoomTimerPresetImplCopyWithImpl<$Res>
       _$RoomTimerPresetImpl _value, $Res Function(_$RoomTimerPresetImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of RoomTimerPreset
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -1207,7 +1173,7 @@ class _$RoomTimerPresetImpl implements _RoomTimerPreset {
                 other.moderatorOnly == moderatorOnly));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(
       runtimeType,
@@ -1218,9 +1184,7 @@ class _$RoomTimerPresetImpl implements _RoomTimerPreset {
       maxConcurrentTimers,
       moderatorOnly);
 
-  /// Create a copy of RoomTimerPreset
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$RoomTimerPresetImplCopyWith<_$RoomTimerPresetImpl> get copyWith =>
@@ -1259,11 +1223,8 @@ abstract class _RoomTimerPreset implements RoomTimerPreset {
   int get maxConcurrentTimers;
   @override
   bool get moderatorOnly;
-
-  /// Create a copy of RoomTimerPreset
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$RoomTimerPresetImplCopyWith<_$RoomTimerPresetImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -1282,12 +1243,8 @@ mixin _$TimerEvent {
   String? get details => throw _privateConstructorUsedError;
   Map<String, dynamic>? get metadata => throw _privateConstructorUsedError;
 
-  /// Serializes this TimerEvent to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of TimerEvent
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $TimerEventCopyWith<TimerEvent> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -1317,8 +1274,6 @@ class _$TimerEventCopyWithImpl<$Res, $Val extends TimerEvent>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of TimerEvent
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -1383,8 +1338,6 @@ class __$$TimerEventImplCopyWithImpl<$Res>
       _$TimerEventImpl _value, $Res Function(_$TimerEventImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of TimerEvent
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -1479,14 +1432,12 @@ class _$TimerEventImpl implements _TimerEvent {
             const DeepCollectionEquality().equals(other._metadata, _metadata));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(runtimeType, timerId, action, timestamp,
       userId, details, const DeepCollectionEquality().hash(_metadata));
 
-  /// Create a copy of TimerEvent
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$TimerEventImplCopyWith<_$TimerEventImpl> get copyWith =>
@@ -1525,11 +1476,8 @@ abstract class _TimerEvent implements TimerEvent {
   String? get details;
   @override
   Map<String, dynamic>? get metadata;
-
-  /// Create a copy of TimerEvent
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$TimerEventImplCopyWith<_$TimerEventImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

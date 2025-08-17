@@ -511,64 +511,100 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
       return _buildCompactPlaceholder();
     }
 
-    return GestureDetector(
-      onTap: widget.isModerator && widget.showControls ? _showTimerControls : null,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Better padding for larger text
-        decoration: BoxDecoration(
-          color: _getTimerColor(),
-          borderRadius: BorderRadius.circular(12), // Restore original radius
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.3),
-            width: 1,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isSmallScreen = screenWidth < 380;
+        
+        return GestureDetector(
+          onTap: widget.isModerator && widget.showControls ? _showTimerControls : null,
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isSmallScreen ? 6 : 8, 
+              vertical: isSmallScreen ? 3 : 4,
+            ),
+            constraints: BoxConstraints(
+              maxWidth: isSmallScreen ? 85 : 110, // Increased from 70/90 to 85/110
+              minWidth: isSmallScreen ? 65 : 80,  // Increased from 50/60 to 65/80
+            ),
+            decoration: BoxDecoration(
+              color: _getTimerColor(),
+              borderRadius: BorderRadius.circular(isSmallScreen ? 10 : 12),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: _buildTimerDisplay(compact: true),
+                ),
+                // Remove settings icon on small screens to give timer maximum space
+                if (widget.isModerator && widget.showControls && !isSmallScreen) ...[
+                  const SizedBox(width: 4),
+                  const Icon(Icons.settings, color: Colors.white, size: 10),
+                ],
+              ],
+            ),
           ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildTimerDisplay(compact: true),
-            if (widget.isModerator && widget.showControls) ...[
-              const SizedBox(width: 4), // Better spacing for larger timer
-              const Icon(Icons.settings, color: Colors.white, size: 10), // Slightly larger icon to match
-            ],
-          ],
-        ),
-      ),
+        );
+      },
     );
   }
 
   Widget _buildCompactPlaceholder() {
-    return GestureDetector(
-      onTap: widget.isModerator && widget.showControls ? _showCreateTimerDialog : null,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Better padding for larger text
-        decoration: BoxDecoration(
-          color: const Color(0xFF4A4A4A), // Arena purple
-          borderRadius: BorderRadius.circular(12), // Restore original radius
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.3),
-            width: 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              '--:--',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 16, // Larger font to match timer text
-                fontFamily: 'monospace',
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isSmallScreen = screenWidth < 380;
+        
+        return GestureDetector(
+          onTap: widget.isModerator && widget.showControls ? _showCreateTimerDialog : null,
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isSmallScreen ? 6 : 8, 
+              vertical: isSmallScreen ? 3 : 4,
+            ),
+            constraints: BoxConstraints(
+              maxWidth: isSmallScreen ? 85 : 110, // Match active timer size
+              minWidth: isSmallScreen ? 65 : 80,  // Match active timer size
+            ),
+            decoration: BoxDecoration(
+              color: const Color(0xFF4A4A4A), // Arena purple
+              borderRadius: BorderRadius.circular(isSmallScreen ? 10 : 12),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.3),
+                width: 1,
               ),
             ),
-            if (widget.isModerator && widget.showControls) ...[
-              const SizedBox(width: 4), // Better spacing for larger timer
-              const Icon(Icons.add_circle_outline, color: Colors.white, size: 10), // Slightly larger icon to match
-            ],
-          ],
-        ),
-      ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    '--:--',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: isSmallScreen ? 16 : 18, // Increased to match active timer
+                      fontFamily: 'monospace',
+                      letterSpacing: -0.5, // Tighter spacing
+                    ),
+                    overflow: TextOverflow.clip,
+                  ),
+                ),
+                // Remove add icon on small screens to give timer maximum space
+                if (widget.isModerator && widget.showControls && !isSmallScreen) ...[
+                  const SizedBox(width: 4),
+                  const Icon(Icons.add_circle_outline, color: Colors.white, size: 10),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -663,14 +699,26 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
     final timeText = _formatTime(seconds);
     final color = _getTimerColor();
     
+    // For compact mode, make timer as large as possible while preventing overflow
+    double fontSize = compact ? 18 : 56; // Increased base size from 14 to 18
+    if (compact) {
+      final screenWidth = MediaQuery.of(context).size.width;
+      final isSmallScreen = screenWidth < 380;
+      // Larger but still safe sizes
+      fontSize = isSmallScreen ? 16 : 18; // Increased from 12/14 to 16/18
+    }
+    
     Widget timeDisplay = Text(
       timeText,
       style: TextStyle(
-        fontSize: compact ? 16 : 56, // Larger readable font for compact mode
+        fontSize: fontSize,
         fontWeight: FontWeight.bold,
         color: compact ? Colors.white : color,
         fontFamily: 'monospace',
+        letterSpacing: compact ? -0.5 : 0, // Tighter letter spacing for compact mode
       ),
+      overflow: compact ? TextOverflow.clip : null, // Use clip instead of ellipsis
+      maxLines: 1,
     );
 
     if (!compact && _activeTimer != null && _activeTimer!.isInWarningZone && _activeTimer!.isActive) {

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:appwrite/appwrite.dart';
 import '../services/appwrite_service.dart';
 import '../features/arena/providers/arena_lobby_provider.dart';
 import '../core/logging/app_logger.dart';
 import '../widgets/challenge_bell.dart';
+import '../models/moderator_judge.dart';
+import '../constants/appwrite.dart';
 import 'arena_screen.dart';
 
 class CreateArenaScreen extends ConsumerStatefulWidget {
@@ -22,6 +25,12 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
   String? _currentUserId;
   bool _isCreating = false;
   DateTime? _lastCreateAttempt;
+  
+  // Moderator/Judge selection
+  DebateCategory _selectedCategory = DebateCategory.any;
+  List<ModeratorProfile> _availableModerators = [];
+  List<JudgeProfile> _availableJudges = [];
+  bool _loadingModerators = false;
   
   // Colors
   static const Color scarletRed = Color(0xFFFF2400);
@@ -51,6 +60,104 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
       setState(() {
         _currentUserId = user.$id;
       });
+      _loadModeratorsAndJudges();
+    }
+  }
+
+  Future<void> _loadModeratorsAndJudges() async {
+    if (_loadingModerators) return;
+    
+    setState(() => _loadingModerators = true);
+    
+    try {
+      // Load moderators
+      final moderatorResponse = await _appwrite.databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.moderatorsCollection,
+        queries: [
+          Query.equal('isAvailable', true),
+          Query.orderDesc('rating'),
+          Query.limit(20),
+        ],
+      );
+
+      final moderators = moderatorResponse.documents
+          .map((doc) => ModeratorProfile.fromJson(doc.data))
+          .toList();
+
+      // Load judges
+      final judgeResponse = await _appwrite.databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.judgesCollection,
+        queries: [
+          Query.equal('isAvailable', true),
+          Query.orderDesc('rating'),
+          Query.limit(20),
+        ],
+      );
+
+      final judges = judgeResponse.documents
+          .map((doc) => JudgeProfile.fromJson(doc.data))
+          .toList();
+
+      // Filter by category if not "Any"
+      final filteredModerators = _selectedCategory == DebateCategory.any
+          ? moderators
+          : moderators.where((mod) => mod.categories.contains(_selectedCategory)).toList();
+
+      final filteredJudges = _selectedCategory == DebateCategory.any
+          ? judges
+          : judges.where((judge) => judge.categories.contains(_selectedCategory)).toList();
+
+      setState(() {
+        _availableModerators = filteredModerators;
+        _availableJudges = filteredJudges;
+        _loadingModerators = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading moderators/judges: $e');
+      setState(() => _loadingModerators = false);
+    }
+  }
+
+  Future<void> _sendPingRequest(String roleType, String toUserId, String toUsername) async {
+    if (_currentUserId == null) return;
+
+    try {
+      final topic = _topicController.text.trim();
+      final description = _descriptionController.text.trim();
+      
+      if (topic.isEmpty) {
+        _showError('Please enter a debate topic before pinging');
+        return;
+      }
+
+      final user = await _appwrite.getCurrentUser();
+      if (user == null) return;
+
+      await _appwrite.databases.createDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.pingRequestsCollection,
+        documentId: ID.unique(),
+        data: {
+          'fromUserId': _currentUserId!,
+          'fromUsername': user.name,
+          'toUserId': toUserId,
+          'toUsername': toUsername,
+          'roleType': roleType,
+          'debateTitle': topic,
+          'debateDescription': description.isNotEmpty ? description : 'No description provided',
+          'category': _selectedCategory.displayName,
+          'scheduledTime': DateTime.now().add(const Duration(hours: 1)).toIso8601String(),
+          'status': 'pending',
+          'message': 'Would you like to ${roleType == 'moderator' ? 'moderate' : 'judge'} this debate?',
+          'createdAt': DateTime.now().toIso8601String(),
+        },
+      );
+
+      _showSuccess('Ping sent to $toUsername! They will be notified.');
+    } catch (e) {
+      _showError('Failed to send ping: $e');
     }
   }
 
@@ -285,6 +392,8 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
             _buildHeader(),
             const SizedBox(height: 30),
             _buildForm(),
+            const SizedBox(height: 20),
+            _buildModeratorJudgeSection(),
             const SizedBox(height: 30),
             _buildCreateButton(),
             const SizedBox(height: 20),
@@ -510,6 +619,374 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
     );
   }
 
+  Widget _buildModeratorJudgeSection() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.notifications_active, color: accentPurple, size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Request Moderator & Judge (Optional)',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: deepPurple,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Ping experienced moderators and judges to help with your debate',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 20),
+          
+          // Category Selection
+          _buildCategorySelector(),
+          const SizedBox(height: 20),
+          
+          // Moderator Selection
+          _buildModeratorSelector(),
+          const SizedBox(height: 16),
+          
+          // Judge Selection  
+          _buildJudgeSelector(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategorySelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Debate Category',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: deepPurple,
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 40,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: DebateCategory.values.length,
+            itemBuilder: (context, index) {
+              final category = DebateCategory.values[index];
+              final isSelected = category == _selectedCategory;
+              
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilterChip(
+                  label: Text(category.displayName),
+                  selected: isSelected,
+                  onSelected: (selected) {
+                    setState(() {
+                      _selectedCategory = category;
+                    });
+                    _loadModeratorsAndJudges();
+                  },
+                  selectedColor: accentPurple.withValues(alpha: 0.2),
+                  checkmarkColor: accentPurple,
+                  labelStyle: TextStyle(
+                    color: isSelected ? accentPurple : Colors.grey[700],
+                    fontSize: 12,
+                  ),
+                  backgroundColor: Colors.grey[100],
+                  side: BorderSide(
+                    color: isSelected ? accentPurple : Colors.grey[300]!,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildModeratorSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.gavel, color: Color(0xFF4CAF50), size: 20),
+            SizedBox(width: 8),
+            Text(
+              'Request Moderator',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: deepPurple,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_loadingModerators)
+          const Center(child: CircularProgressIndicator(color: accentPurple))
+        else if (_availableModerators.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'No moderators available for ${_selectedCategory.displayName}',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+          )
+        else
+          SizedBox(
+            height: 80,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _availableModerators.length,
+              itemBuilder: (context, index) {
+                final moderator = _availableModerators[index];
+                return _buildModeratorCard(moderator);
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildJudgeSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.balance, color: Color(0xFF2196F3), size: 20),
+            SizedBox(width: 8),
+            Text(
+              'Request Judge',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: deepPurple,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_loadingModerators)
+          const Center(child: CircularProgressIndicator(color: accentPurple))
+        else if (_availableJudges.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'No judges available for ${_selectedCategory.displayName}',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+          )
+        else
+          SizedBox(
+            height: 80,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _availableJudges.length,
+              itemBuilder: (context, index) {
+                final judge = _availableJudges[index];
+                return _buildJudgeCard(judge);
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildModeratorCard(ModeratorProfile moderator) {
+    return Container(
+      width: 200,
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 12,
+                backgroundColor: const Color(0xFF4CAF50),
+                backgroundImage: moderator.avatar != null 
+                    ? NetworkImage(moderator.avatar!) 
+                    : null,
+                child: moderator.avatar == null
+                    ? Text(
+                        moderator.displayName[0].toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      moderator.displayName,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Row(
+                      children: [
+                        const Icon(Icons.star, color: Colors.amber, size: 12),
+                        const SizedBox(width: 2),
+                        Text(
+                          moderator.rating.toStringAsFixed(1),
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            height: 24,
+            child: ElevatedButton(
+              onPressed: () => _sendPingRequest('moderator', moderator.userId, moderator.username),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4CAF50),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                textStyle: const TextStyle(fontSize: 10),
+              ),
+              child: const Text('Ping'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildJudgeCard(JudgeProfile judge) {
+    return Container(
+      width: 200,
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 12,
+                backgroundColor: const Color(0xFF2196F3),
+                backgroundImage: judge.avatar != null 
+                    ? NetworkImage(judge.avatar!) 
+                    : null,
+                child: judge.avatar == null
+                    ? Text(
+                        judge.displayName[0].toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      judge.displayName,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Row(
+                      children: [
+                        const Icon(Icons.star, color: Colors.amber, size: 12),
+                        const SizedBox(width: 2),
+                        Text(
+                          judge.rating.toStringAsFixed(1),
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            height: 24,
+            child: ElevatedButton(
+              onPressed: () => _sendPingRequest('judge', judge.userId, judge.username),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2196F3),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                textStyle: const TextStyle(fontSize: 10),
+              ),
+              child: const Text('Ping'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildInfoPanel() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -541,6 +1018,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
             '• Others can join as audience members\n'
             '• Assign participant roles (debaters, judges)\n'
             '• Control debate phases and timing\n'
+            '• Ping system notifies selected moderators/judges\n'
             '• Everyone sees real-time updates',
             style: TextStyle(
               fontSize: 14,
