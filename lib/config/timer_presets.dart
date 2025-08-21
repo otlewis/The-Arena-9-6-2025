@@ -19,7 +19,7 @@ class TimerPresets {
         type: TimerType.general,
         label: 'General Timer',
         description: 'Flexible timer for discussion segments',
-        defaultDurationSeconds: 300, // 5 minutes
+        defaultDurationSeconds: 180, // 3 minutes (updated from 5 minutes)
         minDurationSeconds: 60,     // 1 minute
         maxDurationSeconds: 600,    // 10 minutes
         presetDurations: [60, 120, 180, 300, 420, 600], // 1-10 minutes
@@ -35,7 +35,7 @@ class TimerPresets {
         type: TimerType.speakerTurn,
         label: 'Speaker Turn',
         description: 'Individual speaking time limits',
-        defaultDurationSeconds: 120, // 2 minutes
+        defaultDurationSeconds: 180, // 3 minutes (updated from 2 minutes)
         minDurationSeconds: 30,     // 30 seconds
         maxDurationSeconds: 300,    // 5 minutes
         presetDurations: [30, 60, 90, 120, 180, 300],

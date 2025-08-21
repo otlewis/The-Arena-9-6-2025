@@ -17,7 +17,6 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
   // Form controllers
   final TextEditingController _roomNameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  final TextEditingController _userNameController = TextEditingController();
   final TextEditingController _customCategoryController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   
@@ -76,7 +75,6 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
   void dispose() {
     _roomNameController.dispose();
     _descriptionController.dispose();
-    _userNameController.dispose();
     _customCategoryController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -84,8 +82,7 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
 
   // Check if form is valid
   bool get _isFormValid {
-    final basicValid = _roomNameController.text.trim().isNotEmpty && 
-                      _userNameController.text.trim().isNotEmpty;
+    final basicValid = _roomNameController.text.trim().isNotEmpty;
     
     // If private room, password is required
     if (_isPrivate) {
@@ -171,7 +168,7 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
             builder: (context) => DebatesDiscussionsScreen(
               roomId: roomId,
               roomName: _roomNameController.text.trim(),
-              moderatorName: _userNameController.text.trim(),
+              moderatorName: currentUser.name.isNotEmpty ? currentUser.name : 'Moderator',
             ),
           ),
         );
@@ -278,14 +275,6 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildInputLabel('Your Name*'),
-                  _buildTextInput(
-                    controller: _userNameController,
-                    placeholder: 'Enter your name',
-                    maxLength: 30,
-                  ),
-                  const SizedBox(height: 16),
-                  
                   _buildInputLabel('Room Name*'),
                   _buildTextInput(
                     controller: _roomNameController,

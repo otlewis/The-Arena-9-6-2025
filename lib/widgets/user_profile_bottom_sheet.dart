@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/user_profile.dart';
 import '../services/challenge_messaging_service.dart';
+import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
+import '../widgets/report_user_dialog.dart';
 
 /// Beautiful user profile bottom sheet modal
 class UserProfileBottomSheet extends StatefulWidget {
@@ -397,6 +399,80 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                             ),
                           ),
                         ],
+                      ),
+                      
+                      const SizedBox(height: 12),
+                      
+                      // Report button (full width)
+                      GestureDetector(
+                        onTap: () async {
+                          HapticFeedback.lightImpact();
+                          
+                          // Get current user ID for reporting
+                          final appwrite = AppwriteService();
+                          final currentUser = await appwrite.getCurrentUser();
+                          
+                          // Check mounted state before using context
+                          if (!mounted) return;
+                          
+                          // Safe to use context here because mounted check ensures widget is still active
+                          // ignore: use_build_context_synchronously
+                          final scaffoldMessenger = ScaffoldMessenger.of(context);
+                          
+                          if (currentUser == null) {
+                            scaffoldMessenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Please sign in to report users'),
+                                backgroundColor: Color(0xFFFF2400),
+                              ),
+                            );
+                            return;
+                          }
+
+                          // ignore: use_build_context_synchronously
+                          showDialog(
+                            // ignore: use_build_context_synchronously
+                            context: context,
+                            builder: (context) => ReportUserDialog(
+                              reportedUser: widget.user,
+                              reporterId: currentUser.$id,
+                              roomId: 'room_interaction', // Default room ID for room interactions
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF2400),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFFF2400).withValues(alpha: 0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.report_problem,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'Report User',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),

@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../services/appwrite_service.dart';
@@ -29,6 +31,10 @@ import '../utils/optimized_state_manager.dart';
 import '../utils/ultra_performance_mode.dart';
 import '../utils/extreme_performance_mode.dart';
 import '../widgets/performance_optimized_audience_grid.dart';
+import '../core/performance/riverpod_performance_optimizer.dart';
+import '../core/performance/virtualized_list_optimizer.dart';
+import '../core/performance/network_performance_optimizer.dart';
+import '../widgets/streaming_destinations_modal.dart';
 
 class DebatesDiscussionsScreen extends StatefulWidget {
   final String roomId;
@@ -46,10 +52,16 @@ class DebatesDiscussionsScreen extends StatefulWidget {
   State<DebatesDiscussionsScreen> createState() => _DebatesDiscussionsScreenState();
 }
 
-class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
+class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> 
+    with NetworkOptimizationMixin, ListOptimizationMixin, WidgetsBindingObserver {
   final AppwriteService _appwrite = AppwriteService();
   final FirebaseGiftService _giftService = FirebaseGiftService();
   final LiveKitService _webrtcService = LiveKitService();
+  
+  // Performance optimization instances
+  final RiverpodPerformanceOptimizer _performanceOptimizer = RiverpodPerformanceOptimizer();
+  final VirtualizedListOptimizer _listOptimizer = VirtualizedListOptimizer();
+  final NetworkPerformanceOptimizer _networkOptimizer = NetworkPerformanceOptimizer();
   
   // Video/Audio WebRTC state
   bool _isWebRTCConnected = false;
@@ -98,6 +110,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   // Connection stability monitoring
   Timer? _connectionHealthTimer;
   Timer? _reconnectionTimer;
+  Timer? _participantSyncTimer;
+  bool _wasOffline = false;
   bool _isReconnecting = false;
   int _connectionDropCount = 0;
   DateTime? _lastConnectionDrop;
@@ -107,7 +121,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   static const int _unhealthyThreshold = 3; // Require 3 consecutive unhealthy checks
   static const int _minTimeBetweenReconnections = 60; // Minimum 60 seconds between reconnection attempts
   
-  // Legacy audio variables (Agora removed, kept to prevent compilation errors)
+  // Audio variables (handled by LiveKit)
   // Note: These are no longer used but kept for any remaining references
   
   // Room state
@@ -125,10 +139,14 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   RealtimeSubscription? _participantsSubscription;
   RealtimeSubscription? _roomSubscription;
   StreamSubscription? _unreadMessagesSubscription; // Instant messages subscription
+  StreamSubscription? _firebaseParticipantSubscription; // Firebase participant sync
 
   @override
   void initState() {
     super.initState();
+    
+    // Add lifecycle observer for automatic refresh on app resume
+    WidgetsBinding.instance.addObserver(this);
     
     // Enable ultra-performance mode for maximum FPS
     UltraPerformanceMode.instance.enable();
@@ -719,11 +737,23 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         await _joinRoom();
       }
       
+      // Clear any cached participant data to ensure fresh load
+      invalidateNetworkCache(patternPrefix: 'participants_');
+      
       // Load participants from database
       await _loadParticipants();
       
       // Set up real-time subscriptions
       _setupRealTimeUpdates();
+      
+      // Setup Firebase real-time participant sync (temporarily disabled)
+      // _setupFirebaseParticipantSync();
+      
+      // Sync initial participants to Firebase (temporarily disabled)
+      // await _syncAllParticipantsToFirebase();
+      
+      // Start periodic participant synchronization to ensure consistency
+      _startPeriodicParticipantSync();
       
       // RACE CONDITION FIX: Longer delay to ensure fallback role checks complete
       await Future.delayed(const Duration(milliseconds: 100));
@@ -770,17 +800,31 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     try {
       AppLogger().debug('📦 Loading room data for: ${widget.roomId}');
       
-      // Load room details from database
-      final roomData = await _appwrite.getDebateDiscussionRoom(widget.roomId);
+      // Optimize room data request with caching
+      final roomData = await optimizedNetworkRequest(
+        requestId: 'room_data_${widget.roomId}',
+        requestBuilder: () => _appwrite.getDebateDiscussionRoom(widget.roomId),
+        cacheExpiry: const Duration(minutes: 2),
+      );
+      
       if (roomData != null && mounted && !_isDisposing) {
+        // Use optimized state update
+        final optimizedRoomData = _performanceOptimizer.optimizeProvider(
+          'room_data_${widget.roomId}', 
+          roomData,
+        );
         setState(() {
-          _roomData = roomData;
+          _roomData = optimizedRoomData;
         });
         
         // Load moderator profile if available
         final moderatorId = roomData['createdBy'];
         if (moderatorId != null) {
-          final moderatorProfile = await _appwrite.getUserProfile(moderatorId);
+          final moderatorProfile = await optimizedNetworkRequest(
+            requestId: 'moderator_$moderatorId',
+            requestBuilder: () => _appwrite.getUserProfile(moderatorId),
+            cacheExpiry: const Duration(minutes: 5),
+          );
           if (moderatorProfile != null && mounted && !_isDisposing) {
             setState(() {
               _moderator = moderatorProfile;
@@ -826,6 +870,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       }
       
       AppLogger().debug('✅ Joined room ${widget.roomId} as $initialRole');
+      
+      // Immediately refresh participants to ensure this user appears in all other users' screens
+      Future.microtask(() async {
+        if (mounted && !_isDisposing) {
+          await _loadParticipants();
+        }
+      });
     } catch (e) {
       AppLogger().error('❌ Error joining room: $e');
       // Continue anyway - user might already be in room
@@ -857,7 +908,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         },
         onChallenge: () {
           // Challenge functionality is now handled directly by UserProfileBottomSheet
-          debugPrint('Challenge functionality delegated to UserProfileBottomSheet');
+          AppLogger().debug('Challenge functionality delegated to UserProfileBottomSheet');
         },
         onEmail: () {
           if (mounted && _currentUser != null) {
@@ -1128,19 +1179,110 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     );
   }
 
+  /// Start intelligent participant synchronization that adapts to issues
+  void _startPeriodicParticipantSync() {
+    int consecutiveFailures = 0;
+    int lastParticipantCount = 0;
+    
+    // Ultra-aggressive sync for immediate participant visibility (5-second intervals)
+    _participantSyncTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      if (mounted && !_isDisposing) {
+        try {
+          final currentCount = _audienceMembers.length + _speakerPanelists.length;
+          
+          // Detect potential issues
+          bool needsSync = false;
+          
+          // 1. No participants at all (suspicious)
+          if (currentCount == 0) {
+            AppLogger().warning('⚠️ Empty participant list detected - forcing sync');
+            needsSync = true;
+          }
+          
+          // 2. Participant count dropped significantly (possible disconnect)
+          if (currentCount < lastParticipantCount - 1 && lastParticipantCount > 2) {
+            AppLogger().warning('⚠️ Participant count dropped from $lastParticipantCount to $currentCount - forcing sync');
+            needsSync = true;
+          }
+          
+          // 3. Regular maintenance sync less frequently
+          if (timer.tick % 4 == 0) { // Every 3 minutes (45s * 4)
+            AppLogger().debug('🔄 Regular maintenance sync');
+            needsSync = true;
+          }
+          
+          if (needsSync) {
+            // Force refresh participants from database
+            invalidateNetworkCache(patternPrefix: 'participants_');
+            await _loadParticipants();
+            
+            consecutiveFailures = 0;
+            lastParticipantCount = _audienceMembers.length + _speakerPanelists.length;
+            
+            AppLogger().debug('✅ Smart sync completed - ${_audienceMembers.length} audience, ${_speakerPanelists.length} speakers');
+          } else {
+            AppLogger().debug('🔍 Participant sync check - no issues detected ($currentCount participants)');
+          }
+          
+        } catch (e) {
+          consecutiveFailures++;
+          AppLogger().warning('Smart participant sync failed ($consecutiveFailures consecutive): $e');
+          
+          // If we have multiple failures, try to reconnect real-time subscription
+          if (consecutiveFailures >= 3) {
+            AppLogger().error('🔥 Multiple sync failures - reconnecting real-time subscription');
+            _reconnectParticipantsSubscription();
+            consecutiveFailures = 0;
+          }
+        }
+      }
+    });
+    
+    AppLogger().info('🚀 Started periodic participant synchronization (every 15s)');
+  }
+
+  // Handle app lifecycle changes for automatic refresh
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted && !_isDisposing) {
+      // App came back to foreground - refresh participants in case we missed updates
+      AppLogger().info('🔄 App resumed - refreshing participants to ensure sync');
+      Future.microtask(() async {
+        try {
+          invalidateNetworkCache(patternPrefix: 'participants_');
+          await _loadParticipants();
+        } catch (e) {
+          AppLogger().warning('App resume participant refresh failed: $e');
+        }
+      });
+    }
+  }
+  
   @override
   void dispose() {
     _isDisposing = true;
+    
+    // Remove lifecycle observer
+    WidgetsBinding.instance.removeObserver(this);
+    
     _participantsSubscription?.close();
     _roomSubscription?.close();
     _unreadMessagesSubscription?.cancel();
+    _firebaseParticipantSubscription?.cancel();
+    
+    // Clean up Firebase when leaving room (temporarily disabled)
+    // _firebaseSync.clearRoom(widget.roomId);
     
     // Clean up performance optimizations
     PerformanceOptimizations.dispose();
+    _performanceOptimizer.clearCache();
+    _listOptimizer.disposeList('debates_${widget.roomId}');
+    _networkOptimizer.invalidateCache(patternPrefix: widget.roomId);
     
     // Stop connection health monitoring
     _stopConnectionHealthMonitoring();
     _reconnectionTimer?.cancel();
+    _participantSyncTimer?.cancel();
     
     // Clean up audio connection
     if (_liveKitService.isConnected) {
@@ -1214,7 +1356,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       AppLogger().debug('🔥 CONNECT-AUDIO: 🔑 Generated LiveKit token successfully: ${token.substring(0, 50)}...');
       AppLogger().debug('🔥 CONNECT-AUDIO: 🔑 Token contains role: $userRole');
       
-      // Connect using LiveKit service with timeout
+      // Connect using LiveKit service with Arena's memory management
       await _liveKitService.connect(
         serverUrl: 'ws://172.236.109.9:7880',
         roomName: roomId,
@@ -1222,12 +1364,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         userId: userId,
         userRole: userRole,
         roomType: 'debate_discussion',
-      ).timeout(
-        const Duration(seconds: 30),
-        onTimeout: () {
-          AppLogger().error('❌ Audio connection timeout after 30 seconds');
-          throw Exception('Audio connection timeout. Please check your internet connection and try again.');
-        },
       );
       
       AppLogger().debug('🔥 CONNECT-AUDIO: ✅ Audio connected successfully as $userRole');
@@ -1246,6 +1382,18 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     } catch (e) {
       AppLogger().error('🔥 CONNECT-AUDIO: ❌ Failed to connect to audio: $e');
       
+      // Enhanced error handling similar to Arena
+      final errorString = e.toString().toLowerCase();
+      String userMessage = 'Failed to connect to audio. Please try again.';
+      
+      if (errorString.contains('memory') || errorString.contains('pthread') || errorString.contains('native crash')) {
+        userMessage = 'Memory error: Please close other apps and try again.';
+      } else if (errorString.contains('timeout') || errorString.contains('network')) {
+        userMessage = 'Connection timeout: Please check your internet and try again.';
+      } else if (errorString.contains('token') || errorString.contains('auth')) {
+        userMessage = 'Authentication error: Please restart the app.';
+      }
+      
       if (mounted) {
         setState(() {
           _isAudioConnecting = false;
@@ -1254,7 +1402,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to connect to audio: $e'),
+            content: Text(userMessage),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 5),
             action: SnackBarAction(
@@ -1272,8 +1420,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
     try {
       AppLogger().debug('Loading participants for room: ${widget.roomId}');
       
-      // Get real participants from database
-      final participants = await _appwrite.getDebateDiscussionParticipants(widget.roomId);
+      
+      // Optimize network request with shorter cache for faster role updates
+      final participants = await optimizedNetworkRequest(
+        requestId: 'participants_${widget.roomId}',
+        requestBuilder: () => _appwrite.getDebateDiscussionParticipants(widget.roomId),
+        cacheExpiry: const Duration(seconds: 5), // Shorter cache for real-time updates
+      );
       
       if (mounted && !_isDisposing) {
         // Check if participants actually changed to avoid unnecessary rebuilds
@@ -1405,6 +1558,19 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
       }
       
       AppLogger().debug('Loaded ${participants.length} participants: ${_speakerPanelists.length} speakers, ${_audienceMembers.length} audience, ${_speakerRequests.length} pending requests');
+      AppLogger().debug('📈 PARTICIPANT SUMMARY: Total=${participants.length}, Speakers=${_speakerPanelists.length}, Audience=${_audienceMembers.length}, Pending=${_speakerRequests.length}');
+      
+      // Enhanced debugging: Log all participant IDs and roles
+      if (participants.isNotEmpty) {
+        final participantSummary = participants.map((p) => {
+          'id': p['userProfile']?['userId'] ?? p['userProfile']?['id'] ?? 'unknown',
+          'name': p['userProfile']?['name'] ?? 'unknown',
+          'role': p['role'] ?? 'unknown'
+        }).toList();
+        AppLogger().debug('📈 DETAILED PARTICIPANTS: $participantSummary');
+      } else {
+        AppLogger().warning('⚠️ EMPTY PARTICIPANT LIST for room ${widget.roomId}');
+      }
       AppLogger().info('🎤 ROLE DEBUG: Current user status: moderator=$_isCurrentUserModerator, speaker=$_isCurrentUserSpeaker, requested=$_hasRequestedSpeaker');
       
       // Additional debug: Show current user's actual role in database
@@ -1417,62 +1583,87 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         AppLogger().info('🎤 ROLE DEBUG: Current user database role: $currentUserRole');
         AppLogger().info('🎤 ROLE DEBUG: Current user in speaker panel: ${_speakerPanelists.any((s) => s.id == _currentUser!.id)}');
       }
+      
+      // Participant loading completed
     } catch (e) {
       AppLogger().error('Error loading participants: $e');
-      // Fallback to mock data if real data fails
-      _createMockParticipants();
-      if (mounted) {
-        OptimizedStateManager.batchedSetState(
-          'participants_${widget.roomId}',
-          () => setState(() {}),
-          {'audience': _audienceMembers.length, 'speakers': _speakerPanelists.length},
-        );
+      
+      // Check if this might be a connectivity issue
+      final isNetworkError = e.toString().contains('network') || 
+                             e.toString().contains('connection') || 
+                             e.toString().contains('timeout') ||
+                             e.toString().toLowerCase().contains('unreachable');
+      
+      if (isNetworkError) {
+        _wasOffline = true;
+        AppLogger().warning('🌐 Network connectivity issue detected');
       }
+      
+      // Retry once after a short delay before showing error state
+      Future.delayed(const Duration(seconds: 2), () async {
+        if (mounted && !_isDisposing) {
+          try {
+            AppLogger().info('♾️ Retrying participant load after error...');
+            final retryParticipants = await _appwrite.getDebateDiscussionParticipants(widget.roomId);
+            
+            if (mounted && !_isDisposing && retryParticipants.isNotEmpty) {
+              AppLogger().info('✅ Retry successful - loaded ${retryParticipants.length} participants');
+              
+              // Check if we're back online after being offline
+              if (_wasOffline) {
+                AppLogger().info('🌐 Connection restored - forcing full participant refresh');
+                _wasOffline = false;
+                
+                // Also reconnect real-time subscription to catch up on missed events
+                _reconnectParticipantsSubscription();
+              }
+              
+              // Clear cache and reload with fresh data
+              invalidateNetworkCache(patternPrefix: 'participants_');
+              await _loadParticipants();
+              return;
+            }
+          } catch (retryError) {
+            AppLogger().warning('Retry failed: $retryError - showing error state');
+          }
+        }
+        
+        // Show error state instead of mock data
+        if (mounted && !_isDisposing) {
+          AppLogger().error('❌ Unable to load participants after retry - showing error state');
+          
+          // Show error message to user
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Unable to load participants. Please check your connection and try refreshing.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 5),
+            ),
+          );
+          
+          // Keep UI functional but show that participants couldn't be loaded
+          // At minimum, show the current user in the audience
+          if (_currentUser != null && !_audienceMembers.any((p) => p.id == _currentUser!.id) && !_isCurrentUserModerator) {
+            setState(() {
+              _audienceMembers.clear();
+              _audienceMembers.add(_currentUser!);
+            });
+          }
+        }
+      });
     }
   }
 
-  void _createMockParticipants() {
-    // Add moderator to speaker panel if not already there
-    if (_moderator != null && !_speakerPanelists.any((p) => p.id == _moderator!.id)) {
-      _speakerPanelists.add(_moderator!);
-    }
-    
-    // Add current user to appropriate list
-    if (_currentUser != null && !_isCurrentUserModerator) {
-      _audienceMembers.add(_currentUser!);
-    }
-    
-    // Create mock audience members for demonstration
-    final mockAudience = [
-      'Sarah Johnson', 'Mike Chen', 'Alex Rivera', 'Emily Davis', 'James Wilson',
-      'Maria Garcia', 'David Brown', 'Lisa Anderson', 'Kevin Taylor', 'Rachel White'
-    ];
-    
-    for (int i = 0; i < mockAudience.length; i++) {
-      final mockUser = UserProfile(
-        id: 'mock_audience_$i',
-        name: mockAudience[i],
-        email: '${mockAudience[i].toLowerCase().replaceAll(' ', '.')}@example.com',
-        avatar: null,
-        bio: 'Debate enthusiast',
-        reputation: 0,
-        totalWins: 0,
-        totalDebates: 0,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-      
-      if (!_audienceMembers.any((p) => p.id == mockUser.id)) {
-        _audienceMembers.add(mockUser);
-      }
-    }
-  }
+  // Mock participants method removed - we now handle errors properly
+  // instead of showing fake data that misleads users
 
   void _setupRealTimeUpdates() {
     try {
-      // Separate subscription for participants - critical for hand-raising notifications
+      // APPWRITE OPTIMIZATION: Subscribe to room-specific events only for faster sync
       _participantsSubscription = _appwrite.realtimeInstance.subscribe([
-        'databases.arena_db.collections.debate_discussion_participants.documents'
+        'databases.arena_db.collections.debate_discussion_participants.documents',
+        // Also subscribe to specific room to catch broader changes
+        'databases.arena_db.collections.debate_discussion_rooms.documents.${widget.roomId}'
       ]);
 
       _participantsSubscription?.stream.listen(
@@ -1485,45 +1676,84 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             bool isHandRaiseEvent = false;
             bool isHandLowerEvent = false;
             bool isSpeakerPromotionEvent = false;
+            bool needsParticipantReload = false;
             
             for (var event in response.events) {
-              // Check if this is an update event
-              if (event.contains('debate_discussion_participants.documents') && event.endsWith('.update')) {
+              // Check if this is an update, create, or delete event
+              if (event.contains('debate_discussion_participants.documents') && 
+                  (event.endsWith('.update') || event.endsWith('.create') || event.endsWith('.delete'))) {
                 // Check if it's for this room
                 if (response.payload['roomId'] == widget.roomId) {
-                  final newRole = response.payload['role'];
-                  final userId = response.payload['userId'];
+                  AppLogger().debug('🔄 PARTICIPANT EVENT: $event for room ${widget.roomId}');
                   
-                  AppLogger().debug('🔄 ROLE UPDATE: User $userId role changed to: $newRole');
+                  // Mark that we need to reload participants
                   
-                  if (newRole == 'pending') {
-                    AppLogger().info('Hand-raise detected: $userId requested to speak');
-                    isHandRaiseEvent = true;
-                  } else if (newRole == 'audience') {
-                    // Could be hand lowering or moderator denial - check if it was current user
-                    if (userId == _currentUser?.id && _hasRequestedSpeaker) {
-                      AppLogger().info('Hand-lower detected: $userId lowered their hand');
-                      isHandLowerEvent = true;
+                  // For create events (new user joined)
+                  if (event.endsWith('.create')) {
+                    AppLogger().info('📥 NEW PARTICIPANT: User joined room ${widget.roomId}');
+                    needsParticipantReload = true;
+                  }
+                  
+                  // For delete events (user left)
+                  if (event.endsWith('.delete')) {
+                    AppLogger().info('📤 PARTICIPANT LEFT: User left room ${widget.roomId}');
+                    needsParticipantReload = true;
+                  }
+                  // For update events, handle role changes
+                  if (event.endsWith('.update')) {
+                    final newRole = response.payload['role'];
+                    final userId = response.payload['userId'];
+                    
+                    AppLogger().debug('🔄 ROLE UPDATE: User $userId role changed to: $newRole');
+                    
+                    if (newRole == 'pending') {
+                      AppLogger().info('Hand-raise detected: $userId requested to speak');
+                      isHandRaiseEvent = true;
+                    } else if (newRole == 'audience') {
+                      // Could be hand lowering or moderator denial - check if it was current user
+                      if (userId == _currentUser?.id && _hasRequestedSpeaker) {
+                        AppLogger().info('Hand-lower detected: $userId lowered their hand');
+                        isHandLowerEvent = true;
+                      }
+                    } else if ((newRole == 'speaker' || newRole == 'affirmative' || newRole == 'negative') && userId == _currentUser?.id) {
+                      // CRITICAL: Current user was promoted to speaker - need to reinitialize LiveKit connection
+                      AppLogger().info('🔄 SPEAKER PROMOTION: Current user promoted to speaker role - will reinitialize audio');
+                      isSpeakerPromotionEvent = true;
                     }
-                  } else if ((newRole == 'speaker' || newRole == 'affirmative' || newRole == 'negative') && userId == _currentUser?.id) {
-                    // CRITICAL: Current user was promoted to speaker - need to reinitialize LiveKit connection
-                    AppLogger().info('🔄 SPEAKER PROMOTION: Current user promoted to speaker role - will reinitialize audio');
-                    isSpeakerPromotionEvent = true;
                   }
                 }
               }
             }
             
-            // Always reload participants to keep UI in sync (throttled to prevent excessive updates)
-            PerformanceOptimizations.throttledSetState(() async {
-              await _loadParticipants();
-            });
+            // Single participant reload for all events (prevents duplicate loading)
+            if (needsParticipantReload || isHandRaiseEvent || isHandLowerEvent || isSpeakerPromotionEvent) {
+              AppLogger().info('🚀 CRITICAL UPDATE: Bypassing cache for immediate participant refresh');
+              
+              // For critical role changes, bypass cache completely for instant updates with multiple invalidations
+              Future.microtask(() async {
+                if (mounted && !_isDisposing) {
+                  // Aggressively clear all participant-related cache
+                  invalidateNetworkCache(patternPrefix: 'participants_');
+                  invalidateNetworkCache(patternPrefix: 'debate_discussion_participants');
+                  invalidateNetworkCache(patternPrefix: widget.roomId);
+                  await _loadParticipants();
+                  
+                  // Force a second reload after a brief delay to catch any missed updates
+                  Future.delayed(const Duration(milliseconds: 500), () async {
+                    if (mounted && !_isDisposing) {
+                      invalidateNetworkCache(patternPrefix: 'participants_');
+                      await _loadParticipants();
+                    }
+                  });
+                }
+              });
+            }
             
             // CRITICAL: Handle speaker promotion - reinitialize LiveKit connection with new role
             if (isSpeakerPromotionEvent) {
-              AppLogger().info('🔄 SPEAKER PROMOTION: Executing LiveKit role sync for current user');
-              // Wait a moment for participant data to be loaded, then reinitialize
-              Future.delayed(const Duration(milliseconds: 200), () async {
+              AppLogger().info('🔄 SPEAKER PROMOTION: Executing immediate LiveKit role sync');
+              // Immediate audio reinitializtion for instant speaker seating
+              Future.microtask(() async {
                 if (mounted) {
                   await _reinitializeAudioForSpeaker();
                 }
@@ -1546,9 +1776,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         },
         onError: (error) {
           AppLogger().error('Participants subscription error: $error');
-          // Attempt to reconnect after error
-          Future.delayed(const Duration(seconds: 2), () {
+          // Attempt immediate reconnect after error (more aggressive)
+          Future.delayed(const Duration(milliseconds: 500), () {
             if (mounted && !_isDisposing) {
+              AppLogger().warning('🔄 Reconnecting participants subscription due to error');
               _reconnectParticipantsSubscription();
             }
           });
@@ -1603,24 +1834,33 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                 bool isHandLowerEvent = false;
                 
                 for (var event in response.events) {
-                  if (event.contains('debate_discussion_participants.documents') && event.endsWith('.update')) {
+                  if (event.contains('debate_discussion_participants.documents') && 
+                      (event.endsWith('.update') || event.endsWith('.create') || event.endsWith('.delete'))) {
                     if (response.payload['roomId'] == widget.roomId) {
-                      final newRole = response.payload['role'];
-                      final userId = response.payload['userId'];
                       
-                      if (newRole == 'pending') {
-                        AppLogger().info('Hand-raise detected after reconnect: $userId');
-                        isHandRaiseEvent = true;
-                      } else if (newRole == 'audience') {
-                        if (userId == _currentUser?.id && _hasRequestedSpeaker) {
-                          AppLogger().info('Hand-lower detected after reconnect: $userId');
-                          isHandLowerEvent = true;
+                      // Mark that we need to reload participants (done at end)
+                      
+                      // Handle specific role update events
+                      if (event.endsWith('.update')) {
+                        final newRole = response.payload['role'];
+                        final userId = response.payload['userId'];
+                        
+                        if (newRole == 'pending') {
+                          AppLogger().info('Hand-raise detected after reconnect: $userId');
+                          isHandRaiseEvent = true;
+                        } else if (newRole == 'audience') {
+                          if (userId == _currentUser?.id && _hasRequestedSpeaker) {
+                            AppLogger().info('Hand-lower detected after reconnect: $userId');
+                            isHandLowerEvent = true;
+                          }
                         }
                       }
                     }
                   }
                 }
                 
+                // Force immediate reload after reconnection
+                invalidateNetworkCache(patternPrefix: 'participants_');
                 await _loadParticipants();
                 
                 if (isHandRaiseEvent && _isCurrentUserModerator) {
@@ -1896,7 +2136,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             ),
           );
           
-          // Audio/Video cleanup disabled (Agora removed)
+          // Audio/Video cleanup handled by LiveKit
           
           // Navigate back to home screen
           Future.delayed(const Duration(seconds: 1), () {
@@ -1914,7 +2154,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
   Future<void> _leaveRoom() async {
     try {
       if (_isJoined && !_isDisposing) {
-        // Audio/Video cleanup disabled (Agora removed)
+        // Audio/Video cleanup handled by LiveKit
         
         if (_currentUser != null) {
           await _appwrite.leaveDebateDiscussionRoom(
@@ -2204,12 +2444,70 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
           // CRITICAL: Reinitialize LiveKit connection with new speaker role
           AppLogger().info('🔄 ROLE ASSIGNMENT: User promoted to speaker - reinitializing audio connection');
           await _reinitializeAudioForSpeaker();
+          _showSpeakerActivationDialog();
+        } else if (role == 'audience') {
+          // DEMOTION: Current user demoted back to audience
+          _isCurrentUserSpeaker = false;
+          AppLogger().info('🔄 ROLE ASSIGNMENT: Current user demoted to audience - disabling speaker privileges');
+          
+          // Disable audio/video if they were enabled
+          if (!_isMuted && _isAudioConnected) {
+            await _toggleMute(); // Mute audio
+          }
+          if (_isVideoEnabled) {
+            await _toggleVideo(); // Disable video
+          }
         }
-        
-        _showSpeakerActivationDialog();
       }
       
-      // The real-time subscription will update the UI automatically
+      // CRITICAL: Handle current user demotion BEFORE UI update
+      if (role == 'audience') {
+        final currentUser = await _appwrite.getCurrentUser();
+        if (currentUser != null && user.id == currentUser.$id) {
+          AppLogger().debug('🔇 DEMOTION: Current user demoted to audience - unpublishing audio tracks');
+          await _liveKitService.unpublishAllTracks();
+          
+          // Update local speaker status
+          _isCurrentUserSpeaker = false;
+          
+          // Mute microphone for audience role
+          if (_liveKitService.isConnected) {
+            await _liveKitService.disableAudio();
+          }
+        }
+      }
+
+      // Immediately update moderator UI for instant feedback
+      if (mounted && !_isDisposing) {
+        setState(() {
+          // Remove user from speaker requests list (applies to all role changes)
+          _speakerRequests.removeWhere((participant) => participant.id == user.id);
+          
+          // Update participant role mapping
+          _participantRoles[user.id] = role;
+          
+          if (role == 'audience') {
+            // DEMOTION: Move user from speakers back to audience
+            _speakerPanelists.removeWhere((participant) => participant.id == user.id);
+            if (!_audienceMembers.any((p) => p.id == user.id)) {
+              _audienceMembers.add(user);
+            }
+          } else {
+            // PROMOTION: Move user from audience to speakers
+            _audienceMembers.removeWhere((participant) => participant.id == user.id);
+            if (!_speakerPanelists.any((p) => p.id == user.id)) {
+              _speakerPanelists.add(user);
+            }
+          }
+        });
+        
+        AppLogger().info('🚀 IMMEDIATE UI: Moderator screen updated instantly for ${user.name} → $role');
+      }
+      
+      // Sync to Firebase for instant cross-device updates (temporarily disabled)
+      // await _syncParticipantToFirebase(user, role);
+      
+      // Real-time subscription will sync any missed updates from other sources
     } catch (e) {
       AppLogger().error('Error assigning user to role: $e');
       if (mounted) {
@@ -2410,6 +2708,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
                   fontWeight: FontWeight.w500,
                 ),
               ),
+              // Sync indicator removed for performance
                         // Audio status indicator
           const SizedBox(width: 8),
           Icon(
@@ -3067,8 +3366,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
             icon: LucideIcons.share2,
             label: 'Share',
             color: Colors.blue,
-            onTap: _shareRoom,
+            onTap: _shareRoomToSocial,
           ),
+          // Streaming button - only visible to moderators
+          if (_isCurrentUserModerator) 
+            _buildControlButton(
+              icon: LucideIcons.radio,
+              label: 'Go Live',
+              color: Colors.red,
+              onTap: _showStreamingOptions,
+            ),
           _buildGiftButton(),
           // Audio controls - ALL users can join audio (like open discussion)
           // But only speakers and moderators can unmute
@@ -4201,9 +4508,19 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
               title: 'Share Room',
               onTap: () {
                 Navigator.pop(context);
-                _shareRoom();
+                _shareRoomToSocial();
               },
             ),
+            // Add streaming option for moderators
+            if (_isCurrentUserModerator)
+              _buildOptionTile(
+                icon: LucideIcons.radio,
+                title: 'Go Live',
+                onTap: () {
+                  Navigator.pop(context);
+                  _showStreamingOptions();
+                },
+              ),
           ],
         ),
       ),
@@ -4250,10 +4567,18 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
         newRole: 'audience',
       );
       
-      // Remove from speaker requests locally
+      // Remove from speaker requests and ensure user is in audience
       if (mounted) {
         setState(() {
           _speakerRequests.removeWhere((request) => request.id == user.id);
+          
+          // Make sure user is in audience (not speakers)
+          if (!_audienceMembers.any((p) => p.id == user.id)) {
+            _audienceMembers.add(user);
+          }
+          
+          // Update participant role mapping
+          _participantRoles[user.id] = 'audience';
         });
         
         ScaffoldMessenger.of(context).showSnackBar(
@@ -4296,44 +4621,57 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> {
 
 
 
-  void _shareRoom() {
+  void _shareRoomToSocial() async {
     final roomName = _roomData?['name'] ?? 'Debate Room';
     final moderatorName = _moderator?.name ?? 'Unknown';
+    final participantCount = _speakerPanelists.length + _audienceMembers.length;
     
-    // Create shareable room information
-    final shareText = '''
-🎙️ Join our live debate discussion!
+    // Create shareable room join link
+    final roomJoinLink = 'https://arena.app/join/debates/${widget.roomId}';
+    
+    // Create shareable content optimized for social media
+    final shareText = '''🎙️ Join our live debate discussion!
 
 Room: $roomName
 Moderator: $moderatorName
-Participants: ${_speakerPanelists.length + _audienceMembers.length}
+Participants: $participantCount
 
-Join the conversation now in the Arena app!
-''';
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Room details copied to share'),
-        backgroundColor: const Color(0xFF8B5CF6),
-        action: SnackBarAction(
-          label: 'View',
-          onPressed: () {
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                backgroundColor: Colors.grey[900],
-                title: const Text('Share Room', style: TextStyle(color: Colors.white)),
-                content: Text(shareText, style: const TextStyle(color: Colors.white70)),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Close'),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
+Join the conversation now:
+$roomJoinLink
+
+#ArenaDebate #LiveDebate #Discussion''';
+
+    try {
+      // Direct native share - this should show the grid of apps like in your image
+      // Including Facebook, Instagram, TikTok, X (Twitter), Messages, WhatsApp etc.
+      await Share.share(
+        shareText,
+        subject: '🎙️ Join our live debate discussion!',
+      );
+    } catch (e) {
+      // Fallback to clipboard if native share fails
+      Clipboard.setData(ClipboardData(text: shareText));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Room details copied to clipboard - paste in any app to share!'),
+            backgroundColor: Color(0xFF8B5CF6),
+          ),
+        );
+      }
+    }
+  }
+
+  void _showStreamingOptions() {
+    // Show streaming destinations modal for live streaming (moderator-only)
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StreamingDestinationsModal(
+        roomId: widget.roomId,
+        roomName: _roomData?['name'] ?? 'Debate Room',
+        isModerator: _isCurrentUserModerator,
       ),
     );
   }
@@ -4356,7 +4694,7 @@ Join the conversation now in the Arena app!
         },
       );
 
-      // Audio cleanup disabled (Agora removed)
+      // Audio cleanup handled by LiveKit
 
       // Navigate back to room list
       if (mounted) {
@@ -5238,4 +5576,5 @@ Join the conversation now in the Arena app!
   //     ),
   //   );
   // }
+
 }

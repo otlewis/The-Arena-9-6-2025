@@ -27,6 +27,7 @@ import '../core/logging/app_logger.dart';
 import '../debug_coin_initializer.dart';
 import '../widgets/ping_notification_modal.dart';
 import '../models/moderator_judge.dart';
+import 'moderation_dashboard_screen.dart';
 // All test screen imports removed - files deleted
 
 class HomeScreen extends StatefulWidget {
@@ -44,6 +45,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _arenaRoleInvitations = 0;
   bool _isLoading = true;
   RealtimeSubscription? _pingSubscription;
+  Timer? _roleCheckTimer;
   bool _isCurrentUserModerator = false;
   bool _isCurrentUserJudge = false;
 
@@ -59,7 +61,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _checkUserRoles();
     
     // Periodic role check for debugging (every 30 seconds)
-    Timer.periodic(const Duration(seconds: 30), (timer) {
+    _roleCheckTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       if (mounted) {
         AppLogger().debug('⏰ Periodic role check triggered');
         _checkUserRoles();
@@ -73,6 +75,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _pingSubscription?.close();
+    _roleCheckTimer?.cancel();
     super.dispose();
   }
 
@@ -224,6 +227,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ),
           ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ModerationDashboardScreen(),
+            ),
+          );
+        },
+        backgroundColor: const Color(0xFF8B5CF6),
+        icon: const Icon(Icons.admin_panel_settings, color: Colors.white),
+        label: const Text('Reports', style: TextStyle(color: Colors.white)),
       ),
     );
   }
@@ -964,7 +980,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             Expanded(
               child: AnimatedScaleIn(
                 delay: const Duration(milliseconds: 1600),
-                child: _buildFeatureCard('OpenDiscussions', 'Open Discussions', () => _navigateToCreateOpen()),
+                child: _buildFeatureCard('OpenDiscussions', 'Open Discussion', () => _navigateToCreateOpen()),
               ),
             ),
           ],
@@ -1015,15 +1031,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // Get screen dimensions for responsive sizing
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-    final isSmallScreen = screenWidth < 380 || screenHeight < 700;
+    final isSmallScreen = screenWidth < 400 || screenHeight < 750; // Expanded threshold for iPhone 12
     
-    // Responsive sizing based on screen size
-    final iconContainerSize = isSmallScreen ? 45.0 : 60.0;
-    final iconSize = isSmallScreen ? 24.0 : 32.0;
-    final imageSize = isSmallScreen ? 30.0 : 40.0;
-    final fontSize = isSmallScreen ? 10.0 : 12.0;
-    final verticalSpacing = isSmallScreen ? 8.0 : 12.0;
-    final horizontalPadding = isSmallScreen ? 4.0 : 8.0;
+    // Responsive sizing based on screen size - even larger icons
+    final iconContainerSize = isSmallScreen ? 60.0 : 60.0; // Even larger icons on small screens
+    final iconSize = isSmallScreen ? 34.0 : 32.0; // Even larger icons on small screens
+    final imageSize = isSmallScreen ? 42.0 : 40.0; // Even larger images on small screens
+    final fontSize = isSmallScreen ? 11.0 : 15.0; // Smaller text on small screens
+    final verticalSpacing = isSmallScreen ? 4.0 : 8.0; // Minimal spacing for more text room
+    final horizontalPadding = isSmallScreen ? 4.0 : 10.0;
     
     return AspectRatio(
       aspectRatio: 1.0,
@@ -1059,7 +1075,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           child: Padding(
             padding: EdgeInsets.symmetric(
               horizontal: horizontalPadding,
-              vertical: isSmallScreen ? 8.0 : 12.0,
+              vertical: isSmallScreen ? 4.0 : 12.0, // Reduced vertical padding on small screens
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -1120,18 +1136,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
                 SizedBox(height: verticalSpacing),
                 if (title.isNotEmpty)
-                  Flexible(
+                  Expanded(
                     child: Text(
                       title,
                       style: TextStyle(
                         fontSize: fontSize,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w600, // Consistent weight
                         color: _themeService.isDarkMode 
                             ? Colors.white70
                             : Colors.black87,
+                        height: isSmallScreen ? 1.0 : 1.1, // Even tighter line height on small screens
                       ),
                       textAlign: TextAlign.center,
-                      maxLines: 2,
+                      maxLines: isSmallScreen ? 4 : 3, // More lines on small screens
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),

@@ -127,7 +127,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Timer? _roomStatusChecker; // Periodic room status checker
   Timer? _roomCompletionTimer; // Timer for room completion after closure
   Timer? _muteStateSyncTimer; // Periodic mute state sync to prevent stuck states
-  bool _userIntentionallyMuted = true; // Track if user deliberately muted themselves
   StreamSubscription? _realtimeSubscription; // Track realtime subscription
   StreamSubscription? _unreadMessagesSubscription; // Instant messages subscription
   int _roomStatusCheckerIterations = 0; // Track iterations to prevent infinite loops
@@ -383,8 +382,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   Future<void> _initializeInstantMessaging() async {
-    // Instant messaging removed with Agora chat
-    AppLogger().debug('📱 Instant messaging disabled (Agora removed)');
+    // Instant messaging handled by Appwrite
+    AppLogger().debug('📱 Instant messaging via Appwrite');
   }
 
 
@@ -439,7 +438,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _chatController.dispose();
     
     AppLogger().debug('🛑 DISPOSE: Cleaning up WebRTC...');
-    _disposeWebRTC();
+    _disposeWebRTC(); // Fire and forget - lifecycle method can't await
     
     AppLogger().debug('🛑 DISPOSE: Cleaning up noise cancellation...');
     try {
@@ -838,8 +837,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           });
         }
         
-        // Start periodic state sync to prevent stuck states
-        _startMuteStateSyncTimer();
+        // Disabled periodic sync - was causing mute/unmute loops
+        // _startMuteStateSyncTimer();
       };
       
       _liveKitService.onDisconnected = () {
@@ -966,22 +965,36 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
       AppLogger().debug('🎥 LiveKit Role: $webrtcRole (User Role: $_userRole)');
       
+      // CRITICAL: Generate unique identity to prevent duplicate identity disconnections
+      final currentUserId = _currentUser?.id;
+      if (currentUserId == null || currentUserId.isEmpty) {
+        AppLogger().error('❌ DUPLICATE IDENTITY FIX: No valid user ID available for LiveKit connection');
+        throw Exception('Cannot connect to Arena: User authentication required. Please restart the app.');
+      }
+      
       // Generate LiveKit token with matching deployment credentials
+      final audioRoomId = 'arena-${widget.roomId}';
+      final uniqueIdentity = '${currentUserId}_${DateTime.now().millisecondsSinceEpoch}';
+      AppLogger().debug('🆔 DUPLICATE IDENTITY FIX: Using unique identity: $uniqueIdentity (from user: $currentUserId)');
+      
       final token = LiveKitTokenService.generateToken(
-        roomName: widget.roomId,
-        identity: _currentUser?.id ?? 'unknown',
+        roomName: audioRoomId,
+        identity: uniqueIdentity, // Use timestamped unique identity
         userRole: webrtcRole,
         roomType: 'arena',
-        userId: _currentUser?.id ?? 'unknown',
+        userId: currentUserId, // Keep original user ID for metadata
         ttl: const Duration(hours: 2),
       );
       
-      AppLogger().debug('🔑 Generated LiveKit token for ${_currentUser?.id}');
+      AppLogger().debug('🔑 Generated LiveKit token for user: $currentUserId');
       AppLogger().debug('🔗 Connecting to LiveKit server...');
       AppLogger().debug('📡 Server URL: ws://172.236.109.9:7880');
-      AppLogger().debug('🏠 Room: ${widget.roomId}');
-      AppLogger().debug('👤 Identity: ${_currentUser?.id}');
+      AppLogger().debug('🏠 Room: $audioRoomId (formatted from: ${widget.roomId})');
+      AppLogger().debug('👤 Identity: $uniqueIdentity');
       AppLogger().debug('🎭 Role: $webrtcRole');
+      AppLogger().debug('🔑 Token generated for room type: arena');
+      AppLogger().debug('🌐 Network: Attempting WebRTC connection with enhanced ICE configuration');
+      AppLogger().debug('🔄 ICE: Pool size = 10, TURN servers = openrelay.metered.ca:80,443');
       
       // Connect using LiveKitService directly (same as Debates & Discussions)
       AppLogger().info('🚀 ARENA: Connecting via LiveKitService directly...');
@@ -989,16 +1002,16 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       try {
         await _liveKitService.connect(
           serverUrl: 'ws://172.236.109.9:7880',
-          roomName: widget.roomId,
+          roomName: audioRoomId,
           token: token,
-          userId: _currentUser?.id ?? 'unknown',
+          userId: currentUserId, // Use validated user ID instead of fallback
           userRole: webrtcRole,
           roomType: 'arena',
         ).timeout(
-          const Duration(seconds: 30),
+          const Duration(seconds: 20),
           onTimeout: () {
-            AppLogger().error('❌ Audio connection timeout after 30 seconds');
-            throw Exception('Audio connection timeout. Please check your internet connection and try again.');
+            AppLogger().error('❌ Audio connection timeout after 20 seconds');
+            throw Exception('Arena audio connection timeout. Please check your network connection.');
           },
         );
         
@@ -1026,11 +1039,25 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
       // Start muted by default to prevent feedback (like other rooms)
       AppLogger().debug('🔇 Starting muted by default to prevent feedback');
-      await _liveKitService.disableAudio();
-      if (mounted) {
-        setState(() {
-          _isMuted = true;
-        });
+      
+      // Wait a moment for connection to stabilize before trying to control audio
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      try {
+        await _liveKitService.disableAudio();
+        if (mounted) {
+          setState(() {
+            _isMuted = true;
+          });
+        }
+      } catch (e) {
+        AppLogger().debug('⚠️ Could not disable audio initially (will start muted anyway): $e');
+        // Still set muted state even if the disable failed
+        if (mounted) {
+          setState(() {
+            _isMuted = true;
+          });
+        }
       }
       
       AppLogger().info('✅ LiveKit connection established successfully');
@@ -1264,24 +1291,23 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     try {
       // Track user intention for mute state protection
       final willBeMuted = !_isMuted; // After toggle, mute state will be opposite
-      _userIntentionallyMuted = willBeMuted;
       AppLogger().debug('🔒 USER INTENTION: User ${willBeMuted ? 'intentionally muting' : 'intentionally unmuting'} themselves');
       
-      // ENHANCED JUDGE HANDLING: Use special logic for judges
-      if (_userRole?.startsWith('judge') == true) {
-        AppLogger().debug('⚖️ JUDGE AUDIO: Using enhanced toggle logic...');
+      // ENHANCED AUDIO HANDLING: Use special logic for judges and moderators
+      if (_userRole?.startsWith('judge') == true || _userRole == 'moderator') {
+        AppLogger().debug('🎭 ENHANCED AUDIO: Using enhanced toggle logic for $_userRole...');
         
         if (_isMuted) {
-          // Unmuting judge - use enhanced setup
-          await _handleJudgeAudioSetup();
+          // Unmuting judge/moderator - use enhanced setup
+          await _handleEnhancedAudioSetup();
           if (mounted) {
             setState(() {
               _isMuted = false;
             });
           }
-          AppLogger().info('⚖️ JUDGE AUDIO: Successfully unmuted via enhanced setup');
+          AppLogger().info('🎭 ENHANCED AUDIO: Successfully unmuted $_userRole via enhanced setup');
         } else {
-          // Muting judge - use standard method
+          // Muting judge/moderator - use standard method
           await _liveKitService.toggleMute();
           final newMuteState = _liveKitService.isMuted;
           if (mounted) {
@@ -1289,7 +1315,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               _isMuted = newMuteState;
             });
           }
-          AppLogger().info('⚖️ JUDGE AUDIO: Successfully muted via standard method');
+          AppLogger().info('🎭 ENHANCED AUDIO: Successfully muted $_userRole via standard method');
         }
       } else {
         // Standard toggle for non-judges
@@ -1307,6 +1333,25 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
     } catch (e) {
       AppLogger().error('❌ Failed to toggle audio: $e');
+      
+      // Check for Android memory-related errors
+      final errorString = e.toString().toLowerCase();
+      if (errorString.contains('memory') || 
+          errorString.contains('pthread') ||
+          errorString.contains('native crash') ||
+          errorString.contains('android microphone')) {
+        AppLogger().debug('🧹 ANDROID FIX: Memory error detected in Arena audio toggle');
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Memory issue detected. Close other apps and try again.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+      }
       
       // Try emergency unmute if we were trying to unmute
       if (_isMuted) {
@@ -1334,35 +1379,35 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
-  /// Enhanced judge audio setup - 10/10 for judges
-  Future<void> _handleJudgeAudioSetup() async {
+  /// Enhanced audio setup for judges and moderators - 10/10 reliability
+  Future<void> _handleEnhancedAudioSetup() async {
     try {
-      AppLogger().debug('⚖️ JUDGE AUDIO 10/10: Starting enhanced audio setup...');
+      AppLogger().debug('🎭 ENHANCED AUDIO: Starting enhanced audio setup for $_userRole...');
       
       // Step 1: Force role synchronization with LiveKit
-      AppLogger().debug('⚖️ Step 1: Force syncing judge role with LiveKit...');
+      AppLogger().debug('🎭 Step 1: Force syncing $_userRole role with LiveKit...');
       // Role updates handled automatically by LiveKitService
       await Future.delayed(const Duration(milliseconds: 500));
       
       // Step 2: Ensure WebRTC connection is stable - INSTANT
-      AppLogger().debug('🚀 INSTANT: Quick WebRTC check for judge...');
+      AppLogger().debug('🚀 INSTANT: Quick WebRTC check for $_userRole...');
       if (!_isWebRTCConnected) {
         AppLogger().debug('🚀 INSTANT: Fast reconnect...');
         await _connectToWebRTC();
         await Future.delayed(const Duration(milliseconds: 200));
       }
       
-      // Step 3: Try multiple audio enable strategies for judges
-      AppLogger().debug('⚖️ Step 3: Attempting judge audio enable strategies...');
+      // Step 3: Try multiple audio enable strategies
+      AppLogger().debug('🎭 Step 3: Attempting audio enable strategies for $_userRole...');
       
       // Strategy 1: Direct enable
       try {
-        AppLogger().debug('⚖️ Strategy 1: Direct audio enable...');
+        AppLogger().debug('🎭 Strategy 1: Direct audio enable...');
         await _liveKitService.enableAudio();
-        AppLogger().info('⚖️ Strategy 1 SUCCESS: Direct audio enable worked');
+        AppLogger().info('🎭 Strategy 1 SUCCESS: Direct audio enable worked for $_userRole');
         return;
       } catch (e) {
-        AppLogger().debug('⚖️ Strategy 1 failed: $e');
+        AppLogger().debug('🎭 Strategy 1 failed: $e');
       }
       
       // Strategy 2: Force setup judge audio (if method exists)
@@ -1450,10 +1495,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         // Role updates handled automatically by LiveKitService
       }
       
-      // ENHANCED JUDGE AUDIO HANDLING - 10/10 for judges
-      if (_userRole?.startsWith('judge') == true) {
-        AppLogger().debug('⚖️ JUDGE AUDIO 10/10: Using enhanced judge audio setup...');
-        await _handleJudgeAudioSetup();
+      // ENHANCED AUDIO HANDLING - Enhanced setup for judges and moderators
+      if (_userRole?.startsWith('judge') == true || _userRole == 'moderator') {
+        AppLogger().debug('🎭 ENHANCED AUDIO: Using enhanced audio setup for $_userRole...');
+        await _handleEnhancedAudioSetup();
       } else {
         // Try direct enable for other roles
         await _liveKitService.enableAudio();
@@ -1493,104 +1538,16 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   // Video toggle removed - Arena is audio-only
   
-  /// Simple, standard microphone button
+  /// Standardized microphone button matching Open Discussion style
   Widget _buildEnhancedMicButton() {
-    return GestureDetector(
-      // Regular tap for normal toggle
-      onTap: _toggleAudio,
-      
-      child: Stack(
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: _isMuted ? Colors.red : Colors.green,
-              borderRadius: BorderRadius.circular(8), // Rounded rectangle instead of circle
-            ),
-            child: Icon(
-              _isMuted ? Icons.mic_off : Icons.mic,
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-          
-          // Connection status indicator
-          if (_isReconnecting)
-            Positioned(
-              top: 0,
-              right: 0,
-              child: Container(
-                width: 16,
-                height: 16,
-                decoration: BoxDecoration(
-                  color: Colors.orange,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 1),
-                ),
-                child: const Center(
-                  child: SizedBox(
-                    width: 8,
-                    height: 8,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+    return _buildControlButton(
+      icon: _isMuted ? Icons.mic_off : Icons.mic,
+      label: _isMuted ? 'Unmute' : 'Mute',
+      color: _isMuted ? Colors.red : Colors.green,
+      onPressed: _toggleAudio,
     );
   }
   
-  
-  /// Start periodic mute state sync to prevent stuck states
-  void _startMuteStateSyncTimer() {
-    // Cancel existing timer
-    _muteStateSyncTimer?.cancel();
-    
-    // Start sync every 2 seconds
-    _muteStateSyncTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
-      if (!mounted || !_isWebRTCConnected) {
-        timer.cancel();
-        return;
-      }
-      
-      _syncMuteState();
-    });
-  }
-  
-  /// Sync local mute state with LiveKit service state
-  void _syncMuteState() {
-    if (!_isWebRTCConnected) return;
-    
-    final livekitMuted = _liveKitService.isMuted;
-    if (_isMuted != livekitMuted) {
-      AppLogger().debug('🔄 Mute state mismatch detected: local=$_isMuted, livekit=$livekitMuted, userIntentional=$_userIntentionallyMuted');
-      
-      // If user intentionally muted themselves, enforce that state
-      if (_userIntentionallyMuted && !livekitMuted) {
-        AppLogger().debug('🔇 PROTECT: User intentionally muted, enforcing mute state');
-        _liveKitService.disableAudio().then((_) {
-          if (mounted) {
-            setState(() {
-              _isMuted = true;
-            });
-          }
-        });
-      } else {
-        // Only sync if it's not conflicting with user intention
-        AppLogger().debug('🔄 Safe sync: Updating local state to match LiveKit');
-        if (mounted) {
-          setState(() {
-            _isMuted = livekitMuted;
-          });
-        }
-      }
-    }
-  }
 
   /// Show screen share bottom sheet
   void _showShareScreenBottomSheet() {
@@ -1736,12 +1693,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
 
   /// Clean up WebRTC resources
-  void _disposeWebRTC() {
+  Future<void> _disposeWebRTC() async {
     try {
       AppLogger().debug('🛑 Disposing WebRTC resources...');
       
-      // Disconnect from WebRTC service
-      _liveKitService.disconnect();
+      // Critical: Properly await disconnect to ensure track cleanup
+      await _liveKitService.disconnect();
       
       // Dispose local renderer
       _localRenderer.dispose();
@@ -2770,7 +2727,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         },
         onChallenge: () {
           // Challenge functionality is now handled directly by UserProfileBottomSheet
-          debugPrint('Challenge functionality delegated to UserProfileBottomSheet');
+          AppLogger().debug('Challenge functionality delegated to UserProfileBottomSheet');
         },
         onEmail: () {
           if (mounted && _currentUser != null) {
@@ -6305,6 +6262,7 @@ class ModeratorControlModal extends StatelessWidget {
     );
   }
 
+  /// Control button for moderator modal
   Widget _buildControlButton({
     required IconData icon,
     required String label,
@@ -6321,74 +6279,26 @@ class ModeratorControlModal extends StatelessWidget {
           color: isEnabled ? color : Colors.grey[600],
           borderRadius: BorderRadius.circular(8),
         ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth < 100) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, color: Colors.white, size: 14),
-                  const SizedBox(height: 2),
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                ],
-              );
-            } else {
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, color: Colors.white, size: 16),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                  ),
-                ],
-              );
-            }
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSpeakerButton(String label, String role, bool isActive, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-        decoration: BoxDecoration(
-          color: isActive ? Colors.green : Colors.grey[700],
-          borderRadius: BorderRadius.circular(6),
-          border: isActive ? Border.all(color: Colors.greenAccent, width: 2) : null,
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-          textAlign: TextAlign.center,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -6406,12 +6316,11 @@ class ModeratorControlModal extends StatelessWidget {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   return Text(
-                    constraints.maxWidth < 150 ? 'Emergency' : 'Emergency Controls',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
+                    'Emergency Controls',
+                    style: TextStyle(
+                      fontSize: constraints.maxWidth < 150 ? 14 : 16,
+                      fontWeight: FontWeight.bold,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   );
                 },
               ),
@@ -6441,6 +6350,29 @@ class ModeratorControlModal extends StatelessWidget {
             child: const Text('Cancel'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSpeakerButton(String label, String role, bool isActive, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.green : Colors.grey[700],
+          borderRadius: BorderRadius.circular(6),
+          border: isActive ? Border.all(color: Colors.greenAccent, width: 2) : null,
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+          textAlign: TextAlign.center,
+        ),
       ),
     );
   }

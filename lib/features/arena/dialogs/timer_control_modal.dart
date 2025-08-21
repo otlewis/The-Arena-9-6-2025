@@ -39,8 +39,10 @@ class _TimerControlModalState extends State<TimerControlModal> {
   @override
   void initState() {
     super.initState();
-    final minutes = widget.remainingSeconds ~/ 60;
-    final seconds = widget.remainingSeconds % 60;
+    // Default to 3 minutes (180 seconds) if no timer is set yet
+    final timeToShow = widget.remainingSeconds > 0 ? widget.remainingSeconds : 180;
+    final minutes = timeToShow ~/ 60;
+    final seconds = timeToShow % 60;
     _minutesController.text = minutes.toString();
     _secondsController.text = seconds.toString();
   }

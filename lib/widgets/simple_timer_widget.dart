@@ -162,10 +162,10 @@ class _SimpleTimerWidgetState extends State<SimpleTimerWidget> {
               runSpacing: 12,
               alignment: WrapAlignment.center,
               children: [
-                _buildPresetButton('1:00', 60),
+                _buildPresetButton('3:00', 180), // 3 minutes first (default)
                 _buildPresetButton('2:00', 120),
-                _buildPresetButton('3:00', 180),
                 _buildPresetButton('5:00', 300),
+                _buildPresetButton('1:00', 60),
               ],
             ),
             
