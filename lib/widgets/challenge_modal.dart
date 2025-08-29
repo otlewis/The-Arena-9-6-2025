@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
+import 'dart:io' show Platform;
 import '../widgets/user_avatar.dart';
 import '../services/challenge_messaging_service.dart';
 import '../screens/arena_screen.dart';
@@ -396,8 +397,11 @@ class _ChallengeModalState extends State<ChallengeModal>
           // Get the room ID from the updated challenge (messaging service creates the room)
           final challengeId = widget.challenge['id'];
           
-          // Wait a moment for the messaging service to update the challenge with room ID
-          await Future.delayed(const Duration(milliseconds: 500));
+          // ANDROID FIX: Wait longer for room setup to complete - prevents audio timeout issues
+          await Future.delayed(Platform.isAndroid 
+              ? const Duration(milliseconds: 2000)  // Longer delay for Android
+              : const Duration(milliseconds: 1000)  // Shorter delay for iOS
+          );
           
           // Fetch the updated challenge to get the arena room ID
           final appwrite = AppwriteService();
@@ -421,6 +425,14 @@ class _ChallengeModalState extends State<ChallengeModal>
               throw Exception('Arena room not found after challenge acceptance');
             }
           }
+
+          // ANDROID FIX: Verify room exists and roles are properly assigned before navigation
+          final roomData = await appwrite.getArenaRoom(roomId);
+          if (roomData == null) {
+            throw Exception('Challenge room was not properly created or was deleted');
+          }
+          
+          AppLogger().info('Challenge room verified, proceeding with navigation to: $roomId');
 
           // ✅ NOTE: Judge/moderator invitations are now handled automatically 
           // by ChallengeMessagingService when the arena room is created

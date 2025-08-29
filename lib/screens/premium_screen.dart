@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import '../services/theme_service.dart';
 import '../services/in_app_purchase_service.dart';
@@ -137,7 +138,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
       // );
       
     } catch (e) {
-      debugPrint('Error updating premium status: $e');
+      AppLogger().debug('Error updating premium status: $e');
     }
   }
   

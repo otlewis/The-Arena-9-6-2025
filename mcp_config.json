@@ -50,12 +50,13 @@
         "APPWRITE_API_KEY": "${APPWRITE_API_KEY}"
       }
     },
-    "agora-metrics": {
+    "livekit-metrics": {
       "command": "node",
-      "args": ["/Users/otislewis/arena2/arena-monitoring/agora-server.js"],
+      "args": ["/Users/otislewis/arena2/arena-monitoring/livekit-server.js"],
       "env": {
-        "AGORA_APP_ID": "${AGORA_APP_ID}",
-        "AGORA_APP_CERTIFICATE": "${AGORA_APP_CERTIFICATE}"
+        "LIVEKIT_URL": "${LIVEKIT_URL}",
+        "LIVEKIT_API_KEY": "${LIVEKIT_API_KEY}",
+        "LIVEKIT_SECRET": "${LIVEKIT_SECRET}"
       }
     },
     "notion": {

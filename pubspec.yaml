@@ -47,7 +47,7 @@ dependencies:
   intl: ^0.20.0
   just_audio: ^0.9.36
   json_annotation: ^4.9.0
-  crypto: ^3.0.3
+  crypto: ^3.0.6
   mcp_toolkit: ^0.2.3
   liquid_glass_renderer: ^0.1.1-dev.9
   flutter_webrtc: ^0.12.12
@@ -55,9 +55,10 @@ dependencies:
   in_app_purchase: ^3.2.0
   in_app_purchase_storekit: ^0.3.17+2
   flutter_launcher_icons: ^0.14.4
-  livekit_client: ^2.2.3
+  livekit_client: ^2.3.1
   workmanager: ^0.6.0
   share_plus: ^10.0.3
+  pdfx: ^2.6.0
 
 dev_dependencies:
   flutter_test:
@@ -82,3 +83,20 @@ flutter:
     - assets/icons/
     - assets/images/
     - assets/audio/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo2.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#1a1a2e"
+  adaptive_icon_foreground: "assets/images/logo2.png"
+  web:
+    generate: true
+    image_path: "assets/images/logo2.png"
+    background_color: "#1a1a2e"
+    theme_color: "#8b5cf6"
+  windows:
+    generate: true
+    image_path: "assets/images/logo2.png"
+    icon_size: 48

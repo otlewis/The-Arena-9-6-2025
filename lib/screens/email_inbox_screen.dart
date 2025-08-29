@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import '../services/appwrite_service.dart';
@@ -46,7 +47,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
   
   Future<void> _initializeSoundService() async {
     await _soundService.initialize();
-    debugPrint('SoundService initialized for email inbox');
+    AppLogger().debug('SoundService initialized for email inbox');
   }
   
   @override
@@ -68,7 +69,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
       
       await _loadEmails();
     } catch (e) {
-      debugPrint('Error loading user: $e');
+      AppLogger().debug('Error loading user: $e');
     }
   }
   
@@ -78,7 +79,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
     setState(() => _isLoading = true);
     
     try {
-      debugPrint('Loading emails for user: $_currentUserId');
+      AppLogger().debug('Loading emails for user: $_currentUserId');
       
       // Simple approach: Load ALL emails and filter in app
       final allEmailsResponse = await _appwrite.databases.listDocuments(
@@ -90,7 +91,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
         ],
       );
       
-      debugPrint('Total emails in database: ${allEmailsResponse.documents.length}');
+      AppLogger().debug('Total emails in database: ${allEmailsResponse.documents.length}');
       
       // Filter emails in the app
       final allEmails = allEmailsResponse.documents
@@ -105,18 +106,18 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
           .where((email) => email.senderId == _currentUserId!)
           .toList();
       
-      debugPrint('Filtered inbox emails: ${newInboxEmails.length} for user $_currentUserId');
-      debugPrint('Filtered sent emails: ${newSentEmails.length} for user $_currentUserId');
+      AppLogger().debug('Filtered inbox emails: ${newInboxEmails.length} for user $_currentUserId');
+      AppLogger().debug('Filtered sent emails: ${newSentEmails.length} for user $_currentUserId');
       
       // Debug sent emails
       for (var email in newSentEmails) {
-        debugPrint('Sent email: to=${email.recipientUsername}, subject=${email.subject}, date=${email.createdAt}');
+        AppLogger().debug('Sent email: to=${email.recipientUsername}, subject=${email.subject}, date=${email.createdAt}');
       }
       
       // Note: Sound is now played in the real-time subscription when a new email arrives
       
       for (var email in newInboxEmails) {
-        debugPrint('Inbox email: sender=${email.senderId}, recipient=${email.recipientId}, subject=${email.subject}');
+        AppLogger().debug('Inbox email: sender=${email.senderId}, recipient=${email.recipientId}, subject=${email.subject}');
       }
       
       // Load drafts
@@ -128,7 +129,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('Error loading emails: $e');
+      AppLogger().debug('Error loading emails: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -153,9 +154,9 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
         _drafts = drafts;
       });
       
-      debugPrint('Loaded ${drafts.length} drafts');
+      AppLogger().debug('Loaded ${drafts.length} drafts');
     } catch (e) {
-      debugPrint('Error loading drafts: $e');
+      AppLogger().debug('Error loading drafts: $e');
       // Collection might not exist yet
       setState(() {
         _drafts = [];
@@ -171,14 +172,14 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
       ]);
       
       _subscription!.stream.listen((response) {
-        debugPrint('Email subscription event received: ${response.events}');
+        AppLogger().debug('Email subscription event received: ${response.events}');
         
         // Check if this is a new email for the current user
         if (response.events.contains('databases.${AppwriteConstants.databaseId}.collections.${AppwriteConstants.arenaEmailsCollection}.documents.*.create')) {
           // New email created, check if it's for current user
           final payload = response.payload;
           if (payload['recipientId'] == _currentUserId) {
-            debugPrint('New email received for current user! Playing sound...');
+            AppLogger().debug('New email received for current user! Playing sound...');
             _soundService.playEmailSound();
           }
         }
@@ -186,7 +187,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
         _loadEmails(); // Reload emails on any change
       });
     } catch (e) {
-      debugPrint('Error subscribing to emails: $e');
+      AppLogger().debug('Error subscribing to emails: $e');
     }
   }
   
@@ -201,7 +202,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
         data: {'isRead': true},
       );
     } catch (e) {
-      debugPrint('Error marking email as read: $e');
+      AppLogger().debug('Error marking email as read: $e');
     }
   }
   
@@ -344,7 +345,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
                                 );
                               }
                             } catch (e) {
-                              debugPrint('Error deleting email: $e');
+                              AppLogger().debug('Error deleting email: $e');
                               if (mounted) {
                                 messenger.showSnackBar(
                                   SnackBar(
@@ -511,7 +512,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
           IconButton(
             icon: const Icon(Icons.volume_up, color: Colors.white54),
             onPressed: () {
-              debugPrint('Testing email sound...');
+              AppLogger().debug('Testing email sound...');
               _soundService.playEmailSound();
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -571,6 +572,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
               ],
             ),
       floatingActionButton: FloatingActionButton(
+        heroTag: "email_compose",
         onPressed: () => _composeEmail(),
         backgroundColor: accentPurple,
         child: const Icon(Icons.edit, color: Colors.white),
@@ -669,7 +671,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
               );
             }
           } catch (e) {
-            debugPrint('Error deleting email: $e');
+            AppLogger().debug('Error deleting email: $e');
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -825,7 +827,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
               );
             }
           } catch (e) {
-            debugPrint('Error deleting draft: $e');
+            AppLogger().debug('Error deleting draft: $e');
           }
         },
         child: ListTile(

@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import '../services/livekit_service.dart';
 import '../services/livekit_token_service.dart';
@@ -111,7 +112,7 @@ class _LiveKitTestScreenState extends State<LiveKitTestScreen> {
         _connectionLogs.removeLast();
       }
     });
-    debugPrint(message);
+    AppLogger().debug(message);
   }
 
   Future<void> _testServerConnectivity() async {

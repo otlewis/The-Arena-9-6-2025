@@ -1,3 +1,4 @@
+import '../../../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/arena_state.dart';
@@ -44,7 +45,7 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
         }
       }
     } catch (e) {
-      debugPrint('Error loading user data: $e');
+      AppLogger().debug('Error loading user data: $e');
     }
   }
 
@@ -57,7 +58,7 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
         });
       }
     } catch (e) {
-      debugPrint('Error loading gifts: $e');
+      AppLogger().debug('Error loading gifts: $e');
     }
   }
 

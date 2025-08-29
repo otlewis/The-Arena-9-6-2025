@@ -1,6 +1,6 @@
+import '../core/logging/app_logger.dart';
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import 'package:in_app_purchase_storekit/store_kit_wrappers.dart';
@@ -45,12 +45,12 @@ class InAppPurchaseService {
   List<ProductDetails> get products => _products;
 
   Future<void> initialize() async {
-    debugPrint('🛒 Initializing In-App Purchase Service...');
+    AppLogger().debug('🛒 Initializing In-App Purchase Service...');
     
     // Check if in-app purchase is available on this device
     final bool available = await _inAppPurchase.isAvailable();
     if (!available) {
-      debugPrint('❌ In-app purchase not available on this device');
+      AppLogger().debug('❌ In-app purchase not available on this device');
       onPurchaseError?.call('In-app purchases not available on this device');
       return;
     }
@@ -67,7 +67,7 @@ class InAppPurchaseService {
       _onPurchaseUpdated,
       onDone: () => _subscription.cancel(),
       onError: (error) {
-        debugPrint('❌ Purchase stream error: $error');
+        AppLogger().debug('❌ Purchase stream error: $error');
         onPurchaseError?.call('Purchase error: $error');
       },
     );
@@ -75,42 +75,42 @@ class InAppPurchaseService {
     // Load products
     await loadProducts();
     
-    debugPrint('✅ In-App Purchase Service initialized successfully');
+    AppLogger().debug('✅ In-App Purchase Service initialized successfully');
   }
 
   Future<void> loadProducts() async {
-    debugPrint('📦 Loading products...');
+    AppLogger().debug('📦 Loading products...');
     
     try {
       final ProductDetailsResponse response = await _inAppPurchase.queryProductDetails(_productIds);
       
       if (response.error != null) {
-        debugPrint('❌ Error loading products: ${response.error}');
+        AppLogger().debug('❌ Error loading products: ${response.error}');
         onPurchaseError?.call('Failed to load products: ${response.error!.message}');
         return;
       }
 
       if (response.notFoundIDs.isNotEmpty) {
-        debugPrint('⚠️ Products not found: ${response.notFoundIDs}');
+        AppLogger().debug('⚠️ Products not found: ${response.notFoundIDs}');
       }
 
       _products = response.productDetails;
-      debugPrint('✅ Loaded ${_products.length} products');
+      AppLogger().debug('✅ Loaded ${_products.length} products');
       
       for (var product in _products) {
-        debugPrint('📱 Product: ${product.id} - ${product.title} - ${product.price}');
+        AppLogger().debug('📱 Product: ${product.id} - ${product.title} - ${product.price}');
       }
       
       onProductsLoaded?.call(_products);
       
     } catch (e) {
-      debugPrint('❌ Exception loading products: $e');
+      AppLogger().debug('❌ Exception loading products: $e');
       onPurchaseError?.call('Failed to load products: $e');
     }
   }
 
   Future<void> purchaseProduct(ProductDetails product) async {
-    debugPrint('💳 Purchasing product: ${product.id}');
+    AppLogger().debug('💳 Purchasing product: ${product.id}');
     
     try {
       final PurchaseParam purchaseParam = PurchaseParam(productDetails: product);
@@ -127,44 +127,44 @@ class InAppPurchaseService {
       }
       
     } catch (e) {
-      debugPrint('❌ Purchase failed: $e');
+      AppLogger().debug('❌ Purchase failed: $e');
       onPurchaseError?.call('Purchase failed: $e');
     }
   }
 
   Future<void> restorePurchases() async {
-    debugPrint('🔄 Restoring purchases...');
+    AppLogger().debug('🔄 Restoring purchases...');
     
     try {
       await _inAppPurchase.restorePurchases();
     } catch (e) {
-      debugPrint('❌ Restore failed: $e');
+      AppLogger().debug('❌ Restore failed: $e');
       onPurchaseError?.call('Restore failed: $e');
     }
   }
 
   void _onPurchaseUpdated(List<PurchaseDetails> purchaseDetailsList) {
     for (final PurchaseDetails purchaseDetails in purchaseDetailsList) {
-      debugPrint('🔄 Purchase status: ${purchaseDetails.status} for ${purchaseDetails.productID}');
+      AppLogger().debug('🔄 Purchase status: ${purchaseDetails.status} for ${purchaseDetails.productID}');
       
       switch (purchaseDetails.status) {
         case PurchaseStatus.pending:
-          debugPrint('⏳ Purchase pending for ${purchaseDetails.productID}');
+          AppLogger().debug('⏳ Purchase pending for ${purchaseDetails.productID}');
           break;
           
         case PurchaseStatus.purchased:
         case PurchaseStatus.restored:
-          debugPrint('✅ Purchase successful for ${purchaseDetails.productID}');
+          AppLogger().debug('✅ Purchase successful for ${purchaseDetails.productID}');
           _handleSuccessfulPurchase(purchaseDetails);
           break;
           
         case PurchaseStatus.error:
-          debugPrint('❌ Purchase error for ${purchaseDetails.productID}: ${purchaseDetails.error}');
+          AppLogger().debug('❌ Purchase error for ${purchaseDetails.productID}: ${purchaseDetails.error}');
           onPurchaseError?.call('Purchase failed: ${purchaseDetails.error?.message ?? 'Unknown error'}');
           break;
           
         case PurchaseStatus.canceled:
-          debugPrint('🚫 Purchase canceled for ${purchaseDetails.productID}');
+          AppLogger().debug('🚫 Purchase canceled for ${purchaseDetails.productID}');
           onPurchaseError?.call('Purchase was canceled');
           break;
       }
@@ -182,7 +182,7 @@ class InAppPurchaseService {
     // 2. Grant premium access to the user
     // 3. Update user's subscription status in your database
     
-    debugPrint('🎉 Handling successful purchase: ${purchaseDetails.productID}');
+    AppLogger().debug('🎉 Handling successful purchase: ${purchaseDetails.productID}');
     
     // For now, just call the success callback
     onPurchaseSuccess?.call(purchaseDetails.productID);

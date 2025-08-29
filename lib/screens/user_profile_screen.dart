@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user_profile.dart';
@@ -5,6 +6,9 @@ import '../models/gift.dart';
 import '../widgets/user_avatar.dart';
 import '../widgets/challenge_bell.dart';
 import '../widgets/gift_bell.dart';
+import '../widgets/report_user_dialog.dart';
+import '../widgets/block_user_dialog.dart';
+import '../widgets/report_user_icon.dart';
 import '../services/gift_service.dart';
 import '../services/coin_service.dart';
 import '../services/appwrite_service.dart';
@@ -35,23 +39,23 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     try {
       final appwriteService = AppwriteService();
       final currentUser = await appwriteService.getCurrentUser();
-      debugPrint('🪙 DEBUG: Current user: ${currentUser?.$id}');
+      AppLogger().debug('🪙 DEBUG: Current user: ${currentUser?.$id}');
       
       if (currentUser != null) {
         final userProfile = await appwriteService.getUserProfile(currentUser.$id);
-        debugPrint('🪙 DEBUG: User profile found: ${userProfile != null}');
-        debugPrint('🪙 DEBUG: Current reputation: ${userProfile?.reputation}');
+        AppLogger().debug('🪙 DEBUG: User profile found: ${userProfile != null}');
+        AppLogger().debug('🪙 DEBUG: Current reputation: ${userProfile?.reputation}');
         
         final coins = await _coinService.getUserCoins(currentUser.$id);
-        debugPrint('🪙 DEBUG: Coin service returned: $coins');
+        AppLogger().debug('🪙 DEBUG: Coin service returned: $coins');
         return coins;
       }
     } catch (e) {
       // If error getting current user, still try to get coins with fallback
-      debugPrint('🪙 ERROR: Error getting current user for coins: $e');
+      AppLogger().debug('🪙 ERROR: Error getting current user for coins: $e');
     }
     // Return 500 as fallback for testing (same as coin service)
-    debugPrint('🪙 DEBUG: Returning fallback 500 coins');
+    AppLogger().debug('🪙 DEBUG: Returning fallback 500 coins');
     return 500;
   }
 
@@ -327,6 +331,87 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     }
   }
 
+  Widget _buildProfileMenuButton() {
+    final notifier = ref.read(userProfileProvider(widget.userId).notifier);
+    final state = ref.watch(userProfileProvider(widget.userId));
+    
+    // Don't show menu for current user or if not signed in
+    if (!notifier.canInteract || state.userProfile == null) {
+      return const SizedBox.shrink();
+    }
+    
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, color: deepPurple),
+      onSelected: (value) => _handleMenuAction(value),
+      itemBuilder: (BuildContext context) => [
+        const PopupMenuItem<String>(
+          value: 'report',
+          child: Row(
+            children: [
+              Icon(Icons.report, color: Colors.red, size: 20),
+              SizedBox(width: 12),
+              Text('Report User'),
+            ],
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'block',
+          child: Row(
+            children: [
+              Icon(Icons.block, color: Colors.orange, size: 20),
+              SizedBox(width: 12),
+              Text('Block User'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _handleMenuAction(String action) async {
+    final state = ref.read(userProfileProvider(widget.userId));
+    final currentUserState = ref.read(userProfileProvider('current'));
+    
+    if (state.userProfile == null || currentUserState.userProfile == null) {
+      return;
+    }
+
+    switch (action) {
+      case 'report':
+        await _showReportDialog(state.userProfile!, currentUserState.userProfile!.id);
+        break;
+      case 'block':
+        await _showBlockDialog(state.userProfile!, currentUserState.userProfile!.id);
+        break;
+    }
+  }
+
+  Future<void> _showReportDialog(UserProfile userToReport, String currentUserId) async {
+    await showDialog(
+      context: context,
+      builder: (context) => ReportUserDialog(
+        reportedUser: userToReport,
+        roomId: 'profile_view', // Generic room ID for profile reports
+        reporterId: currentUserId,
+      ),
+    );
+  }
+
+  Future<void> _showBlockDialog(UserProfile userToBlock, String currentUserId) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => BlockUserDialog(
+        userToBlock: userToBlock,
+        currentUserId: currentUserId,
+      ),
+    );
+
+    if (result == true && mounted) {
+      // User was successfully blocked, navigate back
+      Navigator.of(context).pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final profileState = ref.watch(userProfileProvider(widget.userId));
@@ -344,11 +429,18 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
           fontSize: 20,
           fontWeight: FontWeight.w600,
         ),
-        actions: const [
-          ChallengeBell(iconColor: Color(0xFF6B46C1)),
-          SizedBox(width: 12),
-          GiftBell(iconColor: Color(0xFF8B5CF6)),
-          SizedBox(width: 16),
+        actions: [
+          const ChallengeBell(iconColor: Color(0xFF6B46C1)),
+          const SizedBox(width: 12),
+          const GiftBell(iconColor: Color(0xFF8B5CF6)),
+          const SizedBox(width: 8),
+          ReportUserIcon(
+            userId: widget.userId,
+            userName: userProfile?.name,
+          ),
+          const SizedBox(width: 8),
+          _buildProfileMenuButton(),
+          const SizedBox(width: 16),
         ],
       ),
       body: isLoading

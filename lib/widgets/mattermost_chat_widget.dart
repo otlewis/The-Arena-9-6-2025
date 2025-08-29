@@ -161,20 +161,20 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
     final content = _messageController.text.trim();
     if (content.isEmpty) return;
 
-    debugPrint('📤 Sending message: "$content"');
-    debugPrint('📤 Room ID: ${widget.roomId}');
+    AppLogger().debug('📤 Sending message: "$content"');
+    AppLogger().debug('📤 Room ID: ${widget.roomId}');
 
     try {
       if (widget.roomId != null) {
-        debugPrint('📤 Sending room message...');
+        AppLogger().debug('📤 Sending room message...');
         await _chatService.sendRoomMessage(
           content: content,
           replyToId: _replyToMessageId,
           mentions: _extractMentions(content),
         );
-        debugPrint('✅ Room message sent successfully');
+        AppLogger().debug('✅ Room message sent successfully');
       } else {
-        debugPrint('⚠️ Cannot send message - no room available');
+        AppLogger().debug('⚠️ Cannot send message - no room available');
         _showError('No room available for messaging');
         return;
       }
@@ -185,7 +185,7 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
       _scrollToBottomImmediate();
     } catch (e) {
       AppLogger().error('Error sending message: $e');
-      debugPrint('❌ Error sending message: $e');
+      AppLogger().debug('❌ Error sending message: $e');
       _showError('Failed to send message: ${e.toString()}');
     }
   }

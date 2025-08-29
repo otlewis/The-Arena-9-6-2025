@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import '../services/appwrite_service.dart';
@@ -47,7 +48,7 @@ class _ModeratorListScreenState extends State<ModeratorListScreen> {
       await _loadModerators();
       await _checkCurrentUserModerator();
     } catch (e) {
-      debugPrint('Error loading current user: $e');
+      AppLogger().debug('Error loading current user: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -97,7 +98,7 @@ class _ModeratorListScreenState extends State<ModeratorListScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('Error loading moderators: $e');
+      AppLogger().debug('Error loading moderators: $e');
       setState(() {
         _moderators = [];
         _isLoading = false;
@@ -123,7 +124,7 @@ class _ModeratorListScreenState extends State<ModeratorListScreen> {
         });
       }
     } catch (e) {
-      debugPrint('Error checking current user moderator: $e');
+      AppLogger().debug('Error checking current user moderator: $e');
     }
   }
 
@@ -202,6 +203,7 @@ class _ModeratorListScreenState extends State<ModeratorListScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: "moderator_register",
         onPressed: _registerAsModerator,
         backgroundColor: const Color(0xFF8B5CF6),
         icon: Icon(
@@ -540,7 +542,7 @@ class _ModeratorListScreenState extends State<ModeratorListScreen> {
         );
       }
     } catch (e) {
-      debugPrint('Error pinging moderator: $e');
+      AppLogger().debug('Error pinging moderator: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -564,7 +566,7 @@ class _ModeratorListScreenState extends State<ModeratorListScreen> {
       );
       return response.documents.map((doc) => doc.data).toList();
     } catch (e) {
-      debugPrint('Error loading arena participants: $e');
+      AppLogger().debug('Error loading arena participants: $e');
       return [];
     }
   }

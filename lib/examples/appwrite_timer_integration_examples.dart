@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import '../widgets/appwrite_timer_widget.dart';
 import '../widgets/timer_sync_indicator.dart';
@@ -727,57 +728,57 @@ class AppwriteTimerIntegrationExamples {
 
   // Action handlers (implement based on your app's needs)
   static void _showTimerExpiredDialog(String message) {
-    debugPrint('Timer expired: $message');
+    AppLogger().debug('Timer expired: $message');
     // Show dialog or notification
   }
 
   static void _showSnackBar(String message) {
-    debugPrint('Timer event: $message');
+    AppLogger().debug('Timer event: $message');
     // Show snackbar
   }
 
   static void _handleSpeakerTimeExpired(String? speaker) {
-    debugPrint('Speaker time expired for: $speaker');
+    AppLogger().debug('Speaker time expired for: $speaker');
     // Implement speaker rotation logic with server sync
   }
 
   static void _handleDebatePhaseComplete(String? phase, String? debater) {
-    debugPrint('Debate phase complete: $phase for $debater');
+    AppLogger().debug('Debate phase complete: $phase for $debater');
     // Implement phase transition logic with server sync
   }
 
   static void _announcePhaseStart(String? phase, String? debater) {
-    debugPrint('Phase started: $phase for $debater');
+    AppLogger().debug('Phase started: $phase for $debater');
     // Implement announcement logic
   }
 
   static void _showSyncStatus() {
-    debugPrint('Showing sync status');
+    AppLogger().debug('Showing sync status');
     // Show sync status dialog
   }
 
   static void _refreshAllTimers() {
-    debugPrint('Refreshing all timers');
+    AppLogger().debug('Refreshing all timers');
     // Force refresh all timer streams
   }
 
   static void _showTimerManagement(String roomId, String userId) {
-    debugPrint('Showing timer management for room: $roomId');
+    AppLogger().debug('Showing timer management for room: $roomId');
     // Show timer management interface
   }
 
   static void _startSpeakerTimer(String roomId, String userId, String speaker) {
-    debugPrint('Starting speaker timer for: $speaker');
+    AppLogger().debug('Starting speaker timer for: $speaker');
     // Start timer for specific speaker
   }
 
   static void _startQATimer(String roomId, String userId) {
-    debugPrint('Starting Q&A timer');
+    AppLogger().debug('Starting Q&A timer');
     // Start Q&A round timer
   }
 
   static void _startArenaPhase(String roomId, String userId, TimerType timerType) {
-    debugPrint('Starting Arena phase: ${timerType.name}');
+    AppLogger().debug('Starting Arena phase: ${timerType.name}');
     // Start specific Arena phase timer
   }
 }

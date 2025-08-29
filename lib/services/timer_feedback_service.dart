@@ -1,5 +1,5 @@
+import '../core/logging/app_logger.dart';
 import 'dart:async';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import '../models/timer_state.dart';
@@ -28,7 +28,7 @@ class TimerFeedbackService {
       await _preloadSounds();
       _isInitialized = true;
     } catch (e) {
-      debugPrint('TimerFeedbackService initialization error: $e');
+      AppLogger().debug('TimerFeedbackService initialization error: $e');
       // Continue without audio if assets are missing
       _isInitialized = true;
     }
@@ -41,7 +41,7 @@ class TimerFeedbackService {
       await _audioPlayer.setAsset(_timerExpiredSound);
       await _audioPlayer.setAsset(_timerStartSound);
     } catch (e) {
-      debugPrint('Sound preloading failed: $e');
+      AppLogger().debug('Sound preloading failed: $e');
     }
   }
 
@@ -161,7 +161,7 @@ class TimerFeedbackService {
 
     // Debug logging
     if (description != null) {
-      debugPrint('TimerFeedback: $description');
+      AppLogger().debug('TimerFeedback: $description');
     }
 
     for (int i = 0; i < repeat; i++) {
@@ -207,7 +207,7 @@ class TimerFeedbackService {
           break;
       }
     } catch (e) {
-      debugPrint('Haptic feedback error: $e');
+      AppLogger().debug('Haptic feedback error: $e');
     }
   }
 
@@ -224,7 +224,7 @@ class TimerFeedbackService {
         }
       }
     } catch (e) {
-      debugPrint('Vibration pattern error: $e');
+      AppLogger().debug('Vibration pattern error: $e');
     }
   }
 
@@ -233,7 +233,7 @@ class TimerFeedbackService {
       await _audioPlayer.setAsset(assetPath);
       await _audioPlayer.play();
     } catch (e) {
-      debugPrint('Sound playback error: $e');
+      AppLogger().debug('Sound playback error: $e');
       // Fallback to system sound if asset fails
       await SystemSound.play(SystemSoundType.click);
     }

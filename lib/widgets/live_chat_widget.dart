@@ -529,6 +529,7 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
       bottom: 8,
       right: 8,
       child: FloatingActionButton(
+        heroTag: "chat_scroll_down",
         mini: true,
         backgroundColor: _primaryAccent,
         onPressed: () => _scrollToBottom(),

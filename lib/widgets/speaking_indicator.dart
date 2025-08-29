@@ -296,6 +296,7 @@ class _MicrophoneSpeakingIndicatorState extends State<MicrophoneSpeakingIndicato
         return Transform.scale(
           scale: widget.isSpeaking && !widget.isMuted ? _pulseAnimation.value : 1.0,
           child: FloatingActionButton(
+            heroTag: "speaking_indicator",
             onPressed: widget.onTap,
             backgroundColor: backgroundColor,
             child: Icon(

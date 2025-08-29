@@ -42,7 +42,7 @@ rtc:
 
 # Production API keys (same as development for consistency)
 keys:
-  LKAPI1234567890: your-secret-key-here
+  LKAPI1234567890: 7e9fb42854e466daf92dabbc9b88e98f7811486704338e062d30815a592de45d
 
 room:
   max_participants: 100

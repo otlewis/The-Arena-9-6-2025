@@ -42,6 +42,10 @@ class AppwriteService {
     storage = Storage(client);
     realtime = Realtime(client);
     functions = Functions(client);
+    
+    // Log initialization for debugging
+    AppLogger().debug('🚀 AppwriteService initialized with endpoint: ${AppwriteConstants.endpoint}');
+    AppLogger().debug('🚀 Project ID: ${AppwriteConstants.projectId}');
   }
 
   // Getter for realtime access
@@ -79,18 +83,68 @@ class AppwriteService {
     }
   }
 
+  /// Simplified debug method to test Appwrite connectivity
+  Future<void> debugAppwriteConnection() async {
+    AppLogger().debug('🧪 DEBUGGING APPWRITE CONNECTION');
+    AppLogger().debug('   Endpoint: ${client.endPoint}');
+    AppLogger().debug('   Project: ${AppwriteConstants.projectId}');
+    
+    try {
+      AppLogger().debug('   Testing simple health check...');
+      
+      // Test the most basic operation first - just the SDK connection
+      AppLogger().debug('   About to call account.get() with 5-second timeout');
+      final stopwatch = Stopwatch()..start();
+      
+      final user = await account.get().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          final elapsed = stopwatch.elapsedMilliseconds;
+          AppLogger().debug('   ⏰ TIMEOUT after ${elapsed}ms (expected 5000ms)');
+          throw Exception('Connection timeout - SDK not responding');
+        },
+      );
+      
+      stopwatch.stop();
+      AppLogger().debug('   ✅ Success! Got response in ${stopwatch.elapsedMilliseconds}ms');
+      AppLogger().debug('   User: ${user.name} (${user.email})');
+      
+    } catch (e) {
+      AppLogger().debug('   ❌ Connection test failed: $e');
+      AppLogger().debug('   Error type: ${e.runtimeType}');
+      
+      // Try to get more details about what's failing
+      if (e.toString().contains('timeout')) {
+        AppLogger().debug('   🔍 This is a timeout issue - SDK call is hanging');
+        AppLogger().debug('   🔍 Possible causes:');
+        AppLogger().debug('      - Network connectivity issues');
+        AppLogger().debug('      - Appwrite Cloud service down');
+        AppLogger().debug('      - SDK configuration error');
+        AppLogger().debug('      - Local firewall/proxy blocking requests');
+      } else if (e.toString().contains('unauthorized') || e.toString().contains('scope')) {
+        AppLogger().debug('   🔍 This is an authentication issue - user not logged in (expected)');
+      } else {
+        AppLogger().debug('   🔍 Unexpected error - investigating...');
+      }
+    }
+  }
+
   /// Test method specifically for debugging Chrome user profile loading issues
   /// This method provides comprehensive debugging for troubleshooting
   Future<void> debugUserProfileLoading(String userId) async {
     AppLogger().debug('🔍 DEBUG: Starting comprehensive user profile loading test');
     AppLogger().debug('🔍 Target User ID: $userId');
     
-    // Test authentication first
-    AppLogger().debug('🔍 Step 1: Testing authentication...');
+    // Test basic connectivity first
+    AppLogger().debug('🔍 Step 1: Testing Appwrite connectivity...');
+    await debugAppwriteConnection();
+    
+    // Test authentication
+    AppLogger().debug('🔍 Step 2: Testing authentication...');
     final currentUser = await getCurrentUser();
     
-    // Test user profile loading
-    AppLogger().debug('🔍 Step 2: Testing user profile loading...');
+    // Test user profile loading  
+    AppLogger().debug('🔍 Step 3: Testing user profile loading...');
     final userProfile = await getUserProfile(userId);
     
     // Summary
@@ -159,16 +213,50 @@ class AppwriteService {
     required String name,
   }) async {
     try {
+      AppLogger().debug('🔐 Creating account for email: $email');
+      
+      // First, ensure no existing session conflicts
+      try {
+        await account.deleteSession(sessionId: 'current');
+        AppLogger().debug('🔐 Cleared existing session before account creation');
+      } catch (e) {
+        AppLogger().debug('🔐 No existing session to clear (expected)');
+      }
+      
       final user = await account.create(
         userId: ID.unique(),
         email: email,
         password: password,
         name: name,
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          AppLogger().debug('🔐 ⏰ Account creation timeout after 15 seconds');
+          throw Exception('Account creation timed out after 15 seconds');
+        },
       );
+      
+      AppLogger().debug('🔐 ✅ Account created successfully for: $email');
+      AppLogger().debug('🔐    - User ID: ${user.$id}');
+      AppLogger().debug('🔐    - User Name: ${user.name}');
       return user;
     } catch (e) {
-      AppLogger().debug('Error creating account: $e');
-      rethrow;
+      AppLogger().debug('🔐 ❌ Error creating account for $email:');
+      AppLogger().debug('🔐    - Error type: ${e.runtimeType}');
+      AppLogger().debug('🔐    - Error message: $e');
+      
+      // Provide more specific error messages
+      if (e.toString().contains('user_already_exists')) {
+        throw Exception('An account with this email already exists');
+      } else if (e.toString().contains('password')) {
+        throw Exception('Password does not meet requirements');
+      } else if (e.toString().contains('email')) {
+        throw Exception('Please enter a valid email address');
+      } else if (e.toString().contains('timeout')) {
+        throw Exception('Network timeout - please check your connection and try again');
+      } else {
+        throw Exception('Failed to create account: ${e.toString()}');
+      }
     }
   }
 
@@ -177,16 +265,45 @@ class AppwriteService {
     required String password,
   }) async {
     try {
+      AppLogger().debug('🔐 Starting signIn for: $email');
+      
       final session = await _executeWithRetry(
         'signIn',
-        () => account.createEmailPasswordSession(
-          email: email,
-          password: password,
-        ),
+        () async {
+          try {
+            // Try to create session normally
+            return await account.createEmailPasswordSession(
+              email: email,
+              password: password,
+            );
+          } catch (e) {
+            // If there's already an active session, sign out first then retry
+            if (e.toString().contains('user_session_already_exists')) {
+              AppLogger().debug('🔐 Active session detected, signing out first...');
+              try {
+                await account.deleteSession(sessionId: 'current');
+                AppLogger().debug('🔐 Previous session cleared, retrying login...');
+              } catch (signOutError) {
+                AppLogger().debug('🔐 Error clearing session (continuing): $signOutError');
+              }
+              
+              // Retry session creation after clearing
+              return await account.createEmailPasswordSession(
+                email: email,
+                password: password,
+              );
+            } else {
+              // Re-throw other errors
+              rethrow;
+            }
+          }
+        },
       );
+      
+      AppLogger().debug('🔐 ✅ signIn successful for: $email');
       return session;
     } catch (e) {
-      AppLogger().debug('Error signing in: $e');
+      AppLogger().debug('🔐 ❌ Error signing in: $e');
       rethrow;
     }
   }
@@ -227,50 +344,28 @@ class AppwriteService {
 
   // User Methods
   Future<models.User?> getCurrentUser() async {
-    AppLogger().debug('========== getCurrentUser START ==========');
-    AppLogger().debug('getCurrentUser called');
-    AppLogger().debug('Platform: ${_getBrowserInfo()}');
-    
-    // Log Chrome-specific debugging info
-    _logChromeSpecificDebugInfo();
+    AppLogger().debug('🔐 getCurrentUser - checking authentication status');
     
     try {
-      AppLogger().debug('Attempting to get current user from account...');
-      final user = await account.get();
+      final user = await account.get().timeout(
+        const Duration(seconds: 8),
+        onTimeout: () {
+          AppLogger().debug('🔐 ⏰ getCurrentUser timeout after 8 seconds');
+          throw Exception('getCurrentUser timed out');
+        },
+      );
       
-      AppLogger().debug('Current user retrieved successfully:');
-      AppLogger().debug('  - User ID: ${user.$id}');
-      AppLogger().debug('  - User Name: ${user.name}');
-      AppLogger().debug('  - User Email: ${user.email}');
-      AppLogger().debug('  - Email Verified: ${user.emailVerification}');
-      AppLogger().debug('  - Registration: ${user.registration}');
-      
-      AppLogger().debug('========== getCurrentUser SUCCESS ==========');
+      AppLogger().debug('🔐 ✅ getCurrentUser SUCCESS');
+      AppLogger().debug('🔐 User: ${user.name} (${user.email})');
       return user;
-    } catch (e, stackTrace) {
-      // Only log unexpected errors, not normal unauthorized scope for guests
-      if (!e.toString().contains('general_unauthorized_scope') && !e.toString().contains('missing scope')) {
-        AppLogger().debug('ERROR in getCurrentUser:');
-        AppLogger().debug('Error type: ${e.runtimeType}');
-        AppLogger().debug('Error message: $e');
-        AppLogger().debug('Stack trace: $stackTrace');
-        
-        // Chrome/Web-specific debugging
-        if (kIsWeb) {
-          AppLogger().debug('Web-specific authentication error analysis:');
-          AppLogger().debug('  - This authentication error occurred on web platform');
-          AppLogger().debug('  - Chrome may have specific session/cookie handling issues');
-          AppLogger().debug('  - Check if Chrome is blocking third-party cookies');
-          AppLogger().debug('  - Verify Chrome local storage and session storage');
-          
-          if (e.toString().contains('network') || e.toString().contains('fetch')) {
-            AppLogger().debug('  - NETWORK/FETCH ERROR in authentication - Chrome security policy issue?');
-          }
-        }
-        AppLogger().debug('========== getCurrentUser FAILED ==========');
+      
+    } catch (e) {
+      if (e.toString().contains('general_unauthorized_scope') || 
+          e.toString().contains('missing scope') ||
+          e.toString().contains('user_unauthorized')) {
+        AppLogger().debug('🔐 User not authenticated (guest mode)');
       } else {
-        AppLogger().debug('User is not authenticated (expected for guest users)');
-        AppLogger().debug('========== getCurrentUser NOT_AUTHENTICATED ==========');
+        AppLogger().debug('🔐 ❌ getCurrentUser ERROR: $e');
       }
       return null;
     }
@@ -293,46 +388,99 @@ class AppwriteService {
     List<String>? interests,
   }) async {
     try {
-      await databases.createDocument(
-        databaseId: 'arena_db',
-        collectionId: 'users',
-        documentId: userId,
-        data: {
-          'name': name,
-          'email': email,
-          'bio': bio,
-          'avatar': avatar,
-          'location': location,
-          'website': website,
-          'xHandle': xHandle,
-          'linkedinHandle': linkedinHandle,
-          'youtubeHandle': youtubeHandle,
-          'facebookHandle': facebookHandle,
-          'instagramHandle': instagramHandle,
-          'preferences': '{}',
-          'reputation': 0,
-          'totalDebates': 0,
-          'totalWins': 0,
-          'totalRoomsCreated': 0,
-          'totalRoomsJoined': 0,
-          'coinBalance': 100, // Start new users with 100 coins
-          'totalGiftsSent': 0,
-          'totalGiftsReceived': 0,
-          'interests': interests ?? [],
-          'joinedClubs': [],
-          'isVerified': false,
-          'isPublicProfile': true,
-          'isAvailableAsModerator': false,
-          'isAvailableAsJudge': false,
-        },
-      );
+      final profileData = {
+        'name': name,
+        'email': email,
+        'bio': bio,
+        'avatar': avatar,
+        'location': location,
+        'website': website,
+        'xHandle': xHandle,
+        'linkedinHandle': linkedinHandle,
+        'youtubeHandle': youtubeHandle,
+        'facebookHandle': facebookHandle,
+        'instagramHandle': instagramHandle,
+        'preferences': '{}',
+        'reputation': 0,
+        'totalDebates': 0,
+        'totalWins': 0,
+        'totalRoomsCreated': 0,
+        'totalRoomsJoined': 0,
+        'coinBalance': 100, // Start new users with 100 coins
+        'totalGiftsSent': 0,
+        'totalGiftsReceived': 0,
+        'interests': interests ?? [],
+        'joinedClubs': [],
+        'isVerified': false,
+        'isPublicProfile': true,
+        'isAvailableAsModerator': false,
+        'isAvailableAsJudge': false,
+      };
+
+      // First, try to check if user profile already exists
+      try {
+        await databases.getDocument(
+          databaseId: 'arena_db',
+          collectionId: 'users',
+          documentId: userId,
+        );
+        
+        // If we get here, document exists, so update it
+        AppLogger().debug('User profile already exists, updating: $userId');
+        await databases.updateDocument(
+          databaseId: 'arena_db',
+          collectionId: 'users',
+          documentId: userId,
+          data: profileData,
+        );
+      } catch (e) {
+        // Document doesn't exist, create it
+        AppLogger().debug('User profile does not exist, creating: $userId');
+        try {
+          await databases.createDocument(
+            databaseId: 'arena_db',
+            collectionId: 'users',
+            documentId: userId,
+            data: profileData,
+          );
+          AppLogger().debug('✅ Successfully created user profile: $userId');
+        } catch (createError) {
+          AppLogger().error('❌ Failed to create user profile: $userId');
+          AppLogger().error('Create error details: $createError');
+          
+          // If document already exists, try to update it instead
+          if (createError.toString().contains('document_already_exists') || 
+              createError.toString().contains('Document with the requested ID already exists')) {
+            AppLogger().warning('🔄 Document exists, attempting update instead for: $userId');
+            try {
+              await databases.updateDocument(
+                databaseId: 'arena_db',
+                collectionId: 'users',
+                documentId: userId,
+                data: profileData,
+              );
+              AppLogger().debug('✅ Successfully updated existing profile: $userId');
+            } catch (updateError) {
+              AppLogger().error('❌ Failed to update existing profile: $userId');
+              AppLogger().error('Update error: $updateError');
+              rethrow;
+            }
+          } else {
+            rethrow;
+          }
+        }
+      }
     } catch (e) {
-      AppLogger().debug('Error creating user profile: $e');
+      AppLogger().debug('Error creating/updating user profile: $e');
       rethrow;
     }
   }
 
   Future<UserProfile?> getUserProfile(String userId) async {
+    // FORCE BYPASS ALL CIRCUIT BREAKERS FOR DEBUGGING
+    AppLogger().error('🚨 FORCE DEBUGGING: getUserProfile called with userId: $userId');
+    AppLogger().error('🚨 This will bypass ALL error handling to find the null type error');
+    
     // Debug: Log method entry with platform information
     AppLogger().debug('========== getUserProfile START ==========');
     AppLogger().debug('getUserProfile called with userId: $userId');
@@ -356,14 +504,20 @@ class AppwriteService {
       AppLogger().debug('Attempting to fetch user profile from database...');
       AppLogger().debug('Database ID: arena_db, Collection ID: users, Document ID: $userId');
       
-      final response = await _executeWithRetry(
-        'getUserProfile-$userId',
-        () => databases.getDocument(
+      // Temporarily bypass circuit breaker for debugging
+      AppLogger().debug('🔧 DEBUGGING: Bypassing circuit breaker for getUserProfile');
+      late final models.Document response;
+      try {
+        response = await databases.getDocument(
           databaseId: 'arena_db',
           collectionId: 'users',
           documentId: userId,
-        ),
-      );
+        );
+        AppLogger().debug('✅ Direct database call succeeded');
+      } catch (e) {
+        AppLogger().error('❌ Direct database call failed: $e');
+        rethrow;
+      }
       
       AppLogger().debug('Raw response received from Appwrite:');
       AppLogger().debug('Response ID: ${response.$id}');
@@ -372,17 +526,27 @@ class AppwriteService {
       AppLogger().debug('Response data keys: ${response.data.keys.toList()}');
       AppLogger().debug('Response data values preview: ${response.data.toString().length > 500 ? '${response.data.toString().substring(0, 500)}...' : response.data.toString()}');
       
-      final profileData = Map<String, dynamic>.from(response.data);
-      AppLogger().debug('Profile data after Map.from conversion - keys: ${profileData.keys.toList()}');
+      Map<String, dynamic> profileData;
+      try {
+        profileData = _safeDocumentToMap(response);
+        AppLogger().debug('Profile data after safe conversion - keys: ${profileData.keys.toList()}');
+      } catch (e, stackTrace) {
+        AppLogger().error('Error in _safeDocumentToMap: $e');
+        AppLogger().error('Stack trace: $stackTrace');
+        rethrow;
+      }
       
-      profileData['id'] = response.$id;
-      profileData['createdAt'] = response.$createdAt;
-      profileData['updatedAt'] = response.$updatedAt;
-      
-      AppLogger().debug('Profile data after adding metadata - final keys: ${profileData.keys.toList()}');
       AppLogger().debug('About to create UserProfile from map...');
       
-      final userProfile = UserProfile.fromMap(profileData);
+      UserProfile userProfile;
+      try {
+        userProfile = UserProfile.fromMap(profileData);
+      } catch (e, stackTrace) {
+        AppLogger().error('Error in UserProfile.fromMap: $e');
+        AppLogger().error('Profile data causing error: $profileData');
+        AppLogger().error('Stack trace: $stackTrace');
+        rethrow;
+      }
       AppLogger().debug('UserProfile successfully created:');
       AppLogger().debug('  - ID: ${userProfile.id}');
       AppLogger().debug('  - Name: ${userProfile.name}');
@@ -626,13 +790,7 @@ class AppwriteService {
         ],
       );
       
-      return response.documents.map((doc) {
-        final clubData = Map<String, dynamic>.from(doc.data);
-        clubData['id'] = doc.$id; // Add the document ID
-        clubData['createdAt'] = doc.$createdAt;
-        clubData['updatedAt'] = doc.$updatedAt;
-        return clubData;
-      }).toList().cast<Map<String, dynamic>>();
+      return response.documents.map((doc) => _safeDocumentToMap(doc)).toList();
     } catch (e) {
       AppLogger().debug('Error getting debate clubs: $e');
       rethrow;
@@ -728,11 +886,7 @@ class AppwriteService {
         ],
       );
       
-      return response.documents.map((doc) {
-        final membershipData = Map<String, dynamic>.from(doc.data);
-        membershipData['id'] = doc.$id;
-        return membershipData;
-      }).toList().cast<Map<String, dynamic>>();
+      return response.documents.map((doc) => _safeDocumentToMap(doc)).toList();
     } catch (e) {
       AppLogger().debug('Error getting user memberships: $e');
       rethrow;
@@ -816,7 +970,7 @@ class AppwriteService {
           collectionId: AppwriteConstants.roomsCollection,
           documentId: ID.unique(),
           data: {
-            'title': title,
+            'name': title,
             'description': description,
             'type': 'discussion',
             'status': 'active',
@@ -856,8 +1010,12 @@ class AppwriteService {
     int maxParticipants = 999999,
   }) async {
     try {
+      AppLogger().debug('🔥 createDiscussionRoom called with title: $title');
+      AppLogger().debug('🔥 Using collection: ${AppwriteConstants.roomsCollection}');
+      
+      // Use discussion_rooms collection (Open Discussion rooms)
       final response = await databases.createDocument(
-        databaseId: 'arena_db',
+        databaseId: AppwriteConstants.databaseId,
         collectionId: AppwriteConstants.roomsCollection,
         documentId: ID.unique(),
         data: {
@@ -866,21 +1024,25 @@ class AppwriteService {
           'type': 'discussion',
           'status': status,
           'createdBy': createdBy,
+          'moderatorId': createdBy,
           'isPublic': !isPrivate,
           'maxParticipants': maxParticipants,
           'participants': [],
-          'moderatorId': createdBy,
-          'settings': '{}',
+          'settings': json.encode({
+            'allowChat': true,
+            'recordSession': false,
+            'moderatorApproval': false,
+          }),
           'tags': tags ?? [],
           'isFeatured': false,
         },
       );
       
-      // Create initial room participant entry for the creator as moderator
+      // Create initial participant entry for the creator as moderator
       await joinRoom(
         roomId: response.$id,
         userId: createdBy,
-        role: 'moderator',
+        role: 'moderator', // Creator becomes moderator of Open Discussion room
       );
       
       return response.$id;
@@ -913,6 +1075,11 @@ class AppwriteService {
         roomData['id'] = doc.$id;
         roomData['createdAt'] = doc.$createdAt;
         
+        // Map 'title' to 'name' for frontend compatibility 
+        if (roomData.containsKey('title') && !roomData.containsKey('name')) {
+          roomData['name'] = roomData['title'];
+        }
+        
         // Parse JSON strings to Maps for Room model compatibility
         if (roomData['settings'] is String) {
           try {
@@ -937,7 +1104,7 @@ class AppwriteService {
         // Get participant count
         final participantsResponse = await databases.listDocuments(
           databaseId: 'arena_db',
-          collectionId: 'room_participants',
+          collectionId: AppwriteConstants.roomParticipantsCollection,
           queries: [
             Query.equal('roomId', doc.$id),
             Query.equal('status', 'joined'),
@@ -1008,7 +1175,7 @@ class AppwriteService {
       // Get participants
       final participantsResponse = await databases.listDocuments(
         databaseId: 'arena_db',
-        collectionId: 'room_participants',
+        collectionId: AppwriteConstants.roomParticipantsCollection,
         queries: [
           Query.equal('roomId', roomId),
           Query.equal('status', 'joined'),
@@ -1035,7 +1202,7 @@ class AppwriteService {
       // Get ALL entries for this user in this room (active or not)
       final allEntries = await databases.listDocuments(
         databaseId: 'arena_db',
-        collectionId: 'room_participants',
+        collectionId: AppwriteConstants.roomParticipantsCollection,
         queries: [
           Query.equal('roomId', roomId),
           Query.equal('userId', userId),
@@ -1046,7 +1213,7 @@ class AppwriteService {
       for (var entry in allEntries.documents) {
         await databases.deleteDocument(
           databaseId: 'arena_db',
-          collectionId: 'room_participants',
+          collectionId: AppwriteConstants.roomParticipantsCollection,
           documentId: entry.$id,
         );
       }
@@ -1065,29 +1232,145 @@ class AppwriteService {
     String role = 'audience',
   }) async {
     try {
+      AppLogger().debug('🏠 JOIN ROOM: Starting joinRoom process...');
+      AppLogger().debug('🏠 JOIN ROOM: roomId=$roomId, userId=$userId, role=$role');
+      AppLogger().debug('🏠 JOIN ROOM: Using collection=${AppwriteConstants.roomParticipantsCollection}');
+      
       // First, clean up any existing entries for this user in this room to prevent duplicates
+      AppLogger().debug('🧹 JOIN ROOM: Starting cleanup of duplicates...');
       await _cleanupOpenDiscussionParticipantDuplicates(roomId, userId);
+      AppLogger().debug('🧹 JOIN ROOM: Cleanup completed');
+      
+      // Get user info for participant record
+      AppLogger().debug('👤 JOIN ROOM: Getting current user info...');
+      final user = await getCurrentUser();
+      AppLogger().debug('👤 JOIN ROOM: User info - name: ${user?.name}, id: ${user?.$id}');
+      
+      final documentData = {
+        'userId': userId,
+        'roomId': roomId,
+        'userName': user?.name ?? 'User',
+        'userAvatar': user?.prefs.data['avatar'],
+        'role': role, // Store role as-is (audience, moderator, speaker)
+        'status': 'joined',
+        'joinedAt': DateTime.now().toIso8601String(),
+        'metadata': '{}',
+      };
+      
+      AppLogger().debug('📄 JOIN ROOM: Document data prepared: $documentData');
+      AppLogger().debug('💾 JOIN ROOM: Creating document in database...');
+      
+      final document = await databases.createDocument(
+        databaseId: 'arena_db',
+        collectionId: AppwriteConstants.roomParticipantsCollection,
+        documentId: ID.unique(),
+        data: documentData,
+      );
+      
+      AppLogger().debug('✅ JOIN ROOM: Document created successfully! ID: ${document.$id}');
+      AppLogger().debug('✅ JOIN ROOM: Final document data: ${document.data}');
+      
+    } catch (e) {
+      AppLogger().debug('❌ JOIN ROOM ERROR: $e');
+      AppLogger().debug('❌ JOIN ROOM ERROR TYPE: ${e.runtimeType}');
+      AppLogger().debug('❌ JOIN ROOM ERROR STACK: ${StackTrace.current}');
+      rethrow;
+    }
+  }
+
+  Future<void> _cleanupDebateDiscussionParticipantDuplicates(String roomId, String userId) async {
+    try {
+      // Get ALL entries for this user in this room (active or not)
+      final allEntries = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('userId', userId),
+        ],
+      );
+      
+      // Delete all existing entries to ensure no duplicates
+      for (var entry in allEntries.documents) {
+        await databases.deleteDocument(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+          documentId: entry.$id,
+        );
+      }
+      
+      if (allEntries.documents.isNotEmpty) {
+        AppLogger().debug('Cleaned up ${allEntries.documents.length} duplicate Debate Discussion entries for user $userId in room $roomId');
+      }
+    } catch (e) {
+      AppLogger().debug('Error cleaning up participant duplicates: $e');
+      // Don't rethrow - this is a cleanup operation
+    }
+  }
+
+  /// Join a debate discussion room (uses debate_discussion_participants collection)
+  Future<void> joinDebateDiscussionRoom({
+    required String roomId,
+    required String userId,
+    String role = 'audience',
+  }) async {
+    try {
+      AppLogger().debug('🚪 DEBUG: joinDebateDiscussionRoom called - roomId: $roomId, userId: $userId, role: $role');
+      AppLogger().debug('🗂️ DEBUG: Target collection: ${AppwriteConstants.debateDiscussionParticipantsCollection}');
+      
+      // First, clean up any existing entries for this user in this room to prevent duplicates
+      await _cleanupDebateDiscussionParticipantDuplicates(roomId, userId);
       
       // Get user info for participant record
       final user = await getCurrentUser();
+      AppLogger().debug('👤 DEBUG: Current user: ${user?.name ?? 'User'}');
       
-      await databases.createDocument(
-        databaseId: 'arena_db',
-        collectionId: 'room_participants',
-        documentId: ID.unique(),
-        data: {
-          'userId': userId,
-          'roomId': roomId,
-          'userName': user?.name ?? 'User',
-          'userAvatar': user?.prefs.data['avatar'],
-          'role': role, // Store role as-is (audience, moderator, speaker)
-          'status': 'joined',
-          'joinedAt': DateTime.now().toIso8601String(),
-          'metadata': '{}',
-        },
-      );
+      // Ensure avatar is never null - default to empty string
+      try {
+        // Avatar URL retrieved but not used in current implementation
+        user?.prefs.data['avatar'] ?? '';
+      } catch (e) {
+        AppLogger().debug('Warning: Could not get avatar from user prefs: $e');
+      }
+      
+      final documentData = {
+        'userId': userId,
+        'roomId': roomId,
+        'role': role, // Store role as-is (audience, moderator, speaker)
+        'status': 'joined',
+        'joinedAt': DateTime.now().toIso8601String(),
+        'lastActiveAt': DateTime.now().toIso8601String(), // Required field for collection schema
+      };
+      
+      AppLogger().debug('📄 DEBUG: Creating document with data: $documentData');
+      
+      try {
+        final createdDoc = await databases.createDocument(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+          documentId: ID.unique(),
+          data: documentData,
+        );
+
+        AppLogger().debug('✅ DEBUG: Document created successfully with ID: ${createdDoc.$id}');
+        AppLogger().debug('User $userId joined debate discussion room $roomId with role $role');
+      } catch (e) {
+        AppLogger().error('❌ DETAILED ERROR in joinDebateDiscussionRoom:');
+        AppLogger().error('   Error type: ${e.runtimeType}');
+        AppLogger().error('   Error message: $e');
+        AppLogger().error('   Document data attempted: ${documentData.toString()}');
+        AppLogger().error('   Database ID: ${AppwriteConstants.databaseId}');
+        AppLogger().error('   Collection ID: ${AppwriteConstants.debateDiscussionParticipantsCollection}');
+        
+        // Try to extract more details from AppwriteException
+        if (e.toString().contains('AppwriteException')) {
+          AppLogger().error('   This appears to be an AppwriteException - check Appwrite console for collection schema requirements');
+        }
+        
+        rethrow;
+      }
     } catch (e) {
-      AppLogger().debug('Error joining room: $e');
+      AppLogger().error('❌ ERROR in joinDebateDiscussionRoom outer catch: $e');
       rethrow;
     }
   }
@@ -1115,7 +1398,7 @@ class AppwriteService {
     try {
       final participants = await databases.listDocuments(
         databaseId: 'arena_db',
-        collectionId: 'room_participants',
+        collectionId: AppwriteConstants.roomParticipantsCollection,
         queries: [
           Query.equal('roomId', roomId),
           Query.equal('userId', userId),
@@ -1126,7 +1409,7 @@ class AppwriteService {
       if (participants.documents.isNotEmpty) {
         await databases.updateDocument(
           databaseId: 'arena_db',
-          collectionId: 'room_participants',
+          collectionId: AppwriteConstants.roomParticipantsCollection,
           documentId: participants.documents.first.$id,
           data: {
             'role': newRole, // Store role as-is (audience, moderator, speaker)
@@ -1148,7 +1431,7 @@ class AppwriteService {
     try {
       final participants = await databases.listDocuments(
         databaseId: 'arena_db',
-        collectionId: 'room_participants',
+        collectionId: AppwriteConstants.roomParticipantsCollection,
         queries: [
           Query.equal('roomId', roomId),
           Query.equal('userId', userId),
@@ -1184,7 +1467,7 @@ class AppwriteService {
         
         await databases.updateDocument(
           databaseId: 'arena_db',
-          collectionId: 'room_participants',
+          collectionId: AppwriteConstants.roomParticipantsCollection,
           documentId: participants.documents.first.$id,
           data: {
             'metadata': metadataJson,
@@ -1205,7 +1488,7 @@ class AppwriteService {
     try {
       final participants = await databases.listDocuments(
         databaseId: 'arena_db',
-        collectionId: 'room_participants',
+        collectionId: AppwriteConstants.roomParticipantsCollection,
         queries: [
           Query.equal('roomId', roomId),
           Query.equal('userId', userId),
@@ -1583,11 +1866,7 @@ class AppwriteService {
         ],
       );
 
-      return challenges.documents.map((doc) {
-        final challengeData = Map<String, dynamic>.from(doc.data);
-        challengeData['id'] = doc.$id;
-        return challengeData;
-      }).toList().cast<Map<String, dynamic>>();
+      return challenges.documents.map((doc) => _safeDocumentToMap(doc)).toList();
     } catch (e) {
       AppLogger().error('Error getting user challenges: $e');
       return [];
@@ -1606,11 +1885,7 @@ class AppwriteService {
         ],
       );
 
-      return notifications.documents.map((doc) {
-        final notificationData = Map<String, dynamic>.from(doc.data);
-        notificationData['id'] = doc.$id;
-        return notificationData;
-      }).toList().cast<Map<String, dynamic>>();
+      return notifications.documents.map((doc) => _safeDocumentToMap(doc)).toList();
     } catch (e) {
       AppLogger().error('Error getting user arena role notifications: $e');
       return [];
@@ -1630,12 +1905,17 @@ class AppwriteService {
     DateTime? scheduledDate,
   }) async {
     try {
+      // Debug: Log the name being sent
+      AppLogger().debug('🔥 Creating room with name: "$name"');
+      AppLogger().debug('🔥 Name length: ${name.length}');
+      AppLogger().debug('🔥 Name is empty: ${name.isEmpty}');
+      
       final response = await databases.createDocument(
         databaseId: AppwriteConstants.databaseId,
         collectionId: AppwriteConstants.debateDiscussionRoomsCollection,
         documentId: ID.unique(),
         data: {
-          'name': name,
+          'name': name, // Back to 'name' field since that's what the collection has
           'description': description,
           'category': category,
           'debateStyle': debateStyle,
@@ -1643,10 +1923,10 @@ class AppwriteService {
           'moderatorId': createdBy,
           'status': isScheduled ? 'scheduled' : 'active',
           'isPrivate': isPrivate,
-          'password': password,
+          'password': password ?? '',
           'isScheduled': isScheduled,
           'scheduledDate': scheduledDate?.toIso8601String(),
-          'maxParticipants': 999999, // Effectively unlimited
+          'maxParticipants': 999999,
           'settings': json.encode({
             'allowChat': true,
             'recordSession': false,
@@ -1666,7 +1946,11 @@ class AppwriteService {
       AppLogger().debug('Created debate discussion room: ${response.$id}');
       return response.$id;
     } catch (e) {
-      AppLogger().error('Error creating debate discussion room: $e');
+      AppLogger().error('🚨 FULL ERROR creating debate discussion room: $e');
+      AppLogger().error('🚨 ERROR TYPE: ${e.runtimeType}');
+      if (e.toString().contains('AppwriteException')) {
+        AppLogger().error('🚨 This is an AppwriteException - check collection permissions and schema');
+      }
       rethrow;
     }
   }
@@ -1690,6 +1974,11 @@ class AppwriteService {
         roomData['id'] = doc.$id;
         roomData['createdAt'] = doc.$createdAt;
         
+        // Map 'name' field to 'title' for consistency with frontend expectations
+        if (roomData.containsKey('name') && !roomData.containsKey('title')) {
+          roomData['title'] = roomData['name'];
+        }
+        
         // Parse settings JSON
         if (roomData['settings'] is String) {
           try {
@@ -1702,7 +1991,7 @@ class AppwriteService {
         // Get participant count
         final participantsResponse = await databases.listDocuments(
           databaseId: AppwriteConstants.databaseId,
-          collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+          collectionId: AppwriteConstants.roomParticipantsCollection,
           queries: [
             Query.equal('roomId', doc.$id),
             Query.equal('status', 'joined'),
@@ -1710,6 +1999,16 @@ class AppwriteService {
         );
         
         roomData['participantCount'] = participantsResponse.documents.length;
+        
+        // Add participants array for compatibility with frontend
+        roomData['participants'] = participantsResponse.documents.map((p) => p.data['userId']).toList();
+        
+        // Map category to tags array for frontend compatibility
+        if (roomData.containsKey('category') && !roomData.containsKey('tags')) {
+          roomData['tags'] = [roomData['category']];
+        } else if (!roomData.containsKey('tags')) {
+          roomData['tags'] = [];
+        }
         
         // Get moderator profile
         try {
@@ -1731,6 +2030,90 @@ class AppwriteService {
       return roomsWithDetails;
     } catch (e) {
       AppLogger().error('Error getting debate discussion rooms: $e');
+      rethrow;
+    }
+  }
+
+  /// Paginated version of getDebateDiscussionRooms
+  Future<List<Map<String, dynamic>>> getDebateDiscussionRoomsPaginated({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final response = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionRoomsCollection,
+        queries: [
+          Query.equal('status', ['active', 'scheduled']),
+          Query.limit(limit),
+          Query.offset(offset),
+          Query.orderDesc('\$createdAt'),
+        ],
+      );
+      
+      // For each room, get participant count and moderator profile
+      List<Map<String, dynamic>> roomsWithDetails = [];
+      for (var doc in response.documents) {
+        final roomData = Map<String, dynamic>.from(doc.data);
+        roomData['id'] = doc.$id;
+        roomData['createdAt'] = doc.$createdAt;
+        
+        // Map 'name' field to 'title' for consistency with frontend expectations
+        if (roomData.containsKey('name') && !roomData.containsKey('title')) {
+          roomData['title'] = roomData['name'];
+        }
+        
+        // Parse settings JSON
+        if (roomData['settings'] is String) {
+          try {
+            roomData['settings'] = json.decode(roomData['settings']);
+          } catch (e) {
+            roomData['settings'] = {};
+          }
+        }
+        
+        // Get participant count
+        final participantsResponse = await databases.listDocuments(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: AppwriteConstants.roomParticipantsCollection,
+          queries: [
+            Query.equal('roomId', doc.$id),
+            Query.equal('status', 'joined'),
+          ],
+        );
+        
+        roomData['participantCount'] = participantsResponse.documents.length;
+        
+        // Add participants array for compatibility with frontend
+        roomData['participants'] = participantsResponse.documents.map((p) => p.data['userId']).toList();
+        
+        // Map category to tags array for frontend compatibility
+        if (roomData.containsKey('category') && !roomData.containsKey('tags')) {
+          roomData['tags'] = [roomData['category']];
+        } else if (!roomData.containsKey('tags')) {
+          roomData['tags'] = [];
+        }
+        
+        // Get moderator profile
+        try {
+          final moderatorProfile = await getUserProfile(roomData['createdBy']);
+          if (moderatorProfile != null) {
+            roomData['moderatorProfile'] = {
+              'name': moderatorProfile.name,
+              'avatar': moderatorProfile.avatar,
+              'email': moderatorProfile.email,
+            };
+          }
+        } catch (e) {
+          AppLogger().debug('Error getting moderator profile for room ${doc.$id}: $e');
+        }
+        
+        roomsWithDetails.add(roomData);
+      }
+      
+      return roomsWithDetails;
+    } catch (e) {
+      AppLogger().error('Error getting paginated debate discussion rooms: $e');
       rethrow;
     }
   }
@@ -1807,36 +2190,6 @@ class AppwriteService {
     }
   }
 
-  Future<void> joinDebateDiscussionRoom({
-    required String roomId,
-    required String userId,
-    String role = 'participant',
-  }) async {
-    try {
-      // First, clean up any existing entries for this user in this room to prevent duplicates
-      await _cleanupDebateDiscussionParticipantDuplicates(roomId, userId);
-      
-      // Now create the new entry
-      await databases.createDocument(
-        databaseId: AppwriteConstants.databaseId,
-        collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
-        documentId: ID.unique(),
-        data: {
-          'roomId': roomId,
-          'userId': userId,
-          'role': role,
-          'status': 'joined',
-          'joinedAt': DateTime.now().toIso8601String(),
-          'lastActiveAt': DateTime.now().toIso8601String(),
-        },
-      );
-      
-      AppLogger().debug('User $userId joined debate discussion room $roomId as $role (duplicates cleaned)');
-    } catch (e) {
-      AppLogger().error('Error joining debate discussion room: $e');
-      rethrow;
-    }
-  }
 
   Future<void> leaveDebateDiscussionRoom({
     required String roomId,
@@ -1855,6 +2208,9 @@ class AppwriteService {
 
   Future<List<Map<String, dynamic>>> getDebateDiscussionParticipants(String roomId) async {
     try {
+      AppLogger().debug('🔍 DEBUG: getDebateDiscussionParticipants called for roomId: $roomId');
+      AppLogger().debug('🗂️ DEBUG: Querying collection: ${AppwriteConstants.debateDiscussionParticipantsCollection}');
+      
       final participants = await databases.listDocuments(
         databaseId: AppwriteConstants.databaseId,
         collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
@@ -1865,19 +2221,27 @@ class AppwriteService {
         ],
       );
       
+      AppLogger().debug('📊 DEBUG: Found ${participants.documents.length} participants in collection');
+      
       List<Map<String, dynamic>> participantsList = [];
+      
+      // OPTIMIZATION: Batch load all user profiles at once instead of N+1 queries
+      final userIds = participants.documents.map((p) => p.data['userId'] as String).toSet().toList();
+      AppLogger().debug('🚀 BATCH LOADING: ${userIds.length} user profiles for ${participants.documents.length} participants');
+      
+      final userProfilesMap = await _batchGetUserProfiles(userIds);
+      
       for (var participant in participants.documents) {
         final participantData = Map<String, dynamic>.from(participant.data);
         participantData['id'] = participant.$id;
         
-        // Get user profile for each participant
-        try {
-          final userProfile = await getUserProfile(participantData['userId']);
-          if (userProfile != null) {
-            participantData['userProfile'] = userProfile.toMap();
-          }
-        } catch (e) {
-          AppLogger().warning('Could not load user profile for participant: $e');
+        // Get user profile from batch-loaded data
+        final userId = participantData['userId'] as String;
+        final userProfile = userProfilesMap[userId];
+        if (userProfile != null) {
+          participantData['userProfile'] = userProfile;
+        } else {
+          AppLogger().warning('User profile not found in batch for participant: $userId');
         }
         
         participantsList.add(participantData);
@@ -1890,35 +2254,164 @@ class AppwriteService {
     }
   }
 
-  /// Clean up duplicate entries for a user in a debate discussion room
-  Future<void> _cleanupDebateDiscussionParticipantDuplicates(String roomId, String userId) async {
+  Future<List<Map<String, dynamic>>> getDiscussionRoomParticipants(String roomId) async {
     try {
-      // Get ALL entries for this user in this room (active or not)
-      final allEntries = await databases.listDocuments(
+      AppLogger().debug('🔍 DEBUG: getDiscussionRoomParticipants called for roomId: $roomId');
+      AppLogger().debug('🗂️ DEBUG: Querying collection: ${AppwriteConstants.roomParticipantsCollection}');
+      
+      final participants = await databases.listDocuments(
         databaseId: AppwriteConstants.databaseId,
-        collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+        collectionId: AppwriteConstants.roomParticipantsCollection,
         queries: [
           Query.equal('roomId', roomId),
-          Query.equal('userId', userId),
+          Query.equal('status', 'joined'),
+          Query.orderDesc('\$createdAt'),
         ],
       );
       
-      // Delete all existing entries to ensure no duplicates
-      for (var entry in allEntries.documents) {
-        await databases.deleteDocument(
-          databaseId: AppwriteConstants.databaseId,
-          collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
-          documentId: entry.$id,
-        );
+      AppLogger().debug('📊 DEBUG: Found ${participants.documents.length} participants in collection');
+      
+      List<Map<String, dynamic>> participantsList = [];
+      
+      // OPTIMIZATION: Batch load all user profiles at once instead of N+1 queries
+      final userIds = participants.documents.map((p) => p.data['userId'] as String).toSet().toList();
+      AppLogger().debug('🚀 BATCH LOADING: ${userIds.length} user profiles for ${participants.documents.length} participants');
+      
+      final userProfilesMap = await _batchGetUserProfiles(userIds);
+      
+      for (var participant in participants.documents) {
+        final participantData = Map<String, dynamic>.from(participant.data);
+        participantData['id'] = participant.$id;
+        
+        // Get user profile from batch-loaded data
+        final userProfile = userProfilesMap[participantData['userId']];
+        if (userProfile != null) {
+          participantData['userProfile'] = userProfile;
+        }
+        
+        participantsList.add(participantData);
       }
       
-      if (allEntries.documents.isNotEmpty) {
-        AppLogger().debug('Cleaned up ${allEntries.documents.length} duplicate debate discussion entries for user $userId in room $roomId');
-      }
+      return participantsList;
     } catch (e) {
-      AppLogger().error('Error cleaning up debate discussion participant duplicates: $e');
+      AppLogger().error('Error getting discussion room participants: $e');
+      return [];
     }
   }
+
+  /// ONE-TIME CLEANUP: Remove incorrectly stored Open Discussion rooms and participants
+  Future<void> cleanupIncorrectOpenDiscussionData() async {
+    try {
+      AppLogger().debug('🧹 CLEANUP: Starting cleanup of incorrect Open Discussion data');
+      
+      // Step 1: Find Open Discussion rooms in wrong collection (debate_discussion_rooms)
+      final wrongRooms = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionRoomsCollection,
+        queries: [
+          Query.equal('debateStyle', 'Open Discussion'),
+        ],
+      );
+      
+      AppLogger().debug('🔍 Found ${wrongRooms.documents.length} Open Discussion rooms in wrong collection');
+      
+      if (wrongRooms.documents.isEmpty) {
+        AppLogger().debug('✅ No incorrect Open Discussion rooms found - cleanup not needed');
+        return;
+      }
+      
+      // Step 2: Delete participants for these rooms
+      int totalParticipantsDeleted = 0;
+      for (var room in wrongRooms.documents) {
+        final participants = await databases.listDocuments(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: AppwriteConstants.roomParticipantsCollection,
+          queries: [
+            Query.equal('roomId', room.$id),
+          ],
+        );
+        
+        AppLogger().debug('🗑️ Deleting ${participants.documents.length} participants for room: ${room.data['name']}');
+        
+        for (var participant in participants.documents) {
+          try {
+            await databases.deleteDocument(
+              databaseId: AppwriteConstants.databaseId,
+              collectionId: AppwriteConstants.roomParticipantsCollection,
+              documentId: participant.$id,
+            );
+            totalParticipantsDeleted++;
+          } catch (e) {
+            AppLogger().error('❌ Failed to delete participant ${participant.$id}: $e');
+          }
+        }
+      }
+      
+      // Step 3: Delete the rooms themselves
+      int roomsDeleted = 0;
+      for (var room in wrongRooms.documents) {
+        try {
+          await databases.deleteDocument(
+            databaseId: AppwriteConstants.databaseId,
+            collectionId: AppwriteConstants.debateDiscussionRoomsCollection,
+            documentId: room.$id,
+          );
+          AppLogger().debug('✅ Deleted room: ${room.data['name']}');
+          roomsDeleted++;
+        } catch (e) {
+          AppLogger().error('❌ Failed to delete room ${room.data['name']}: $e');
+        }
+      }
+      
+      AppLogger().debug('🎉 CLEANUP COMPLETE: Deleted $roomsDeleted rooms and $totalParticipantsDeleted participants');
+      AppLogger().debug('💡 New Open Discussion rooms will now use the correct collections');
+      
+    } catch (e) {
+      AppLogger().error('❌ Error during cleanup: $e');
+    }
+  }
+
+  /// Batch load multiple user profiles for optimal performance
+  Future<Map<String, Map<String, dynamic>>> _batchGetUserProfiles(List<String> userIds) async {
+    if (userIds.isEmpty) return {};
+    
+    try {
+      AppLogger().debug('🚀 APPWRITE OPTIMIZATION: Batch loading ${userIds.length} user profiles');
+      
+      // Since Appwrite doesn't support batch document loading by ID list directly,
+      // we'll load individual profiles but with better caching and concurrency
+      final userProfilesMap = <String, Map<String, dynamic>>{};
+      
+      // Use Future.wait for concurrent loading instead of sequential
+      final futures = userIds.map((userId) async {
+        try {
+          final userProfile = await getUserProfile(userId);
+          if (userProfile != null) {
+            return MapEntry(userId, userProfile.toMap());
+          }
+        } catch (e) {
+          AppLogger().warning('Failed to load profile: $userId - $e');
+        }
+        return null;
+      });
+      
+      final results = await Future.wait(futures);
+      
+      for (final result in results) {
+        if (result != null) {
+          userProfilesMap[result.key] = result.value;
+        }
+      }
+      
+      AppLogger().debug('✅ CONCURRENT SUCCESS: Loaded ${userProfilesMap.length}/${userIds.length} user profiles concurrently');
+      return userProfilesMap;
+      
+    } catch (e) {
+      AppLogger().error('Error in batch user profile loading: $e');
+      return {};
+    }
+  }
+
 
   Future<void> updateDebateDiscussionParticipantRole({
     required String roomId,
@@ -1951,6 +2444,42 @@ class AppwriteService {
       }
     } catch (e) {
       AppLogger().error('Error updating participant role: $e');
+      rethrow;
+    }
+  }
+
+  /// Update room participant role (for open discussion rooms)
+  Future<void> updateRoomParticipantRole({
+    required String roomId,
+    required String userId,
+    required String newRole,
+  }) async {
+    try {
+      final participants = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.roomParticipantsCollection,
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('userId', userId),
+          Query.equal('status', 'joined'),
+        ],
+      );
+      
+      if (participants.documents.isNotEmpty) {
+        await databases.updateDocument(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: AppwriteConstants.roomParticipantsCollection,
+          documentId: participants.documents.first.$id,
+          data: {
+            'role': newRole,
+            'lastActiveAt': DateTime.now().toIso8601String(),
+          },
+        );
+        
+        AppLogger().debug('Updated room participant $userId role to $newRole in room $roomId');
+      }
+    } catch (e) {
+      AppLogger().error('Error updating room participant role: $e');
       rethrow;
     }
   }
@@ -2761,12 +3290,20 @@ class AppwriteService {
       );
 
       return response.documents.map((doc) {
-        final roomData = Map<String, dynamic>.from(doc.data);
-        roomData['id'] = doc.$id;
-        roomData['createdAt'] = doc.$createdAt;
-        roomData['updatedAt'] = doc.$updatedAt;
-        return roomData;
-      }).toList().cast<Map<String, dynamic>>();
+        try {
+          return _safeDocumentToMap(doc);
+        } catch (e) {
+          AppLogger().warning('Error processing arena room document ${doc.$id}: $e');
+          // Return minimal safe data
+          return <String, dynamic>{
+            'id': doc.$id,
+            'createdAt': doc.$createdAt,
+            'updatedAt': doc.$updatedAt,
+            'title': 'Unknown Room',
+            'status': 'active',
+          };
+        }
+      }).toList();
     } catch (e) {
       AppLogger().error('Error getting active arena rooms: $e');
       return [];
@@ -2934,14 +3471,16 @@ class AppwriteService {
       AppLogger().info('🔍 AppwriteService: Found ${response.documents.length} users from database');
       
       var users = response.documents.map((doc) {
-        final userData = Map<String, dynamic>.from(doc.data);
-        userData['id'] = doc.$id;
-        userData['createdAt'] = doc.$createdAt;
-        userData['updatedAt'] = doc.$updatedAt;
-        final userProfile = UserProfile.fromMap(userData);
-        AppLogger().debug('🔍 User found: ${userProfile.name} (${userProfile.id})');
-        return userProfile;
-      }).toList();
+        try {
+          final userData = _safeDocumentToMap(doc);
+          final userProfile = UserProfile.fromMap(userData);
+          AppLogger().debug('🔍 User found: ${userProfile.name} (${userProfile.id})');
+          return userProfile;
+        } catch (e) {
+          AppLogger().warning('Error processing user document ${doc.$id}: $e');
+          return null;
+        }
+      }).where((user) => user != null).cast<UserProfile>().toList();
       
       // If we had to fall back to listing all users, filter manually
       if (needsManualFilter && users.isNotEmpty) {
@@ -2993,6 +3532,46 @@ class AppwriteService {
       
     } catch (e) {
       AppLogger().error('🔧 DEBUG: Error in debug search: $e');
+    }
+  }
+
+  /// Safely convert Appwrite document data to Map with proper null handling
+  static Map<String, dynamic> _safeDocumentToMap(models.Document doc, {Map<String, dynamic>? additionalData}) {
+    try {
+      AppLogger().debug('🔧 _safeDocumentToMap processing document: ${doc.$id}');
+      final result = <String, dynamic>{};
+      
+      // Safely copy document data
+      if (doc.data.isNotEmpty) {
+        AppLogger().debug('🔧 Document data keys: ${doc.data.keys.toList()}');
+        doc.data.forEach((key, value) {
+          AppLogger().debug('🔧 Processing field "$key": $value (${value.runtimeType})');
+          result[key] = value; // Let null values pass through naturally
+        });
+      }
+      
+      // Add standard document fields
+      result['id'] = doc.$id;
+      result['createdAt'] = doc.$createdAt;
+      result['updatedAt'] = doc.$updatedAt;
+      
+      // Add any additional data
+      if (additionalData != null) {
+        additionalData.forEach((key, value) {
+          result[key] = value;
+        });
+      }
+      
+      return result;
+    } catch (e) {
+      AppLogger().warning('Error safely converting document ${doc.$id}: $e');
+      // Return minimal safe data
+      return {
+        'id': doc.$id,
+        'createdAt': doc.$createdAt,
+        'updatedAt': doc.$updatedAt,
+        ...?additionalData,
+      };
     }
   }
 
@@ -3721,10 +4300,7 @@ class AppwriteService {
       List<Map<String, dynamic>> joinableRooms = [];
       
       for (var doc in response.documents) {
-        final roomData = Map<String, dynamic>.from(doc.data);
-        roomData['id'] = doc.$id;
-        roomData['createdAt'] = doc.$createdAt;
-        roomData['updatedAt'] = doc.$updatedAt;
+        final roomData = _safeDocumentToMap(doc);
 
         // Only include manual rooms (empty challengeId indicates manual room)
         final challengeId = doc.data['challengeId'] ?? '';
@@ -3743,7 +4319,7 @@ class AppwriteService {
         );
 
         roomData['currentParticipants'] = participants.documents.length;
-        roomData['participants'] = participants.documents.map((p) => Map<String, dynamic>.from(p.data)).toList().cast<Map<String, dynamic>>();
+        roomData['participants'] = participants.documents.map((p) => _safeDocumentToMap(p)).toList();
         
         // Only include rooms that aren't full (using default max of 8 since field doesn't exist)
         const maxParticipants = 1000; // Allow unlimited participants
@@ -3827,7 +4403,7 @@ class AppwriteService {
         // Get active participants for this room
         final participants = await databases.listDocuments(
           databaseId: 'arena_db',
-          collectionId: 'room_participants',
+          collectionId: AppwriteConstants.roomParticipantsCollection,
           queries: [
             Query.equal('roomId', roomId),
             Query.equal('status', 'joined'),
@@ -3865,7 +4441,7 @@ class AppwriteService {
           for (final participant in participants.documents) {
             await databases.updateDocument(
               databaseId: 'arena_db',
-              collectionId: 'room_participants',
+              collectionId: AppwriteConstants.roomParticipantsCollection,
               documentId: participant.$id,
               data: {
                 'status': 'left',
@@ -3926,7 +4502,7 @@ class AppwriteService {
           // Get ALL participants for this room
           final allParticipants = await databases.listDocuments(
             databaseId: 'arena_db',
-            collectionId: 'room_participants',
+            collectionId: AppwriteConstants.roomParticipantsCollection,
             queries: [
               Query.equal('roomId', roomId),
             ],
@@ -3936,7 +4512,7 @@ class AppwriteService {
           for (final participant in allParticipants.documents) {
             await databases.updateDocument(
               databaseId: 'arena_db',
-              collectionId: 'room_participants',
+              collectionId: AppwriteConstants.roomParticipantsCollection,
               documentId: participant.$id,
               data: {
                 'status': 'left',
@@ -4007,7 +4583,7 @@ class AppwriteService {
           // Get ALL participants for this room
           final allParticipants = await databases.listDocuments(
             databaseId: 'arena_db',
-            collectionId: 'room_participants',
+            collectionId: AppwriteConstants.roomParticipantsCollection,
             queries: [
               Query.equal('roomId', roomId),
             ],
@@ -4018,7 +4594,7 @@ class AppwriteService {
             if (participant.data['status'] != 'left') {
               await databases.updateDocument(
                 databaseId: 'arena_db',
-                collectionId: 'room_participants',
+                collectionId: AppwriteConstants.roomParticipantsCollection,
                 documentId: participant.$id,
                 data: {
                   'status': 'left',

@@ -601,15 +601,25 @@ class _RoleBadge extends StatelessWidget {
 class PerformanceOptimizedSpeakersPanel extends StatefulWidget {
   final List<Map<String, dynamic>> speakers;
   final Map<String, dynamic>? moderator;
+  final List<Map<String, dynamic>>? audience; // New parameter for audience
+  final List<Map<String, dynamic>>? speakerRequests; // New parameter for speaker requests
   final Function(String userId)? onSpeakerTap;
+  final Function(String userId)? onAudienceTap; // New parameter for audience tap
+  final Function(String userId)? onSpeakerRequestApprove; // New parameter for approving speaker requests
   final String? debateStyle; // New parameter for debate style
+  final bool isCurrentUserModerator; // New parameter to know if current user is moderator
   
   const PerformanceOptimizedSpeakersPanel({
     super.key,
     required this.speakers,
     this.moderator,
+    this.audience,
+    this.speakerRequests,
     this.onSpeakerTap,
+    this.onAudienceTap,
+    this.onSpeakerRequestApprove,
     this.debateStyle,
+    this.isCurrentUserModerator = false,
   });
 
   @override
@@ -880,6 +890,86 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
                 isDebateLayout: isDebateLayout || isTakeLayout,
               ),
             ),
+          
+          // Speaker requests section (only for moderator)
+          if (widget.isCurrentUserModerator && widget.speakerRequests != null && widget.speakerRequests!.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            
+            Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Speaker Requests:',
+                    style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  ...(widget.speakerRequests!.map((request) => 
+                    Row(
+                      children: [
+                        Text(
+                          request['name'] ?? 'Unknown',
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () => widget.onSpeakerRequestApprove?.call(request['userId'] ?? ''),
+                          child: const Text('Approve', style: TextStyle(color: Colors.green, fontSize: 10)),
+                        ),
+                      ],
+                    ),
+                  )),
+                ],
+              ),
+            ),
+          ],
+          
+          // Audience section below moderator
+          if (widget.audience != null && widget.audience!.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            
+            // Audience header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.group,
+                    color: Colors.white,
+                    size: 14,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Audience (${widget.audience!.length})',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 8),
+            
+            // Audience grid
+            SizedBox(
+              height: 120, // Fixed height for audience section
+              child: PerformanceOptimizedAudienceGrid(
+                participants: widget.audience!,
+                onParticipantTap: widget.onAudienceTap,
+                debugLabel: 'SpeakerPanelAudience',
+              ),
+            ),
+          ],
         ],
       ),
     );

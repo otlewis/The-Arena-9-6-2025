@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart' hide ConnectionState;
 import 'package:livekit_client/livekit_client.dart';
 import '../core/logging/app_logger.dart';
 import 'livekit_token_service.dart';
+import 'livekit_config_service.dart';
 
 /// Persistent Audio Service - Maintains single LiveKit connection across all room types
 /// 
@@ -237,24 +238,24 @@ class PersistentAudioService extends ChangeNotifier {
           // Add comprehensive ICE server configuration
           rtcConfiguration: RTCConfiguration(
             iceServers: [
-              // Google STUN servers for better NAT traversal
-              RTCIceServer(urls: ['stun:stun.l.google.com:19302']),
-              RTCIceServer(urls: ['stun:stun1.l.google.com:19302']),
-              // Free TURN server from OpenRelay (Metered) - helps with strict NAT
+              // TCP TURN first - more reliable through firewalls
               RTCIceServer(
-                urls: [
-                  'turn:a.relay.metered.ca:80',
-                  'turn:a.relay.metered.ca:80?transport=tcp',
-                  'turn:a.relay.metered.ca:443',
-                  'turn:a.relay.metered.ca:443?transport=tcp',
-                ],
-                username: 'e8dd65c92c1036ee0365f24e',
-                credential: 'BXDGfnKgHqR6e0kF',
+                urls: ['turn:openrelay.metered.ca:443?transport=tcp'],
+                username: 'openrelayproject',
+                credential: 'openrelayproject',
               ),
+              // UDP TURN for performance
+              RTCIceServer(
+                urls: ['turn:openrelay.metered.ca:80'],
+                username: 'openrelayproject',
+                credential: 'openrelayproject',
+              ),
+              // STUN as fallback
+              RTCIceServer(urls: ['stun:stun.l.google.com:19302']),
             ],
             iceTransportPolicy: RTCIceTransportPolicy.all,
-            // Add ICE candidate pooling for faster connections
-            iceCandidatePoolSize: 10,
+            // On-demand ICE gathering for faster connection
+            iceCandidatePoolSize: 0,
           ),
         );
         
@@ -324,7 +325,7 @@ class PersistentAudioService extends ChangeNotifier {
   /// Call this once on app startup
   Future<void> initialize({
     required String userId,
-    String serverUrl = 'ws://172.236.109.9:7880', // Match actual server
+    String? serverUrl, // Optional override, uses config service by default
     String? roomName, // Optional specific room to connect to
   }) async {
     if (_isInitialized || _isDisposed) return;
@@ -380,9 +381,10 @@ class PersistentAudioService extends ChangeNotifier {
       // Set up event listeners
       _setupEventListeners();
       
-      // Connect to the room with enhanced connectivity options
+      // Connect to the room with enhanced connectivity options  
+      final effectiveServerUrl = serverUrl ?? LiveKitConfigService.instance.effectiveServerUrl;
       await _connectWithRetry(
-        serverUrl: serverUrl,
+        serverUrl: effectiveServerUrl,
         token: token,
         roomName: connectionDisplayName,
         maxRetries: 3,
@@ -459,7 +461,7 @@ class PersistentAudioService extends ChangeNotifier {
       
       // For room switches, we need to reconnect to the actual room
       // This is still much faster than a cold start because our connection is ready
-      const currentServerUrl = 'ws://172.236.109.9:7880'; // Use consistent server URL
+      final currentServerUrl = LiveKitConfigService.instance.effectiveServerUrl;
       
       AppLogger().info('🔄 PERSISTENT AUDIO: Switching to different room, reconnecting...');
       

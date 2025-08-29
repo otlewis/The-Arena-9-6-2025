@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:appwrite/appwrite.dart';
@@ -75,7 +76,7 @@ class _RoomChatPanelState extends ConsumerState<RoomChatPanel> {
         _scrollToBottom();
       }
     } catch (e) {
-      debugPrint('Error loading messages: $e');
+      AppLogger().debug('Error loading messages: $e');
       if (mounted) {
         setState(() {
           _isLoadingMessages = false;
@@ -113,7 +114,7 @@ class _RoomChatPanelState extends ConsumerState<RoomChatPanel> {
         }
       });
     } catch (e) {
-      debugPrint('Error setting up realtime updates: $e');
+      AppLogger().debug('Error setting up realtime updates: $e');
     }
   }
 
@@ -147,7 +148,7 @@ class _RoomChatPanelState extends ConsumerState<RoomChatPanel> {
       
       return avatarUrl;
     } catch (e) {
-      debugPrint('Error fetching avatar for user $userId: $e');
+      AppLogger().debug('Error fetching avatar for user $userId: $e');
       _userAvatars[userId] = null; // Cache null result to avoid repeated calls
       return null;
     }

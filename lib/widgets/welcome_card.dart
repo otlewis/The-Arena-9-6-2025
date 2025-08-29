@@ -76,9 +76,16 @@ class WelcomeCard extends StatelessWidget {
       children: [
         _buildStatBox(context, 'Wins', profile?.totalWins ?? 0, isDarkMode),
         _buildStatBox(context, 'Debates', profile?.totalDebates ?? 0, isDarkMode),
-        _buildStatBox(context, 'Rank', (profile?.reputation != null ? (profile!.reputation / 100).toStringAsFixed(1) : '0.0'), isDarkMode),
+        _buildStatBox(context, 'Rank', _calculateRank(profile), isDarkMode),
       ],
     );
+  }
+
+  String _calculateRank(UserProfile? profile) {
+    if (profile?.reputation == null) return '0.0';
+    final reputation = profile!.reputation;
+    if (reputation == 0) return '0.0';
+    return (reputation / 100).toStringAsFixed(1);
   }
 
   Widget _buildStatBox(BuildContext context, String label, dynamic value, bool isDarkMode) {

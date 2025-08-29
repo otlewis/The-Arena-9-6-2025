@@ -206,9 +206,11 @@ class ArenaHelpers {
     return (rowCount * (ArenaConstants.audienceGridHeight / 2)).clamp(70.0, ArenaConstants.audienceGridHeight);
   }
   
-  /// Determines if device is in landscape mode
+  /// Note: App is locked to portrait orientation
+  /// This method is deprecated and always returns false
+  @Deprecated('App is now locked to portrait orientation. This method always returns false.')
   static bool isLandscape(BuildContext context) {
-    return MediaQuery.of(context).orientation == Orientation.landscape;
+    return false; // App is locked to portrait
   }
   
   /// Gets appropriate font size based on screen size

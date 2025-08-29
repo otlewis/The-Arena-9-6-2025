@@ -19,8 +19,12 @@ class AppwriteConstants {
   static const String judgesCollection = "judges";
   static const String pingRequestsCollection = "ping_requests";
   static const String moderatorJudgeRatingsCollection = "moderator_judge_ratings";
+  static const String roomHandRaisesCollection = "room_hand_raises";
+  static const String roomSlideStateCollection = "room_slide_state";
+  static const String sharedSourcesCollection = "shared_sources";
 
   
   // Bucket IDs
   static const String profileImagesBucket = "profile_images";
+  static const String debateSlidesBucket = "debate_slides";
 } 

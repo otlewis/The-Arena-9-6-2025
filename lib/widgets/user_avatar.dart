@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'speaking_indicator.dart';
+import 'super_mod_badge.dart';
 
 class UserAvatar extends StatelessWidget {
   final String? avatarUrl;
@@ -103,6 +104,7 @@ class UserAvatarStatus extends StatelessWidget {
   final bool isSpeaking;
   final bool isMuted;
   final String? userRole;
+  final String? userId;
   final VoidCallback? onTap;
 
   const UserAvatarStatus({
@@ -114,6 +116,7 @@ class UserAvatarStatus extends StatelessWidget {
     this.isSpeaking = false,
     this.isMuted = false,
     this.userRole,
+    this.userId,
     this.onTap,
   });
 
@@ -148,6 +151,17 @@ class UserAvatarStatus extends StatelessWidget {
                   width: 2,
                 ),
               ),
+            ),
+          ),
+        // Super Moderator Badge
+        if (userId != null)
+          Positioned(
+            top: -2,
+            right: -2,
+            child: SuperModBadge(
+              userId: userId!,
+              size: radius * 0.5,
+              showText: radius >= 24,
             ),
           ),
       ],

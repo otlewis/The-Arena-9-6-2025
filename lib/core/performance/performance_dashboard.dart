@@ -244,6 +244,7 @@ class _PerformanceOverlayState extends State<PerformanceOverlay> {
           top: 50,
           right: 16,
           child: FloatingActionButton.small(
+            heroTag: "performance_dashboard",
             onPressed: () => setState(() => _showOverlay = !_showOverlay),
             backgroundColor: Colors.blue.shade800,
             child: const Icon(Icons.speed, size: 16),

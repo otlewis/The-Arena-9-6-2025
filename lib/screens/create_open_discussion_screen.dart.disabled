@@ -1,0 +1,426 @@
+import 'package:flutter/material.dart';
+import '../services/open_discussion_service.dart';
+import '../services/appwrite_service.dart';
+import '../core/logging/app_logger.dart';
+import 'open_discussion_screen.dart';
+
+/// Screen for creating new open discussion rooms using LiveKit
+class CreateOpenDiscussionScreen extends StatefulWidget {
+  const CreateOpenDiscussionScreen({super.key});
+
+  @override
+  State<CreateOpenDiscussionScreen> createState() => _CreateOpenDiscussionScreenState();
+}
+
+class _CreateOpenDiscussionScreenState extends State<CreateOpenDiscussionScreen> {
+  final OpenDiscussionService _openDiscussionService = OpenDiscussionService();
+  final AppwriteService _appwriteService = AppwriteService();
+  final TextEditingController _roomTitleController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _customCategoryController = TextEditingController();
+  
+  bool _isCreating = false;
+  String? _errorMessage;
+  String _selectedCategory = 'Religion';
+  bool _isCustomCategory = false;
+
+  final List<String> _categories = [
+    'Religion',
+    'Sports', 
+    'Science',
+    'Current Events',
+    'Technology',
+    'Custom'
+  ];
+
+  @override
+  void dispose() {
+    _roomTitleController.dispose();
+    _descriptionController.dispose();
+    _customCategoryController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _createRoom() async {
+    // Validation
+    final roomTitle = _roomTitleController.text.trim();
+    final description = _descriptionController.text.trim();
+    final customCategory = _customCategoryController.text.trim();
+    
+    if (roomTitle.isEmpty) {
+      setState(() {
+        _errorMessage = 'Room title is required';
+      });
+      return;
+    }
+    
+    if (description.isEmpty) {
+      setState(() {
+        _errorMessage = 'Description is required';
+      });
+      return;
+    }
+    
+    if (_selectedCategory == 'Custom' && customCategory.isEmpty) {
+      setState(() {
+        _errorMessage = 'Please enter a custom category';
+      });
+      return;
+    }
+
+    // OPTIMISTIC UI: Navigate immediately while creating room in background
+    _createRoomOptimistically(roomTitle, description, customCategory);
+  }
+
+  Future<void> _createRoomOptimistically(String roomTitle, String description, String customCategory) async {
+    // Get current user first (fast operation)
+    final user = await _appwriteService.getCurrentUser();
+    if (user == null) {
+      setState(() {
+        _errorMessage = 'Must be signed in to create room';
+      });
+      return;
+    }
+
+    // Generate room data immediately (no waiting)
+    const maxParticipants = 0; // Unlimited participants
+    final finalCategory = _selectedCategory == 'Custom' ? customCategory : _selectedCategory;
+    final roomName = '${roomTitle.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '-')}-${DateTime.now().millisecondsSinceEpoch}';
+
+    AppLogger().debug('🚀 OPTIMISTIC: Navigating to room immediately: $roomName');
+
+    // STEP 1: Navigate to room screen immediately with optimistic data
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => OpenDiscussionScreen(
+            roomName: roomName,
+            displayTitle: roomTitle,
+            userRole: 'moderator',
+            // Pass room creation data for background processing
+            isNewRoom: true,
+            roomCreationData: {
+              'displayTitle': roomTitle,
+              'description': description,
+              'category': finalCategory,
+              'moderatorId': user.$id,
+              'maxParticipants': maxParticipants,
+            },
+          ),
+        ),
+      );
+    }
+
+    // STEP 2: Create room in background (user doesn't wait for this)
+    _createRoomInBackground(roomName, roomTitle, description, finalCategory, user.$id, maxParticipants);
+  }
+
+  void _createRoomInBackground(String roomName, String displayTitle, String description, String category, String moderatorId, int maxParticipants) async {
+    try {
+      AppLogger().debug('🔄 BACKGROUND: Creating room in database: $roomName');
+      
+      // Create room in Appwrite database (non-blocking for UI)
+      await _openDiscussionService.createRoom(
+        roomName: roomName,
+        displayTitle: displayTitle,
+        description: description,
+        category: category,
+        moderatorId: moderatorId,
+        maxParticipants: maxParticipants,
+        emptyTimeout: 600,
+      );
+
+      AppLogger().debug('✅ BACKGROUND: Room created successfully: $roomName');
+      
+    } catch (e) {
+      AppLogger().error('❌ BACKGROUND: Failed to create room in database: $e');
+      // Room creation failed in background - but user is already in the room via LiveKit
+      // This is handled gracefully in the room screen
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Create Open Discussion'),
+        elevation: 0,
+      ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.white,
+              Colors.red.withValues(alpha: 0.15),
+              Colors.purple.withValues(alpha: 0.25),
+            ],
+          ),
+        ),
+        child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header
+            Card(
+              color: Colors.white.withValues(alpha: 0.7),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.add_circle,
+                      size: 48,
+                      color: Color(0xFF6B46C1),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Create New Discussion Room',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Fill in the details to start your discussion',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 14,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 24),
+
+            // Room Title Input (Required)
+            TextFormField(
+              controller: _roomTitleController,
+              decoration: const InputDecoration(
+                labelText: 'Room Title *',
+                hintText: 'Enter an engaging room title',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.title),
+              ),
+              textCapitalization: TextCapitalization.words,
+              enabled: !_isCreating,
+              maxLength: 50,
+            ),
+
+            const SizedBox(height: 16),
+
+            // Description Input (Required)
+            TextFormField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(
+                labelText: 'Description *',
+                hintText: 'Describe what your discussion is about',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.description),
+                alignLabelWithHint: true,
+              ),
+              maxLines: 3,
+              maxLength: 200,
+              enabled: !_isCreating,
+            ),
+
+            const SizedBox(height: 16),
+
+            // Category Selection
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[400]!),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.category, color: Colors.grey[600]),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Category',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _categories.map((category) {
+                        final isSelected = _selectedCategory == category;
+                        return GestureDetector(
+                          onTap: _isCreating ? null : () {
+                            setState(() {
+                              _selectedCategory = category;
+                              _isCustomCategory = category == 'Custom';
+                              if (!_isCustomCategory) {
+                                _customCategoryController.clear();
+                              }
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isSelected ? const Color(0xFF6B46C1) : Colors.grey[100],
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isSelected ? const Color(0xFF6B46C1) : Colors.grey[300]!,
+                              ),
+                            ),
+                            child: Text(
+                              category,
+                              style: TextStyle(
+                                color: isSelected ? Colors.white : Colors.grey[700],
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+
+            // Custom Category Input (if selected)
+            if (_isCustomCategory) ...[
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _customCategoryController,
+                decoration: const InputDecoration(
+                  labelText: 'Custom Category *',
+                  hintText: 'Enter your custom category',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.edit),
+                ),
+                textCapitalization: TextCapitalization.words,
+                enabled: !_isCreating,
+                maxLength: 30,
+              ),
+            ],
+
+            const SizedBox(height: 24),
+
+            // Error Message
+            if (_errorMessage != null)
+              Container(
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.red[50],
+                  border: Border.all(color: Colors.red[200]!),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red[600]),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: TextStyle(color: Colors.red[800]),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Create Button
+            ElevatedButton(
+              onPressed: _isCreating ? null : _createRoom,
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: const Color(0xFF6B46C1),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: _isCreating
+                  ? const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Text('Creating Room...'),
+                      ],
+                    )
+                  : const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.create),
+                        SizedBox(width: 8),
+                        Text('Create Discussion Room'),
+                      ],
+                    ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Info Card
+            Card(
+              color: const Color(0xFF6B46C1).withValues(alpha: 0.1),
+              child: const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Color(0xFF6B46C1)),
+                        SizedBox(width: 8),
+                        Text(
+                          'Room Guidelines',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF6B46C1),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 8),
+                    Text('• Choose a clear, descriptive title'),
+                    Text('• Provide a detailed description of your topic'),
+                    Text('• Select the most appropriate category'),
+                    Text('• As moderator, you control who can speak'),
+                    Text('• Room automatically closes when empty for 10 minutes'),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 32),
+          ],
+        ),
+        ),
+      ),
+    );
+  }
+}

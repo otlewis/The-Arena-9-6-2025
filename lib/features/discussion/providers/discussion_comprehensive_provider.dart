@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:appwrite/appwrite.dart';
-import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
 import '../models/discussion_state.dart';
@@ -166,41 +165,41 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
 
   Future<void> _init() async {
     try {
-      debugPrint('🚨 PROVIDER DEBUG: Starting provider initialization...');
+      logger.debug('Starting provider initialization...');
       state = state.copyWith(isLoading: true);
       logger.info('Initializing discussion room: ${params.room.id}');
       
       // Initialize audio player
-      debugPrint('🚨 PROVIDER DEBUG: Initializing audio player...');
+      logger.debug('Initializing audio player...');
       await _initializeAudioPlayer();
       
       // Get current user
-      debugPrint('🚨 PROVIDER DEBUG: Loading current user...');
+      logger.debug('Loading current user...');
       await _loadCurrentUser();
       
       // Load Firebase coin balance
-      debugPrint('🚨 PROVIDER DEBUG: Loading Firebase coin balance...');
+      logger.debug('Loading Firebase coin balance...');
       await _loadFirebaseCoinBalance();
       
       // Join the room as a participant
-      debugPrint('🚨 PROVIDER DEBUG: Joining room...');
+      logger.debug('Joining room...');
       await _joinRoom();
       
       // Load participants and profiles
-      debugPrint('🚨 PROVIDER DEBUG: Loading room participants...');
+      logger.debug('Loading room participants...');
       await _loadRoomParticipants();
       
       // Load hand raises from participant metadata
-      debugPrint('🚨 PROVIDER DEBUG: Loading hand raises...');
+      logger.debug('Loading hand raises...');
       await _loadHandRaisesFromParticipants();
       
       // Set up real-time subscription
-      debugPrint('🚨 PROVIDER DEBUG: Setting up realtime subscription...');
+      logger.debug('Setting up realtime subscription...');
       await _setupRealtimeSubscription();
       
-      // Initialize Agora voice
-      debugPrint('🚨 PROVIDER DEBUG: About to initialize Jitsi...');
-      await _initializeAgora();
+      // Initialize LiveKit voice
+      logger.debug('About to initialize Jitsi...');
+      await _initializeLiveKit();
       
       state = state.copyWith(isLoading: false);
       logger.info('Discussion room initialized successfully: ${params.room.id}');
@@ -499,15 +498,15 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
     _fallbackRefreshTimer = null;
   }
 
-  Future<void> _initializeAgora() async {
+  Future<void> _initializeLiveKit() async {
     try {
-      debugPrint('🚨 PROVIDER DEBUG: Starting Jitsi initialization in provider...');
+      logger.debug('Starting Jitsi initialization in provider...');
       state = state.copyWith(
         voiceState: state.voiceState.copyWith(isConnecting: true),
       );
       
-      // Initialize Agora
-      // Jitsi/Agora voice chat disabled for WebRTC testing
+      // Initialize LiveKit
+      // Voice chat handled by LiveKit WebRTC
       // await _jitsiService.initialize();
       
       // Set up callbacks
@@ -572,7 +571,7 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
         voiceState: state.voiceState.copyWith(isConnecting: false),
         error: 'Error connecting to voice room: $e',
       );
-      logger.error('Error initializing Agora: $e');
+      logger.error('Error initializing LiveKit: $e');
     }
   }
 
@@ -763,7 +762,7 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
         metadata: {'handRaised': false},
       );
       
-      // If this is the current user being promoted, switch their Agora role
+      // If this is the current user being promoted, switch their LiveKit role
       if (userId == state.currentUserId) {
         // await _jitsiService.switchToSpeaker();
         state = state.copyWith(
@@ -792,7 +791,7 @@ class DiscussionComprehensiveNotifier extends StateNotifier<DiscussionState> {
         newRole: 'audience',
       );
       
-      // If this is the current user being demoted, switch their Agora role
+      // If this is the current user being demoted, switch their LiveKit role
       if (userId == state.currentUserId) {
         // await _jitsiService.switchToAudience();
         state = state.copyWith(

@@ -222,6 +222,7 @@ class _FloatingMicrophoneButtonState extends State<FloatingMicrophoneButton>
         return Transform.scale(
           scale: isSpeaking ? _pulseAnimation.value : 1.0,
           child: FloatingActionButton(
+            heroTag: "microphone_control",
             onPressed: widget.onToggleMute,
             backgroundColor: isMuted ? Colors.red : Colors.green,
             foregroundColor: Colors.white,

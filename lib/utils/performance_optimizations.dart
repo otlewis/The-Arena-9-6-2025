@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -154,7 +155,7 @@ class PerformanceOptimizations {
     WidgetsBinding.instance.addPersistentFrameCallback((timeStamp) {
       final fps = 1000000 / timeStamp.inMicroseconds;
       if (fps < 55) {
-        debugPrint('⚠️ Low FPS detected: ${fps.toStringAsFixed(1)}');
+        AppLogger().debug('⚠️ Low FPS detected: ${fps.toStringAsFixed(1)}');
       }
     });
   }

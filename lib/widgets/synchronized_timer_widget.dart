@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -72,7 +73,7 @@ class _SynchronizedTimerWidgetState extends State<SynchronizedTimerWidget>
       _setupTimerStream();
       _setupDisplayUpdateTimer();
     } catch (e) {
-      debugPrint('Timer initialization error: $e');
+      AppLogger().debug('Timer initialization error: $e');
       _showErrorSnackBar('Timer initialization failed: $e');
     }
   }
@@ -115,7 +116,7 @@ class _SynchronizedTimerWidgetState extends State<SynchronizedTimerWidget>
       // Load built-in system sounds or custom assets
       // await _audioPlayer.setAsset('assets/sounds/timer_alert.mp3');
     } catch (e) {
-      debugPrint('Error initializing audio: $e');
+      AppLogger().debug('Error initializing audio: $e');
     }
   }
 
@@ -200,7 +201,7 @@ class _SynchronizedTimerWidgetState extends State<SynchronizedTimerWidget>
       // If you have audio assets, play them here
       // await _audioPlayer.play();
     } catch (e) {
-      debugPrint('Error playing timer sound: $e');
+      AppLogger().debug('Error playing timer sound: $e');
     }
   }
 

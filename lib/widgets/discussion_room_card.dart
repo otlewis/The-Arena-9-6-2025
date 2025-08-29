@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 
 class DiscussionRoomCard extends StatelessWidget {
@@ -91,31 +92,31 @@ class DiscussionRoomCard extends StatelessWidget {
         final dateTime = DateTime.parse(scheduledDate.toString());
         
         // Debug timezone conversion
-        debugPrint('=== TIMEZONE DEBUG ===');
-        debugPrint('Raw scheduled date: $scheduledDate');
-        debugPrint('Parsed datetime: $dateTime');
-        debugPrint('Parsed as UTC: ${dateTime.toUtc()}');
-        debugPrint('Parsed as local: ${dateTime.toLocal()}');
-        debugPrint('Current time: ${DateTime.now()}');
-        debugPrint('Current time UTC: ${DateTime.now().toUtc()}');
-        debugPrint('System timezone offset: ${DateTime.now().timeZoneOffset}');
+        AppLogger().debug('=== TIMEZONE DEBUG ===');
+        AppLogger().debug('Raw scheduled date: $scheduledDate');
+        AppLogger().debug('Parsed datetime: $dateTime');
+        AppLogger().debug('Parsed as UTC: ${dateTime.toUtc()}');
+        AppLogger().debug('Parsed as local: ${dateTime.toLocal()}');
+        AppLogger().debug('Current time: ${DateTime.now()}');
+        AppLogger().debug('Current time UTC: ${DateTime.now().toUtc()}');
+        AppLogger().debug('System timezone offset: ${DateTime.now().timeZoneOffset}');
         
         // Format to 12-hour time
         final hour12 = dateTime.hour == 0 ? 12 : (dateTime.hour > 12 ? dateTime.hour - 12 : dateTime.hour);
         final amPm = dateTime.hour >= 12 ? 'PM' : 'AM';
         formattedScheduledDate = '${dateTime.day}/${dateTime.month}/${dateTime.year} $hour12:${dateTime.minute.toString().padLeft(2, '0')} $amPm';
         
-        debugPrint('Formatted time: $formattedScheduledDate');
-        debugPrint('=== END TIMEZONE DEBUG ===');
+        AppLogger().debug('Formatted time: $formattedScheduledDate');
+        AppLogger().debug('=== END TIMEZONE DEBUG ===');
       } catch (e) {
-        debugPrint('Error parsing scheduled date: $e');
-        debugPrint('Original value: $scheduledDate');
+        AppLogger().debug('Error parsing scheduled date: $e');
+        AppLogger().debug('Original value: $scheduledDate');
       }
     }
     
     // Debug print to check data
-    debugPrint('Room Card - Moderator: $moderatorName, Avatar: $moderatorAvatar');
-    debugPrint('Room Card - Scheduled: $isScheduled, Date: $formattedScheduledDate');
+    AppLogger().debug('Room Card - Moderator: $moderatorName, Avatar: $moderatorAvatar');
+    AppLogger().debug('Room Card - Scheduled: $isScheduled, Date: $formattedScheduledDate');
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

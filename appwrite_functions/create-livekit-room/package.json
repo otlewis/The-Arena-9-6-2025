@@ -1,0 +1,16 @@
+{
+  "name": "create-livekit-room",
+  "version": "1.0.0",
+  "description": "Appwrite Function to create LiveKit room and generate token",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {
+    "node-appwrite": "^11.0.0",
+    "jsonwebtoken": "^9.0.0"
+  },
+  "keywords": ["appwrite", "livekit", "room", "token"],
+  "author": "Arena App",
+  "license": "MIT"
+}

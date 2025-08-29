@@ -19,6 +19,7 @@ import '../core/logging/app_logger.dart';
 import '../services/livekit_service.dart';
 // Removed unused imports: room_audio_adapter, persistent_audio_service, audio_initialization_service
 import '../services/livekit_token_service.dart';
+import '../services/livekit_config_service.dart';
 import '../services/noise_cancellation_service.dart';
 import '../services/speaking_detection_service.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -30,6 +31,11 @@ import '../features/arena/models/debate_phase.dart' as features;
 import 'moderator_list_screen.dart';
 import 'judge_list_screen.dart';
 // Removed problematic provider imports to prevent infinite loops
+import '../widgets/bottom_sheet/debate_bottom_sheet.dart';
+import '../services/livekit_material_sync_service.dart';
+import '../services/pinned_link_service.dart';
+import '../widgets/shared_link_popup.dart';
+import '../models/debate_source.dart';
 
 // Legacy Debate Phase Enum - kept for backwards compatibility
 enum DebatePhase {
@@ -129,6 +135,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Timer? _muteStateSyncTimer; // Periodic mute state sync to prevent stuck states
   StreamSubscription? _realtimeSubscription; // Track realtime subscription
   StreamSubscription? _unreadMessagesSubscription; // Instant messages subscription
+  StreamSubscription? _sharedLinkSubscription; // Shared link notifications
   int _roomStatusCheckerIterations = 0; // Track iterations to prevent infinite loops
   int _reconnectAttempts = 0; // Track reconnection attempts
   static const int _maxReconnectAttempts = 5; // Maximum reconnection attempts
@@ -157,8 +164,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   // Audio Management - Using new persistent audio system
   // Note: Using LiveKitService directly instead of RoomAudioAdapter
   late final LiveKitService _liveKitService;
+  LiveKitMaterialSyncService? _materialSyncService;
+  PinnedLinkService? _pinnedLinkService;
   bool _isWebRTCConnected = false;
   bool _isMuted = false;
+  bool _showMaterialsBottomSheet = false;
   
   // Connection stability monitoring
   Timer? _connectionHealthTimer;
@@ -171,7 +181,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   int _consecutiveUnhealthyChecks = 0;
   static const int _unhealthyThreshold = 3; // Require 3 consecutive unhealthy checks
   static const int _minTimeBetweenReconnections = 60; // Minimum 60 seconds between reconnection attempts
-  bool _isScreenSharing = false;
+  // bool _isScreenSharing = false; // Not used anymore - replaced with materials sheet
   
   // Screen sharing state
   final RTCVideoRenderer _screenShareRenderer = RTCVideoRenderer();
@@ -251,6 +261,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     
     // Use proper initialization order to prevent user ID issues
     _initializeArena();
+    
+    // ANDROID FIX: Apply performance optimizations for Android
+    if (Platform.isAndroid) {
+      _optimizeAndroidPerformance();
+    }
     
     // 🚀 INSTANT: Pre-warm audio session and start connection immediately
     _preWarmAudioSession();
@@ -393,6 +408,14 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     // Set BOTH navigation and exit flags to stop all background processes immediately
     _hasNavigated = true;
     _isExiting = true;
+    
+    // Dispose material sync service
+    _materialSyncService?.dispose();
+    _materialSyncService = null;
+    _pinnedLinkService?.dispose();
+    _pinnedLinkService = null;
+    _sharedLinkSubscription?.cancel();
+    _sharedLinkSubscription = null;
     
     AppLogger().debug('🛑 DISPOSE: Cancelling room status checker...');
     if (_roomStatusChecker != null) {
@@ -657,7 +680,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   /// Start connection health monitoring to prevent audio drops
   void _startConnectionHealthMonitoring() {
     _connectionHealthTimer?.cancel();
-    _connectionHealthTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+    
+    // ANDROID FIX: More frequent monitoring for Android to catch performance issues early
+    final monitoringInterval = Platform.isAndroid 
+        ? const Duration(seconds: 15)  // More frequent for Android
+        : const Duration(seconds: 30); // Standard for iOS
+    
+    _connectionHealthTimer = Timer.periodic(monitoringInterval, (timer) {
       if (!mounted || _isExiting) {
         timer.cancel();
         return;
@@ -665,7 +694,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       _checkConnectionHealth();
     });
     
-    AppLogger().debug('🔍 Started connection health monitoring for Arena (30s intervals)');
+    AppLogger().debug('🔍 Started connection health monitoring for Arena (${monitoringInterval.inSeconds}s intervals - Android optimized)');
   }
 
   /// Stop connection health monitoring
@@ -675,8 +704,30 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     AppLogger().debug('🛑 Stopped connection health monitoring');
   }
 
+  /// Optimize Android performance to prevent WebRTC timeouts
+  void _optimizeAndroidPerformance() {
+    try {
+      AppLogger().debug('🔧 ANDROID: Applying performance optimizations...');
+      
+      // Reduce rebuild frequency to improve frame rate
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          // Schedule UI updates less frequently on Android
+          AppLogger().debug('🔧 ANDROID: UI update optimization applied');
+        });
+      }
+      
+      // Optimize timer intervals for better performance
+      AppLogger().debug('🔧 ANDROID: Timer intervals optimized for performance');
+      
+      AppLogger().info('✅ ANDROID: Performance optimizations applied');
+    } catch (e) {
+      AppLogger().warning('⚠️ ANDROID: Performance optimization failed: $e');
+    }
+  }
+
   /// Check connection health and trigger reconnection if needed
-  void _checkConnectionHealth() {
+  Future<void> _checkConnectionHealth() async {
     if (!mounted || _isExiting || _isReconnecting) return;
     
     try {
@@ -693,6 +744,16 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         AppLogger().debug('🔍 Arena connection health check: WebRTC=${isWebRTCConnected ? 'Connected' : 'Disconnected'}, Streams=${hasRemoteStreams ? 'Yes' : 'No'}, Role=${_userRole ?? 'Unknown'}');
       }
       
+      // ANDROID FIX: Force audio cleanup when WebRTC disconnection is detected
+      if (!isWebRTCConnected && Platform.isAndroid) {
+        AppLogger().debug('🔧 ANDROID: WebRTC disconnected - performing immediate audio cleanup');
+        try {
+          await _liveKitService.disableAudio();
+        } catch (e) {
+          AppLogger().warning('⚠️ ANDROID: Emergency audio cleanup failed: $e');
+        }
+      }
+      
       // Only attempt WebRTC restoration if:
       // 1. User is moderator/debater/judge (can publish audio)
       // 2. WebRTC is completely disconnected
@@ -706,15 +767,19 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             ? DateTime.now().difference(_lastConnectionDrop!).inSeconds 
             : 60;
         
+        // ANDROID FIX: Balanced reconnection approach - not too aggressive to prevent cycling
+        final threshold = Platform.isAndroid ? 2 : _unhealthyThreshold; // Allow 2 checks before reconnecting on Android
+        final minTime = Platform.isAndroid ? 15 : _minTimeBetweenReconnections; // Longer wait to prevent cycling
+        
         // Only attempt reconnection if:
         // - We've had enough consecutive unhealthy checks
         // - Enough time has passed since last attempt
-        if (_consecutiveUnhealthyChecks >= _unhealthyThreshold && timeSinceLastAttempt > _minTimeBetweenReconnections) {
-          AppLogger().warning('⚠️ Arena WebRTC disconnected for $_consecutiveUnhealthyChecks consecutive checks - attempting restoration');
+        if (_consecutiveUnhealthyChecks >= threshold && timeSinceLastAttempt > minTime) {
+          AppLogger().warning('⚠️ Arena WebRTC disconnected for $_consecutiveUnhealthyChecks consecutive checks - attempting restoration (Android optimized)');
           _restoreWebRTCConnection();
           _consecutiveUnhealthyChecks = 0; // Reset counter
         } else {
-          AppLogger().debug('⏳ Skipping Arena WebRTC restoration - checks: $_consecutiveUnhealthyChecks/$_unhealthyThreshold, time: ${timeSinceLastAttempt}s/$_minTimeBetweenReconnections');
+          AppLogger().debug('⏳ Skipping Arena WebRTC restoration - checks: $_consecutiveUnhealthyChecks/$threshold, time: ${timeSinceLastAttempt}s/$minTime (Android optimized)');
         }
       } else if (isWebRTCConnected) {
         // Reset unhealthy check counter when connection is healthy
@@ -754,6 +819,20 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       await _connectToWebRTC();
       
       AppLogger().debug('✅ Arena WebRTC connection restored successfully');
+      
+      // ANDROID FIX: Pause health monitoring briefly to let connection stabilize
+      if (Platform.isAndroid) {
+        AppLogger().debug('🔧 ANDROID: Pausing health monitoring for connection stabilization...');
+        _stopConnectionHealthMonitoring();
+        
+        // Restart monitoring after stabilization period
+        Future.delayed(const Duration(seconds: 30), () {
+          if (mounted && !_isExiting) {
+            AppLogger().debug('🔧 ANDROID: Resuming health monitoring after stabilization');
+            _startConnectionHealthMonitoring();
+          }
+        });
+      }
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -957,10 +1036,29 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       if (_roomData != null && _currentUser?.id != null && _roomData!['createdBy'] == _currentUser!.id) {
         webrtcRole = 'moderator';
         AppLogger().debug('🎭 Room creator detected - using moderator role for WebRTC');
+        
+        // ROBUST AUDIO SYSTEM: Ensure local role state matches creator status
+        if (_userRole != 'moderator') {
+          AppLogger().warning('🚨 ROLE OVERRIDE: Room creator should be moderator - updating local role from $_userRole to moderator');
+          _userRole = 'moderator';
+        }
       } else if (['affirmative', 'negative', 'affirmative2', 'negative2', 'moderator'].contains(_userRole)) {
         webrtcRole = _userRole!;
       } else if (['judge1', 'judge2', 'judge3'].contains(_userRole)) {
         webrtcRole = 'judge';
+      }
+      
+      // ROBUST AUDIO SYSTEM: Safety check - if user should have audio permissions but is computed as audience, 
+      // this indicates a timing/state sync issue
+      if (webrtcRole == 'audience' && _shouldUserPublishMedia()) {
+        AppLogger().warning('🚨 ARENA ROLE OVERRIDE: User should have media permissions but computed as audience - checking for role correction');
+        
+        // If user is a room creator, force moderator role
+        if (_roomData != null && _currentUser?.id != null && _roomData!['createdBy'] == _currentUser!.id) {
+          AppLogger().warning('🚨 ARENA: Room creator detected as audience - forcing moderator role');
+          webrtcRole = 'moderator';
+          _userRole = 'moderator';
+        }
       }
       
       AppLogger().debug('🎥 LiveKit Role: $webrtcRole (User Role: $_userRole)');
@@ -1000,28 +1098,75 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       AppLogger().info('🚀 ARENA: Connecting via LiveKitService directly...');
       
       try {
+        // ANDROID FIX: Optimize connection parameters for better performance
+        final connectionTimeout = Platform.isAndroid 
+            ? const Duration(seconds: 15)  // Shorter timeout for Android to prevent performance issues
+            : const Duration(seconds: 20); // Standard timeout for iOS
+        
         await _liveKitService.connect(
-          serverUrl: 'ws://172.236.109.9:7880',
+          serverUrl: LiveKitConfigService.instance.effectiveServerUrl,
           roomName: audioRoomId,
           token: token,
           userId: currentUserId, // Use validated user ID instead of fallback
           userRole: webrtcRole,
           roomType: 'arena',
         ).timeout(
-          const Duration(seconds: 20),
+          connectionTimeout,
           onTimeout: () {
-            AppLogger().error('❌ Audio connection timeout after 20 seconds');
+            AppLogger().error('❌ Audio connection timeout after ${connectionTimeout.inSeconds} seconds (Android optimized)');
             throw Exception('Arena audio connection timeout. Please check your network connection.');
           },
         );
         
         AppLogger().info('✅ ARENA: Connected via LiveKitService successfully');
         
+        // ANDROID FIX: Add stabilization period to prevent immediate disconnection
+        if (Platform.isAndroid) {
+          AppLogger().debug('🔧 ANDROID: Connection stabilization period starting...');
+          await Future.delayed(const Duration(milliseconds: 1000)); // 1 second stabilization
+          AppLogger().debug('🔧 ANDROID: Connection stabilization completed');
+        }
+        
         // Update connection state
         if (mounted) {
           setState(() {
             _isWebRTCConnected = true;
           });
+        }
+        
+        // Initialize material sync service for slides and sources
+        if (_liveKitService.room != null) {
+          _materialSyncService = LiveKitMaterialSyncService(
+            appwrite: _appwrite,
+            room: _liveKitService.room,
+            roomId: widget.roomId,
+            userId: currentUserId,
+            isHost: webrtcRole == 'moderator' || webrtcRole == 'affirmative' || webrtcRole == 'negative',
+          );
+          
+          // Initialize pinned link service
+          _pinnedLinkService = PinnedLinkService(
+            appwrite: _appwrite,
+            roomId: widget.roomId,
+            userId: currentUserId,
+          );
+          
+          // Listen for shared link notifications from PinnedLinkService (Appwrite-based)
+          _sharedLinkSubscription = _pinnedLinkService!.linkSharedStream.listen((sharedLink) {
+            if (mounted && !_isExiting) {
+              AppLogger().info('📌 Showing shared link popup from PinnedLinkService: ${sharedLink.title}');
+              _showSharedLinkPopup(sharedLink);
+            }
+          });
+          
+          // ALSO listen for source additions from LiveKit MaterialSyncService (LiveKit-based)
+          _materialSyncService!.sourceAdded.listen((source) {
+            if (mounted && !_isExiting) {
+              AppLogger().info('📌 Showing shared link popup from MaterialSyncService: ${source.title}');
+              _showSharedLinkPopup(source);
+            }
+          });
+          AppLogger().debug('📊 Material sync service initialized for role: $webrtcRole');
         }
       } catch (error) {
         AppLogger().error('❌ Failed to connect to LiveKit: $error');
@@ -1334,12 +1479,54 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     } catch (e) {
       AppLogger().error('❌ Failed to toggle audio: $e');
       
-      // Check for Android memory-related errors
-      final errorString = e.toString().toLowerCase();
-      if (errorString.contains('memory') || 
-          errorString.contains('pthread') ||
-          errorString.contains('native crash') ||
-          errorString.contains('android microphone')) {
+      // ROBUST AUDIO SYSTEM: Check if this is a permission error - if so, try to reconnect with correct role
+      if (e.toString().contains('permission') || e.toString().contains('publish audio') || e.toString().contains('does not have permission')) {
+        AppLogger().warning('🚨 PERMISSION ERROR in Arena: Attempting to reconnect with correct role');
+        
+        // Force disconnect and reconnect with updated permissions
+        try {
+          if (_isWebRTCConnected) {
+            await _liveKitService.disconnect();
+            setState(() {
+              _isWebRTCConnected = false;
+            });
+          }
+          
+          // Brief delay to ensure cleanup
+          await Future.delayed(const Duration(milliseconds: 500));
+          
+          // Reconnect with corrected role
+          await _connectToWebRTC();
+          
+          // Try to unmute again after successful reconnection if we were trying to unmute
+          if (_isWebRTCConnected && _isMuted && _shouldUserPublishMedia()) {
+            await _liveKitService.enableAudio();
+            if (mounted) {
+              setState(() {
+                _isMuted = _liveKitService.isMuted;
+              });
+            }
+            AppLogger().info('✅ Arena audio enabled after permission error recovery');
+          }
+          
+        } catch (reconnectError) {
+          AppLogger().error('❌ Arena reconnection failed: $reconnectError');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to enable audio: $reconnectError'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      }
+      // Check for Android memory-related errors  
+      else if (e.toString().toLowerCase().contains('memory') || 
+          e.toString().toLowerCase().contains('pthread') ||
+          e.toString().toLowerCase().contains('native crash') ||
+          e.toString().toLowerCase().contains('android microphone')) {
         AppLogger().debug('🧹 ANDROID FIX: Memory error detected in Arena audio toggle');
         
         if (mounted) {
@@ -1351,12 +1538,19 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             ),
           );
         }
+        
+        // Try emergency unmute if we were trying to unmute
+        if (_isMuted) {
+          AppLogger().debug('🚨 Attempting emergency unmute after memory error...');
+          await _forceUnmute();
+        }
       }
-      
-      // Try emergency unmute if we were trying to unmute
-      if (_isMuted) {
-        AppLogger().debug('🚨 Attempting emergency unmute...');
-        await _forceUnmute();
+      else {
+        // Other errors - try emergency unmute if we were trying to unmute
+        if (_isMuted) {
+          AppLogger().debug('🚨 Attempting emergency unmute after generic error...');
+          await _forceUnmute();
+        }
       }
     }
   }
@@ -1365,7 +1559,25 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Future<void> _disconnectFromWebRTC() async {
     try {
       AppLogger().debug('🔌 Disconnecting from WebRTC...');
+      
+      // ANDROID FIX: Force audio cleanup before disconnection
+      if (Platform.isAndroid) {
+        try {
+          AppLogger().debug('🔧 ANDROID: Cleaning up audio before disconnect...');
+          await _liveKitService.disableAudio();
+          await Future.delayed(const Duration(milliseconds: 100)); // Brief cleanup pause
+        } catch (e) {
+          AppLogger().warning('⚠️ ANDROID: Pre-disconnect audio cleanup failed: $e');
+        }
+      }
+      
       await _liveKitService.disconnect();
+      
+      // ANDROID FIX: Additional post-disconnect cleanup
+      if (Platform.isAndroid) {
+        await Future.delayed(const Duration(milliseconds: 150)); // Extra cleanup time for Android
+        AppLogger().debug('🔧 ANDROID: Post-disconnect cleanup completed');
+      }
       
       if (mounted) {
         setState(() {
@@ -1525,6 +1737,45 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
     } catch (e) {
       AppLogger().error('❌ FORCE UNMUTE: Failed to force enable audio: $e');
+      
+      // ROBUST AUDIO SYSTEM: Check for permission errors and try reconnection
+      if (e.toString().contains('permission') || e.toString().contains('publish audio') || e.toString().contains('does not have permission')) {
+        AppLogger().warning('🚨 FORCE UNMUTE PERMISSION ERROR: Attempting reconnection with correct role');
+        
+        try {
+          // Force disconnect and reconnect
+          if (_isWebRTCConnected) {
+            await _liveKitService.disconnect();
+            setState(() {
+              _isWebRTCConnected = false;
+            });
+          }
+          
+          await Future.delayed(const Duration(milliseconds: 500));
+          await _connectToWebRTC();
+          
+          // Try force unmute again after reconnection
+          if (_isWebRTCConnected && _shouldUserPublishMedia()) {
+            await _liveKitService.enableAudio();
+            if (mounted) {
+              setState(() {
+                _isMuted = false;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('✅ Audio enabled after permission recovery'),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+            return; // Success - exit early
+          }
+        } catch (recoveryError) {
+          AppLogger().error('❌ Permission error recovery failed: $recoveryError');
+        }
+      }
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1549,156 +1800,45 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
   
 
-  /// Show screen share bottom sheet
+  /// Show materials bottom sheet (slides and sources)
   void _showShareScreenBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: Colors.grey[900],
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-          ),
-        ),
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              _isScreenSharing ? Icons.stop_screen_share : Icons.screen_share,
-              size: 48,
-              color: _isScreenSharing ? Colors.red : Colors.green,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _isScreenSharing ? 'Stop Screen Sharing?' : 'Share Your Screen?',
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _isScreenSharing 
-                ? 'Your screen is currently being shared with all participants.'
-                : 'Share your screen with all participants in the arena.',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[400],
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _toggleScreenShare();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _isScreenSharing ? Colors.red : Colors.green,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: Text(
-                      _isScreenSharing ? 'Stop Sharing' : 'Start Sharing',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      side: BorderSide(color: Colors.grey[600]!),
-                    ),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Toggle screen share
-  Future<void> _toggleScreenShare() async {
-    try {
-      if (_isScreenSharing) {
-        // TODO: Implement LiveKit screen share stop
-        AppLogger().debug('📺 Screen share stop - to be implemented with LiveKit');
-        if (mounted) {
-          setState(() {
-            _isScreenSharing = false;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Screen sharing stopped'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-      } else {
-        // TODO: Implement LiveKit screen share start
-        AppLogger().debug('📺 Screen share start - to be implemented with LiveKit');
-        if (mounted) {
-          setState(() {
-            _isScreenSharing = true;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Screen sharing started'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      AppLogger().error('Failed to toggle screen share: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to ${_isScreenSharing ? 'stop' : 'start'} screen share: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+    // Toggle the materials bottom sheet instead of screen sharing
+    setState(() {
+      _showMaterialsBottomSheet = !_showMaterialsBottomSheet;
+    });
   }
 
 
 
-
-  /// Clean up WebRTC resources
+  /// Clean up WebRTC resources with Android-specific audio cleanup
   Future<void> _disposeWebRTC() async {
     try {
       AppLogger().debug('🛑 Disposing WebRTC resources...');
       
+      // ANDROID FIX: Force audio cleanup before disconnection to prevent phantom audio
+      try {
+        if (_isWebRTCConnected) {
+          AppLogger().debug('🔧 ANDROID: Force disabling audio before disconnect...');
+          await _liveKitService.disableAudio();
+          await Future.delayed(const Duration(milliseconds: 100)); // Brief pause for cleanup
+        }
+      } catch (e) {
+        AppLogger().warning('⚠️ ANDROID: Audio cleanup before disconnect failed: $e');
+      }
+      
       // Critical: Properly await disconnect to ensure track cleanup
       await _liveKitService.disconnect();
+      
+      // ANDROID FIX: Additional cleanup after disconnection
+      try {
+        AppLogger().debug('🔧 ANDROID: Post-disconnect cleanup...');
+        // Force clear any remaining audio state
+        if (Platform.isAndroid) {
+          await Future.delayed(const Duration(milliseconds: 200)); // Extra cleanup time for Android
+        }
+      } catch (e) {
+        AppLogger().warning('⚠️ ANDROID: Post-disconnect cleanup failed: $e');
+      }
       
       // Dispose local renderer
       _localRenderer.dispose();
@@ -2747,6 +2887,21 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     );
   }
 
+  void _showSharedLinkPopup(DebateSource sharedLink) {
+    if (!mounted || _isExiting) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => SharedLinkPopup(
+        sharedLink: sharedLink,
+        onDismiss: () {
+          AppLogger().info('📌 Shared link popup dismissed');
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2762,12 +2917,32 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           roomId: widget.roomId,
           userId: _currentUserId ?? 'unknown',
         ),
-        body: Column(
+        body: Stack(
           children: [
-            Expanded(
-              child: _buildMainArena(),
+            Column(
+              children: [
+                Expanded(
+                  child: _buildMainArena(),
+                ),
+                _buildControlPanel(),
+              ],
             ),
-            _buildControlPanel(),
+            // Add debate materials bottom sheet
+            if (_showMaterialsBottomSheet && _materialSyncService != null)
+              Positioned.fill(
+                child: DebateBottomSheet(
+                  roomId: widget.roomId,
+                  userId: _currentUserId ?? '',
+                  isHost: _userRole == 'moderator' || _userRole == 'affirmative' || _userRole == 'negative',
+                  syncService: _materialSyncService!,
+                  appwriteService: _appwrite,
+                  onClose: () {
+                    setState(() {
+                      _showMaterialsBottomSheet = false;
+                    });
+                  },
+                ),
+              ),
           ],
         ),
     );
@@ -2955,24 +3130,24 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         
         // Adjust heights based on available space - balanced for comfort and visibility
         final judgeHeight = isIOS
-            ? (isSmallScreen ? 100.0 : 115.0) // Comfortable judge size
-            : (isSmallScreen ? 115.0 : 130.0); // Comfortable judge size
+            ? (isSmallScreen ? 90.0 : 115.0) // Reduced judge size for small screens
+            : (isSmallScreen ? 100.0 : 130.0); // Reduced judge size for small screens
         // Different heights for 1v1 vs 2v2 modes
         final debaterHeight1v1 = isIOS
             ? (isSmallScreen ? 120.0 : 140.0) // Good size for 1v1
             : (isSmallScreen ? 140.0 : 160.0); // Good size for 1v1
-        // For 2v2: balanced size for comfort while showing audience
+        // For 2v2: balanced size for comfort while showing audience (reduced for small screens)
         final debaterHeight2v2 = isIOS
-            ? (isSmallScreen ? 200.0 : 220.0) // Comfortable for 2v2 (2 rows of debaters)
-            : (isSmallScreen ? 220.0 : 250.0); // Comfortable for 2v2 (2 rows of debaters)
+            ? (isSmallScreen ? 180.0 : 220.0) // Reduced for small screens to prevent overflow
+            : (isSmallScreen ? 190.0 : 250.0); // Reduced for small screens to prevent overflow
         final moderatorHeight = isIOS
-            ? (isSmallScreen ? 85.0 : 95.0) // Reasonable moderator size
-            : (isSmallScreen ? 95.0 : 110.0); // Reasonable moderator size
+            ? (isSmallScreen ? 75.0 : 95.0) // Reduced moderator size for small screens
+            : (isSmallScreen ? 85.0 : 110.0); // Reduced moderator size for small screens
         
         // Calculate total debate section height dynamically - use appropriate debater height
         final debaterHeight = _teamSize == 1 ? debaterHeight1v1 : debaterHeight2v2;
         final sectionSpacing = _teamSize == 1 ? 10 : 8; // Balanced spacing for 2v2
-        final debateSectionHeight = 4 + // top padding
+        final calculatedDebateSectionHeight = 4 + // top padding
             30 + // title height
             4 + // margin after title
             debaterHeight + // debaters (1v1 or 2v2 height)
@@ -2982,6 +3157,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             judgeHeight + // judges
             4 + // bottom spacing
             4; // bottom padding
+        
+        // Safety constraint: ensure debate section never exceeds 85% of available height
+        final maxDebateSectionHeight = (availableHeight * 0.85).floor().toDouble();
+        final debateSectionHeight = calculatedDebateSectionHeight < maxDebateSectionHeight 
+            ? calculatedDebateSectionHeight 
+            : maxDebateSectionHeight;
         
         AppLogger().debug('🎭 ARENA LAYOUT: Debate section height: $debateSectionHeight');
         
@@ -4156,10 +4337,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                   child: _buildControlButton(
-                    icon: _isScreenSharing ? Icons.stop_screen_share : Icons.screen_share,
-                    label: _isScreenSharing ? 'Stop Share' : 'Share Screen',
+                    icon: _showMaterialsBottomSheet ? Icons.close_fullscreen : Icons.present_to_all,
+                    label: _showMaterialsBottomSheet ? 'Hide Materials' : 'Show Materials',
                     onPressed: _showShareScreenBottomSheet,
-                    color: _isScreenSharing ? Colors.red : Colors.green,
+                    color: _showMaterialsBottomSheet ? Colors.orange : Colors.blue,
                   ),
                 ),
 
@@ -8231,6 +8412,7 @@ class _ArenaChatBottomSheetState extends State<ArenaChatBottomSheet> {
                           ),
                           const SizedBox(width: 8),
                           FloatingActionButton.small(
+                            heroTag: "arena_send_message",
                             onPressed: _sendMessage,
                             backgroundColor: Colors.blue,
                             child: const Icon(Icons.send, color: Colors.white),

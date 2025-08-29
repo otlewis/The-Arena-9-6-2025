@@ -19,6 +19,43 @@ class OptimizedDatabaseService {
     _appwrite = appwrite;
   }
 
+  /// Safely convert Appwrite document data to Map with proper null handling
+  Map<String, dynamic> _safeDocumentToMap(models.Document doc, {Map<String, dynamic>? additionalData}) {
+    try {
+      final result = <String, dynamic>{};
+      
+      // Safely copy document data
+      if (doc.data.isNotEmpty) {
+        doc.data.forEach((key, value) {
+          result[key] = value; // Let null values pass through naturally
+        });
+      }
+      
+      // Add standard document fields
+      result['id'] = doc.$id;
+      result['createdAt'] = doc.$createdAt;
+      result['updatedAt'] = doc.$updatedAt;
+      
+      // Add any additional data
+      if (additionalData != null) {
+        additionalData.forEach((key, value) {
+          result[key] = value;
+        });
+      }
+      
+      return result;
+    } catch (e) {
+      _logger.warning('Error safely converting document ${doc.$id}: $e');
+      // Return minimal safe data
+      return {
+        'id': doc.$id,
+        'createdAt': doc.$createdAt,
+        'updatedAt': doc.$updatedAt,
+        ...?additionalData,
+      };
+    }
+  }
+
   /// Batch get users with caching
   Future<List<Map<String, dynamic>>> batchGetUsers(
     List<String> userIds, {
@@ -78,9 +115,7 @@ class OptimizedDatabaseService {
         );
 
         for (final doc in response.documents) {
-          final userData = Map<String, dynamic>.from(doc.data);
-          userData['id'] = doc.$id;
-          results.add(userData);
+          results.add(_safeDocumentToMap(doc));
         }
       } catch (e) {
         _logger.error('Failed to fetch user batch: $batch', e);
@@ -129,11 +164,7 @@ class OptimizedDatabaseService {
         queries: queries,
       );
 
-      final rooms = response.documents.map((doc) {
-        final roomData = Map<String, dynamic>.from(doc.data);
-        roomData['id'] = doc.$id;
-        return roomData;
-      }).toList();
+      final rooms = response.documents.map((doc) => _safeDocumentToMap(doc)).toList();
 
       // Cache the results
       await _cache.cacheRoom(cacheKey, {'rooms': rooms});
@@ -219,14 +250,9 @@ class OptimizedDatabaseService {
       final roomDoc = futures[0] as models.Document;
       final participantsResponse = futures[1] as models.DocumentList;
 
-      final roomData = Map<String, dynamic>.from(roomDoc.data);
-      roomData['id'] = roomDoc.$id;
+      final roomData = _safeDocumentToMap(roomDoc);
 
-      final participants = participantsResponse.documents.map((doc) {
-        final participantData = Map<String, dynamic>.from(doc.data);
-        participantData['id'] = doc.$id;
-        return participantData;
-      }).toList();
+      final participants = participantsResponse.documents.map((doc) => _safeDocumentToMap(doc)).toList();
 
       final result = {
         'room': roomData,
@@ -276,11 +302,7 @@ class OptimizedDatabaseService {
         queries: queries,
       );
 
-      final users = response.documents.map((doc) {
-        final userData = Map<String, dynamic>.from(doc.data);
-        userData['id'] = doc.$id;
-        return userData;
-      }).toList();
+      final users = response.documents.map((doc) => _safeDocumentToMap(doc)).toList();
 
       // Cache the search results
       await _cache.cacheUser(cacheKey, {'users': users});
@@ -310,11 +332,7 @@ class OptimizedDatabaseService {
         ],
       );
 
-      final challenges = challengesResponse.documents.map((doc) {
-        final challengeData = Map<String, dynamic>.from(doc.data);
-        challengeData['id'] = doc.$id;
-        return challengeData;
-      }).toList();
+      final challenges = challengesResponse.documents.map((doc) => _safeDocumentToMap(doc)).toList();
 
       if (challenges.isEmpty) return challenges;
 

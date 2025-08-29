@@ -349,9 +349,11 @@ class _NotificationBannerOverlayState extends State<NotificationBannerOverlay> {
 
     // Auto-remove after display duration
     Future.delayed(const Duration(seconds: 6), () {
-      setState(() {
-        _activeNotifications.remove(notification);
-      });
+      if (mounted) {
+        setState(() {
+          _activeNotifications.remove(notification);
+        });
+      }
     });
   }
 

@@ -65,6 +65,37 @@ class UserProfile {
     this.isAvailableAsJudge = false,
   });
 
+  /// Safely parse preferences field with proper error handling
+  static Map<String, dynamic> _safeParsePreferences(dynamic preferences) {
+    try {
+      if (preferences == null) return {};
+      if (preferences is Map<String, dynamic>) return preferences;
+      if (preferences is String) {
+        if (preferences.isEmpty) return {};
+        return Map<String, dynamic>.from(json.decode(preferences));
+      }
+      return {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  /// Safely parse integer field with proper error handling
+  static int _safeParseInt(dynamic value, {int defaultValue = 0}) {
+    try {
+      if (value == null) return defaultValue;
+      if (value is int) return value;
+      if (value is double) return value.toInt();
+      if (value is String && value.isNotEmpty) {
+        final parsed = int.tryParse(value);
+        return parsed ?? defaultValue;
+      }
+      return defaultValue;
+    } catch (e) {
+      return defaultValue;
+    }
+  }
+
   /// Create UserProfile from Appwrite document data
   factory UserProfile.fromMap(Map<String, dynamic> map) {
     return UserProfile(
@@ -72,7 +103,7 @@ class UserProfile {
       name: map['name'] ?? '',
       email: map['email'] ?? '',
       bio: map['bio'],
-      avatar: map['avatar'],
+      avatar: map['avatar'] ?? map['profileImageUrl'], // Support both field names
       location: map['location'],
       website: map['website'],
       xHandle: map['xHandle'],
@@ -80,27 +111,23 @@ class UserProfile {
       youtubeHandle: map['youtubeHandle'],
       facebookHandle: map['facebookHandle'],
       instagramHandle: map['instagramHandle'],
-      preferences: Map<String, dynamic>.from(
-        map['preferences'] is String 
-          ? json.decode(map['preferences']) 
-          : map['preferences'] ?? {}
-      ),
-      reputation: map['reputation'] ?? 0,
-      totalDebates: map['totalDebates'] ?? 0,
-      totalWins: map['totalWins'] ?? 0,
-      totalRoomsCreated: map['totalRoomsCreated'] ?? 0,
-      totalRoomsJoined: map['totalRoomsJoined'] ?? 0,
-      coinBalance: map['coinBalance'] ?? 100,
-      totalGiftsSent: map['totalGiftsSent'] ?? 0,
-      totalGiftsReceived: map['totalGiftsReceived'] ?? 0,
-      interests: List<String>.from(map['interests'] ?? []),
-      joinedClubs: List<String>.from(map['joinedClubs'] ?? []),
-      createdAt: DateTime.parse(
-        map['createdAt'] ?? map['\$createdAt'] ?? DateTime.now().toIso8601String()
-      ),
-      updatedAt: DateTime.parse(
-        map['updatedAt'] ?? map['\$updatedAt'] ?? DateTime.now().toIso8601String()
-      ),
+      preferences: _safeParsePreferences(map['preferences']),
+      reputation: _safeParseInt(map['reputation'], defaultValue: 0),
+      totalDebates: _safeParseInt(map['totalDebates'], defaultValue: 0),
+      totalWins: _safeParseInt(map['totalWins'], defaultValue: 0),
+      totalRoomsCreated: _safeParseInt(map['totalRoomsCreated'], defaultValue: 0),
+      totalRoomsJoined: _safeParseInt(map['totalRoomsJoined'], defaultValue: 0),
+      coinBalance: _safeParseInt(map['coinBalance'], defaultValue: 100),
+      totalGiftsSent: _safeParseInt(map['totalGiftsSent'], defaultValue: 0),
+      totalGiftsReceived: _safeParseInt(map['totalGiftsReceived'], defaultValue: 0),
+      interests: (map['interests'] as List?)?.cast<String>() ?? [],
+      joinedClubs: (map['joinedClubs'] as List?)?.cast<String>() ?? [],
+      createdAt: DateTime.tryParse(
+        map['createdAt'] ?? map['\$createdAt'] ?? ''
+      ) ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(
+        map['updatedAt'] ?? map['\$updatedAt'] ?? ''
+      ) ?? DateTime.now(),
       isVerified: map['isVerified'] ?? false,
       isPublicProfile: map['isPublicProfile'] ?? true,
       isAvailableAsModerator: map['isAvailableAsModerator'] ?? false,

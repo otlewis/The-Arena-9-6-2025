@@ -115,7 +115,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
         _loadingModerators = false;
       });
     } catch (e) {
-      debugPrint('Error loading moderators/judges: $e');
+      AppLogger().debug('Error loading moderators/judges: $e');
       setState(() => _loadingModerators = false);
     }
   }

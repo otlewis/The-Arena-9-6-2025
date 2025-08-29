@@ -27,10 +27,12 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     if (!_preferencesService.isLoaded) {
       await _preferencesService.loadPreferences();
     }
-    setState(() {
-      _preferences = _preferencesService.preferences;
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _preferences = _preferencesService.preferences;
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _savePreferences() async {
@@ -420,9 +422,11 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
 
     if (confirmed == true) {
       await _preferencesService.resetToDefaults();
-      setState(() {
-        _preferences = _preferencesService.preferences;
-      });
+      if (mounted) {
+        setState(() {
+          _preferences = _preferencesService.preferences;
+        });
+      }
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

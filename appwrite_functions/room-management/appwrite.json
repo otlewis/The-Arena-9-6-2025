@@ -1,0 +1,22 @@
+{
+  "projectId": "YOUR_PROJECT_ID",
+  "functions": [
+    {
+      "$id": "room-management",
+      "name": "Room Management",
+      "runtime": "node-18.0",
+      "execute": [],
+      "events": [],
+      "schedule": "",
+      "timeout": 15,
+      "enabled": true,
+      "logging": true,
+      "entrypoint": "src/main.js",
+      "commands": "npm install",
+      "ignore": [
+        "node_modules",
+        ".appwrite"
+      ]
+    }
+  ]
+}

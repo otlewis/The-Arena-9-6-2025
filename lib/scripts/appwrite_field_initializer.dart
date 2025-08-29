@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import '../core/logging/app_logger.dart';
 import '../services/appwrite_service.dart';
 
 /// Script to programmatically initialize coin system data for users
@@ -11,16 +11,16 @@ class AppwriteFieldInitializer {
   /// Note: This assumes the database fields already exist in Appwrite Console
   static Future<void> initializeCoinSystemFields() async {
     try {
-      debugPrint('🔧 Starting coin system initialization...');
-      debugPrint('ℹ️  Note: Database fields must exist in Appwrite Console first');
+      AppLogger().debug('🔧 Starting coin system initialization...');
+      AppLogger().debug('ℹ️  Note: Database fields must exist in Appwrite Console first');
       
       // Try to initialize current user's coins
       await _initializeCurrentUserCoins();
       
-      debugPrint('✅ Successfully initialized coin system!');
+      AppLogger().debug('✅ Successfully initialized coin system!');
       
     } catch (e) {
-      debugPrint('❌ Error initializing coin system: $e');
+      AppLogger().debug('❌ Error initializing coin system: $e');
       
       // Provide helpful instructions for missing fields
       if (e.toString().toLowerCase().contains('attribute') || 
@@ -35,33 +35,33 @@ class AppwriteFieldInitializer {
   
   /// Show instructions for manually setting up database fields
   static void _showFieldSetupInstructions() {
-    debugPrint('');
-    debugPrint('🛠️  MANUAL SETUP REQUIRED:');
-    debugPrint('💡 Database schema fields must be added manually in Appwrite Console.');
-    debugPrint('🌐 Go to: https://cloud.appwrite.io');
-    debugPrint('📁 Navigate to: Your Project → Databases → arena_db → users collection');
-    debugPrint('➕ Add these attributes:');
-    debugPrint('   • reputation (Integer, default: 500, required: false)');
-    debugPrint('   • coinBalance (Integer, default: 1000, required: false)');
-    debugPrint('   • totalGiftsSent (Integer, default: 0, required: false)');
-    debugPrint('   • totalGiftsReceived (Integer, default: 0, required: false)');
-    debugPrint('');
-    debugPrint('✨ After adding fields, run this debug tool again!');
-    debugPrint('');
+    AppLogger().debug('');
+    AppLogger().debug('🛠️  MANUAL SETUP REQUIRED:');
+    AppLogger().debug('💡 Database schema fields must be added manually in Appwrite Console.');
+    AppLogger().debug('🌐 Go to: https://cloud.appwrite.io');
+    AppLogger().debug('📁 Navigate to: Your Project → Databases → arena_db → users collection');
+    AppLogger().debug('➕ Add these attributes:');
+    AppLogger().debug('   • reputation (Integer, default: 500, required: false)');
+    AppLogger().debug('   • coinBalance (Integer, default: 1000, required: false)');
+    AppLogger().debug('   • totalGiftsSent (Integer, default: 0, required: false)');
+    AppLogger().debug('   • totalGiftsReceived (Integer, default: 0, required: false)');
+    AppLogger().debug('');
+    AppLogger().debug('✨ After adding fields, run this debug tool again!');
+    AppLogger().debug('');
   }
   
   /// Initialize the current user's coin balance after fields are created
   static Future<void> _initializeCurrentUserCoins() async {
     try {
-      debugPrint('💰 Initializing current user coins...');
+      AppLogger().debug('💰 Initializing current user coins...');
       
       final currentUser = await _appwrite.getCurrentUser();
       if (currentUser == null) {
-        debugPrint('❌ No current user found');
+        AppLogger().debug('❌ No current user found');
         return;
       }
       
-      debugPrint('🔧 Setting initial coin balance for user: ${currentUser.$id}');
+      AppLogger().debug('🔧 Setting initial coin balance for user: ${currentUser.$id}');
       
       // Wait a bit more for field creation to propagate
       await Future.delayed(const Duration(seconds: 2));
@@ -79,10 +79,10 @@ class AppwriteFieldInitializer {
         },
       );
       
-      debugPrint('✅ Successfully initialized coins for user ${currentUser.$id}');
+      AppLogger().debug('✅ Successfully initialized coins for user ${currentUser.$id}');
       
     } catch (e) {
-      debugPrint('❌ Error initializing user coins: $e');
+      AppLogger().debug('❌ Error initializing user coins: $e');
       rethrow;
     }
   }
@@ -90,11 +90,11 @@ class AppwriteFieldInitializer {
   /// Run the complete initialization process
   static Future<void> run() async {
     try {
-      debugPrint('🚀 Starting complete Appwrite coin system setup...');
+      AppLogger().debug('🚀 Starting complete Appwrite coin system setup...');
       await initializeCoinSystemFields();
-      debugPrint('🎉 Coin system setup completed successfully!');
+      AppLogger().debug('🎉 Coin system setup completed successfully!');
     } catch (e) {
-      debugPrint('💥 Setup failed: $e');
+      AppLogger().debug('💥 Setup failed: $e');
       rethrow;
     }
   }

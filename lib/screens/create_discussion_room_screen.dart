@@ -5,7 +5,9 @@ import '../core/logging/app_logger.dart';
 import 'debates_discussions_screen.dart';
 
 class CreateDiscussionRoomScreen extends StatefulWidget {
-  const CreateDiscussionRoomScreen({super.key});
+  final String? preSelectedFormat;
+  
+  const CreateDiscussionRoomScreen({super.key, this.preSelectedFormat});
 
   @override
   State<CreateDiscussionRoomScreen> createState() => _CreateDiscussionRoomScreenState();
@@ -70,6 +72,15 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
       'description': 'Share your perspective on a topic'
     },
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Set the debate style based on preSelectedFormat
+    if (widget.preSelectedFormat != null) {
+      _selectedDebateStyle = widget.preSelectedFormat!;
+    }
+  }
 
   @override
   void dispose() {
@@ -152,13 +163,7 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
       AppLogger().info('Waiting for room setup to stabilize before navigation...');
       await Future.delayed(const Duration(seconds: 1));
       
-      // Verify room exists and is properly set up before navigating
-      final roomData = await _appwriteService.getDebateDiscussionRoom(roomId);
-      if (roomData == null) {
-        throw Exception('Room was not properly created or was deleted');
-      }
-      
-      AppLogger().info('Room verified, proceeding with navigation to: $roomId');
+      AppLogger().info('Proceeding with navigation to created room: $roomId');
       
       // Navigate directly to the created room (using Arena pattern)
       if (mounted) {
@@ -236,7 +241,9 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
     return Scaffold(
       backgroundColor: lightPurple,
       appBar: AppBar(
-        title: const Text('Create Discussion Room'),
+        title: Text(widget.preSelectedFormat != null 
+            ? 'Create ${widget.preSelectedFormat} Room' 
+            : 'Create Discussion Room'),
         backgroundColor: Colors.white,
         foregroundColor: darkGray,
         elevation: 0,
@@ -295,30 +302,84 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
             ),
             const SizedBox(height: 24),
             
-            _buildFormSection(
-              title: 'Debate Style',
-              child: Column(
-                children: _debateStyles.map((style) {
-                  final isSelected = _selectedDebateStyle == style['id'];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: InkWell(
-                      onTap: () {
-                        setState(() {
-                          _selectedDebateStyle = style['id']!;
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: isSelected ? primaryPurple.withValues(alpha: 0.1) : Colors.transparent,
-                          border: Border.all(
-                            color: isSelected ? primaryPurple : lightBorder,
-                            width: 2,
-                          ),
-                          borderRadius: BorderRadius.circular(8),
+            // Show locked format info or debate style selection
+            if (widget.preSelectedFormat != null)
+              _buildFormSection(
+                title: 'Room Format',
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: primaryPurple.withValues(alpha: 0.1),
+                    border: Border.all(
+                      color: primaryPurple,
+                      width: 2,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.lock,
+                        color: primaryPurple,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${widget.preSelectedFormat} Room',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: primaryPurple,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _getFormatDescription(widget.preSelectedFormat!),
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
                         ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            
+            // Add spacing after locked format info
+            if (widget.preSelectedFormat != null) const SizedBox(height: 24),
+            
+            if (widget.preSelectedFormat == null)
+              _buildFormSection(
+                title: 'Debate Style',
+                child: Column(
+                  children: _debateStyles.map((style) {
+                    final isSelected = _selectedDebateStyle == style['id'];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            _selectedDebateStyle = style['id']!;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: isSelected ? primaryPurple.withValues(alpha: 0.1) : Colors.transparent,
+                            border: Border.all(
+                              color: isSelected ? primaryPurple : lightBorder,
+                              width: 2,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         child: Row(
                           children: [
                             Container(
@@ -368,7 +429,9 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
                 }).toList(),
               ),
             ),
-            const SizedBox(height: 24),
+            
+            // Add spacing whether debate style is shown or not
+            if (widget.preSelectedFormat == null) const SizedBox(height: 24),
             
             _buildFormSection(
               title: 'Category',
@@ -621,5 +684,18 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
         ),
       ],
     );
+  }
+  
+  String _getFormatDescription(String format) {
+    switch (format) {
+      case 'Debate':
+        return 'Structured argument with opposing viewpoints';
+      case 'Take':
+        return 'Share your perspective on a topic';
+      case 'Discussion':
+        return 'Open conversation and exchange of ideas';
+      default:
+        return 'Room format';
+    }
   }
 }

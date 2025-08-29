@@ -2,6 +2,7 @@ import 'package:get_it/get_it.dart';
 import '../core/logging/app_logger.dart';
 import 'persistent_audio_service.dart';
 import 'appwrite_service.dart';
+import 'livekit_config_service.dart';
 
 /// Service responsible for initializing the persistent audio connection
 /// when the user is authenticated and ready
@@ -48,7 +49,7 @@ class AudioInitializationService {
       try {
         await persistentAudioService.initialize(
           userId: userId,
-          serverUrl: 'ws://172.236.109.9:7880', // Use actual LiveKit server
+          serverUrl: LiveKitConfigService.instance.effectiveServerUrl,
         );
 
         _isInitialized = true;

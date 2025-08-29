@@ -162,7 +162,7 @@ class ArenaModals {
     );
   }
 
-  // Show chat bottom sheet - DEPRECATED: Use showAgoraChatBottomSheet instead
+  // Show chat bottom sheet for instant messaging
   static void showChatBottomSheet(
     BuildContext context,
     {
@@ -2293,7 +2293,7 @@ class ShareScreenBottomSheet extends StatefulWidget {
   final VoidCallback? onStopScreenShare;
   final bool isScreenSharing;
   final VoidCallback? onRequestScreenShare;
-  final dynamic agoraEngine; // Add Agora engine for video view (dynamic for web compatibility)
+  final dynamic livekitRoom; // Add LiveKit room for video view (dynamic for web compatibility)
 
   const ShareScreenBottomSheet({
     super.key,
@@ -2303,7 +2303,7 @@ class ShareScreenBottomSheet extends StatefulWidget {
     this.onStopScreenShare,
     this.isScreenSharing = false,
     this.onRequestScreenShare,
-    this.agoraEngine,
+    this.livekitRoom,
   });
 
   @override
@@ -2448,7 +2448,7 @@ class _ShareScreenBottomSheetState extends State<ShareScreenBottomSheet> {
                   ),
                   
                   // Screen sharing video view (when actively sharing)
-                  if (widget.isScreenSharing && widget.agoraEngine != null) ...[
+                  if (widget.isScreenSharing && widget.livekitRoom != null) ...[
                     const SizedBox(height: 16),
                     Container(
                       height: 250, // Increased height for better viewing
@@ -2687,7 +2687,7 @@ class _ShareScreenBottomSheetState extends State<ShareScreenBottomSheet> {
 
   /// Build the screen sharing video view
   Widget _buildScreenShareVideoView() {
-    if (widget.agoraEngine == null) {
+    if (widget.livekitRoom == null) {
       return Container(
         color: Colors.black,
         child: const Center(
@@ -2715,7 +2715,7 @@ class _ShareScreenBottomSheetState extends State<ShareScreenBottomSheet> {
 
     try {
       // For web compatibility, return a placeholder widget
-      if (widget.agoraEngine == null) {
+      if (widget.livekitRoom == null) {
         return Container(
           color: Colors.black,
           child: const Center(

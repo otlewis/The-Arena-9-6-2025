@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'livekit_service.dart';
@@ -32,7 +33,7 @@ class SpeakingDetectionService extends ChangeNotifier {
     _liveKitService.onSpeakingChanged = _handleSpeakingChanged;
     _liveKitService.onAudioLevelChanged = _handleAudioLevelChanged;
     
-    debugPrint('🗣️ Speaking detection service initialized');
+    AppLogger().debug('🗣️ Speaking detection service initialized');
   }
 
   /// Handle speaking state changes from LiveKit
@@ -42,7 +43,7 @@ class SpeakingDetectionService extends ChangeNotifier {
     if (isSpeaking != wasSpokening) {
       _speakingStates[userId] = isSpeaking;
       
-      debugPrint('🗣️ Speaking state changed: $userId = $isSpeaking');
+      AppLogger().debug('🗣️ Speaking state changed: $userId = $isSpeaking');
       notifyListeners();
     }
   }
@@ -64,7 +65,7 @@ class SpeakingDetectionService extends ChangeNotifier {
     _audioLevels.remove(userId);
     
     if (wasRemoved) {
-      debugPrint('🧹 Cleared speaking state for $userId');
+      AppLogger().debug('🧹 Cleared speaking state for $userId');
       notifyListeners();
     }
   }
@@ -74,7 +75,7 @@ class SpeakingDetectionService extends ChangeNotifier {
     if (_speakingStates.isNotEmpty || _audioLevels.isNotEmpty) {
       _speakingStates.clear();
       _audioLevels.clear();
-      debugPrint('🧹 Cleared all speaking states');
+      AppLogger().debug('🧹 Cleared all speaking states');
       notifyListeners();
     }
   }
@@ -86,7 +87,7 @@ class SpeakingDetectionService extends ChangeNotifier {
 
   /// Simulate speaking for testing purposes
   void simulateSpeaking(String userId, bool isSpeaking) {
-    debugPrint('🧪 Simulating speaking for $userId: $isSpeaking');
+    AppLogger().debug('🧪 Simulating speaking for $userId: $isSpeaking');
     _liveKitService.simulateSpeaking(userId, isSpeaking);
   }
 

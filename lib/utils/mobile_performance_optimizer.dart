@@ -52,12 +52,10 @@ class MobilePerformanceOptimizer {
   /// Apply mobile-specific optimizations
   Future<void> _applyMobileOptimizations() async {
     try {
-      // Set preferred orientations for mobile
+      // Set preferred orientations for mobile (portrait only)
       await SystemChrome.setPreferredOrientations([
         DeviceOrientation.portraitUp,
         DeviceOrientation.portraitDown,
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
       ]);
       
       // Optimize system UI for mobile

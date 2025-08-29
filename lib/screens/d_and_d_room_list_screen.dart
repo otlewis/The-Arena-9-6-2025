@@ -105,6 +105,7 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: "dnd_create_room",
         onPressed: _createNewRoom,
         backgroundColor: accentPurple,
         foregroundColor: Colors.white,

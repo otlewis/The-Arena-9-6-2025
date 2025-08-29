@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import '../widgets/synchronized_timer_widget.dart';
 import '../models/timer_state.dart';
@@ -506,45 +507,45 @@ class TimerIntegrationExamples {
   // Helper methods for timer actions (implement based on your app's needs)
   static void _showTimerExpiredDialog(String message) {
     // Show dialog or snackbar
-    debugPrint('Timer expired: $message');
+    AppLogger().debug('Timer expired: $message');
   }
 
   static void _showSnackBar(String message) {
-    debugPrint('Timer event: $message');
+    AppLogger().debug('Timer event: $message');
   }
 
   static void _handleSpeakerTimeExpired(String? speaker) {
-    debugPrint('Speaker time expired for: $speaker');
+    AppLogger().debug('Speaker time expired for: $speaker');
     // Implement speaker rotation logic
   }
 
   static void _handleDebatePhaseComplete(String? phase, String? debater) {
-    debugPrint('Debate phase complete: $phase for $debater');
+    AppLogger().debug('Debate phase complete: $phase for $debater');
     // Implement phase transition logic
   }
 
   static void _announcePhaseStart(String? phase, String? debater) {
-    debugPrint('Phase started: $phase for $debater');
+    AppLogger().debug('Phase started: $phase for $debater');
     // Implement announcement logic
   }
 
   static void _createQuickTimer(String roomId, String userId, RoomType roomType, int duration) {
-    debugPrint('Creating quick timer: ${duration}s for room $roomId');
+    AppLogger().debug('Creating quick timer: ${duration}s for room $roomId');
     // Implement timer creation
   }
 
   static void _startSpeakerTimer(String roomId, String userId, String speaker) {
-    debugPrint('Starting speaker timer for: $speaker');
+    AppLogger().debug('Starting speaker timer for: $speaker');
     // Implement speaker timer logic
   }
 
   static void _startQATimer(String roomId, String userId) {
-    debugPrint('Starting Q&A timer');
+    AppLogger().debug('Starting Q&A timer');
     // Implement Q&A timer logic
   }
 
   static void _startDebatePhase(String roomId, String userId, TimerType timerType) {
-    debugPrint('Starting debate phase: ${timerType.displayName}');
+    AppLogger().debug('Starting debate phase: ${timerType.displayName}');
     // Implement debate phase timer logic
   }
 }

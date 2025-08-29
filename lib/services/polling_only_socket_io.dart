@@ -1,6 +1,6 @@
+import '../core/logging/app_logger.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 /// A custom Socket.IO client that ONLY uses HTTP polling
@@ -29,7 +29,7 @@ class PollingOnlySocketIO {
   /// Connect to Socket.IO server using polling only
   Future<void> connect() async {
     try {
-      debugPrint('🔌 PollingOnlySocketIO: Connecting to $serverUrl');
+      AppLogger().debug('🔌 PollingOnlySocketIO: Connecting to $serverUrl');
       
       // 1. Initial handshake
       final handshakeUrl = '$serverUrl/socket.io/?EIO=4&transport=polling';
@@ -44,7 +44,7 @@ class PollingOnlySocketIO {
           sessionId = handshake['sid'];
           socketId = sessionId; // Socket ID is the session ID
           
-          debugPrint('✅ PollingOnlySocketIO: Connected! Session ID: $sessionId');
+          AppLogger().debug('✅ PollingOnlySocketIO: Connected! Session ID: $sessionId');
           _isConnected = true;
           
           // Start polling for messages
@@ -52,7 +52,7 @@ class PollingOnlySocketIO {
           
           // CRITICAL: Send Socket.IO connection message to upgrade from Engine.IO
           await _sendRaw('40'); // Connect to default namespace
-          debugPrint('🔗 PollingOnlySocketIO: Sent Socket.IO connection message (40)');
+          AppLogger().debug('🔗 PollingOnlySocketIO: Sent Socket.IO connection message (40)');
           
           // Wait a moment for server to process the connection
           await Future.delayed(const Duration(milliseconds: 100));
@@ -68,7 +68,7 @@ class PollingOnlySocketIO {
         throw Exception('Handshake failed: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('❌ PollingOnlySocketIO: Connection error: $e');
+      AppLogger().debug('❌ PollingOnlySocketIO: Connection error: $e');
       onConnectError?.call(e);
       _emit('connect_error', e);
       rethrow;
@@ -89,7 +89,7 @@ class PollingOnlySocketIO {
           _handlePollResponse(response.body);
         }
       } catch (e) {
-        debugPrint('❌ PollingOnlySocketIO: Polling error: $e');
+        AppLogger().debug('❌ PollingOnlySocketIO: Polling error: $e');
       }
     });
   }
@@ -97,14 +97,14 @@ class PollingOnlySocketIO {
   /// Handle poll response
   void _handlePollResponse(String data) {
     if (data.isNotEmpty) {
-      debugPrint('📨 PollingOnlySocketIO: Raw poll response: $data');
+      AppLogger().debug('📨 PollingOnlySocketIO: Raw poll response: $data');
     }
     
     // Socket.IO protocol: messages can be batched
     final messages = _parseMessages(data);
     
     for (final message in messages) {
-      debugPrint('📨 PollingOnlySocketIO: Processing message: $message');
+      AppLogger().debug('📨 PollingOnlySocketIO: Processing message: $message');
       
       if (message.startsWith('42')) {
         // This is a Socket.IO message event
@@ -114,37 +114,37 @@ class PollingOnlySocketIO {
           if (decoded is List && decoded.length >= 2) {
             final event = decoded[0] as String;
             final data = decoded.length > 2 ? decoded.sublist(1) : decoded[1];
-            debugPrint('📥 PollingOnlySocketIO: Received event: $event with data: $data');
+            AppLogger().debug('📥 PollingOnlySocketIO: Received event: $event with data: $data');
             _emit(event, data);
           } else {
-            debugPrint('❌ PollingOnlySocketIO: Invalid event format: $decoded');
+            AppLogger().debug('❌ PollingOnlySocketIO: Invalid event format: $decoded');
           }
         } catch (e) {
-          debugPrint('❌ PollingOnlySocketIO: Error parsing message: $e');
-          debugPrint('❌ PollingOnlySocketIO: Raw payload: $payload');
+          AppLogger().debug('❌ PollingOnlySocketIO: Error parsing message: $e');
+          AppLogger().debug('❌ PollingOnlySocketIO: Raw payload: $payload');
         }
       } else if (message == '2') {
         // Ping from server, send pong
-        debugPrint('💓 PollingOnlySocketIO: Received ping, sending pong');
+        AppLogger().debug('💓 PollingOnlySocketIO: Received ping, sending pong');
         _sendRaw('3');
       } else if (message == '3') {
         // Pong response 
-        debugPrint('💓 PollingOnlySocketIO: Received pong');
+        AppLogger().debug('💓 PollingOnlySocketIO: Received pong');
       } else if (message == '1') {
         // Engine.IO close message - but let's debug what's happening
-        debugPrint('⚠️ PollingOnlySocketIO: Received message type 1 - ignoring for now');
+        AppLogger().debug('⚠️ PollingOnlySocketIO: Received message type 1 - ignoring for now');
         // Don't disconnect yet - let's see what happens
       } else if (message == '6') {
         // NOOP (no operation) - just ignore
-        debugPrint('⏸️ PollingOnlySocketIO: Received NOOP message');
+        AppLogger().debug('⏸️ PollingOnlySocketIO: Received NOOP message');
       } else if (message == '40') {
         // Connect to namespace (successful connection)
-        debugPrint('✅ PollingOnlySocketIO: Connected to namespace');
+        AppLogger().debug('✅ PollingOnlySocketIO: Connected to namespace');
       } else if (message == '41') {
         // Disconnect from namespace
-        debugPrint('🔌 PollingOnlySocketIO: Disconnected from namespace');
+        AppLogger().debug('🔌 PollingOnlySocketIO: Disconnected from namespace');
       } else {
-        debugPrint('❓ PollingOnlySocketIO: Unknown message type: $message');
+        AppLogger().debug('❓ PollingOnlySocketIO: Unknown message type: $message');
       }
     }
   }
@@ -174,7 +174,7 @@ class PollingOnlySocketIO {
             break;
           }
         } catch (e) {
-          debugPrint('❌ PollingOnlySocketIO: Error parsing message length: $e');
+          AppLogger().debug('❌ PollingOnlySocketIO: Error parsing message length: $e');
           break;
         }
       }
@@ -196,7 +196,7 @@ class PollingOnlySocketIO {
     
     // Create Socket.IO message format
     final message = jsonEncode([event, data]);
-    debugPrint('📤 PollingOnlySocketIO: Emitting event: $event with data: $data');
+    AppLogger().debug('📤 PollingOnlySocketIO: Emitting event: $event with data: $data');
     await _sendRaw('42$message');
   }
   
@@ -208,15 +208,15 @@ class PollingOnlySocketIO {
     final body = '${data.length}:$data';
     
     try {
-      debugPrint('📮 PollingOnlySocketIO: Sending to $sendUrl with body: $body');
+      AppLogger().debug('📮 PollingOnlySocketIO: Sending to $sendUrl with body: $body');
       final response = await http.post(
         Uri.parse(sendUrl),
         headers: {'Content-Type': 'text/plain;charset=UTF-8'},
         body: body,
       );
-      debugPrint('📬 PollingOnlySocketIO: Send response: ${response.statusCode} - ${response.body}');
+      AppLogger().debug('📬 PollingOnlySocketIO: Send response: ${response.statusCode} - ${response.body}');
     } catch (e) {
-      debugPrint('❌ PollingOnlySocketIO: Send error: $e');
+      AppLogger().debug('❌ PollingOnlySocketIO: Send error: $e');
     }
   }
   
@@ -249,7 +249,7 @@ class PollingOnlySocketIO {
           // Always call with data parameter, even if null
           handler(data);
         } catch (e) {
-          debugPrint('❌ PollingOnlySocketIO: Handler error: $e');
+          AppLogger().debug('❌ PollingOnlySocketIO: Handler error: $e');
         }
       }
     }
@@ -266,7 +266,7 @@ class PollingOnlySocketIO {
     onDisconnect?.call();
     _emit('disconnect', null);
     
-    debugPrint('🔌 PollingOnlySocketIO: Disconnected');
+    AppLogger().debug('🔌 PollingOnlySocketIO: Disconnected');
   }
   
   /// Dispose resources

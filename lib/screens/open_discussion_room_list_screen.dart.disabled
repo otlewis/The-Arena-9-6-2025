@@ -1,0 +1,484 @@
+import 'package:flutter/material.dart';
+import '../services/open_discussion_service.dart';
+import '../services/appwrite_service.dart';
+import '../core/logging/app_logger.dart';
+import 'open_discussion_screen.dart';
+import 'create_open_discussion_screen.dart';
+import 'dart:convert';
+
+/// List of available open discussion rooms
+class OpenDiscussionRoomListScreen extends StatefulWidget {
+  const OpenDiscussionRoomListScreen({super.key});
+
+  @override
+  State<OpenDiscussionRoomListScreen> createState() => _OpenDiscussionRoomListScreenState();
+}
+
+class _OpenDiscussionRoomListScreenState extends State<OpenDiscussionRoomListScreen> {
+  final OpenDiscussionService _openDiscussionService = OpenDiscussionService();
+  final AppwriteService _appwriteService = AppwriteService();
+  
+  String? _currentUserId;
+  
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+  
+  Future<void> _initialize() async {
+    try {
+      // Get current user
+      final user = await _appwriteService.getCurrentUser();
+      if (user != null) {
+        _currentUserId = user.$id;
+      }
+    } catch (e) {
+      AppLogger().error('Failed to initialize: $e');
+    }
+  }
+  
+  Future<void> _joinRoom(Map<String, dynamic> room) async {
+    try {
+      final roomName = room['name'] ?? ''; // Technical name for LiveKit
+      final displayTitle = room['title'] ?? room['displayTitle'] ?? 'Untitled Room'; // Clean title for UI
+      final metadata = jsonDecode(room['metadata'] ?? '{}');
+      final moderatorId = metadata['moderatorId'] ?? '';
+      
+      // Determine user role
+      final userRole = (_currentUserId == moderatorId) ? 'moderator' : 'audience';
+      
+      AppLogger().debug('Joining room $roomName (display: $displayTitle) as $userRole');
+      
+      // Navigate to room
+      if (mounted) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OpenDiscussionScreen(
+              roomName: roomName,
+              displayTitle: displayTitle,
+              userRole: userRole,
+            ),
+          ),
+        );
+        
+        // Rooms will auto-refresh via StreamBuilder
+      }
+    } catch (e) {
+      AppLogger().error('Failed to join room: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to join room: $e')),
+        );
+      }
+    }
+  }
+  
+  Future<void> _createNewRoom() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const CreateOpenDiscussionScreen(),
+      ),
+    );
+    
+    // Rooms will auto-refresh via StreamBuilder when new room is created
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF2D3748),
+        title: const Text(
+          'Open Discussion Rooms',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              // Trigger a manual refresh by calling the service method
+              _openDiscussionService.refreshRoomList();
+            },
+          ),
+        ],
+        elevation: 0,
+      ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.white,
+              Colors.red.withValues(alpha: 0.05),
+              Colors.purple.withValues(alpha: 0.1),
+            ],
+          ),
+        ),
+        child: StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _openDiscussionService.roomsStream,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator(color: Color(0xFF48BB78)));
+            }
+            
+            if (snapshot.hasError) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: Colors.red[300],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Error loading rooms',
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.red[600],
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${snapshot.error}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF6B7280),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              );
+            }
+            
+            final rooms = snapshot.data ?? [];
+            
+            if (rooms.isEmpty) {
+              return _buildEmptyState();
+            }
+            
+            return _buildRoomList(rooms);
+          },
+        ),
+        ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _createNewRoom,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text(
+          'Create Room',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: const Color(0xFF6B46C1), // Purple FAB
+        elevation: 4,
+      ),
+    );
+  }
+  
+  Widget _buildEmptyState() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.forum_outlined,
+            size: 64,
+            color: Color(0xFFA0ADB8),
+          ),
+          SizedBox(height: 16),
+          Text(
+            'No active discussion rooms',
+            style: TextStyle(
+              fontSize: 18,
+              color: Color(0xFF374151), // Dark text for white background
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Create a room to start a discussion',
+            style: TextStyle(
+              fontSize: 14,
+              color: Color(0xFF6B7280), // Medium gray for white background
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildRoomList(List<Map<String, dynamic>> rooms) {
+    return RefreshIndicator(
+      onRefresh: () async {
+        // Trigger manual refresh through the service
+        _openDiscussionService.refreshRoomList();
+      },
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: rooms.length,
+        itemBuilder: (context, index) {
+          final room = rooms[index];
+          return _buildRoomCard(room);
+        },
+      ),
+    );
+  }
+  
+  Widget _buildRoomCard(Map<String, dynamic> room) {
+    final participantCount = room['num_participants'] ?? 0;
+    final metadata = jsonDecode(room['metadata'] ?? '{}');
+    final moderatorId = metadata['moderatorId'] ?? room['moderatorId'] ?? '';
+    final moderatorName = room['moderatorName'] ?? metadata['moderatorName'] ?? 'Unknown';
+    final roomTitle = room['title'] ?? metadata['title'] ?? 'Untitled Room';
+    final description = room['description'] ?? metadata['description'] ?? 'No description provided';
+    final category = room['category'] ?? metadata['category'] ?? 'General';
+    
+    final isModerator = _currentUserId == moderatorId;
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF6B46C1).withValues(alpha: 0.1), // Light purple background
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF6B46C1).withValues(alpha: 0.3), width: 1), // Purple border
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: InkWell(
+        onTap: () => _joinRoom(room),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Room title and category badge
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      roomTitle,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFDC2626), // Scarlet color
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isModerator ? const Color(0xFFDC2626) : const Color(0xFF6B46C1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      isModerator ? 'MY ROOM' : category.toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 8),
+              
+              // Description
+              Text(
+                description,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFFDC2626), // Scarlet color
+                  height: 1.3,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              
+              const SizedBox(height: 8),
+              
+              // Moderator info with profile picture
+              Row(
+                children: [
+                  // Moderator profile picture
+                  _buildModeratorAvatar(room, moderatorName),
+                  const SizedBox(width: 8),
+                  // Moderator name
+                  Text(
+                    'Moderated by $moderatorName',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF374151), // Dark gray instead of scarlet for better contrast on white
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // Participant avatars row
+              Row(
+                children: [
+                  // Mock participant avatars (we'll get real ones later)
+                  _buildParticipantAvatars(participantCount),
+                  
+                  const Spacer(),
+                  
+                  // Join button
+                  ElevatedButton(
+                    onPressed: () => _joinRoom(room),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC2626), // Scarlet button
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      isModerator ? 'ENTER ROOM' : 'JOIN ROOM',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 12),
+              
+              // Participant count and status
+              Row(
+                children: [
+                  const Icon(
+                    Icons.people,
+                    size: 16,
+                    color: Color(0xFFDC2626), // Scarlet color
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$participantCount',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFFDC2626), // Scarlet color
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFDC2626), // Scarlet dot for live
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Live',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFFDC2626), // Scarlet color
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildParticipantAvatars(int participantCount) {
+    // Show simple participant indicator instead of mock avatars
+    if (participantCount == 0) {
+      return const SizedBox.shrink();
+    }
+    
+    return Row(
+      children: [
+        // Show up to 3 participant indicators
+        for (int i = 0; i < (participantCount > 3 ? 3 : participantCount); i++)
+          Container(
+            margin: EdgeInsets.only(right: i < 2 ? 4 : 0),
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: const Color(0xFF6B46C1),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 1.5),
+            ),
+            child: const Icon(
+              Icons.person,
+              size: 12,
+              color: Colors.white,
+            ),
+          ),
+        if (participantCount > 3)
+          Container(
+            margin: const EdgeInsets.only(left: 8),
+            child: Text(
+              '+${participantCount - 3}',
+              style: const TextStyle(
+                color: Color(0xFFA0ADB8),
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+  
+  /// Build moderator avatar with real profile picture or fallback
+  Widget _buildModeratorAvatar(Map<String, dynamic> room, String moderatorName) {
+    // Try multiple possible fields for profile image
+    final metadata = jsonDecode(room['metadata'] ?? '{}');
+    final profileImageUrl = room['moderatorProfileImageUrl'] as String? ?? 
+                           room['moderatorAvatar'] as String? ??
+                           metadata['moderatorAvatar'] as String? ??
+                           metadata['moderatorProfileImageUrl'] as String?;
+    
+    return CircleAvatar(
+      radius: 16,
+      backgroundColor: const Color(0xFF6B46C1), // Purple background
+      backgroundImage: profileImageUrl != null && profileImageUrl.isNotEmpty
+          ? NetworkImage(profileImageUrl)
+          : null,
+      child: profileImageUrl == null || profileImageUrl.isEmpty
+          ? Text(
+              moderatorName.isNotEmpty ? moderatorName[0].toUpperCase() : 'M',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            )
+          : null,
+    );
+  }
+}

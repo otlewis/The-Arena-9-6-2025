@@ -11,6 +11,8 @@ import '../services/appwrite_service.dart';
 import '../services/firebase_gift_service.dart';
 import '../services/livekit_service.dart';
 import '../services/livekit_token_service.dart';
+import '../services/livekit_config_service.dart';
+import '../services/super_moderator_service.dart';
 // import '../services/chat_service.dart'; // Removed with new chat system
 import '../models/user_profile.dart';
 import '../models/gift.dart';
@@ -28,6 +30,7 @@ import '../models/discussion_chat_message.dart';
 import '../core/logging/app_logger.dart';
 import '../utils/performance_optimizations.dart';
 import '../utils/optimized_state_manager.dart';
+import '../utils/token_debugger.dart';
 import '../utils/ultra_performance_mode.dart';
 import '../utils/extreme_performance_mode.dart';
 import '../widgets/performance_optimized_audience_grid.dart';
@@ -134,6 +137,18 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   
   // Video conference state removed - audio-only mode
   // Future update will restore video functionality
+  
+  // Helper method to check if current user has moderator powers (regular mod OR Super Moderator)
+  bool get _hasModeratorPowers {
+    if (_isCurrentUserModerator) return true;
+    
+    final superModService = SuperModeratorService();
+    if (_currentUser != null && superModService.isSuperModerator(_currentUser!.id)) {
+      return true;
+    }
+    
+    return false;
+  }
   
   // Real-time subscriptions - separate instances for reliability
   RealtimeSubscription? _participantsSubscription;
@@ -250,6 +265,51 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       AppLogger().debug('🔇 LiveKit audio ${_isMuted ? 'muted' : 'unmuted'}');
     } catch (e) {
       AppLogger().error('❌ Error toggling mute: $e');
+      
+      // Check if this is a permission error - if so, try to reconnect with correct role
+      if (e.toString().contains('permission') || e.toString().contains('publish audio')) {
+        AppLogger().warning('🚨 PERMISSION ERROR: Attempting to reconnect with correct role');
+        
+        // Force disconnect and reconnect with updated permissions
+        try {
+          if (_isAudioConnected) {
+            await _liveKitService.disconnect();
+            setState(() {
+              _isAudioConnected = false;
+              _isAudioConnecting = false;
+            });
+          }
+          
+          // Brief delay to ensure cleanup
+          await Future.delayed(const Duration(milliseconds: 500));
+          
+          // Reconnect with corrected role
+          await _connectToAudio();
+          
+          // Try to unmute again after successful reconnection
+          if (_isAudioConnected && _isMuted) {
+            await _liveKitService.enableAudio();
+            if (mounted) {
+              setState(() {
+                _isMuted = _liveKitService.isMuted;
+              });
+            }
+          }
+          
+        } catch (reconnectError) {
+          AppLogger().error('❌ Reconnection failed: $reconnectError');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to enable audio: $reconnectError'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      }
+      
       // Sync local state with service state on error
       if (mounted) {
         setState(() {
@@ -654,12 +714,15 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       }
     }
     
-    // Connect ALL users to audio automatically when room loads
-    AppLogger().debug('🔥 AUTO-CONNECT: Proceeding with auto-connect for user: ${_currentUser!.name} (final role: moderator=$_isCurrentUserModerator, speaker=$_isCurrentUserSpeaker)');
-    _connectToAudio().then((_) {
+    // Load participants first to set proper roles before connecting to audio
+    AppLogger().debug('🔥 AUTO-CONNECT: Loading participants before audio connection...');
+    _loadParticipants().then((_) {
+      AppLogger().debug('🔥 AUTO-CONNECT: Participants loaded, proceeding with auto-connect for user: ${_currentUser!.name} (final role: moderator=$_isCurrentUserModerator, speaker=$_isCurrentUserSpeaker)');
+      return _connectToAudio();
+    }).then((_) {
       AppLogger().debug('🔥 AUTO-CONNECT: _connectToAudio() completed successfully');
     }).catchError((error) {
-      AppLogger().error('🔥 AUTO-CONNECT: _connectToAudio() failed: $error');
+      AppLogger().error('🔥 AUTO-CONNECT: Failed during participants load or audio connect: $error');
     });
   }
 
@@ -1323,22 +1386,34 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       _isAudioConnecting = true;
     });
 
-    // Determine user role for audio connection
-    String userRole = 'audience'; // Default
-    AppLogger().debug('🔥 CONNECT-AUDIO: Role determination - isModerator: $_isCurrentUserModerator, isSpeaker: $_isCurrentUserSpeaker');
-    if (_isCurrentUserModerator) {
-      userRole = 'moderator';
-      AppLogger().debug('🔥 CONNECT-AUDIO: ✅ Assigned MODERATOR role');
-    } else if (_isCurrentUserSpeaker) {
-      userRole = 'speaker';
-      AppLogger().debug('🔥 CONNECT-AUDIO: ✅ Assigned SPEAKER role');
-    } else {
-      AppLogger().debug('🔥 CONNECT-AUDIO: ⚠️ Assigned default AUDIENCE role');
+    // ✅ Compute role synchronously - no race conditions
+    String userRole = _computeInitialRole();
+    AppLogger().debug('🎯 INITIAL ROLE for token: "$userRole"');
+    
+    // SAFETY CHECK: If user should have audio permissions but is computed as audience, 
+    // this indicates a timing/state sync issue - force moderator for room creators
+    if (userRole == 'audience' && _roomData != null && _currentUser != null) {
+      final isCreator = _roomData!['createdBy'] == _currentUser!.id;
+      if (isCreator) {
+        AppLogger().warning('🚨 ROLE OVERRIDE: Creator detected as audience - forcing moderator role for audio connection');
+        _isCurrentUserModerator = true;
+        if (mounted) {
+          setState(() {});
+        }
+        // Recompute role with corrected state
+        userRole = _computeInitialRole();
+        AppLogger().debug('🎯 CORRECTED ROLE for token: "$userRole"');
+      }
     }
 
     try {
       final roomId = 'debates-discussion-${widget.roomId}';
-      final userId = _currentUser?.id ?? 'unknown';
+      
+      // Ensure we have a valid user ID, never use 'unknown'
+      if (_currentUser?.id == null || _currentUser!.id.isEmpty) {
+        throw Exception('Cannot connect to audio without a valid user ID');
+      }
+      final userId = _currentUser!.id;
       
       AppLogger().debug('🔥 CONNECT-AUDIO: 🎤 Connecting to LiveKit Audio for Debates & Discussions');
       AppLogger().debug('🔥 CONNECT-AUDIO: 🎤 Room: $roomId, User: $userId, Role: $userRole');
@@ -1349,26 +1424,45 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         roomName: roomId,
         identity: userId,
         userRole: userRole,
-        roomType: 'debate_discussion',
+        roomType: _getRoomTypeForLiveKit(),
         userId: userId,
         ttl: const Duration(hours: 2),
       );
       AppLogger().debug('🔥 CONNECT-AUDIO: 🔑 Generated LiveKit token successfully: ${token.substring(0, 50)}...');
       AppLogger().debug('🔥 CONNECT-AUDIO: 🔑 Token contains role: $userRole');
       
+      // Debug token to verify role permissions (development only)
+      if (kDebugMode) {
+        TokenDebugger.debugToken(token, label: 'Debates & Discussions - $userRole');
+        
+        // Additional verification: print decoded token payload
+        final metadata = LiveKitTokenService.getTokenMetadata(token);
+        AppLogger().debug('🔍 TOKEN METADATA: $metadata');
+      }
+      
       // Connect using LiveKit service with Arena's memory management
       await _liveKitService.connect(
-        serverUrl: 'ws://172.236.109.9:7880',
+        serverUrl: LiveKitConfigService.instance.effectiveServerUrl,
         roomName: roomId,
         token: token,
         userId: userId,
         userRole: userRole,
-        roomType: 'debate_discussion',
+        roomType: _getRoomTypeForLiveKit(),
       );
       
       AppLogger().debug('🔥 CONNECT-AUDIO: ✅ Audio connected successfully as $userRole');
       AppLogger().debug('🔥 CONNECT-AUDIO: ✅ LiveKit service connected: ${_liveKitService.isConnected}');
       AppLogger().debug('🔥 CONNECT-AUDIO: ✅ LiveKit service role: ${_liveKitService.userRole}');
+      
+      // Log server-granted permissions for verification  
+      await Future.delayed(const Duration(milliseconds: 500)); // Allow connection to stabilize
+      final room = _liveKitService.room;
+      final perms = room?.localParticipant?.permissions;
+      if (perms != null) {
+        AppLogger().debug('🔐 SERVER PERMS: canPublish=${perms.canPublish}, canSubscribe=${perms.canSubscribe}');
+      } else {
+        AppLogger().debug('⚠️ SERVER PERMS: Could not retrieve permissions (room or participant null)');
+      }
       
       if (mounted) {
         setState(() {
@@ -1584,6 +1678,17 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         AppLogger().info('🎤 ROLE DEBUG: Current user in speaker panel: ${_speakerPanelists.any((s) => s.id == _currentUser!.id)}');
       }
       
+      // AUTO-CONNECT: Automatically connect to audio for all users
+      if (!_isAudioConnected && !_isAudioConnecting && _currentUser != null) {
+        AppLogger().debug('🔥 AUTO-CONNECT: Initiating automatic audio connection after participants loaded');
+        AppLogger().debug('🔥 AUTO-CONNECT: User role - moderator: $_isCurrentUserModerator, speaker: $_isCurrentUserSpeaker');
+        _connectToAudio().then((_) {
+          AppLogger().debug('🔥 AUTO-CONNECT: Audio connection successful');
+        }).catchError((error) {
+          AppLogger().error('🔥 AUTO-CONNECT: Audio connection failed: $error');
+        });
+      }
+      
       // Participant loading completed
     } catch (e) {
       AppLogger().error('Error loading participants: $e');
@@ -1761,7 +1866,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
             }
             
             // Show immediate notification for hand-raise events (only for moderators)
-            if (isHandRaiseEvent && _isCurrentUserModerator) {
+            if (isHandRaiseEvent && _hasModeratorPowers) {
               AppLogger().info('Showing hand-raise notification to moderator');
               _showHandRaiseNotificationFromPayload(response.payload);
             }
@@ -1863,7 +1968,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                 invalidateNetworkCache(patternPrefix: 'participants_');
                 await _loadParticipants();
                 
-                if (isHandRaiseEvent && _isCurrentUserModerator) {
+                if (isHandRaiseEvent && _hasModeratorPowers) {
                   _showHandRaiseNotificationFromPayload(response.payload);
                 }
                 
@@ -2180,6 +2285,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       return;
     }
     
+    // Check if current user is a Super Moderator
+    final superModService = SuperModeratorService();
+    final isSuperMod = superModService.isSuperModerator(_currentUser!.id);
+    
     try {
       if (_hasRequestedSpeaker) {
         // User wants to lower their hand - change back to audience
@@ -2204,8 +2313,34 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         }
         
         AppLogger().info('User ${_currentUser!.name} lowered their hand');
+      } else if (isSuperMod) {
+        // Super Moderator - instant promotion to speaker
+        await _appwrite.updateDebateDiscussionParticipantRole(
+          roomId: widget.roomId,
+          userId: _currentUser!.id,
+          newRole: 'speaker',
+        );
+        
+        if (mounted && !_isDisposing) {
+          setState(() {
+            _isCurrentUserSpeaker = true;
+            _hasRequestedSpeaker = false;
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🛡️ Super Moderator joined speaker panel'),
+              backgroundColor: Color(0xFFFFD700),
+              duration: Duration(seconds: 2),
+            ),
+          );
+          
+          // Audio will be reinitialized automatically by the role change
+        }
+        
+        AppLogger().info('🛡️ Super Moderator ${_currentUser!.name} joined speaker panel instantly');
       } else {
-        // User wants to raise their hand - change to pending
+        // Regular user wants to raise their hand - change to pending
         await _appwrite.updateDebateDiscussionParticipantRole(
           roomId: widget.roomId,
           userId: _currentUser!.id,
@@ -2327,7 +2462,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   }
 
   void _approveSpeakerRequest(UserProfile user) async {
-    if (!_isCurrentUserModerator) return;
+    if (!_hasModeratorPowers) return;
     
     // Check if this is a debate room
     final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
@@ -2414,6 +2549,56 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   }
 
   Future<void> _assignUserToRole(UserProfile user, String role) async {
+    // Check if user is a Super Moderator being moved to audience (kicked/removed)
+    final superModService = SuperModeratorService();
+    if (superModService.isSuperModerator(user.id) && role == 'audience') {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              icon: const Icon(
+                Icons.shield,
+                color: Color(0xFFFFD700),
+                size: 32,
+              ),
+              title: const Text(
+                'Super Moderator Protection',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFFFFD700),
+                ),
+              ),
+              content: RichText(
+                text: TextSpan(
+                  style: const TextStyle(color: Colors.black87, fontSize: 16),
+                  children: [
+                    TextSpan(
+                      text: user.name,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const TextSpan(
+                      text: ' is a Super Moderator and cannot be moved to the audience or removed from the room. Super Moderators have permanent immunity.',
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFFFFD700),
+                  ),
+                  child: const Text('Understood'),
+                ),
+              ],
+            );
+          },
+        );
+      }
+      return;
+    }
+    
     try {
       await _appwrite.updateDebateDiscussionParticipantRole(
         roomId: widget.roomId,
@@ -2522,6 +2707,56 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   }
 
   void _removeSpeaker(UserProfile user) async {
+    // Check if user is a Super Moderator - they cannot be removed
+    final superModService = SuperModeratorService();
+    if (superModService.isSuperModerator(user.id)) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              icon: const Icon(
+                Icons.shield,
+                color: Color(0xFFFFD700),
+                size: 32,
+              ),
+              title: const Text(
+                'Super Moderator Protection',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFFFFD700),
+                ),
+              ),
+              content: RichText(
+                text: TextSpan(
+                  style: const TextStyle(color: Colors.black87, fontSize: 16),
+                  children: [
+                    TextSpan(
+                      text: user.name,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const TextSpan(
+                      text: ' is a Super Moderator and cannot be removed from the speaker panel. Super Moderators have immunity from kicks and removals.',
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFFFFD700),
+                  ),
+                  child: const Text('Understood'),
+                ),
+              ],
+            );
+          },
+        );
+      }
+      return;
+    }
+    
     if (!_isCurrentUserModerator || user.id == _moderator?.id) {
       return;
     }
@@ -2686,7 +2921,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
             isModerator: _isCurrentUserModerator,
             userId: _currentUser?.id ?? '',
             compact: true,
-            showControls: _isCurrentUserModerator,
+            showControls: _hasModeratorPowers,
             showConnectionStatus: false,
           ),
           const SizedBox(width: 16),
@@ -2760,7 +2995,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                 iconColor: Color(0xFF8B5CF6),
                 iconSize: 20,
               ),
-              if (_isCurrentUserModerator) ...[ 
+              if (_hasModeratorPowers) ...[ 
                 const SizedBox(width: 16),
                 GestureDetector(
                   onTap: _showModeratorTools,
@@ -2867,18 +3102,21 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   }
 
   Widget _buildVideoGrid() {
-    return Column(
-      children: [
-        // Speakers panel at the top
-        _buildSpeakerPanel(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Reserve space for controls and other UI elements
         
-        const SizedBox(height: 16),
-        
-        // Audience section below the speakers panel
-        Expanded(
-          child: _buildAudienceSection(),
-        ),
-      ],
+        return Column(
+          children: [
+            // Speakers panel with integrated audience below moderator
+            Expanded(
+              child: SingleChildScrollView(
+                child: _buildSpeakerPanel(),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -2908,16 +3146,39 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       };
     }
 
+    // Prepare audience data for the speakers panel
+    List<Map<String, dynamic>> audience = _audienceMembers.map((member) => {
+      'userId': member.id,
+      'name': member.name,
+      'userName': member.name,
+      'avatarUrl': member.avatar,
+      'avatar': member.avatar,
+      'role': 'audience',
+    }).toList();
+
+    // Prepare speaker requests data for the speakers panel
+    List<Map<String, dynamic>> speakerRequests = _speakerRequests.map((request) => {
+      'userId': request.id,
+      'name': request.name,
+      'userName': request.name,
+      'avatarUrl': request.avatar,
+      'avatar': request.avatar,
+      'role': 'pending',
+    }).toList();
+
     return PerformanceOptimizedSpeakersPanel(
       speakers: speakers,
       moderator: moderatorData,
+      audience: audience, // Pass audience data
+      speakerRequests: speakerRequests, // Pass speaker requests data
       debateStyle: _roomData?['debateStyle'], // Pass the debate style from room data
+      isCurrentUserModerator: _isCurrentUserModerator, // Pass moderator status
       onSpeakerTap: (userId) {
         final speaker = _speakerPanelists.firstWhere((s) => s.id == userId);
         final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
         AppLogger().debug('🏛️ Speaker tapped: ${speaker.name}, isDebateRoom: $isDebateRoom, isModerator: $_isCurrentUserModerator');
         
-        if (_isCurrentUserModerator && isDebateRoom) {
+        if (_hasModeratorPowers && isDebateRoom) {
           AppLogger().debug('🏛️ Showing debate participant options');
           _showDebateParticipantOptions(speaker);
         } else {
@@ -2925,7 +3186,81 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           _showUserProfileModal(speaker);
         }
       },
+      onAudienceTap: (userId) {
+        final member = _audienceMembers.firstWhere((m) => m.id == userId);
+        AppLogger().debug('🏛️ Audience member tapped: ${member.name}');
+        _showUserProfileModal(member);
+      },
+      onSpeakerRequestApprove: (userId) {
+        final user = _speakerRequests.firstWhere((u) => u.id == userId);
+        _approveSpeakerRequest(user);
+      },
     );
+  }
+
+  /// Determine the correct LiveKit room type based on debate style
+  String _getRoomTypeForLiveKit() {
+    final debateStyle = _roomData?['debateStyle'];
+    
+    // If it's a formal debate (2 slots) or structured take (3 slots), use debate_discussion
+    // If it's an open discussion (8 slots), use open_discussion
+    if (debateStyle == 'Debate' || debateStyle == 'Take') {
+      return 'debate_discussion';
+    } else {
+      // Default to open_discussion for regular discussion rooms
+      return 'open_discussion';
+    }
+  }
+
+  /// Compute user role synchronously - bulletproof against race conditions
+  String _computeInitialRole() {
+    AppLogger().debug('🎯 ROLE COMPUTATION: moderator=$_isCurrentUserModerator, speaker=$_isCurrentUserSpeaker');
+    
+    // If you created the room, you're the moderator
+    if (_isCurrentUserModerator == true) {
+      AppLogger().debug('🎯 ROLE: User is moderator - granting moderator permissions');
+      return 'moderator';
+    }
+    
+    if (_isCurrentUserSpeaker == true) {
+      AppLogger().debug('🎯 ROLE: User is speaker - granting speaker permissions');
+      return 'speaker';
+    }
+    
+    // Additional check: if current user is the room creator, they should be moderator
+    if (_roomData != null && _currentUser != null) {
+      final isCreator = _roomData!['createdBy'] == _currentUser!.id;
+      if (isCreator) {
+        AppLogger().debug('🎯 ROLE: User is room creator, assigning moderator role and updating state');
+        // Update the moderator state if not already set
+        if (!_isCurrentUserModerator) {
+          _isCurrentUserModerator = true;
+          if (mounted) {
+            setState(() {});
+          }
+        }
+        return 'moderator';
+      }
+    }
+    
+    // Check if user is in speaker panel (this handles promoted speakers)
+    if (_currentUser != null) {
+      final isInSpeakerPanel = _speakerPanelists.any((speaker) => speaker.id == _currentUser!.id);
+      if (isInSpeakerPanel) {
+        AppLogger().debug('🎯 ROLE: User is in speaker panel - granting speaker permissions');
+        // Update the speaker state if not already set
+        if (!_isCurrentUserSpeaker) {
+          _isCurrentUserSpeaker = true;
+          if (mounted) {
+            setState(() {});
+          }
+        }
+        return 'speaker';
+      }
+    }
+    
+    AppLogger().debug('🎯 ROLE: User defaulting to audience role');
+    return 'audience';
   }
 
   /// Helper function to create avatar text content - just first letter
@@ -3157,93 +3492,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     );
   }
 
-  Widget _buildAudienceSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Audience header
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12.0),
-          child: Row(
-            children: [
-              const Icon(
-                LucideIcons.users,
-                color: Colors.white,
-                size: 14,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Audience (${_audienceMembers.length})',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        
-        // Speaker requests (only visible to moderator)
-        if (_isCurrentUserModerator && _speakerRequests.isNotEmpty) ...[
-          Container(
-            padding: const EdgeInsets.all(8),
-            margin: const EdgeInsets.symmetric(horizontal: 6),
-            decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Speaker Requests:',
-                  style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                ...(_speakerRequests.map((user) => 
-                  Row(
-                    children: [
-                      Text(user.name, style: const TextStyle(color: Colors.white, fontSize: 12)),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () => _approveSpeakerRequest(user),
-                        child: const Text('Approve', style: TextStyle(color: Colors.green, fontSize: 10)),
-                      ),
-                    ],
-                  ),
-                )),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-        
-        // Clean audience grid with round profile pics and names
-        Expanded(
-          child: PerformanceOptimizedAudienceGrid(
-            participants: _audienceMembers.map((member) => {
-              'userId': member.id,
-              'name': member.name,
-              'userName': member.name,
-              'avatarUrl': member.avatar,
-              'avatar': member.avatar,
-              'role': 'audience',
-            }).toList(),
-            onParticipantTap: (userId) {
-              final member = _audienceMembers.firstWhere((m) => m.id == userId);
-              AppLogger().debug('🏛️ Audience member tapped: ${member.name}');
-              _showUserProfileModal(member);
-            },
-            debugLabel: 'DebatesDiscussionsAudience',
-          ),
-        ),
-      ],
-    );
-  }
 
   // Unused method - kept for potential future use
   // ignore: unused_element
@@ -3255,7 +3503,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     return GestureDetector(
       onTap: () {
         final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
-        if (_isCurrentUserModerator && isDebateRoom) {
+        if (_hasModeratorPowers && isDebateRoom) {
           _showAudiencePromotionOptions(member);
         } else {
           _showUserProfileModal(member);
@@ -3340,110 +3588,237 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           ),
           const SizedBox(height: 12),
           
-          // Control buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-          _buildControlButton(
-            icon: LucideIcons.messageCircle,
-            label: 'Chat',
-            color: const Color(0xFF8B5CF6), // Purple to match theme
-            onTap: _showChat,
-          ),
-          // Hand raise button (for all non-moderators - highlighted when speaker)
-          if (!_isCurrentUserModerator)
-            _buildControlButton(
-              icon: LucideIcons.hand,
-              label: _isCurrentUserSpeaker 
-                ? 'Leave Panel' 
-                : (_hasRequestedSpeaker ? 'Pending' : 'Raise Hand'),
-              color: _isCurrentUserSpeaker 
-                ? Colors.amber // Highlighted amber when on speaker panel
-                : (_hasRequestedSpeaker ? Colors.orange : ArenaColors.accentPurple),
-              onTap: _isCurrentUserSpeaker ? _requestToLeaveSpeakerPanel : _requestToJoinSpeakers,
-            ),
-          _buildControlButton(
-            icon: LucideIcons.share2,
-            label: 'Share',
-            color: Colors.blue,
-            onTap: _shareRoomToSocial,
-          ),
-          // Streaming button - only visible to moderators
-          if (_isCurrentUserModerator) 
-            _buildControlButton(
-              icon: LucideIcons.radio,
-              label: 'Go Live',
-              color: Colors.red,
-              onTap: _showStreamingOptions,
-            ),
-          _buildGiftButton(),
-          // Audio controls - ALL users can join audio (like open discussion)
-          // But only speakers and moderators can unmute
-          _buildControlButton(
-            icon: _isAudioConnected 
-              ? (_isMuted ? Icons.volume_off : Icons.volume_up)
-              : (_isAudioConnecting ? Icons.hourglass_empty : Icons.speaker),
-            label: _isAudioConnected 
-              ? ((_isCurrentUserModerator || _isCurrentUserSpeaker) 
-                  ? (_isMuted ? 'Unmute' : 'Mute')
-                  : 'Listening')
-              : (_isAudioConnecting ? 'Connecting...' : 'Join Audio'),
-            color: _isAudioConnected 
-              ? ((_isCurrentUserModerator || _isCurrentUserSpeaker)
-                  ? (_isMuted ? Colors.red : Colors.green)
-                  : Colors.grey)
-              : (_isAudioConnecting ? Colors.orange : Colors.blue),
-            onTap: _isAudioConnected 
-              ? ((_isCurrentUserModerator || _isCurrentUserSpeaker) 
-                  ? () => _toggleMute()
-                  : () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Only speakers and moderators can use mic. Raise your hand to become a speaker!'),
-                          backgroundColor: Colors.orange,
-                          duration: Duration(seconds: 3),
+          // Control buttons - responsive layout for narrow screens
+          LayoutBuilder(
+            builder: (context, constraints) {
+              // If screen is too narrow, make it scrollable
+              if (constraints.maxWidth < 500) {
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    children: [
+                      _buildControlButton(
+                        icon: LucideIcons.messageCircle,
+                        label: 'Chat',
+                        color: const Color(0xFF8B5CF6),
+                        onTap: _showChat,
+                      ),
+                      const SizedBox(width: 8),
+                      if (!_isCurrentUserModerator) ...[
+                        _buildControlButton(
+                          icon: LucideIcons.hand,
+                          label: _isCurrentUserSpeaker 
+                            ? 'Leave Panel' 
+                            : (_hasRequestedSpeaker ? 'Pending' : 'Raise Hand'),
+                          color: _isCurrentUserSpeaker 
+                            ? Colors.amber
+                            : (_hasRequestedSpeaker ? Colors.orange : ArenaColors.accentPurple),
+                          onTap: _isCurrentUserSpeaker ? _requestToLeaveSpeakerPanel : _requestToJoinSpeakers,
                         ),
-                      );
-                    })
-              : (_isAudioConnecting ? () {} : () {
-                  AppLogger().debug('🔥 MANUAL-CONNECT: Join Audio button pressed');
-                  AppLogger().debug('🔥 MANUAL-CONNECT: Current user: ${_currentUser?.id}, isModerator: $_isCurrentUserModerator, isSpeaker: $_isCurrentUserSpeaker');
-                  AppLogger().debug('🔥 MANUAL-CONNECT: Audio state - connected: $_isAudioConnected, connecting: $_isAudioConnecting');
-                  AppLogger().debug('🔥 MANUAL-CONNECT: Participant roles: $_participantRoles');
-                  _connectToAudio().then((_) {
-                    AppLogger().debug('🔥 MANUAL-CONNECT: _connectToAudio() completed successfully');
-                  }).catchError((error) {
-                    AppLogger().error('🔥 MANUAL-CONNECT: _connectToAudio() failed: $error');
-                  });
-                }),
-          ),
-          // Web audio activation button
-          if (kIsWeb && _remoteStreams.isNotEmpty)
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              child: TextButton.icon(
-                onPressed: () {
-                  _resumeWebAudioContext();
-                },
-                icon: const Icon(Icons.volume_up, size: 16),
-                label: const Text('Enable Audio', style: TextStyle(fontSize: 12)),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.orange,
-                  backgroundColor: Colors.orange.withValues(alpha: 0.1),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                ),
-              ),
-            ),
-          _buildControlButton(
-            icon: LucideIcons.logOut,
-            label: 'Leave',
-            color: Colors.red,
-            onTap: () {
-              Navigator.pop(context);
-            },
-          ),
+                        const SizedBox(width: 8),
+                      ],
+                      _buildControlButton(
+                        icon: LucideIcons.share2,
+                        label: 'Share',
+                        color: Colors.blue,
+                        onTap: _shareRoomToSocial,
+                      ),
+                      const SizedBox(width: 8),
+                      if (_hasModeratorPowers) ...[
+                        _buildControlButton(
+                          icon: LucideIcons.radio,
+                          label: 'Go Live',
+                          color: Colors.red,
+                          onTap: _showStreamingOptions,
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      _buildGiftButton(),
+                      const SizedBox(width: 8),
+                      _buildControlButton(
+                        icon: _isAudioConnected 
+                          ? (_isMuted ? Icons.volume_off : Icons.volume_up)
+                          : (_isAudioConnecting ? Icons.hourglass_empty : Icons.speaker),
+                        label: _isAudioConnected 
+                          ? ((_isCurrentUserModerator || _isCurrentUserSpeaker) 
+                              ? (_isMuted ? 'Unmute' : 'Mute')
+                              : 'Listening')
+                          : (_isAudioConnecting ? 'Connecting...' : 'Audio Off'),
+                        color: _isAudioConnected 
+                          ? ((_isCurrentUserModerator || _isCurrentUserSpeaker)
+                              ? (_isMuted ? Colors.red : Colors.green)
+                              : Colors.grey)
+                          : (_isAudioConnecting ? Colors.orange : Colors.grey),
+                        onTap: _isAudioConnected 
+                          ? ((_isCurrentUserModerator || _isCurrentUserSpeaker) 
+                              ? () => _toggleMute()
+                              : () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Only speakers and moderators can use mic. Raise your hand to become a speaker!'),
+                                      backgroundColor: Colors.orange,
+                                      duration: Duration(seconds: 3),
+                                    ),
+                                  );
+                                })
+                          : (_isAudioConnecting ? () {} : () {
+                              // Retry connection if it failed
+                              AppLogger().debug('🔄 RETRY: Retrying audio connection');
+                              final scaffoldMessenger = ScaffoldMessenger.of(context);
+                              _connectToAudio().then((_) {
+                                AppLogger().debug('🔄 RETRY: Audio reconnection successful');
+                              }).catchError((error) {
+                                AppLogger().error('🔄 RETRY: Audio reconnection failed: $error');
+                                scaffoldMessenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text('Failed to connect audio: ${error.toString()}'),
+                                    backgroundColor: Colors.red,
+                                    duration: const Duration(seconds: 3),
+                                  ),
+                                );
+                              });
+                            }),
+                      ),
+                      if (kIsWeb && _remoteStreams.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          child: TextButton.icon(
+                            onPressed: () {
+                              _resumeWebAudioContext();
+                            },
+                            icon: const Icon(Icons.volume_up, size: 16),
+                            label: const Text('Enable Audio', style: TextStyle(fontSize: 12)),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.orange,
+                              backgroundColor: Colors.orange.withValues(alpha: 0.1),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: 8),
+                      _buildControlButton(
+                        icon: LucideIcons.logOut,
+                        label: 'Leave',
+                        color: Colors.red,
+                        onTap: () {
+                          Navigator.pop(context);
+                        },
+                      ),
         ], // End of Row children
       ), // End of Row
+    ); // End of SingleChildScrollView
+              } else {
+                // For wider screens, use normal spaced layout
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildControlButton(
+                      icon: LucideIcons.messageCircle,
+                      label: 'Chat',
+                      color: const Color(0xFF8B5CF6),
+                      onTap: _showChat,
+                    ),
+                    if (!_isCurrentUserModerator)
+                      _buildControlButton(
+                        icon: LucideIcons.hand,
+                        label: _isCurrentUserSpeaker 
+                          ? 'Leave Panel' 
+                          : (_hasRequestedSpeaker ? 'Pending' : 'Raise Hand'),
+                        color: _isCurrentUserSpeaker 
+                          ? Colors.amber
+                          : (_hasRequestedSpeaker ? Colors.orange : ArenaColors.accentPurple),
+                        onTap: _isCurrentUserSpeaker ? _requestToLeaveSpeakerPanel : _requestToJoinSpeakers,
+                      ),
+                    _buildControlButton(
+                      icon: LucideIcons.share2,
+                      label: 'Share',
+                      color: Colors.blue,
+                      onTap: _shareRoomToSocial,
+                    ),
+                    if (_hasModeratorPowers) 
+                      _buildControlButton(
+                        icon: LucideIcons.radio,
+                        label: 'Go Live',
+                        color: Colors.red,
+                        onTap: _showStreamingOptions,
+                      ),
+                    _buildGiftButton(),
+                    _buildControlButton(
+                      icon: _isAudioConnected 
+                        ? (_isMuted ? Icons.volume_off : Icons.volume_up)
+                        : (_isAudioConnecting ? Icons.hourglass_empty : Icons.speaker),
+                      label: _isAudioConnected 
+                        ? ((_isCurrentUserModerator || _isCurrentUserSpeaker) 
+                            ? (_isMuted ? 'Unmute' : 'Mute')
+                            : 'Listening')
+                        : (_isAudioConnecting ? 'Connecting...' : 'Audio Off'),
+                      color: _isAudioConnected 
+                        ? ((_isCurrentUserModerator || _isCurrentUserSpeaker)
+                            ? (_isMuted ? Colors.red : Colors.green)
+                            : Colors.grey)
+                        : (_isAudioConnecting ? Colors.orange : Colors.grey),
+                      onTap: _isAudioConnected 
+                        ? ((_isCurrentUserModerator || _isCurrentUserSpeaker) 
+                            ? () => _toggleMute()
+                            : () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Only speakers and moderators can use mic. Raise your hand to become a speaker!'),
+                                    backgroundColor: Colors.orange,
+                                    duration: Duration(seconds: 3),
+                                  ),
+                                );
+                              })
+                        : (_isAudioConnecting ? () {} : () {
+                            // Retry connection if it failed
+                            AppLogger().debug('🔄 RETRY: Retrying audio connection');
+                            final scaffoldMessenger = ScaffoldMessenger.of(context);
+                            _connectToAudio().then((_) {
+                              AppLogger().debug('🔄 RETRY: Audio reconnection successful');
+                            }).catchError((error) {
+                              AppLogger().error('🔄 RETRY: Audio reconnection failed: $error');
+                              scaffoldMessenger.showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to connect audio: ${error.toString()}'),
+                                  backgroundColor: Colors.red,
+                                  duration: const Duration(seconds: 3),
+                                ),
+                              );
+                            });
+                          }),
+                    ),
+                    if (kIsWeb && _remoteStreams.isNotEmpty)
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        child: TextButton.icon(
+                          onPressed: () {
+                            _resumeWebAudioContext();
+                          },
+                          icon: const Icon(Icons.volume_up, size: 16),
+                          label: const Text('Enable Audio', style: TextStyle(fontSize: 12)),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.orange,
+                            backgroundColor: Colors.orange.withValues(alpha: 0.1),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          ),
+                        ),
+                      ),
+                    _buildControlButton(
+                      icon: LucideIcons.logOut,
+                      label: 'Leave',
+                      color: Colors.red,
+                      onTap: () {
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ],
+                );
+              }
+            },
+          ),
       ], // End of Column children
     ), // End of Column
   ); // End of Container
@@ -4425,7 +4800,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         return;
       }
       
-      if (!_isCurrentUserModerator) {
+      if (!_hasModeratorPowers) {
         AppLogger().warning('🔇 User is not moderator, cannot mute all');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -4512,7 +4887,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
               },
             ),
             // Add streaming option for moderators
-            if (_isCurrentUserModerator)
+            if (_hasModeratorPowers)
               _buildOptionTile(
                 icon: LucideIcons.radio,
                 title: 'Go Live',

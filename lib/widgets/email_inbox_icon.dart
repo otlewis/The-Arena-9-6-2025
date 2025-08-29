@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import '../services/appwrite_service.dart';
@@ -76,7 +77,7 @@ class _EmailInboxIconState extends State<EmailInboxIcon> with SingleTickerProvid
         }
       }
     } catch (e) {
-      debugPrint('Error loading unread email count: $e');
+      AppLogger().debug('Error loading unread email count: $e');
     }
   }
 
@@ -101,7 +102,7 @@ class _EmailInboxIconState extends State<EmailInboxIcon> with SingleTickerProvid
         }
       });
     } catch (e) {
-      debugPrint('Error subscribing to emails: $e');
+      AppLogger().debug('Error subscribing to emails: $e');
     }
   }
 

@@ -19,6 +19,7 @@ class FirebaseGiftService {
     _firestore = FirebaseFirestore.instance;
     _auth = FirebaseAuth.instance;
     _initializeAuth();
+    // Configure Firestore asynchronously - don't wait for it to complete
     _configureFirestore();
     _debugFirebaseConnection();
   }
@@ -40,14 +41,26 @@ class FirebaseGiftService {
   }
 
   /// Configure Firestore settings
-  void _configureFirestore() {
+  Future<void> _configureFirestore() async {
     try {
-      // Force enable network and clear cache
-      _firestore.enableNetwork();
-      _firestore.clearPersistence();
-      AppLogger().debug('🔥 DEBUG: Firestore configured and cache cleared');
+      // Enable network first
+      await _firestore.enableNetwork();
+      AppLogger().debug('🔥 DEBUG: Firestore network enabled');
+      
+      // Clear persistence (this can fail if there are active listeners)
+      try {
+        await _firestore.clearPersistence();
+        AppLogger().debug('🔥 DEBUG: Firestore cache cleared successfully');
+      } catch (clearError) {
+        // clearPersistence can fail if there are active listeners or if it's already cleared
+        AppLogger().debug('🔥 DEBUG: Failed to clear Firestore persistence (this is often normal): $clearError');
+        // Continue anyway - this is not a critical error
+      }
+      
+      AppLogger().debug('🔥 DEBUG: Firestore configured');
     } catch (e) {
       AppLogger().debug('🔥 DEBUG: Error configuring Firestore: $e');
+      // Continue anyway - configuration errors shouldn't block the service
     }
   }
 
@@ -67,6 +80,15 @@ class FirebaseGiftService {
   CollectionReference get _giftTransactions => _firestore.collection('gift_transactions');
   CollectionReference get _userCoins => _firestore.collection('user_coins');
 
+  // Helper method for safe integer parsing
+  static int? _safeParseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
   /// Initialize or get user's coin balance
   Future<int> getUserCoinBalance(String userId) async {
     AppLogger().debug('🎁 DEBUG: Firebase getUserCoinBalance called with userId: $userId');
@@ -78,8 +100,9 @@ class FirebaseGiftService {
       
       if (doc.exists) {
         final data = doc.data() as Map<String, dynamic>;
-        final balance = data['balance'] ?? 100;
-        AppLogger().debug('🎁 DEBUG: Existing user found. Balance: $balance');
+        final rawBalance = data['balance'];
+        final balance = _safeParseInt(rawBalance) ?? 100;
+        AppLogger().debug('🎁 DEBUG: Existing user found. Raw balance: $rawBalance, Parsed balance: $balance');
         return balance;
       } else {
         AppLogger().debug('🎁 DEBUG: New user detected. Creating initial balance...');
@@ -354,7 +377,9 @@ class FirebaseGiftService {
   Stream<int> getUserCoinBalanceStream(String userId) {
     return _userCoins.doc(userId).snapshots().map((doc) {
       if (doc.exists) {
-        return (doc.data() as Map<String, dynamic>)['balance'] ?? 0;
+        final data = doc.data() as Map<String, dynamic>;
+        final rawBalance = data['balance'];
+        return _safeParseInt(rawBalance) ?? 0;
       }
       return 0;
     });

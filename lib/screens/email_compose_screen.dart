@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'dart:async';
@@ -230,9 +231,9 @@ ${widget.forwardEmail!.body}''';
       }
       
       _hasChanges = false;
-      debugPrint('Draft saved successfully');
+      AppLogger().debug('Draft saved successfully');
     } catch (e) {
-      debugPrint('Error saving draft: $e');
+      AppLogger().debug('Error saving draft: $e');
     }
   }
   
@@ -245,9 +246,9 @@ ${widget.forwardEmail!.body}''';
         collectionId: AppwriteConstants.emailDraftsCollection,
         documentId: _draftId!,
       );
-      debugPrint('Draft deleted successfully');
+      AppLogger().debug('Draft deleted successfully');
     } catch (e) {
-      debugPrint('Error deleting draft: $e');
+      AppLogger().debug('Error deleting draft: $e');
     }
   }
   
@@ -266,7 +267,7 @@ ${widget.forwardEmail!.body}''';
     setState(() => _isSending = true);
     
     try {
-      debugPrint('Sending email from ${widget.currentUserId} to ${_selectedRecipient!.id}');
+      AppLogger().debug('Sending email from ${widget.currentUserId} to ${_selectedRecipient!.id}');
       
       // Determine thread ID for email threading
       String? threadId;
@@ -307,7 +308,7 @@ ${widget.forwardEmail!.body}''';
         Navigator.pop(context, 'sent'); // Return 'sent' to indicate success
       }
     } catch (e) {
-      debugPrint('Error sending email: $e');
+      AppLogger().debug('Error sending email: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -565,7 +566,7 @@ class _UserSearchDialogState extends State<UserSearchDialog> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('Error loading users: $e');
+      AppLogger().debug('Error loading users: $e');
       setState(() => _isLoading = false);
     }
   }

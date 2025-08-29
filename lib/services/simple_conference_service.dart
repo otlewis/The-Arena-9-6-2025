@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 // import 'package:ant_media_flutter/ant_media_flutter.dart'; // Package disabled
@@ -51,16 +52,16 @@ class SimpleConferenceService extends ChangeNotifier {
 
   Future<void> initialize() async {
     try {
-      debugPrint('🎥 Initializing Simple Conference Service...');
+      AppLogger().debug('🎥 Initializing Simple Conference Service...');
       
       // Initialize local renderer
       await _localRenderer.initialize();
       
       // AntMediaFlutter.requestPermissions(); // Package disabled
       
-      debugPrint('✅ Simple Conference Service initialized');
+      AppLogger().debug('✅ Simple Conference Service initialized');
     } catch (e) {
-      debugPrint('❌ Simple Conference Service initialization failed: $e');
+      AppLogger().debug('❌ Simple Conference Service initialization failed: $e');
       onError?.call('Initialization failed: $e');
     }
   }
@@ -83,11 +84,11 @@ class SimpleConferenceService extends ChangeNotifier {
       _isVideoEnabled = !audioOnly;
       _knownParticipants.addAll(otherParticipants.where((p) => p != streamId));
 
-      debugPrint('🔌 Joining Simple Conference...');
-      debugPrint('🔌 Server: $_serverUrl');
-      debugPrint('🔌 Room ID: $_currentRoomId');
-      debugPrint('🔌 Stream ID: $_currentStreamId');
-      debugPrint('🔌 Other participants: $otherParticipants');
+      AppLogger().debug('🔌 Joining Simple Conference...');
+      AppLogger().debug('🔌 Server: $_serverUrl');
+      AppLogger().debug('🔌 Room ID: $_currentRoomId');
+      AppLogger().debug('🔌 Stream ID: $_currentStreamId');
+      AppLogger().debug('🔌 Other participants: $otherParticipants');
 
       // Use conference mode but with participant discovery
       await _connectToConference();
@@ -96,21 +97,21 @@ class SimpleConferenceService extends ChangeNotifier {
       _startParticipantDiscovery();
 
     } catch (e) {
-      debugPrint('❌ Conference join failed: $e');
+      AppLogger().debug('❌ Conference join failed: $e');
       onError?.call('Conference join failed: $e');
       rethrow;
     }
   }
 
   Future<void> _connectToConference() async {
-    debugPrint('📤 Connecting to conference: $_currentStreamId');
+    AppLogger().debug('📤 Connecting to conference: $_currentStreamId');
     
     // AntMedia package disabled - placeholder implementation
     _isConnected = false;
   }
 
   void _startParticipantDiscovery() {
-    debugPrint('🔍 Starting participant discovery...');
+    AppLogger().debug('🔍 Starting participant discovery...');
     
     // Start a timer to periodically try to discover participants
     _participantDiscoveryTimer = Timer.periodic(
@@ -122,21 +123,21 @@ class SimpleConferenceService extends ChangeNotifier {
   }
 
   void _tryDiscoverParticipants() {
-    debugPrint('🔍 Trying to discover participants: $_knownParticipants');
-    debugPrint('🔍 Current room: $_currentRoomId');
-    debugPrint('🔍 My stream: $_currentStreamId');
+    AppLogger().debug('🔍 Trying to discover participants: $_knownParticipants');
+    AppLogger().debug('🔍 Current room: $_currentRoomId');
+    AppLogger().debug('🔍 My stream: $_currentStreamId');
     
     // In conference mode, we don't manually discover participants
     // The server should automatically send us participants when they join
     // and we should receive them via the conference update callback
     
     for (String participantId in _knownParticipants) {
-      debugPrint('🔍 Known participant: $participantId');
+      AppLogger().debug('🔍 Known participant: $participantId');
       // Check if we already have this participant's stream
       if (_remoteStreams.containsKey(participantId)) {
-        debugPrint('✅ Already have stream for: $participantId');
+        AppLogger().debug('✅ Already have stream for: $participantId');
       } else {
-        debugPrint('⏳ Waiting for stream from: $participantId');
+        AppLogger().debug('⏳ Waiting for stream from: $participantId');
       }
     }
   }
@@ -149,7 +150,7 @@ class SimpleConferenceService extends ChangeNotifier {
       _localStream!.getAudioTracks().forEach((track) {
         track.enabled = !_isMuted;
       });
-      debugPrint('🎤 Audio ${_isMuted ? 'muted' : 'unmuted'}');
+      AppLogger().debug('🎤 Audio ${_isMuted ? 'muted' : 'unmuted'}');
       notifyListeners();
     }
   }
@@ -160,7 +161,7 @@ class SimpleConferenceService extends ChangeNotifier {
       _localStream!.getVideoTracks().forEach((track) {
         track.enabled = _isVideoEnabled;
       });
-      debugPrint('📹 Video ${_isVideoEnabled ? 'enabled' : 'disabled'}');
+      AppLogger().debug('📹 Video ${_isVideoEnabled ? 'enabled' : 'disabled'}');
       notifyListeners();
     }
   }
@@ -168,7 +169,7 @@ class SimpleConferenceService extends ChangeNotifier {
   Future<void> disconnect() async {
     if (_isDisposed || !_isConnected) return;
     
-    debugPrint('🔌 Disconnecting from Simple Conference...');
+    AppLogger().debug('🔌 Disconnecting from Simple Conference...');
     
     try {
       // Stop participant discovery
@@ -204,10 +205,10 @@ class SimpleConferenceService extends ChangeNotifier {
       _currentStreamId = null;
       _knownParticipants.clear();
       
-      debugPrint('✅ Disconnected from Simple Conference');
+      AppLogger().debug('✅ Disconnected from Simple Conference');
       
     } catch (e) {
-      debugPrint('❌ Error during disconnect: $e');
+      AppLogger().debug('❌ Error during disconnect: $e');
     }
     
     notifyListeners();

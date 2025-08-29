@@ -1,0 +1,25 @@
+# LiveKit Production Configuration for Arena - v1.5.2 Compatible
+port: 7880
+bind_addresses: [""]
+
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 60000
+  use_external_ip: true
+  stun_servers:
+    - "stun:stun.l.google.com:19302"
+
+# FIXED: Corrected API keys matching Flutter app
+keys:
+  LKAPI1234567890: 7e9fb42854e466daf92dabbc9b88e98f7811486704338e062d30815a592de45d
+
+room:
+  max_participants: 100
+  empty_timeout: 600  # 10 minutes in seconds
+  
+# Production logging
+log_level: debug
+
+# Security settings for production
+development: false

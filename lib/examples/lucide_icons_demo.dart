@@ -251,16 +251,19 @@ class LucideIconsDemo extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             FloatingActionButton(
+              heroTag: "lucide_demo_1",
               onPressed: () {},
               backgroundColor: scarletRed,
               child: const Icon(LucideIcons.plus, color: Colors.white),
             ),
             FloatingActionButton(
+              heroTag: "lucide_demo_2",
               onPressed: () {},
               backgroundColor: accentPurple,
               child: const Icon(LucideIcons.bell, color: Colors.white),
             ),
             FloatingActionButton(
+              heroTag: "lucide_demo_3",
               onPressed: () {},
               backgroundColor: deepPurple,
               child: const Icon(LucideIcons.settings, color: Colors.white),

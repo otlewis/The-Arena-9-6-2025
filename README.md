@@ -145,19 +145,20 @@ The arena is the core debate environment where users engage in structured debate
   - `arena_chat_panel.dart` - Real-time messaging interface
 
 ### Voice Integration
-Real-time voice communication using Agora Voice SDK:
+Real-time voice communication using LiveKit WebRTC:
 
-- **Agora Service** (`lib/services/agora_service_mobile.dart`)
-  - Cross-platform voice implementation
-  - Dynamic token generation for security
-  - Role-based audio permissions (speaker/audience)
+- **LiveKit Service** (`lib/services/livekit_service.dart`)
+  - WebRTC-based voice/video implementation
+  - Cloud-hosted SFU infrastructure
+  - Role-based audio/video permissions
+  - Speaking detection and audio level monitoring
 
 ### Instant Messaging System
 Private messaging between users with real-time delivery:
 
-- **Agora Chat Service** (`lib/services/agora_chat_service.dart`)
-  - Integration with Agora Chat SDK
-  - Real-time message delivery and presence
+- **Appwrite Messaging** (`lib/services/appwrite_service.dart`)
+  - Database-backed message storage
+  - Real-time message delivery via subscriptions
   - Unread message tracking and notifications
   - Message deduplication and caching
 

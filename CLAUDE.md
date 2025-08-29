@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Arena is a Flutter application for real-time debates and discussions with multiple integrated systems:
 1. **Arena System**: Challenge-based 1v1 debates with judges and scoring
 2. **Debates & Discussions**: Open discussion rooms with moderator controls and speaker panels
-3. **Instant Messaging**: Private messaging between users using Agora Chat SDK
+3. **Instant Messaging**: Private messaging between users using Appwrite backend
 4. **Timer System**: Synchronized timers across all participants with audio feedback
 5. **Notification System**: Real-time notifications for challenges, messages, and room events
 
@@ -30,11 +30,12 @@ flutter build ios            # Build iOS app
 flutter pub run build_runner build --delete-conflicting-outputs  # Generate code for freezed, json_serializable, riverpod_generator
 ```
 
-### Agora Token Server (if needed)
+### LiveKit Server
 ```bash
-cd agora_token_server
-npm install
-npm start                    # Runs on port 3000
+# IMPORTANT: ALWAYS deploy LiveKit to the Linode server (172.236.109.9)
+# NEVER run LiveKit locally - it must be accessible to all beta testers
+# Server location: /opt/livekit-arena/
+# Deploy with: ./fix-livekit-config-v2.sh or ./deploy-livekit-linode.sh
 ```
 
 ## Architecture Overview
@@ -47,9 +48,9 @@ npm start                    # Runs on port 3000
 ### Service Layer Pattern
 All external integrations go through service classes:
 - `AppwriteService` - Backend database, auth, storage (singleton pattern)
-- `AgoraService` - Voice chat integration
-- `AgoraChatService` - Instant messaging via Agora Chat SDK
-- `AgoraInstantMessagingService` - Extended IM functionality with conversation management
+- `LiveKitService` - Real-time voice/video communication with WebRTC
+- `ChallengeMessagingService` - Challenge notifications and messaging
+- `AppwriteService` - Instant messaging and data persistence
 - `FirebaseService` - Additional backend services
 - `TimerService` - Firebase-based timer synchronization
 - `AppwriteTimerService` - Appwrite-based timer implementation
@@ -61,7 +62,7 @@ All external integrations go through service classes:
 - Appwrite realtime subscriptions for database changes
 - Pattern: Subscribe in `initState/onMount`, update local state, dispose properly
 - Critical for: participant lists, room status, speaker requests, timer sync, instant messages
-- Agora Chat SDK for instant message delivery
+- LiveKit for real-time voice/video communication
 - Firebase Realtime Database for timer synchronization
 
 ### Feature Structure
@@ -76,6 +77,14 @@ lib/features/[feature_name]/
 
 ## Critical Implementation Details
 
+### LiveKit Voice/Video System
+- **WebRTC-based**: Industry-standard real-time communication protocol
+- **Automatic Fallback**: Graceful degradation if voice/video fails
+- **Role-based Permissions**: Different audio/video capabilities per user role
+- **Speaking Detection**: Real-time audio level monitoring and speaking indicators
+- **Memory Management**: Automatic cleanup of tracks and connections
+- **Cloud Infrastructure**: Scalable SFU (Selective Forwarding Unit) architecture
+
 ### Debates & Discussions Room
 - **Floating Speakers Panel**: Always show 7 slots (1 moderator + 6 speakers)
 - **Hand-raising Flow**: audience → pending → speaker (requires moderator approval)
@@ -83,7 +92,7 @@ lib/features/[feature_name]/
 - **Room Ending**: Must navigate ALL users out when moderator ends room
 
 ### Instant Messaging System
-- **Agora Chat Integration**: Uses same App ID as RTC for unified ecosystem
+- **Appwrite Integration**: Database-backed messaging with real-time subscriptions
 - **Message Deduplication**: Prevents duplicate messages with unique IDs
 - **Unread Counts**: Real-time tracking of unread messages per conversation
 - **Floating Widget**: Always accessible IM interface with badge notifications
@@ -119,8 +128,14 @@ lib/features/[feature_name]/
 - `arena_rooms` - Challenge-based debate rooms
 - `arena_participants` - Arena participant tracking
 - `arena_judgments` - Judge scoring for arena debates
-- `debate_discussion_rooms` - Open discussion rooms
-- `debate_discussion_participants` - Participant tracking with roles
+
+### Room Type Collections - IMPORTANT DISTINCTION:
+- `discussion_rooms` - **Open Discussion rooms** (moderator + speakers + audience)
+- `room_participants` - **Open Discussion participants** with roles
+- `debate_discussion_rooms` - **Debates & Discussions rooms** (structured debates)
+- `debate_discussion_participants` - **Debates & Discussions participants** with roles
+
+### Other Collections
 - `challenges` - Debate challenges between users
 - `challenge_messages` - Challenge notifications and instant messages
 - `instant_messages` - Private messages between users
@@ -144,12 +159,12 @@ lib/features/[feature_name]/
 
 ## Common Pitfalls to Avoid
 1. **Never** auto-approve speaker requests - always require moderator action
-2. **Always** handle Agora initialization failures gracefully - room should work without voice
+2. **Always** handle LiveKit initialization failures gracefully - room should work without voice
 3. **Check** for document_not_found errors when joining rooms
 4. **Use** withValues() instead of deprecated withOpacity()
 5. **Avoid** using BuildContext across async gaps without mounted checks
 6. **Dispose** timer subscriptions properly to prevent memory leaks
-7. **Handle** Agora Chat SDK initialization separately from RTC
+7. **Handle** instant messaging initialization separately from voice/video
 8. **Prevent** duplicate instant messages with proper deduplication
 9. **Test** timer sync on multiple devices with different network conditions
 10. **Check** audio permissions before playing timer sounds
@@ -169,13 +184,18 @@ lib/features/[feature_name]/
 - Never change the UI layout and design of the code when fixing issues/errors
 - Never change the features of this app
 - **DO NOT commit code unless explicitly asked by the user**
+- **ALWAYS deploy LiveKit to the Linode server (172.236.109.9) - NEVER run LiveKit locally**
+  - LiveKit server must be accessible to all beta testers
+  - Local LiveKit instances won't work for production testing
+  - All LiveKit configurations should be deployed to `/opt/livekit-arena/` on the server
+  - Use SSH key authentication or password to deploy: `ssh root@172.236.109.9`
 
 ## New Feature Integration Guidelines
 
 ### Instant Messaging
-- Initialize Agora Chat SDK after successful authentication
-- Use the same Agora App ID for both RTC and Chat SDKs
-- Handle message persistence in both Agora Chat and Appwrite
+- Initialize messaging service after successful authentication
+- Use Appwrite real-time subscriptions for message delivery
+- Handle message persistence in Appwrite collections
 - Show unread counts in the floating IM widget
 
 ### Timer Integration
@@ -196,7 +216,7 @@ lib/features/[feature_name]/
 - arena-analytics: Real-time app performance and user behavior data
 - arena-launch: Launch readiness assessment and critical flow testing
 - appwrite-data: Direct access to Arena collections for analysis
-- agora-metrics: Voice/chat SDK performance monitoring
+- livekit-metrics: Voice/video SDK performance monitoring
 
 ### Claude Code Workflows
 

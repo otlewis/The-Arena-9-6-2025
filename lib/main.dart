@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'l10n/generated/app_localizations.dart';
 import 'dart:ui';
 import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
@@ -9,6 +12,8 @@ import 'screens/arena_screen.dart';
 import 'services/appwrite_service.dart';
 import 'services/challenge_messaging_service.dart';
 import 'services/theme_service.dart';
+import 'services/language_service.dart';
+import 'services/accessibility_service.dart';
 import 'services/sound_service.dart';
 import 'widgets/challenge_modal.dart';
 import 'widgets/arena_role_notification_modal.dart';
@@ -28,6 +33,11 @@ import 'core/startup/app_startup_optimizer.dart';
 import 'core/cache/smart_cache_manager.dart';
 import 'core/navigation/optimized_navigation.dart';
 import 'services/network_resilience_service.dart';
+import 'core/performance/riverpod_performance_optimizer.dart';
+import 'core/performance/virtualized_list_optimizer.dart';
+import 'core/performance/network_performance_optimizer.dart';
+import 'core/performance/code_splitting_service.dart';
+import 'core/performance/widget_rebuild_optimizer.dart';
 import 'services/offline_data_cache.dart';
 import 'services/offline_conflict_resolver.dart';
 import 'services/background_sync_service.dart';
@@ -38,6 +48,8 @@ import 'services/audio_initialization_service.dart';
 import 'services/room_audio_adapter.dart';
 import 'widgets/network_quality_indicator.dart';
 import 'package:mcp_toolkit/mcp_toolkit.dart';
+import 'services/firebase_participant_sync_service.dart';
+import 'services/super_moderator_service.dart';
 
 // Service locator instance
 final getIt = GetIt.instance;
@@ -69,6 +81,13 @@ void setupServiceLocator() {
   getIt.registerLazySingleton<SmartCacheManager>(() => SmartCacheManager());
   getIt.registerLazySingleton<AppStartupOptimizer>(() => AppStartupOptimizer());
   
+  // Register new performance optimization services
+  getIt.registerLazySingleton<RiverpodPerformanceOptimizer>(() => RiverpodPerformanceOptimizer());
+  getIt.registerLazySingleton<VirtualizedListOptimizer>(() => VirtualizedListOptimizer());
+  getIt.registerLazySingleton<NetworkPerformanceOptimizer>(() => NetworkPerformanceOptimizer());
+  getIt.registerLazySingleton<CodeSplittingService>(() => CodeSplittingService());
+  getIt.registerLazySingleton<WidgetRebuildOptimizer>(() => WidgetRebuildOptimizer());
+  
   // Register network resilience service
   getIt.registerLazySingleton<NetworkResilienceService>(() => NetworkResilienceService());
   
@@ -76,6 +95,12 @@ void setupServiceLocator() {
   getIt.registerLazySingleton<OfflineDataCache>(() => OfflineDataCache());
   getIt.registerLazySingleton<OfflineConflictResolver>(() => OfflineConflictResolver());
   getIt.registerLazySingleton<BackgroundSyncService>(() => BackgroundSyncService());
+  
+  // Register Firebase participant sync service
+  getIt.registerLazySingleton<FirebaseParticipantSyncService>(() => FirebaseParticipantSyncService());
+  
+  // Register Super Moderator service
+  getIt.registerLazySingleton<SuperModeratorService>(() => SuperModeratorService());
   
   // Register audio/video services
   getIt.registerLazySingleton<LiveKitService>(() => LiveKitService());
@@ -113,6 +138,12 @@ void main() async {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
     
+    // Lock app to portrait orientation on all devices
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+    
     // Initialize MCP Toolkit for Flutter development tools
     if (kDebugMode) {
       MCPToolkitBinding.instance
@@ -134,6 +165,21 @@ void main() async {
     // Initialize mobile performance optimizations
     await MobilePerformanceOptimizer.instance.initialize();
     logger.info('📱 Mobile performance optimizations initialized');
+    
+    // Initialize new performance optimization systems
+    getIt<RiverpodPerformanceOptimizer>();
+    getIt<NetworkPerformanceOptimizer>();
+    getIt<CodeSplittingService>();
+    getIt<WidgetRebuildOptimizer>();
+    logger.info('🚀 Advanced performance optimizations initialized');
+    
+    // Initialize Super Moderator service
+    try {
+      await getIt<SuperModeratorService>().initialize();
+      logger.info('🛡️ Super Moderator service initialized');
+    } catch (e) {
+      logger.error('Failed to initialize Super Moderator service: $e');
+    }
     
     // Set up global error handling with proper logging
     FlutterError.onError = (FlutterErrorDetails details) {
@@ -168,11 +214,17 @@ void main() async {
       // Initialize cache service
       await getIt<CacheService>().initialize();
       
+      // Initialize Firebase participant sync service (temporarily disabled)
+      // await getIt<FirebaseParticipantSyncService>().initialize();
+      // logger.info('🔥 Firebase participant sync service initialized');
+      
       // Initialize performance monitoring
       getIt<PerformanceMonitor>().initialize();
       
       // Initialize other services
       await ThemeService().initialize();
+      await LanguageService().initialize();
+      await AccessibilityService().initialize();
       await getIt<SoundService>().initialize();
       
       // Initialize notification preferences (load user settings)
@@ -228,8 +280,8 @@ void main() async {
     
     // Create a basic logger for zone errors if main logger fails
     if (kDebugMode) {
-      debugPrint('Zone error: $error');
-      debugPrint('Stack: $stack');
+      AppLogger().debug('Zone error: $error');
+      AppLogger().debug('Stack: $stack');
     }
     
     // Handle known issues gracefully
@@ -316,14 +368,23 @@ class ArenaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: ThemeService(),
+      animation: Listenable.merge([ThemeService(), LanguageService()]),
       builder: (context, child) {
         final themeService = ThemeService();
+        final languageService = LanguageService();
         return MaterialApp(
           title: 'Arena - Debate App',
           theme: themeService.lightTheme,
           darkTheme: themeService.darkTheme,
           themeMode: themeService.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          locale: languageService.locale,
+          supportedLocales: LanguageService.supportedLocales,
           home: const OptimizedMainNavigator(),
           debugShowCheckedModeBanner: false,
         );
@@ -362,6 +423,8 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
     try {
       // Wait for heavy services if they're async
       await getIt.allReady();
+      
+      // Cleanup removed - we'll test the fix directly
       
       _messagingService = getIt<ChallengeMessagingService>();
       _soundService = getIt<SoundService>();

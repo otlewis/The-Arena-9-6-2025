@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/timer_state.dart';
@@ -88,10 +89,13 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
 
   Future<void> _initializeServices() async {
     try {
+      AppLogger().debug('🕐 Timer widget initializing for room: ${widget.roomId}, isModerator: ${widget.isModerator}, userId: ${widget.userId}');
       await _timerService.initialize();
       await _feedbackService.initialize();
       _setupTimerStream();
+      AppLogger().debug('🕐 Timer widget setup complete for room: ${widget.roomId}');
     } catch (e) {
+      AppLogger().error('🕐 Timer widget initialization failed: $e');
       _setConnectionError('Failed to initialize: $e');
     }
   }
@@ -108,6 +112,11 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
   void _onTimersUpdated(List<TimerState> timers) {
     if (!mounted) return;
     
+    AppLogger().debug('🕐 Timer update received for room ${widget.roomId}: ${timers.length} timers, isModerator: ${widget.isModerator}');
+    for (final timer in timers) {
+      AppLogger().debug('🕐   Timer ${timer.id}: ${timer.status.name}, ${timer.remainingSeconds}s remaining');
+    }
+    
     setState(() {
       _timers = timers;
       _isConnected = true;
@@ -120,10 +129,13 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
       
       if (activeTimers.isNotEmpty) {
         _activeTimer = activeTimers.first;
+        AppLogger().debug('🕐 Active timer found: ${_activeTimer!.id} with ${_activeTimer!.remainingSeconds}s remaining');
       } else if (timers.isNotEmpty) {
         _activeTimer = timers.first;
+        AppLogger().debug('🕐 Using first timer: ${_activeTimer!.id} (status: ${_activeTimer!.status.name})');
       } else {
         _activeTimer = null;
+        AppLogger().debug('🕐 No active timer found');
       }
     });
 
@@ -139,7 +151,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
   }
 
   void _onStreamError(error) {
-    debugPrint('Timer stream error: $error');
+    AppLogger().debug('Timer stream error: $error');
     _setConnectionError('Connection lost: $error');
   }
 
@@ -283,7 +295,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
         try {
           await _timerService.deleteTimer(timer.id, widget.userId);
         } catch (e) {
-          debugPrint('Failed to delete expired timer: $e');
+          AppLogger().debug('Failed to delete expired timer: $e');
         }
       }
       
@@ -301,7 +313,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
       // Do NOT auto-start server timer - wait for moderator to start it
       
     } catch (e) {
-      debugPrint('Background server timer creation failed: $e');
+      AppLogger().debug('Background server timer creation failed: $e');
       // Local timer continues working regardless
     }
   }
@@ -333,11 +345,11 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
           _timerService.resetTimer(_activeTimer!.id, widget.userId).then((_) {
             _timerService.startTimer(_activeTimer!.id, widget.userId);
           }).catchError((e) {
-            debugPrint('Server restart failed: $e');
+            AppLogger().debug('Server restart failed: $e');
           });
         } else {
           _timerService.startTimer(_activeTimer!.id, widget.userId).catchError((e) {
-            debugPrint('Server start failed: $e');
+            AppLogger().debug('Server start failed: $e');
           });
         }
       }
@@ -359,7 +371,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
       // Try to pause server timer (non-blocking)
       if (!_activeTimer!.id.startsWith('local_')) {
         _timerService.pauseTimer(_activeTimer!.id, widget.userId).catchError((e) {
-          debugPrint('Server pause failed: $e');
+          AppLogger().debug('Server pause failed: $e');
         });
       }
     } catch (e) {
@@ -381,7 +393,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
       // Try to resume server timer (non-blocking)
       if (!_activeTimer!.id.startsWith('local_')) {
         _timerService.startTimer(_activeTimer!.id, widget.userId).catchError((e) {
-          debugPrint('Server resume failed: $e');
+          AppLogger().debug('Server resume failed: $e');
         });
       }
     } catch (e) {
@@ -524,8 +536,8 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
               vertical: isSmallScreen ? 3 : 4,
             ),
             constraints: BoxConstraints(
-              maxWidth: isSmallScreen ? 85 : 110, // Increased from 70/90 to 85/110
-              minWidth: isSmallScreen ? 65 : 80,  // Increased from 50/60 to 65/80
+              maxWidth: isSmallScreen ? 95 : 120, // Further increased to prevent cutoff
+              minWidth: isSmallScreen ? 75 : 90,  // Increased minimum width
             ),
             decoration: BoxDecoration(
               color: _getTimerColor(),
@@ -568,8 +580,8 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
               vertical: isSmallScreen ? 3 : 4,
             ),
             constraints: BoxConstraints(
-              maxWidth: isSmallScreen ? 85 : 110, // Match active timer size
-              minWidth: isSmallScreen ? 65 : 80,  // Match active timer size
+              maxWidth: isSmallScreen ? 95 : 120, // Match active timer size
+              minWidth: isSmallScreen ? 75 : 90,  // Match active timer size
             ),
             decoration: BoxDecoration(
               color: const Color(0xFF4A4A4A), // Arena purple

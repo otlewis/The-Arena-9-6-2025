@@ -1,0 +1,349 @@
+{
+  "@@locale": "en",
+  "appTitle": "Arena",
+  "@appTitle": {
+    "description": "The title of the application"
+  },
+  
+  "welcome": "Welcome",
+  "@welcome": {
+    "description": "Welcome message"
+  },
+  
+  "home": "Home",
+  "@home": {
+    "description": "Home screen title"
+  },
+  
+  "arena": "Arena",
+  "@arena": {
+    "description": "Arena section title"
+  },
+  
+  "debates": "Debates & Discussions",
+  "@debates": {
+    "description": "Debates and discussions section title"
+  },
+  
+  "openDiscussion": "Open Discussion",
+  "@openDiscussion": {
+    "description": "Open discussion section title"
+  },
+  
+  "profile": "Profile",
+  "@profile": {
+    "description": "Profile section title"
+  },
+  
+  "settings": "Settings",
+  "@settings": {
+    "description": "Settings section title"
+  },
+  
+  "join": "Join",
+  "@join": {
+    "description": "Join button text"
+  },
+  
+  "create": "Create",
+  "@create": {
+    "description": "Create button text"
+  },
+  
+  "cancel": "Cancel",
+  "@cancel": {
+    "description": "Cancel button text"
+  },
+  
+  "save": "Save",
+  "@save": {
+    "description": "Save button text"
+  },
+  
+  "delete": "Delete",
+  "@delete": {
+    "description": "Delete button text"
+  },
+  
+  "edit": "Edit",
+  "@edit": {
+    "description": "Edit button text"
+  },
+  
+  "send": "Send",
+  "@send": {
+    "description": "Send button text"
+  },
+  
+  "loading": "Loading...",
+  "@loading": {
+    "description": "Loading indicator text"
+  },
+  
+  "error": "Error",
+  "@error": {
+    "description": "Error indicator text"
+  },
+  
+  "success": "Success",
+  "@success": {
+    "description": "Success indicator text"
+  },
+  
+  "roomName": "Room Name",
+  "@roomName": {
+    "description": "Room name field label"
+  },
+  
+  "roomDescription": "Room Description",
+  "@roomDescription": {
+    "description": "Room description field label"
+  },
+  
+  "participants": "Participants",
+  "@participants": {
+    "description": "Participants label"
+  },
+  
+  "participantCount": "{count} participants",
+  "@participantCount": {
+    "description": "Participant count display",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  
+  "speakingTime": "Speaking Time",
+  "@speakingTime": {
+    "description": "Speaking time label"
+  },
+  
+  "timer": "Timer",
+  "@timer": {
+    "description": "Timer label"
+  },
+  
+  "startTimer": "Start Timer",
+  "@startTimer": {
+    "description": "Start timer button text"
+  },
+  
+  "pauseTimer": "Pause Timer",
+  "@pauseTimer": {
+    "description": "Pause timer button text"
+  },
+  
+  "resetTimer": "Reset Timer",
+  "@resetTimer": {
+    "description": "Reset timer button text"
+  },
+  
+  "mute": "Mute",
+  "@mute": {
+    "description": "Mute button text"
+  },
+  
+  "unmute": "Unmute",
+  "@unmute": {
+    "description": "Unmute button text"
+  },
+  
+  "raiseHand": "Raise Hand",
+  "@raiseHand": {
+    "description": "Raise hand button text"
+  },
+  
+  "lowerHand": "Lower Hand",
+  "@lowerHand": {
+    "description": "Lower hand button text"
+  },
+  
+  "chat": "Chat",
+  "@chat": {
+    "description": "Chat label"
+  },
+  
+  "typeMessage": "Type a message...",
+  "@typeMessage": {
+    "description": "Chat input placeholder"
+  },
+  
+  "noMessagesYet": "No messages yet",
+  "@noMessagesYet": {
+    "description": "Empty chat state message"
+  },
+  
+  "beFirstToSend": "Be the first to send a message!",
+  "@beFirstToSend": {
+    "description": "Empty chat state encouragement"
+  },
+  
+  "moderator": "Moderator",
+  "@moderator": {
+    "description": "Moderator role label"
+  },
+  
+  "speaker": "Speaker",
+  "@speaker": {
+    "description": "Speaker role label"
+  },
+  
+  "audience": "Audience",
+  "@audience": {
+    "description": "Audience role label"
+  },
+  
+  "judge": "Judge",
+  "@judge": {
+    "description": "Judge role label"
+  },
+  
+  "affirmative": "Affirmative",
+  "@affirmative": {
+    "description": "Affirmative side label"
+  },
+  
+  "negative": "Negative",
+  "@negative": {
+    "description": "Negative side label"
+  },
+  
+  "createRoom": "Create Room",
+  "@createRoom": {
+    "description": "Create room button text"
+  },
+  
+  "joinRoom": "Join Room",
+  "@joinRoom": {
+    "description": "Join room button text"
+  },
+  
+  "leaveRoom": "Leave Room",
+  "@leaveRoom": {
+    "description": "Leave room button text"
+  },
+  
+  "endRoom": "End Room",
+  "@endRoom": {
+    "description": "End room button text"
+  },
+  
+  "privateRoom": "Private Room",
+  "@privateRoom": {
+    "description": "Private room label"
+  },
+  
+  "publicRoom": "Public Room",
+  "@publicRoom": {
+    "description": "Public room label"
+  },
+  
+  "password": "Password",
+  "@password": {
+    "description": "Password field label"
+  },
+  
+  "incorrectPassword": "Incorrect password",
+  "@incorrectPassword": {
+    "description": "Incorrect password error message"
+  },
+  
+  "roomRequiresPassword": "This room requires a password to enter.",
+  "@roomRequiresPassword": {
+    "description": "Private room password prompt"
+  },
+  
+  "activeDiscussions": "Active Discussions",
+  "@activeDiscussions": {
+    "description": "Active discussions section title"
+  },
+  
+  "noActiveDiscussions": "No active discussions",
+  "@noActiveDiscussions": {
+    "description": "Empty discussions state message"
+  },
+  
+  "beFirstToCreate": "Be the first to create a discussion room!",
+  "@beFirstToCreate": {
+    "description": "Empty discussions state encouragement"
+  },
+  
+  "roomsAvailable": "{count} rooms available",
+  "@roomsAvailable": {
+    "description": "Available rooms count",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  
+  "darkMode": "Dark Mode",
+  "@darkMode": {
+    "description": "Dark mode setting label"
+  },
+  
+  "language": "Language",
+  "@language": {
+    "description": "Language setting label"
+  },
+  
+  "notifications": "Notifications",
+  "@notifications": {
+    "description": "Notifications setting label"
+  },
+  
+  "accessibility": "Accessibility",
+  "@accessibility": {
+    "description": "Accessibility settings section"
+  },
+  
+  "largeText": "Large Text",
+  "@largeText": {
+    "description": "Large text accessibility option"
+  },
+  
+  "highContrast": "High Contrast",
+  "@highContrast": {
+    "description": "High contrast accessibility option"
+  },
+  
+  "screenReader": "Screen Reader Support",
+  "@screenReader": {
+    "description": "Screen reader support option"
+  },
+  
+  "connectionStatus": "Connection Status",
+  "@connectionStatus": {
+    "description": "Connection status label"
+  },
+  
+  "connected": "Connected",
+  "@connected": {
+    "description": "Connected status"
+  },
+  
+  "disconnected": "Disconnected",
+  "@disconnected": {
+    "description": "Disconnected status"
+  },
+  
+  "reconnecting": "Reconnecting...",
+  "@reconnecting": {
+    "description": "Reconnecting status"
+  },
+  
+  "offline": "Offline",
+  "@offline": {
+    "description": "Offline status"
+  },
+  
+  "retryConnection": "Retry Connection",
+  "@retryConnection": {
+    "description": "Retry connection button text"
+  }
+}

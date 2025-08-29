@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import '../models/timer_state.dart';
 import '../config/timer_presets.dart';
 import '../core/logging/app_logger.dart';
@@ -86,7 +85,7 @@ class TimerService {
 
       return timerId;
     } catch (e) {
-      debugPrint('Error creating timer: $e');
+      AppLogger().debug('Error creating timer: $e');
       rethrow;
     }
   }
@@ -133,7 +132,7 @@ class TimerService {
       _startLocalExpiryTimer(timerId, remainingSeconds);
 
     } catch (e) {
-      debugPrint('Error starting timer: $e');
+      AppLogger().debug('Error starting timer: $e');
       rethrow;
     }
   }
@@ -180,7 +179,7 @@ class TimerService {
       _cancelLocalTimer(timerId);
 
     } catch (e) {
-      debugPrint('Error pausing timer: $e');
+      AppLogger().debug('Error pausing timer: $e');
       rethrow;
     }
   }
@@ -205,7 +204,7 @@ class TimerService {
       _cancelLocalTimer(timerId);
 
     } catch (e) {
-      debugPrint('Error stopping timer: $e');
+      AppLogger().debug('Error stopping timer: $e');
       rethrow;
     }
   }
@@ -240,7 +239,7 @@ class TimerService {
       _cancelLocalTimer(timerId);
 
     } catch (e) {
-      debugPrint('Error resetting timer: $e');
+      AppLogger().debug('Error resetting timer: $e');
       rethrow;
     }
   }
@@ -293,7 +292,7 @@ class TimerService {
       }
 
     } catch (e) {
-      debugPrint('Error adding time: $e');
+      AppLogger().debug('Error adding time: $e');
       rethrow;
     }
   }
@@ -315,7 +314,7 @@ class TimerService {
       );
 
     } catch (e) {
-      debugPrint('Error completing timer: $e');
+      AppLogger().debug('Error completing timer: $e');
     }
   }
 
@@ -374,7 +373,7 @@ class TimerService {
       _cancelSubscription(timerId);
 
     } catch (e) {
-      debugPrint('Error deleting timer: $e');
+      AppLogger().debug('Error deleting timer: $e');
       rethrow;
     }
   }
@@ -433,7 +432,7 @@ class TimerService {
 
       await _firestore.collection(_eventsCollection).add(event.toJson());
     } catch (e) {
-      debugPrint('Error logging timer event: $e');
+      AppLogger().debug('Error logging timer event: $e');
     }
   }
 

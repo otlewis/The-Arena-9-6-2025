@@ -6,9 +6,12 @@ import 'debates_discussions_screen.dart';
 import '../services/appwrite_service.dart';
 import '../services/theme_service.dart';
 import '../core/logging/app_logger.dart';
+import '../constants/appwrite.dart';
 
 class DiscussionsRoomListScreen extends StatefulWidget {
-  const DiscussionsRoomListScreen({super.key});
+  final String? preSelectedFormat;
+  
+  const DiscussionsRoomListScreen({super.key, this.preSelectedFormat});
 
   @override
   State<DiscussionsRoomListScreen> createState() => _DiscussionsRoomListScreenState();
@@ -39,12 +42,13 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
 
   Future<void> _loadRooms() async {
     try {
-      AppLogger().debug('Loading debate discussion rooms...');
+      AppLogger().debug('Loading discussion rooms...');
       final rooms = await _appwrite.getDebateDiscussionRooms();
+      AppLogger().debug('🔍 Raw rooms data: ${rooms.toString()}');
       
       // Debug room IDs
       for (var room in rooms) {
-        AppLogger().debug('Room loaded: ${room['name']} with ID: ${room['id']}');
+        AppLogger().debug('Room loaded: ${room['title']} with ID: ${room['id']}');
       }
       
       if (mounted) {
@@ -52,7 +56,7 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
           _rooms = rooms;
           _isLoading = false;
         });
-        AppLogger().debug('Loaded ${rooms.length} debate discussion rooms');
+        AppLogger().debug('Loaded ${rooms.length} discussion rooms');
       }
     } catch (e) {
       AppLogger().error('Error loading rooms: $e');
@@ -73,16 +77,14 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
   void _setupRealTimeUpdates() {
     try {
       _roomsSubscription = _appwrite.realtimeInstance.subscribe([
-        'databases.arena_db.collections.debate_discussion_rooms.documents'
+        'databases.${AppwriteConstants.databaseId}.collections.${AppwriteConstants.debateDiscussionRoomsCollection}.documents'
       ]);
 
       _roomsSubscription?.stream.listen(
         (response) {
           AppLogger().debug('Real-time room update: ${response.events}');
           
-          if (response.events.contains('databases.arena_db.collections.debate_discussion_rooms.documents.*.create') ||
-              response.events.contains('databases.arena_db.collections.debate_discussion_rooms.documents.*.update') ||
-              response.events.contains('databases.arena_db.collections.debate_discussion_rooms.documents.*.delete')) {
+          if (response.events.any((event) => event.contains('debate_discussion_rooms.documents'))) {
             // Reload rooms when there are changes
             _loadRooms();
           }
@@ -99,7 +101,7 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
   void _navigateToCreateRoom() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => const CreateDiscussionRoomScreen(),
+        builder: (context) => CreateDiscussionRoomScreen(preSelectedFormat: widget.preSelectedFormat),
       ),
     );
     
@@ -381,7 +383,9 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
             : const Color(0xFFE8E8E8),
         elevation: 0,
         title: Text(
-          'Debates & Discussions',
+          widget.preSelectedFormat != null 
+              ? '${widget.preSelectedFormat} Rooms' 
+              : 'Debates & Discussions',
           style: TextStyle(
             color: _themeService.isDarkMode ? Colors.white : Colors.black87,
             fontSize: 20,

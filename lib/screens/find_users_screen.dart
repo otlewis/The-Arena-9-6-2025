@@ -1,9 +1,12 @@
+import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import '../services/appwrite_service.dart';
 import '../services/theme_service.dart';
 import '../models/user_profile.dart';
 import '../widgets/user_avatar.dart';
 import '../widgets/challenge_bell.dart';
+import '../widgets/report_user_dialog.dart';
+import '../widgets/block_user_dialog.dart';
 import '../screens/user_profile_screen.dart';
 
 class FindUsersScreen extends StatefulWidget {
@@ -60,7 +63,7 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('❌ Error loading users: $e');
+      AppLogger().debug('❌ Error loading users: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -468,12 +471,47 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                   ],
                 ),
                 const SizedBox(width: 8),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                  color: _themeService.isDarkMode 
-                      ? Colors.white54
-                      : Colors.grey,
+                PopupMenuButton<String>(
+                  icon: Icon(
+                    Icons.more_vert,
+                    size: 16,
+                    color: _themeService.isDarkMode 
+                        ? Colors.white54
+                        : Colors.grey,
+                  ),
+                  onSelected: (value) => _handleUserAction(value, user),
+                  itemBuilder: (BuildContext context) => [
+                    const PopupMenuItem<String>(
+                      value: 'view',
+                      child: Row(
+                        children: [
+                          Icon(Icons.person, color: accentPurple, size: 18),
+                          SizedBox(width: 8),
+                          Text('View Profile'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'report',
+                      child: Row(
+                        children: [
+                          Icon(Icons.report, color: Colors.red, size: 18),
+                          SizedBox(width: 8),
+                          Text('Report User'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'block',
+                      child: Row(
+                        children: [
+                          Icon(Icons.block, color: Colors.orange, size: 18),
+                          SizedBox(width: 8),
+                          Text('Block User'),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -490,5 +528,52 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
         builder: (context) => UserProfileScreen(userId: user.id),
       ),
     );
+  }
+
+  Future<void> _handleUserAction(String action, UserProfile user) async {
+    if (_currentUserId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to perform this action')),
+      );
+      return;
+    }
+
+    switch (action) {
+      case 'view':
+        _navigateToUserProfile(user);
+        break;
+      case 'report':
+        await _showReportDialog(user);
+        break;
+      case 'block':
+        await _showBlockDialog(user);
+        break;
+    }
+  }
+
+  Future<void> _showReportDialog(UserProfile userToReport) async {
+    await showDialog(
+      context: context,
+      builder: (context) => ReportUserDialog(
+        reportedUser: userToReport,
+        roomId: 'find_users', // Generic room ID for find users reports
+        reporterId: _currentUserId!,
+      ),
+    );
+  }
+
+  Future<void> _showBlockDialog(UserProfile userToBlock) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => BlockUserDialog(
+        userToBlock: userToBlock,
+        currentUserId: _currentUserId!,
+      ),
+    );
+
+    if (result == true && mounted) {
+      // User was successfully blocked, refresh the user list to remove them
+      await _loadUsers();
+    }
   }
 }

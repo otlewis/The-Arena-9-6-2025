@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import '../models/moderator_judge.dart';
@@ -109,7 +110,7 @@ class _JudgeRegistrationScreenState extends State<JudgeRegistrationScreen> {
       }
       
     } catch (e) {
-      debugPrint('Error saving judge profile: $e');
+      AppLogger().debug('Error saving judge profile: $e');
       _showError('Failed to save profile: ${e.toString()}');
     } finally {
       if (mounted) {

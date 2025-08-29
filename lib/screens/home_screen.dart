@@ -3,7 +3,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'dart:async';
 import '../screens/debate_clubs_screen.dart';
 import '../screens/profile_screen.dart';
-import 'create_open_screen.dart';
+// import 'create_open_screen.dart'; // Disabled
 import '../models/user_profile.dart';
 import '../screens/arena_lobby_screen.dart';
 import '../screens/find_users_screen.dart';
@@ -980,35 +980,53 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             Expanded(
               child: AnimatedScaleIn(
                 delay: const Duration(milliseconds: 1600),
-                child: _buildFeatureCard('OpenDiscussions', 'Open Discussion', () => _navigateToCreateOpen()),
+                child: _buildFeatureCard('Debate', 'Debate', () => _navigateToDebate()),
               ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        // Bottom row - 3 cards
+        // Middle row - 2 cards
         Row(
           children: [
             Expanded(
               child: AnimatedScaleIn(
                 delay: const Duration(milliseconds: 1700),
-                child: _buildFeatureCard('DebateTakeDiscuss', 'Debate, Take, Discuss', () => _navigateToDebatesDiscussions()),
+                child: _buildFeatureCard('Take', 'Take', () => _navigateToTake()),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: AnimatedScaleIn(
                 delay: const Duration(milliseconds: 1800),
+                child: _buildFeatureCard('Discussion', 'Discussion', () => _navigateToDiscussion()),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Empty space to maintain grid
+            Expanded(child: Container()),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // Bottom row - 2 cards
+        Row(
+          children: [
+            Expanded(
+              child: AnimatedScaleIn(
+                delay: const Duration(milliseconds: 1900),
                 child: _buildFeatureCard('DebateClubs', 'Debate Clubs', () => _navigateToDebateClubs()),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: AnimatedScaleIn(
-                delay: const Duration(milliseconds: 1900),
-                child: _buildFeatureCard('Rankings', 'Rankings', () => _navigateToRankings()),
+                delay: const Duration(milliseconds: 2000),
+                child: _buildFeatureCard('Tournaments', 'Tournaments', () => _navigateToTournaments()),
               ),
             ),
+            const SizedBox(width: 12),
+            // Empty space to maintain grid
+            Expanded(child: Container()),
           ],
         ),
       ],
@@ -1020,10 +1038,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final iconMap = {
       'TheArena': Icons.gavel, // Use gavel icon for Arena
       'FindUsers': 'assets/icons/find.png',
-      'OpenDiscussions': 'assets/icons/opendiscussions.png',
-      'DebateTakeDiscuss': 'assets/icons/debatetakesdiscuss.png',
+      'Debate': 'assets/images/debate1.png',
+      'Take': 'assets/images/take5.png',
+      'Discussion': 'assets/images/discussions1.png',
       'DebateClubs': 'assets/icons/debate clubs.png',
-      'Rankings': 'assets/icons/rank1.png',
+      'Tournaments': 'assets/images/bracket.png',
     };
     
     final iconAsset = iconMap[feature];
@@ -1168,8 +1187,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     Navigator.push(context, MaterialPageRoute(builder: (context) => const FindUsersScreen()));
   }
 
-  void _navigateToCreateOpen() {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const CreateOpenScreen()));
+  void _navigateToDebate() {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const DiscussionsRoomListScreen(preSelectedFormat: 'Debate')));
+  }
+
+  void _navigateToTake() {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const DiscussionsRoomListScreen(preSelectedFormat: 'Take')));
+  }
+
+  void _navigateToDiscussion() {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const DiscussionsRoomListScreen(preSelectedFormat: 'Discussion')));
   }
 
   // ignore: unused_element
@@ -1181,15 +1208,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     Navigator.push(context, MaterialPageRoute(builder: (context) => const DebateClubsScreen()));
   }
 
-  void _navigateToDebatesDiscussions() {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const DiscussionsRoomListScreen()));
-  }
-
-  void _navigateToRankings() {
-    // TODO: Navigate to rankings screen when implemented
+  void _navigateToTournaments() {
+    // TODO: Navigate to tournaments screen when implemented
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Rankings feature coming soon!'),
+        content: Text('Tournament feature coming soon!'),
         backgroundColor: Colors.orange,
         duration: Duration(seconds: 2),
       ),

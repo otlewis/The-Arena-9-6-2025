@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import '../models/moderator_judge.dart';
@@ -108,7 +109,7 @@ class _ModeratorRegistrationScreenState extends State<ModeratorRegistrationScree
       }
       
     } catch (e) {
-      debugPrint('Error saving moderator profile: $e');
+      AppLogger().debug('Error saving moderator profile: $e');
       _showError('Failed to save profile: ${e.toString()}');
     } finally {
       if (mounted) {

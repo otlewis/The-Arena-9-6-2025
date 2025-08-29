@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 part 'instant_chat_message.freezed.dart';
 part 'instant_chat_message.g.dart';
 
-/// Instant chat message model for Agora Chat integration
+/// Instant chat message model for instant messaging
 @freezed
 class InstantChatMessage with _$InstantChatMessage {
   const factory InstantChatMessage({

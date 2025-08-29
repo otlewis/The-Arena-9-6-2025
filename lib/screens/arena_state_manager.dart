@@ -187,15 +187,24 @@ class ArenaStateManager {
         documentId: userId,
       );
       
+      // Safe integer parsing helper
+      int safeParseInt(dynamic value, int defaultValue) {
+        if (value == null) return defaultValue;
+        if (value is int) return value;
+        if (value is double) return value.toInt();
+        if (value is String) return int.tryParse(value) ?? defaultValue;
+        return defaultValue;
+      }
+
       return UserProfile(
         id: userData.$id,
         name: userData.data['name'] ?? 'Unknown User',
         email: userData.data['email'] ?? '',
         avatar: userData.data['avatar'],
         bio: userData.data['bio'],
-        reputation: userData.data['reputation'] ?? 0,
-        totalWins: userData.data['totalWins'] ?? 0,
-        totalDebates: userData.data['totalDebates'] ?? 0,
+        reputation: safeParseInt(userData.data['reputation'], 0),
+        totalWins: safeParseInt(userData.data['totalWins'], 0),
+        totalDebates: safeParseInt(userData.data['totalDebates'], 0),
         createdAt: DateTime.parse(userData.$createdAt),
         updatedAt: DateTime.parse(userData.$updatedAt),
       );

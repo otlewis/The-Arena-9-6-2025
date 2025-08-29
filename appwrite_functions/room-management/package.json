@@ -1,0 +1,16 @@
+{
+  "name": "room-management",
+  "version": "1.0.0",
+  "description": "Unified Appwrite Function for audio room management - handles listRooms, createRoom, and joinRoom operations",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {
+    "node-appwrite": "^11.0.0",
+    "livekit-server-sdk": "^2.0.0"
+  },
+  "keywords": ["appwrite", "livekit", "room-management", "audio", "realtime"],
+  "author": "Arena App",
+  "license": "MIT"
+}

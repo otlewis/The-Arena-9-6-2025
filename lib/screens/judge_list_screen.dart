@@ -1,3 +1,4 @@
+import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import '../services/appwrite_service.dart';
@@ -47,7 +48,7 @@ class _JudgeListScreenState extends State<JudgeListScreen> {
       await _loadJudges();
       await _checkCurrentUserJudge();
     } catch (e) {
-      debugPrint('Error loading current user: $e');
+      AppLogger().debug('Error loading current user: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -97,7 +98,7 @@ class _JudgeListScreenState extends State<JudgeListScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('Error loading judges: $e');
+      AppLogger().debug('Error loading judges: $e');
       setState(() {
         _judges = [];
         _isLoading = false;
@@ -123,7 +124,7 @@ class _JudgeListScreenState extends State<JudgeListScreen> {
         });
       }
     } catch (e) {
-      debugPrint('Error checking current user judge: $e');
+      AppLogger().debug('Error checking current user judge: $e');
     }
   }
 
@@ -202,6 +203,7 @@ class _JudgeListScreenState extends State<JudgeListScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: "judge_register",
         onPressed: _registerAsJudge,
         backgroundColor: const Color(0xFFFFC107),
         icon: Icon(
@@ -565,7 +567,7 @@ class _JudgeListScreenState extends State<JudgeListScreen> {
         );
       }
     } catch (e) {
-      debugPrint('Error pinging judge: $e');
+      AppLogger().debug('Error pinging judge: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -589,7 +591,7 @@ class _JudgeListScreenState extends State<JudgeListScreen> {
       );
       return response.documents.map((doc) => doc.data).toList();
     } catch (e) {
-      debugPrint('Error loading arena participants: $e');
+      AppLogger().debug('Error loading arena participants: $e');
       return [];
     }
   }

@@ -160,8 +160,8 @@ class InstantNavigationSystem {
   }
 
   Future<void> _preloadArenaScreenData() async {
-    // Agora pre-initialization disabled (removed)
-    _logger.debug('🏟️ Agora pre-initialization disabled (removed)');
+    // LiveKit pre-initialization handled on-demand
+    _logger.debug('🏟️ LiveKit will initialize when needed');
   }
 
   Future<void> _preloadProfileScreenData() async {
@@ -181,7 +181,7 @@ class InstantNavigationSystem {
     return {
       'is_initialized': _isInitialized,
       'cache_stats': SmartCacheManager().getCacheStats(),
-      'agora_status': false, // Agora removed
+      'livekit_status': false, // LiveKit status tracked separately
       'timestamp': DateTime.now().toIso8601String(),
     };
   }

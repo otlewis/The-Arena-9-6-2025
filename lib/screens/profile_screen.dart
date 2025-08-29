@@ -4,6 +4,7 @@ import '../models/user_profile.dart';
 import '../widgets/user_avatar.dart';
 import 'edit_profile_screen.dart';
 import 'club_details_screen.dart';
+import 'language_settings_screen.dart';
 import 'package:appwrite/models.dart' as models;
 import '../core/logging/app_logger.dart';
 import '../services/theme_service.dart';
@@ -163,7 +164,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
       
     } catch (e) {
-      debugPrint('⚠️ Logout error handled gracefully: $e');
+      AppLogger().debug('⚠️ Logout error handled gracefully: $e');
       
       // Even if there's an error, we've already cleared local state
       // Show success message since the user is effectively logged out
@@ -1053,6 +1054,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 8),
           _buildNeumorphicListTile(
+            icon: Icons.language,
+            title: 'Language & Accessibility',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const LanguageSettingsScreen(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          _buildNeumorphicListTile(
             icon: Icons.help,
             title: 'Help & Support',
             onTap: () {
@@ -1061,6 +1075,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               );
             },
           ),
+          // Admin/Dev option for database optimization
+          if (_currentUser?.email != null && _currentUser!.email.contains('admin')) ...[
+          ],
         ],
       ),
     );

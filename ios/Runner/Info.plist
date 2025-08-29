@@ -43,12 +43,18 @@
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Arena uses Bluetooth to connect to audio devices like headphones and speakers.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Arena needs calendar access to schedule debate sessions and send reminders for upcoming debates.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Arena needs camera access for video chat in debate and discussion rooms.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Arena needs contacts access to help you find friends and invite them to debates and discussions.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Arena needs access to your microphone to enable voice chat in discussion rooms.</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Arena needs screen recording permission to enable debaters to share their screen during debates.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Arena uses speech recognition to provide live transcription and accessibility features during debates and discussions.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>

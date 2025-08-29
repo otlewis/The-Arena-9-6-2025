@@ -27,9 +27,7 @@ class ModernChatInterface extends StatefulWidget {
 
 class _ModernChatInterfaceState extends State<ModernChatInterface>
     with TickerProviderStateMixin {
-  // final AgoraInstantMessagingService _messagingService = AgoraInstantMessagingService(); // Agora removed
-  
-  // Placeholder object to prevent compilation errors
+  // Placeholder messaging service (LiveKit chat integration pending)
   final _messagingService = _DisabledMessagingService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();

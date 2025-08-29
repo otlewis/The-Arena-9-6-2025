@@ -31,11 +31,11 @@ class User {
   
   String? get bio => _getPreferenceValue('bio') as String?;
   
-  int get debateScore => _getPreferenceValue('debateScore') as int? ?? 0;
+  int get debateScore => _safeParseInt(_getPreferenceValue('debateScore')) ?? 0;
   
-  int get totalDebates => _getPreferenceValue('totalDebates') as int? ?? 0;
+  int get totalDebates => _safeParseInt(_getPreferenceValue('totalDebates')) ?? 0;
   
-  int get totalWins => _getPreferenceValue('totalWins') as int? ?? 0;
+  int get totalWins => _safeParseInt(_getPreferenceValue('totalWins')) ?? 0;
   
   List<String> get interests => 
       (_getPreferenceValue('interests') as List<dynamic>?)?.cast<String>() ?? [];
@@ -51,6 +51,15 @@ class User {
     } else if (preferences is _MockPreferences) {
       return (preferences as _MockPreferences).data[key];
     }
+    return null;
+  }
+
+  // Safe integer parsing method
+  static int? _safeParseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value);
     return null;
   }
 
