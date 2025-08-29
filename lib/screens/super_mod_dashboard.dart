@@ -178,13 +178,19 @@ class _SuperModDashboardState extends State<SuperModDashboard>
       appBar: AppBar(
         title: Row(
           children: [
-            const Icon(Icons.shield, color: Color(0xFFFFD700)),
+            const Icon(Icons.shield, color: Color(0xFFFFD700), size: 20),
+            const SizedBox(width: 6),
+            const Flexible(
+              child: Text(
+                'Super Mod Dashboard',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
             const SizedBox(width: 8),
-            const Text('Super Moderator Dashboard'),
-            const SizedBox(width: 12),
             SuperModBadge(
               userId: _currentUser?.id ?? '',
-              size: 16,
+              size: 14,
             ),
           ],
         ),

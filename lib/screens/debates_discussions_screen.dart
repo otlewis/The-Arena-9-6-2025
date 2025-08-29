@@ -4800,12 +4800,17 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         return;
       }
       
-      if (!_hasModeratorPowers) {
-        AppLogger().warning('🔇 User is not moderator, cannot mute all');
+      // Check if user is moderator OR super moderator
+      final superModService = SuperModeratorService();
+      final currentUserId = _currentUser?.id ?? '';
+      final isSuperMod = superModService.isSuperModerator(currentUserId);
+      
+      if (!_hasModeratorPowers && !isSuperMod) {
+        AppLogger().warning('🔇 User is not moderator or super mod, cannot mute all');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('❌ Only moderators can mute all participants'),
+              content: Text('❌ Only moderators and super moderators can mute all participants'),
               backgroundColor: Colors.red,
             ),
           );

@@ -27,7 +27,8 @@ import '../core/logging/app_logger.dart';
 import '../debug_coin_initializer.dart';
 import '../widgets/ping_notification_modal.dart';
 import '../models/moderator_judge.dart';
-import 'moderation_dashboard_screen.dart';
+import 'super_mod_dashboard.dart';
+import '../services/super_moderator_service.dart';
 // All test screen imports removed - files deleted
 
 class HomeScreen extends StatefulWidget {
@@ -228,19 +229,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
           ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const ModerationDashboardScreen(),
-            ),
-          );
-        },
-        backgroundColor: const Color(0xFF8B5CF6),
-        icon: const Icon(Icons.admin_panel_settings, color: Colors.white),
-        label: const Text('Reports', style: TextStyle(color: Colors.white)),
-      ),
+      floatingActionButton: _buildFloatingActionButton(),
     );
   }
 
@@ -516,7 +505,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             ],
                           ),
                           child: Image.asset(
-                            'assets/images/Arenalogo.png',
+                            'assets/images/3logo.png',
                             width: 60,
                             height: 60,
                             fit: BoxFit.contain,
@@ -1038,8 +1027,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final iconMap = {
       'TheArena': Icons.gavel, // Use gavel icon for Arena
       'FindUsers': 'assets/icons/find.png',
-      'Debate': 'assets/images/debate1.png',
-      'Take': 'assets/images/take5.png',
+      'Debate': 'assets/images/1v1.png',
+      'Take': 'assets/images/1take.png',
       'Discussion': 'assets/images/discussions1.png',
       'DebateClubs': 'assets/icons/debate clubs.png',
       'Tournaments': 'assets/images/bracket.png',
@@ -1538,6 +1527,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
       ),
     );
+  }
+
+  Widget? _buildFloatingActionButton() {
+    // Check if current user is a super moderator
+    final userId = _currentUserProfile?.id;
+    if (userId == null) return null;
+    
+    final superModService = SuperModeratorService();
+    final isSuperMod = superModService.isSuperModerator(userId);
+    
+    if (isSuperMod) {
+      // Show Super Moderator dashboard for super mods only
+      return FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const SuperModDashboard(),
+            ),
+          );
+        },
+        backgroundColor: const Color(0xFFFF6B35), // Orange color for super mod
+        icon: const Icon(Icons.security, color: Colors.white),
+        label: const Text('Super Mod', style: TextStyle(color: Colors.white)),
+      );
+    }
+    
+    // Regular users don't see any reports button
+    return null;
   }
 
 

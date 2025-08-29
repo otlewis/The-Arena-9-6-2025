@@ -796,22 +796,77 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
         mainAxisSize: MainAxisSize.min,
         children: [
           if (isDebateLayout)
-            // Debate layout: 2 large slots for Affirmative and Negative
-            SizedBox(
-              height: tileHeight,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (int i = 0; i < 2; i++) ...[
-                    if (i > 0) const SizedBox(width: tileSpacing),
-                    SizedBox(
-                      width: tileWidth,
-                      height: tileHeight,
-                      child: _cachedSpeakerWidgets[i],
-                    ),
-                  ],
-                ],
-              ),
+            // Debate layout: 2 large slots for Affirmative and Negative with tabs
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Tabs row
+                SizedBox(
+                  height: 32,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (int i = 0; i < 2; i++) ...[
+                        if (i > 0) const SizedBox(width: tileSpacing),
+                        Container(
+                          width: tileWidth,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: i == 0 
+                                ? const Color(0xFF4CAF50).withValues(alpha: 0.15)  // Green for Affirmative
+                                : const Color(0xFFF44336).withValues(alpha: 0.15), // Red for Negative  
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(8),
+                              topRight: Radius.circular(8),
+                            ),
+                            border: Border(
+                              top: BorderSide(
+                                color: i == 0 ? const Color(0xFF4CAF50) : const Color(0xFFF44336),
+                                width: 2,
+                              ),
+                              left: BorderSide(
+                                color: i == 0 ? const Color(0xFF4CAF50) : const Color(0xFFF44336),
+                                width: 2,
+                              ),
+                              right: BorderSide(
+                                color: i == 0 ? const Color(0xFF4CAF50) : const Color(0xFFF44336),
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              i == 0 ? 'AFFIRMATIVE' : 'NEGATIVE',
+                              style: TextStyle(
+                                color: i == 0 ? const Color(0xFF4CAF50) : const Color(0xFFF44336),
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                // Speaker slots row
+                SizedBox(
+                  height: tileHeight,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (int i = 0; i < 2; i++) ...[
+                        if (i > 0) const SizedBox(width: tileSpacing),
+                        SizedBox(
+                          width: tileWidth,
+                          height: tileHeight,
+                          child: _cachedSpeakerWidgets[i],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             )
           else if (isTakeLayout)
             // Take layout: 3 medium slots for speakers

@@ -193,61 +193,6 @@ class _PremiumScreenState extends State<PremiumScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Beta Testing Notice
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.blue.withValues(alpha: 0.1),
-                    Colors.cyan.withValues(alpha: 0.1),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Colors.blue.withValues(alpha: 0.3),
-                  width: 1.5,
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.science,
-                    color: Colors.blue,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '🧪 Beta Testing Mode',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: _themeService.isDarkMode ? Colors.blue[300] : Colors.blue[800],
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Coin purchases are simulated for testing. No real money will be charged.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: _themeService.isDarkMode ? Colors.white70 : Colors.black87,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
             // Premium Subscription Section
             _buildSection(
               title: 'Premium Subscriptions',
@@ -258,28 +203,24 @@ class _PremiumScreenState extends State<PremiumScreen> {
                   title: 'Arena Pro Monthly',
                   price: '\$9.99/month',
                   features: [
-                    '🎤 High-quality audio debates',
                     'Unlimited debate challenges',
-                    'Priority arena access',
+                    'Arena access',
                     'Advanced analytics & insights',
                     'Custom debate topics',
                     'No advertisements',
-                    'Priority customer support',
                     'Exclusive debate tournaments',
                   ],
                   color: Colors.purple,
-                  isPopular: true,
+                  isPopular: false,
                 ),
                 const SizedBox(height: 12),
                 _buildSubscriptionCard(
                   title: 'Arena Pro Yearly',
                   price: '\$99.99/year',
                   features: [
-                    '🎤 High-quality audio debates',
                     'All monthly features included',
                     'Get 2 months free (save \$20)',
                     'Exclusive annual tournaments',
-                    'VIP priority support',
                     'Early access to new features',
                     'Special yearly subscriber badge',
                     'Beta feature testing access',
