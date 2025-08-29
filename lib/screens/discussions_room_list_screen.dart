@@ -43,20 +43,31 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
   Future<void> _loadRooms() async {
     try {
       AppLogger().debug('Loading discussion rooms...');
-      final rooms = await _appwrite.getDebateDiscussionRooms();
-      AppLogger().debug('🔍 Raw rooms data: ${rooms.toString()}');
+      final allRooms = await _appwrite.getDebateDiscussionRooms();
+      AppLogger().debug('🔍 Raw rooms data: ${allRooms.toString()}');
+      
+      // Filter rooms by preSelectedFormat if provided
+      List<Map<String, dynamic>> filteredRooms = allRooms;
+      if (widget.preSelectedFormat != null) {
+        filteredRooms = allRooms.where((room) {
+          final roomDebateStyle = room['debateStyle'] as String?;
+          return roomDebateStyle == widget.preSelectedFormat;
+        }).toList();
+        
+        AppLogger().debug('🔍 Filtered ${filteredRooms.length} rooms for format: ${widget.preSelectedFormat}');
+      }
       
       // Debug room IDs
-      for (var room in rooms) {
+      for (var room in filteredRooms) {
         AppLogger().debug('Room loaded: ${room['title']} with ID: ${room['id']}');
       }
       
       if (mounted) {
         setState(() {
-          _rooms = rooms;
+          _rooms = filteredRooms;
           _isLoading = false;
         });
-        AppLogger().debug('Loaded ${rooms.length} discussion rooms');
+        AppLogger().debug('Loaded ${filteredRooms.length} discussion rooms');
       }
     } catch (e) {
       AppLogger().error('Error loading rooms: $e');
@@ -369,6 +380,32 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
       );
     }
   }
+
+  String _getFormattedTitle(String format) {
+    switch (format) {
+      case 'Debate':
+        return 'Debate Rooms'; // Includes both regular and 2v2 debates
+      case 'Take':
+        return 'Take Rooms';
+      case 'Discussion':
+        return 'Discussion Rooms';
+      default:
+        return '$format Rooms';
+    }
+  }
+
+  String _getDisplayDebateStyle(String? debateStyle) {
+    switch (debateStyle) {
+      case 'Debate':
+        return 'DEBATE';
+      case 'Take':
+        return 'TAKE';
+      case 'Discussion':
+        return 'DISCUSSION';
+      default:
+        return debateStyle?.toUpperCase() ?? 'DISCUSSION';
+    }
+  }
   
 
   @override
@@ -384,7 +421,7 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
         elevation: 0,
         title: Text(
           widget.preSelectedFormat != null 
-              ? '${widget.preSelectedFormat} Rooms' 
+              ? _getFormattedTitle(widget.preSelectedFormat!)
               : 'Debates & Discussions',
           style: TextStyle(
             color: _themeService.isDarkMode ? Colors.white : Colors.black87,
@@ -713,7 +750,7 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
                         ),
                       ),
                       child: Text(
-                        roomData['debateStyle']?.toString().toUpperCase() ?? 'DISCUSSION',
+                        _getDisplayDebateStyle(roomData['debateStyle']?.toString()),
                         style: const TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
