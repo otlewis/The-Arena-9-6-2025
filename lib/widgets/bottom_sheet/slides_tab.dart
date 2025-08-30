@@ -350,19 +350,25 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
         
         if (mounted) {
           // Close the debate bottom sheet before opening presentation mode
+          _logger.info('📊 Closing materials sheet before opening presentation mode');
           widget.onClose?.call();
           
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => PresentationViewer(
-                slideData: slideData,
-                syncService: widget.syncService,
-                appwriteService: widget.appwriteService,
-                isPresenter: widget.isHost,
+          // Add a small delay to ensure the sheet closes before opening presentation
+          await Future.delayed(const Duration(milliseconds: 200));
+          
+          if (mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => PresentationViewer(
+                  slideData: slideData,
+                  syncService: widget.syncService,
+                  appwriteService: widget.appwriteService,
+                  isPresenter: widget.isHost,
+                ),
               ),
-            ),
-          );
+            );
+          }
         }
       } else if (_totalPages > 0 && _currentLoadedSlide != null) {
         // If we have slides loaded but no persisted data, create slide data from current state

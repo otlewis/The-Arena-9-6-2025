@@ -251,7 +251,6 @@ class LiveKitMaterialSyncService {
             'description': description,
             'sharedBy': _userId,
             'sharedAt': DateTime.now().toIso8601String(),
-            'isPinned': true, // Mark as pinned to trigger popup for all users via real-time subscription
           },
         );
         _logger.info('📌 Source saved to database - will trigger real-time updates for all participants');
@@ -272,7 +271,11 @@ class LiveKitMaterialSyncService {
   }
 
   Future<void> uploadPdf(String fileId, String fileName, int totalPages, String? pdfUrl) async {
-    if (!_isHost) return;
+    _logger.info('📊 UPLOAD PDF CALLED - isHost: $_isHost, fileName: $fileName');
+    if (!_isHost) {
+      _logger.warning('📊 Upload PDF blocked - user is not host');
+      return;
+    }
     
     try {
       _currentSlideFileId = fileId;
@@ -294,7 +297,9 @@ class LiveKitMaterialSyncService {
         'userName': _userName,
       };
       
+      _logger.info('📊 Sending PDF upload message to all participants via LiveKit');
       await _sendDataMessage(message);
+      _logger.info('📊 PDF upload message sent successfully');
     } catch (e) {
       _logger.error('Error uploading PDF: $e');
     }

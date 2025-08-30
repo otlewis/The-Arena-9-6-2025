@@ -58,9 +58,13 @@ class _SourcesTabState extends State<SourcesTab> with AutomaticKeepAliveClientMi
   }
   
   Future<void> _addSource() async {
+    _logger.info('🔗 ADD SOURCE BUTTON CLICKED - Starting link sharing process');
+    
     final url = _urlController.text.trim();
+    _logger.info('🔗 Raw URL input: "$url"');
     
     if (url.isEmpty) {
+      _logger.warning('🔗 Empty URL - showing error to user');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a URL')),
       );
@@ -71,10 +75,12 @@ class _SourcesTabState extends State<SourcesTab> with AutomaticKeepAliveClientMi
     String normalizedUrl = url;
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       normalizedUrl = 'https://$url';
+      _logger.info('🔗 Added https:// prefix to URL');
     }
     
     final uri = Uri.tryParse(normalizedUrl);
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      _logger.error('🔗 Invalid URL format: $normalizedUrl');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a valid URL (e.g., google.com or https://google.com)')),
       );
@@ -95,6 +101,7 @@ class _SourcesTabState extends State<SourcesTab> with AutomaticKeepAliveClientMi
     }
     
     _logger.info('🔗 Auto-generated title: $title');
+    _logger.info('🔗 About to call widget.syncService.shareSource()...');
     
     try {
       await widget.syncService.shareSource(normalizedUrl, title);

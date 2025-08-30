@@ -628,63 +628,6 @@ class _PresentationViewerState extends State<PresentationViewer> {
     );
   }
 
-  Widget _buildLandscapePresenterControls() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey[600]!, width: 1),
-      ),
-      child: Row(
-        children: [
-          // Previous slide button
-          IconButton(
-            onPressed: _currentPage > 1 ? _previousSlide : null,
-            icon: const Icon(Icons.skip_previous, size: 24, color: Colors.white),
-            style: IconButton.styleFrom(
-              backgroundColor: _currentPage > 1 ? Colors.grey[700] : Colors.grey[800],
-              padding: const EdgeInsets.all(12),
-            ),
-          ),
-          
-          const SizedBox(width: 16),
-          
-          // Slide counter
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey[800],
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                'Slide $_currentPage of $_totalPages',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-          
-          const SizedBox(width: 16),
-          
-          // Next slide button
-          IconButton(
-            onPressed: _currentPage < _totalPages ? _nextSlide : null,
-            icon: const Icon(Icons.skip_next, size: 24, color: Colors.white),
-            style: IconButton.styleFrom(
-              backgroundColor: _currentPage < _totalPages ? Colors.grey[700] : Colors.grey[800],
-              padding: const EdgeInsets.all(12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildLandscapeViewerStatus() {
     return Container(

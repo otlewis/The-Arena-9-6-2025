@@ -68,6 +68,17 @@ class _DebateBottomSheetState extends State<DebateBottomSheet>
         });
       }
     });
+    
+    // Listen for newly added sources from the material sync service
+    widget.syncService.sourceAdded.listen((source) {
+      if (mounted) {
+        setState(() {
+          // Add to the beginning of the list (most recent first)
+          _sources.insert(0, source);
+        });
+        _logger.info('📋 Added new source to materials panel: ${source.title}');
+      }
+    });
   }
   
   Future<void> _loadExistingSources() async {
@@ -86,22 +97,34 @@ class _DebateBottomSheetState extends State<DebateBottomSheet>
       
       if (mounted) {
         setState(() {
-          _sources.clear();
+          // Don't clear existing sources - merge database sources with LiveKit sources
+          final existingUrls = _sources.map((s) => s.url).toSet();
+          
           for (final doc in documents.documents) {
-            final source = DebateSource(
-              id: doc.$id,
-              url: doc.data['url'] ?? '',
-              title: doc.data['title'] ?? 'Untitled',
-              description: doc.data['description'],
-              sharedAt: DateTime.parse(doc.data['sharedAt'] ?? DateTime.now().toIso8601String()),
-              sharedBy: doc.data['sharedBy'] ?? '',
-              sharedByName: doc.data['sharedByName'],
-              isSecure: doc.data['url']?.toString().startsWith('https') ?? false,
-              isPinned: doc.data['isPinned'] ?? false,
-            );
-            _sources.add(source);
-            _logger.debug('📋 Loaded source: ${source.title} -> ${source.url}');
+            final url = doc.data['url'] ?? '';
+            
+            // Only add if not already present (avoid duplicates)
+            if (!existingUrls.contains(url)) {
+              final source = DebateSource(
+                id: doc.$id,
+                url: url,
+                title: doc.data['title'] ?? 'Untitled',
+                description: doc.data['description'],
+                sharedAt: DateTime.parse(doc.data['sharedAt'] ?? DateTime.now().toIso8601String()),
+                sharedBy: doc.data['sharedBy'] ?? '',
+                sharedByName: doc.data['sharedByName'],
+                isSecure: url.startsWith('https'),
+                isPinned: false, // Remove isPinned since database doesn't have this field
+              );
+              _sources.add(source);
+              _logger.debug('📋 Added database source: ${source.title} -> ${source.url}');
+            } else {
+              _logger.debug('📋 Skipped duplicate source: $url');
+            }
           }
+          
+          // Sort by shared date (most recent first)
+          _sources.sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
         });
         _logger.info('📋 Sources list updated. Total sources: ${_sources.length}');
       }

@@ -21,7 +21,6 @@ import '../features/arena/constants/arena_colors.dart';
 import '../widgets/animated_fade_in.dart';
 import '../widgets/appwrite_timer_widget.dart';
 import '../widgets/user_profile_bottom_sheet.dart';
-import '../widgets/instant_message_bell.dart';
 import '../widgets/challenge_bell.dart';
 import '../widgets/mattermost_chat_widget.dart';
 import 'email_compose_screen.dart';
@@ -38,6 +37,11 @@ import '../core/performance/riverpod_performance_optimizer.dart';
 import '../core/performance/virtualized_list_optimizer.dart';
 import '../core/performance/network_performance_optimizer.dart';
 import '../widgets/streaming_destinations_modal.dart';
+import '../widgets/bottom_sheet/debate_bottom_sheet.dart';
+import '../services/livekit_material_sync_service.dart';
+import '../widgets/shared_link_popup.dart';
+import '../widgets/slide_update_popup.dart';
+import '../models/debate_source.dart';
 
 class DebatesDiscussionsScreen extends StatefulWidget {
   final String roomId;
@@ -115,6 +119,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   Timer? _reconnectionTimer;
   Timer? _participantSyncTimer;
   bool _wasOffline = false;
+  
+  // Materials system
+  LiveKitMaterialSyncService? _materialSyncService;
   bool _isReconnecting = false;
   int _connectionDropCount = 0;
   DateTime? _lastConnectionDrop;
@@ -155,6 +162,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   RealtimeSubscription? _roomSubscription;
   StreamSubscription? _unreadMessagesSubscription; // Instant messages subscription
   StreamSubscription? _firebaseParticipantSubscription; // Firebase participant sync
+  StreamSubscription? _materialUpdatesSubscription; // Material sync subscription
+  StreamSubscription? _sourceAddedSubscription; // Shared sources subscription
 
   @override
   void initState() {
@@ -237,6 +246,72 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     };
     
     AppLogger().debug('📹 WebRTC renderers and MediaSoup service initialized for Debates & Discussions');
+  }
+  
+  void _initializeMaterialsService() {
+    // Initialize materials service for ALL users in debate format rooms
+    // Everyone can view slides, but only moderators/debaters can control them
+    if (_roomData?['debateStyle'] == 'Debate') {
+      AppLogger().debug('📊 Initializing materials service for debate room...');
+      AppLogger().debug('📊 LiveKit room status: ${_liveKitService.room != null ? "Available" : "NULL"}');
+      AppLogger().debug('📊 Current user: ${_currentUser?.name} (${_currentUser?.id})');
+      AppLogger().debug('📊 User roles - moderator: $_hasModeratorPowers, speaker: $_isCurrentUserSpeaker');
+      
+      _materialSyncService = LiveKitMaterialSyncService(
+        appwrite: _appwrite,
+        room: _liveKitService.room, // Pass the LiveKit room instance
+        roomId: widget.roomId,
+        userId: _currentUser?.id ?? '',
+        userName: _currentUser?.name,
+        isHost: _hasModeratorPowers || _isCurrentUserSpeaker, // Only moderators/debaters can control slides
+      );
+      AppLogger().debug('📊 Materials service created - isHost: ${_hasModeratorPowers || _isCurrentUserSpeaker}');
+      
+      // Set up material updates listeners for audience popup notifications
+      _setupMaterialListeners();
+    } else {
+      AppLogger().debug('📊 Skipping materials service - not a debate room (style: ${_roomData?['debateStyle']})');
+    }
+  }
+  
+  void _setupMaterialListeners() {
+    if (_materialSyncService == null) {
+      AppLogger().warning('📊 Cannot setup material listeners - service is null');
+      return;
+    }
+    
+    final currentUserId = _currentUser?.id ?? '';
+    AppLogger().debug('📊 Setting up material listeners for user: $currentUserId');
+    
+    // Listen for shared sources
+    _sourceAddedSubscription = _materialSyncService!.sourceAdded.listen((source) {
+      AppLogger().debug('📌 Received shared source event: ${source.title} from ${source.sharedBy}');
+      if (mounted && !_isDisposing) {
+        // Only show popup if current user is not the one who shared the link
+        if (source.sharedBy != currentUserId) {
+          AppLogger().info('📌 Showing shared link popup: ${source.title}');
+          _showSharedLinkPopup(source);
+        } else {
+          AppLogger().debug('📌 Skipping popup for own shared link: ${source.title}');
+        }
+      }
+    });
+    
+    // Listen for material updates and only show popup for NEW slide uploads (pdf_upload), not slide navigation (slide_change)
+    _materialUpdatesSubscription = _materialSyncService!.materialUpdates.listen((materialSync) {
+      AppLogger().debug('📊 Received material sync event: ${materialSync.type} from ${materialSync.userId}');
+      if (mounted && !_isDisposing) {
+        // Only show popup for pdf_upload events (new slides shared), not slide_change events (slide navigation)
+        if (materialSync.type == 'pdf_upload' && materialSync.userId != currentUserId) {
+          AppLogger().info('📊 Showing slide upload popup from ${materialSync.userName}');
+          _showSlideUpdatePopup(materialSync);
+        } else {
+          AppLogger().debug('📊 Skipping popup - type: ${materialSync.type}, own content: ${materialSync.userId == currentUserId}');
+        }
+      }
+    });
+    
+    AppLogger().debug('📊 Material listeners successfully set up');
   }
 
   // Audio/Video control methods (simplified like open discussion)
@@ -896,6 +971,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         }
         
         AppLogger().debug('✅ Room data loaded: ${roomData['name']}');
+        AppLogger().info('📊 ROOM DATA LOADED - Room style: ${roomData['debateStyle']}');
+        
+        // Initialize materials service now that we have room data
+        AppLogger().info('📊 ROOM DATA LOADED - Attempting to initialize materials service');
+        _initializeMaterialsService();
       }
     } catch (e) {
       AppLogger().error('❌ Error loading room data: $e');
@@ -1332,6 +1412,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     _roomSubscription?.close();
     _unreadMessagesSubscription?.cancel();
     _firebaseParticipantSubscription?.cancel();
+    _materialUpdatesSubscription?.cancel();
+    _sourceAddedSubscription?.cancel();
     
     // Clean up Firebase when leaving room (temporarily disabled)
     // _firebaseSync.clearRoom(widget.roomId);
@@ -1351,6 +1433,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     if (_liveKitService.isConnected) {
       _liveKitService.disconnect();
     }
+    
+    // Dispose material sync service
+    _materialSyncService?.dispose();
     
     // Clean up performance optimizations
     OptimizedStateManager.clearKey('participants_${widget.roomId}');
@@ -1471,6 +1556,22 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           _isMuted = _liveKitService.isMuted;
         });
         AppLogger().debug('🔥 CONNECT-AUDIO: ✅ UI state updated - connected: $_isAudioConnected, muted: $_isMuted');
+        
+        // Reinitialize materials service now that LiveKit room is connected
+        if (_roomData?['debateStyle'] == 'Debate' && _liveKitService.room != null) {
+          AppLogger().info('📊 🔥 LIVEKIT CONNECTED - Reinitializing materials service with connected LiveKit room');
+          AppLogger().info('📊 🔥 Room style: ${_roomData?['debateStyle']}, LiveKit room: ${_liveKitService.room != null}');
+          // Dispose old service if it exists
+          if (_materialSyncService != null) {
+            AppLogger().info('📊 🔥 Disposing existing materials service');
+            _materialUpdatesSubscription?.cancel();
+            _sourceAddedSubscription?.cancel();
+            _materialSyncService?.dispose();
+          }
+          _initializeMaterialsService();
+        } else {
+          AppLogger().warning('📊 🔥 LIVEKIT CONNECTED - NOT reinitializing materials: debateStyle=${_roomData?['debateStyle']}, room=${_liveKitService.room != null}');
+        }
       }
       
     } catch (e) {
@@ -2893,9 +2994,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
   Widget _buildHeader() {
     final participantCount = _speakerPanelists.length + _audienceMembers.length;
+    final isSmallScreen = MediaQuery.of(context).size.width < 380;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(isSmallScreen ? 12.0 : 16.0),
       child: Row(
         children: [
           GestureDetector(
@@ -2924,36 +3026,38 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
             showControls: _hasModeratorPowers,
             showConnectionStatus: false,
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: isSmallScreen ? 8 : 16),
           const ChallengeBell(iconColor: Colors.white),
-          const SizedBox(width: 16),
+          SizedBox(width: isSmallScreen ? 8 : 16),
+          // Compact participant count and audio status
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 LucideIcons.users,
                 color: Colors.white,
-                size: 16,
+                size: isSmallScreen ? 14 : 16,
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 2),
               Text(
                 '$participantCount',
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white,
-                  fontSize: 14,
+                  fontSize: isSmallScreen ? 12 : 14,
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              // Sync indicator removed for performance
-                        // Audio status indicator
-          const SizedBox(width: 8),
-          Icon(
-            _webrtcService.isConnected 
-              ? (_isMuted ? LucideIcons.micOff : LucideIcons.mic)
-              : LucideIcons.micOff,
-            color: _webrtcService.isConnected 
-              ? (_isMuted ? Colors.orange : Colors.green)
-              : Colors.grey,
-            size: 14,
+              const SizedBox(width: 6),
+              Icon(
+                _webrtcService.isConnected 
+                  ? (_isMuted ? LucideIcons.micOff : LucideIcons.mic)
+                  : LucideIcons.micOff,
+                color: _webrtcService.isConnected 
+                  ? (_isMuted ? Colors.orange : Colors.green)
+                  : Colors.grey,
+                size: isSmallScreen ? 12 : 14,
+              ),
+            ],
           ),
           
           // Connection status indicator
@@ -2989,28 +3093,22 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
               ),
             ),
           ],
-              const SizedBox(width: 16),
-              // Instant Message Bell
-              const InstantMessageBell(
-                iconColor: Color(0xFF8B5CF6),
-                iconSize: 20,
-              ),
-              if (_hasModeratorPowers) ...[ 
-                const SizedBox(width: 16),
-                GestureDetector(
+          if (_hasModeratorPowers) ...[ 
+            SizedBox(width: isSmallScreen ? 8 : 16),
+            GestureDetector(
                   onTap: _showModeratorTools,
                   child: Stack(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: EdgeInsets.all(isSmallScreen ? 6 : 8),
                         decoration: BoxDecoration(
                           color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           LucideIcons.settings,
-                          color: Color(0xFF8B5CF6),
-                          size: 20,
+                          color: const Color(0xFF8B5CF6),
+                          size: isSmallScreen ? 16 : 20,
                         ),
                       ),
                       // Show badge if there are pending speaker requests
@@ -3041,9 +3139,26 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                     ],
                   ),
                 ),
-              ],
-            ],
-          ),
+          ],
+          // Materials button - only visible to moderators and debaters in debate format rooms
+          if (_roomData?['debateStyle'] == 'Debate' && (_hasModeratorPowers || _isCurrentUserSpeaker)) ...[ 
+            SizedBox(width: isSmallScreen ? 6 : 16),
+            GestureDetector(
+              onTap: _showMaterialsSheet,
+              child: Container(
+                padding: EdgeInsets.all(isSmallScreen ? 6 : 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Icon(
+                  LucideIcons.presentation,
+                  color: const Color(0xFF8B5CF6),
+                  size: isSmallScreen ? 16 : 20,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -5957,4 +6072,73 @@ $roomJoinLink
   //   );
   // }
 
+
+
+  void _showMaterialsSheet() {
+    AppLogger().info('📊 MATERIALS BUTTON CLICKED - Service available: ${_materialSyncService != null}');
+    if (_materialSyncService == null) return;
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      useSafeArea: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: DebateBottomSheet(
+        roomId: widget.roomId,
+        userId: _currentUser?.id ?? "",
+        isHost: _hasModeratorPowers || _isCurrentUserSpeaker,
+        syncService: _materialSyncService!,
+        appwriteService: _appwrite,
+        onClose: () => Navigator.pop(context),
+      ),
+      ),
+    );
+  }
+
+  void _showSharedLinkPopup(DebateSource sharedLink) {
+    if (!mounted || _isDisposing) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => SharedLinkPopup(
+        sharedLink: sharedLink,
+        onDismiss: () {
+          AppLogger().info('📌 Shared link popup dismissed');
+        },
+      ),
+    );
+  }
+
+  void _showSlideUpdatePopup(dynamic materialSync) {
+    if (!mounted || _isDisposing || _materialSyncService == null) return;
+    
+    // Create SlideData from material sync data
+    final slideData = SlideData(
+      fileId: materialSync.slideFileId ?? '',
+      fileName: materialSync.fileName ?? 'Presentation',
+      currentSlide: materialSync.currentSlide ?? 1,
+      totalSlides: materialSync.totalSlides ?? 0,
+      pdfUrl: materialSync.pdfUrl,
+      uploadedBy: materialSync.userId ?? '',
+      uploadedByName: materialSync.userName,
+      uploadedAt: materialSync.timestamp ?? DateTime.now(),
+    );
+    
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => SlideUpdatePopup(
+        slideData: slideData,
+        syncService: _materialSyncService!,
+        appwriteService: _appwrite,
+        currentUserId: _currentUser?.id ?? '',
+        onDismiss: () {
+          AppLogger().info('📊 Slide update popup dismissed');
+        },
+      ),
+    );
+  }
 }
