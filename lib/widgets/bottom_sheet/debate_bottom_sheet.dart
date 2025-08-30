@@ -165,6 +165,7 @@ class _DebateBottomSheetState extends State<DebateBottomSheet>
                         syncService: widget.syncService,
                         appwriteService: widget.appwriteService,
                         currentSlideData: _currentSlideData,
+                        onClose: _closeBottomSheet,
                       ),
                       SourcesTab(
                         roomId: widget.roomId,

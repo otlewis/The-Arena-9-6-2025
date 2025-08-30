@@ -17,6 +17,7 @@ class SlidesTab extends StatefulWidget {
   final LiveKitMaterialSyncService syncService;
   final AppwriteService appwriteService;
   final SlideData? currentSlideData;
+  final VoidCallback? onClose;
   
   const SlidesTab({
     super.key,
@@ -26,6 +27,7 @@ class SlidesTab extends StatefulWidget {
     required this.syncService,
     required this.appwriteService,
     this.currentSlideData,
+    this.onClose,
   });
 
   @override
@@ -47,7 +49,7 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
   
   // Slide library
   List<UserSlideLibrary> _userSlides = [];
-  bool _loadingUserSlides = false;
+  UserSlideLibrary? _currentLoadedSlide;
   
   @override
   bool get wantKeepAlive => true;
@@ -96,21 +98,15 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
   Future<void> _loadUserSlides() async {
     if (!widget.isHost) return; // Only hosts can see slide library
     
-    setState(() => _loadingUserSlides = true);
-    
     try {
       final slides = await _slideLibraryService.getUserSlides();
       if (mounted) {
         setState(() {
           _userSlides = slides;
-          _loadingUserSlides = false;
         });
       }
     } catch (e) {
       _logger.warning('Failed to load user slides: $e');
-      if (mounted) {
-        setState(() => _loadingUserSlides = false);
-      }
     }
   }
   
@@ -199,18 +195,23 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
     if (selectedSlide == null) return;
 
     try {
-      setState(() => _isUploading = true);
+      setState(() {
+        _isUploading = true;
+        _currentLoadedSlide = selectedSlide; // Store the current loaded slide
+      });
 
       // Load PDF from Appwrite storage using the selected slide's fileId
-      final pdfUrl = selectedSlide.fileId; // Use fileId as URL
       await _loadPdfFromFileId(selectedSlide.fileId, selectedSlide.fileName, selectedSlide.totalSlides);
 
+      // Construct the proper URL for the PDF
+      final pdfUrl = 'https://cloud.appwrite.io/v1/storage/buckets/${AppwriteConstants.debateSlidesBucket}/files/${selectedSlide.fileId}/view?project=${AppwriteConstants.projectId}';
+      
       // Notify other participants via LiveKit
       await widget.syncService.uploadPdf(
         selectedSlide.fileId,
         selectedSlide.fileName,
         selectedSlide.totalSlides,
-        selectedSlide.fileId,
+        pdfUrl,
       );
 
       // Mark as recently used
@@ -327,27 +328,6 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
     widget.syncService.changeSlide(page);
   }
   
-  void _openFullscreen() {
-    if (_pdfController == null) return;
-    
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => _FullscreenPdfViewer(
-          controller: _pdfController!,
-          currentPage: _currentPage,
-          totalPages: _totalPages,
-          isHost: widget.isHost,
-          onPageChanged: (page) {
-            if (widget.isHost) {
-              widget.syncService.changeSlide(page);
-            }
-          },
-        ),
-      ),
-    );
-  }
-
   void _openPresentationMode() async {
     if (_pdfController == null) return;
     
@@ -369,6 +349,49 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
         );
         
         if (mounted) {
+          // Close the debate bottom sheet before opening presentation mode
+          widget.onClose?.call();
+          
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PresentationViewer(
+                slideData: slideData,
+                syncService: widget.syncService,
+                appwriteService: widget.appwriteService,
+                isPresenter: widget.isHost,
+              ),
+            ),
+          );
+        }
+      } else if (_totalPages > 0 && _currentLoadedSlide != null) {
+        // If we have slides loaded but no persisted data, create slide data from current state
+        // This can happen when slides are loaded from library but not yet persisted
+        final pdfUrl = 'https://cloud.appwrite.io/v1/storage/buckets/${AppwriteConstants.debateSlidesBucket}/files/${_currentLoadedSlide!.fileId}/view?project=${AppwriteConstants.projectId}';
+        
+        final slideData = SlideData(
+          fileId: _currentLoadedSlide!.fileId,
+          fileName: _currentLoadedSlide!.fileName,
+          currentSlide: _currentPage,
+          totalSlides: _totalPages,
+          pdfUrl: pdfUrl,
+          uploadedBy: widget.userId,
+          uploadedByName: null,
+          uploadedAt: DateTime.now(),
+        );
+        
+        // Also persist this data for future use
+        await widget.syncService.uploadPdf(
+          _currentLoadedSlide!.fileId,
+          _currentLoadedSlide!.fileName,
+          _totalPages,
+          pdfUrl,
+        );
+        
+        if (mounted) {
+          // Close the debate bottom sheet before opening presentation mode
+          widget.onClose?.call();
+          
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -384,7 +407,7 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Unable to open presentation mode')),
+            const SnackBar(content: Text('Unable to open presentation mode - no slides loaded')),
           );
         }
       }
@@ -392,7 +415,7 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
       _logger.error('Error opening presentation mode: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error opening presentation mode')),
+          SnackBar(content: Text('Error opening presentation mode: ${e.toString()}')),
         );
       }
     }
@@ -595,12 +618,12 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
                         backgroundColor: Colors.blue.withValues(alpha: 0.8),
                         foregroundColor: Colors.white,
                       ),
-                      tooltip: 'Present Slides',
+                      tooltip: 'Open Presentation Mode',
                     ),
                     const SizedBox(width: 4),
                     IconButton(
                       icon: const Icon(Icons.fullscreen),
-                      onPressed: _openFullscreen,
+                      onPressed: _openPresentationMode,
                       style: IconButton.styleFrom(
                         backgroundColor: Colors.black54,
                         foregroundColor: Colors.white,
@@ -658,44 +681,6 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
           ),
         ),
       ],
-    );
-  }
-}
-
-class _FullscreenPdfViewer extends StatelessWidget {
-  final PdfController controller;
-  final int currentPage;
-  final int totalPages;
-  final bool isHost;
-  final Function(int) onPageChanged;
-  
-  const _FullscreenPdfViewer({
-    required this.controller,
-    required this.currentPage,
-    required this.totalPages,
-    required this.isHost,
-    required this.onPageChanged,
-  });
-  
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: Text('Slide $currentPage of $totalPages'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.close),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
-      ),
-      body: PdfView(
-        controller: controller,
-        scrollDirection: Axis.horizontal,
-        onPageChanged: (page) => onPageChanged(page + 1),
-      ),
     );
   }
 }

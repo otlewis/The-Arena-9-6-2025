@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pdfx/pdfx.dart';
 import '../models/debate_source.dart';
 import '../services/livekit_material_sync_service.dart';
@@ -6,7 +7,6 @@ import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
 import '../constants/appwrite.dart';
 import 'package:appwrite/appwrite.dart' as appwrite;
-import 'dart:typed_data';
 import 'dart:async';
 
 class PresentationViewer extends StatefulWidget {
@@ -55,6 +55,9 @@ class _PresentationViewerState extends State<PresentationViewer> {
     
     _logger.info('📊 Initialized state: currentPage=$_currentPage, totalPages=$_totalPages, presenterName="$_presenterName"');
     _logger.info('📊 isPresenter: ${widget.isPresenter}');
+    
+    // Enable landscape orientation for presentation mode
+    _enableLandscapeMode();
     
     _loadPresentationPdf();
     _setupSlideSync();
@@ -163,7 +166,7 @@ class _PresentationViewerState extends State<PresentationViewer> {
       final storage = appwrite.Storage(widget.appwriteService.client);
       _logger.info('📊 Storage client created successfully');
       
-      String fileId;
+      String fileId = '';
       
       _logger.info('📊 URL provided: "$url"');
       _logger.info('📊 SlideData fileId: "${widget.slideData.fileId}"');
@@ -176,7 +179,19 @@ class _PresentationViewerState extends State<PresentationViewer> {
         _logger.info('📊 URL is not empty, processing...');
         // If url looks like a fileId (no slashes), use it directly
         if (url.contains('/')) {
-          fileId = url.split('/').last;
+          // Extract fileId from Appwrite storage URL format
+          // URL format: https://cloud.appwrite.io/v1/storage/buckets/debate_slides/files/{fileId}/view?project=...
+          final urlParts = url.split('/');
+          for (int i = 0; i < urlParts.length; i++) {
+            if (urlParts[i] == 'files' && i + 1 < urlParts.length) {
+              fileId = urlParts[i + 1];
+              break;
+            }
+          }
+          // If we couldn't find 'files' segment, fallback to using slideData.fileId
+          if (fileId.isEmpty) {
+            fileId = widget.slideData.fileId;
+          }
           _logger.info('📊 URL contains slash, extracted fileId: "$fileId"');
         } else {
           fileId = url; // url is actually just the fileId
@@ -223,10 +238,34 @@ class _PresentationViewerState extends State<PresentationViewer> {
     }
   }
 
+  /// Enable landscape orientation for presentation mode
+  void _enableLandscapeMode() {
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    _logger.info('📊 Enabled landscape orientation for presentation mode');
+  }
+
+  /// Restore portrait-only orientation for the rest of the app
+  void _restorePortraitMode() {
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+    _logger.info('📊 Restored portrait-only orientation');
+  }
+
   @override
   void dispose() {
     _slideSubscription?.cancel();
     _pdfController?.dispose();
+    
+    // Restore portrait-only orientation when exiting presentation
+    _restorePortraitMode();
+    
     super.dispose();
   }
 
@@ -235,9 +274,12 @@ class _PresentationViewerState extends State<PresentationViewer> {
     _logger.info('📊 PresentationViewer build method called');
     _logger.info('📊 Build state: _isLoading=$_isLoading, _errorMessage=$_errorMessage, _pdfController=${_pdfController != null ? "not null" : "null"}');
     
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    _logger.info('📊 Current orientation: ${isLandscape ? "landscape" : "portrait"}');
+    
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
+      appBar: isLandscape ? null : AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         title: Column(
@@ -246,6 +288,7 @@ class _PresentationViewerState extends State<PresentationViewer> {
             Text(
               widget.slideData.fileName,
               style: const TextStyle(fontSize: 16),
+              overflow: TextOverflow.ellipsis,
             ),
             Text(
               'Presented by $_presenterName',
@@ -279,27 +322,165 @@ class _PresentationViewerState extends State<PresentationViewer> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Presentation area
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              color: Colors.black,
-              child: _buildPresentationContent(),
+      body: isLandscape ? _buildLandscapeLayout() : _buildPortraitLayout(),
+    );
+  }
+
+  Widget _buildPortraitLayout() {
+    return Column(
+      children: [
+        // Presentation area
+        Expanded(
+          child: Container(
+            width: double.infinity,
+            color: Colors.black,
+            child: _buildPresentationContent(),
+          ),
+        ),
+        
+        // Bottom controls
+        Container(
+          padding: const EdgeInsets.all(16),
+          color: Colors.grey[900],
+          child: widget.isPresenter 
+              ? _buildPresenterControls()
+              : _buildViewerControls(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLandscapeLayout() {
+    return Stack(
+      children: [
+        // Full-screen presentation
+        Container(
+          width: double.infinity,
+          height: double.infinity,
+          color: Colors.black,
+          child: _buildPresentationContent(),
+        ),
+        
+        // Floating close button (top-left)
+        Positioned(
+          top: MediaQuery.of(context).padding.top + 8,
+          left: 8,
+          child: SafeArea(
+            child: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white, size: 28),
+              onPressed: () => Navigator.of(context).pop(),
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.black.withValues(alpha: 0.6),
+                padding: const EdgeInsets.all(12),
+              ),
+            ),
+          ),
+        ),
+        
+        // Floating presenter info (top-right) - only for presenters  
+        if (widget.isPresenter)
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            right: 8,
+            child: SafeArea(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.green,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text(
+                        'PRESENTING',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _presenterName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        
+        // Left navigation button - only for presenters
+        if (widget.isPresenter)
+          Positioned(
+            left: 8,
+            top: MediaQuery.of(context).size.height / 2 - 30,
+            child: _buildSideNavigationButton(
+              icon: Icons.skip_previous,
+              onPressed: _currentPage > 1 ? _previousSlide : null,
+              enabled: _currentPage > 1,
             ),
           ),
           
-          // Bottom controls
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.grey[900],
-            child: widget.isPresenter 
-                ? _buildPresenterControls()
-                : _buildViewerControls(),
+        // Right navigation button - only for presenters  
+        if (widget.isPresenter)
+          Positioned(
+            right: 8,
+            top: MediaQuery.of(context).size.height / 2 - 30,
+            child: _buildSideNavigationButton(
+              icon: Icons.skip_next,
+              onPressed: _currentPage < _totalPages ? _nextSlide : null,
+              enabled: _currentPage < _totalPages,
+            ),
           ),
-        ],
-      ),
+          
+        // Slide counter (bottom center, smaller) - only for presenters
+        if (widget.isPresenter)
+          Positioned(
+            bottom: MediaQuery.of(context).padding.bottom + 8,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  '$_currentPage / $_totalPages',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        
+        // Viewer status in top-right (smaller and less intrusive)
+        if (!widget.isPresenter)
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 50, // Below the close button
+            right: 8,
+            child: SafeArea(
+              child: _buildLandscapeViewerStatus(),
+            ),
+          ),
+      ],
     );
   }
 
@@ -418,6 +599,123 @@ class _PresentationViewerState extends State<PresentationViewer> {
       );
     }
   }
+
+  Widget _buildSideNavigationButton({
+    required IconData icon,
+    required VoidCallback? onPressed,
+    required bool enabled,
+  }) {
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: enabled ? 0.7 : 0.3),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: enabled ? 0.3 : 0.1),
+          width: 1,
+        ),
+      ),
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Icon(
+          icon,
+          color: Colors.white.withValues(alpha: enabled ? 1.0 : 0.3),
+          size: 28,
+        ),
+        padding: EdgeInsets.zero,
+      ),
+    );
+  }
+
+  Widget _buildLandscapePresenterControls() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.grey[600]!, width: 1),
+      ),
+      child: Row(
+        children: [
+          // Previous slide button
+          IconButton(
+            onPressed: _currentPage > 1 ? _previousSlide : null,
+            icon: const Icon(Icons.skip_previous, size: 24, color: Colors.white),
+            style: IconButton.styleFrom(
+              backgroundColor: _currentPage > 1 ? Colors.grey[700] : Colors.grey[800],
+              padding: const EdgeInsets.all(12),
+            ),
+          ),
+          
+          const SizedBox(width: 16),
+          
+          // Slide counter
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey[800],
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Text(
+                'Slide $_currentPage of $_totalPages',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          
+          const SizedBox(width: 16),
+          
+          // Next slide button
+          IconButton(
+            onPressed: _currentPage < _totalPages ? _nextSlide : null,
+            icon: const Icon(Icons.skip_next, size: 24, color: Colors.white),
+            style: IconButton.styleFrom(
+              backgroundColor: _currentPage < _totalPages ? Colors.grey[700] : Colors.grey[800],
+              padding: const EdgeInsets.all(12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLandscapeViewerStatus() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.blue[400]!, width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.visibility,
+            color: Colors.blue[400],
+            size: 16,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '$_currentPage/$_totalPages',
+            style: TextStyle(
+              color: Colors.blue[400],
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
 
   Widget _buildPresenterControls() {
     return Row(

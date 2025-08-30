@@ -3481,17 +3481,17 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                       UserAvatar(
                         avatarUrl: audience.avatar,
                         initials: audience.name.isNotEmpty ? audience.name[0] : '?',
-                        radius: 32, // Slightly larger to ensure full visibility
+                        radius: 28, // Reduced to fit within constraints
                         onTap: () => _showUserProfile(audience, 'audience'),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2), // Reduced spacing
                       Text(
                         audience.name.length > 8
                             ? '${audience.name.substring(0, 8)}...'
                             : audience.name,
                         style: const TextStyle(
                           color: Colors.white70,
-                          fontSize: 10,
+                          fontSize: 9, // Slightly smaller font
                           fontWeight: FontWeight.w500,
                         ),
                         textAlign: TextAlign.center,
