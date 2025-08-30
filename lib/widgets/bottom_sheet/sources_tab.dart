@@ -33,7 +33,6 @@ class SourcesTab extends StatefulWidget {
 
 class _SourcesTabState extends State<SourcesTab> with AutomaticKeepAliveClientMixin {
   final TextEditingController _urlController = TextEditingController();
-  final TextEditingController _titleController = TextEditingController();
   bool _isAddingSource = false;
   static final _logger = AppLogger();
   late PinnedLinkService _pinnedLinkService;
@@ -55,19 +54,15 @@ class _SourcesTabState extends State<SourcesTab> with AutomaticKeepAliveClientMi
   void dispose() {
     _pinnedLinkService.dispose();
     _urlController.dispose();
-    _titleController.dispose();
     super.dispose();
   }
   
   Future<void> _addSource() async {
     final url = _urlController.text.trim();
-    final title = _titleController.text.trim();
     
-    _logger.info('🔗 Adding source: $title -> $url');
-    
-    if (url.isEmpty || title.isEmpty) {
+    if (url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter both URL and title')),
+        const SnackBar(content: Text('Please enter a URL')),
       );
       return;
     }
@@ -88,12 +83,24 @@ class _SourcesTabState extends State<SourcesTab> with AutomaticKeepAliveClientMi
     
     _logger.info('🔗 Normalized URL: $normalizedUrl');
     
+    // Auto-generate title from URL
+    String title = uri.host;
+    // Remove www. prefix if present
+    if (title.startsWith('www.')) {
+      title = title.substring(4);
+    }
+    // Capitalize first letter
+    if (title.isNotEmpty) {
+      title = title[0].toUpperCase() + title.substring(1);
+    }
+    
+    _logger.info('🔗 Auto-generated title: $title');
+    
     try {
       await widget.syncService.shareSource(normalizedUrl, title);
       _logger.info('✅ Source shared to sync service successfully');
       
       _urlController.clear();
-      _titleController.clear();
       if (mounted) {
         FocusScope.of(context).unfocus(); // Hide keyboard
         setState(() {
@@ -364,21 +371,6 @@ class _SourcesTabState extends State<SourcesTab> with AutomaticKeepAliveClientMi
                 isDense: true,
               ),
               keyboardType: TextInputType.url,
-              textInputAction: TextInputAction.next,
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _titleController,
-              decoration: InputDecoration(
-                labelText: 'Title',
-                hintText: 'Source title',
-                prefixIcon: const Icon(Icons.title, size: 20),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                isDense: true,
-              ),
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _addSource(),
             ),
@@ -392,7 +384,6 @@ class _SourcesTabState extends State<SourcesTab> with AutomaticKeepAliveClientMi
                       _isAddingSource = false;
                     });
                     _urlController.clear();
-                    _titleController.clear();
                     FocusScope.of(context).unfocus(); // Hide keyboard
                   },
                   child: const Text('Cancel'),

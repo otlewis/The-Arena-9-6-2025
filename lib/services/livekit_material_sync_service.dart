@@ -52,11 +52,19 @@ class LiveKitMaterialSyncService {
       return;
     }
 
-    // Register data message listener
-    // Note: onDataReceived is not directly available, will handle via different method
+    // Create event listener for room events
+    final roomListener = _room!.createListener();
+    
+    // Register data message listener for receiving messages from other participants
+    roomListener.on<DataReceivedEvent>((event) {
+      _logger.info('📌 Received data message from participant: ${event.participant?.identity}');
+      _handleDataMessage(Uint8List.fromList(event.data));
+    });
+    
+    _logger.info('📌 LiveKit data message listener registered');
   }
 
-  void _handleDataMessage(Uint8List data) { // Will be used when LiveKit data channel is available
+  void _handleDataMessage(Uint8List data) {
     try {
       final jsonStr = utf8.decode(data);
       final message = json.decode(jsonStr);
@@ -187,9 +195,9 @@ class LiveKitMaterialSyncService {
       };
       
       await _sendDataMessage(message);
-      _logger.info('📌 Source shared via LiveKit successfully');
+      _logger.info('📌 Source shared via LiveKit successfully to other participants');
       
-      // Try to save to Appwrite for persistence, but don't fail if it doesn't work
+      // Try to save to Appwrite for persistence and real-time sync
       try {
         await _appwrite.databases.createDocument(
           databaseId: AppwriteConstants.databaseId,
@@ -202,17 +210,19 @@ class LiveKitMaterialSyncService {
             'description': description,
             'sharedBy': _userId,
             'sharedAt': DateTime.now().toIso8601String(),
-            'isPinned': true, // Mark as pinned to trigger popup
+            'isPinned': true, // Mark as pinned to trigger popup for all users via real-time subscription
           },
         );
-        _logger.info('📌 Source also saved to database for persistence');
+        _logger.info('📌 Source saved to database - will trigger real-time updates for all participants');
       } catch (dbError) {
         _logger.warning('📌 Could not save to database (will work without persistence): $dbError');
         // Continue without database save - LiveKit messaging works fine
       }
       
-      // Manually trigger the source share handling since we sent via LiveKit
+      // IMPORTANT: Still handle the source locally so it appears in the sharer's materials panel
+      // The popup filtering happens in arena_screen based on sharedBy field
       _handleSourceShare(message);
+      _logger.info('📌 Source added to local materials panel for sharer');
       
     } catch (e) {
       _logger.error('Error sharing source: $e');

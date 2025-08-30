@@ -103,7 +103,7 @@ class PinnedLinkService {
           if (roomId == _roomId) {
             _logger.info('📌 ✅ Link update for our room - isPinned: $isPinned');
             
-            // If a link was just pinned, notify all users (including the sharer)
+            // If a link was just pinned, notify all users via the stream
             if (isPinned) {
               final sharedLink = DebateSource(
                 id: data['\$id'] ?? '',
@@ -117,7 +117,8 @@ class PinnedLinkService {
                 isPinned: isPinned,
               );
               
-              _logger.info('📌 ✅ Broadcasting shared link notification to all users: ${sharedLink.title}');
+              _logger.info('📌 ✅ Broadcasting shared link to stream - sharedBy: $sharedBy, currentUser: $_userId');
+              // The stream will be filtered in arena_screen to not show popup for the sharer
               _linkSharedController.add(sharedLink);
             }
             

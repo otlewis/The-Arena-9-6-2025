@@ -1154,16 +1154,26 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           // Listen for shared link notifications from PinnedLinkService (Appwrite-based)
           _sharedLinkSubscription = _pinnedLinkService!.linkSharedStream.listen((sharedLink) {
             if (mounted && !_isExiting) {
-              AppLogger().info('📌 Showing shared link popup from PinnedLinkService: ${sharedLink.title}');
-              _showSharedLinkPopup(sharedLink);
+              // Only show popup if current user is not the one who shared the link
+              if (sharedLink.sharedBy != currentUserId) {
+                AppLogger().info('📌 Showing shared link popup from PinnedLinkService: ${sharedLink.title}');
+                _showSharedLinkPopup(sharedLink);
+              } else {
+                AppLogger().info('📌 Not showing popup for own shared link from PinnedLinkService: ${sharedLink.title}');
+              }
             }
           });
           
           // ALSO listen for source additions from LiveKit MaterialSyncService (LiveKit-based)
           _materialSyncService!.sourceAdded.listen((source) {
             if (mounted && !_isExiting) {
-              AppLogger().info('📌 Showing shared link popup from MaterialSyncService: ${source.title}');
-              _showSharedLinkPopup(source);
+              // Only show popup if current user is not the one who shared the link
+              if (source.sharedBy != currentUserId) {
+                AppLogger().info('📌 Showing shared link popup from MaterialSyncService: ${source.title}');
+                _showSharedLinkPopup(source);
+              } else {
+                AppLogger().info('📌 Not showing popup for own shared link from MaterialSyncService: ${source.title}');
+              }
             }
           });
           AppLogger().debug('📊 Material sync service initialized for role: $webrtcRole');
