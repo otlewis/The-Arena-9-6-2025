@@ -13,6 +13,7 @@ class LiveKitMaterialSyncService {
   final Room? _room;
   final String _roomId;
   final String _userId;
+  final String? _userName;
   
   final _materialUpdateController = StreamController<DebateMaterialSync>.broadcast();
   Stream<DebateMaterialSync> get materialUpdates => _materialUpdateController.stream;
@@ -37,11 +38,13 @@ class LiveKitMaterialSyncService {
     required Room? room,
     required String roomId,
     required String userId,
+    String? userName,
     bool isHost = false,
   })  : _appwrite = appwrite,
         _room = room,
         _roomId = roomId,
         _userId = userId,
+        _userName = userName,
         _isHost = isHost {
     _initializeListeners();
   }
@@ -74,6 +77,8 @@ class LiveKitMaterialSyncService {
       final sync = DebateMaterialSync(
         type: message['type'],
         slideFileId: message['slideFileId'],
+        fileName: message['fileName'],
+        pdfUrl: message['pdfUrl'],
         currentSlide: message['currentSlide'],
         totalSlides: message['totalSlides'],
         sourceUrl: message['sourceUrl'],
@@ -169,9 +174,12 @@ class LiveKitMaterialSyncService {
       final message = {
         'type': 'slide_change',
         'slideFileId': _currentSlideFileId,
+        'fileName': _currentSlideFileName,
         'currentSlide': slideNumber,
         'totalSlides': _totalSlides,
+        'pdfUrl': _currentSlidePdfUrl,
         'userId': _userId,
+        'userName': _userName,
       };
       
       await _sendDataMessage(message);
@@ -181,6 +189,39 @@ class LiveKitMaterialSyncService {
       await _persistSlideDataToAppwrite();
     } catch (e) {
       _logger.error('Error changing slide: $e');
+    }
+  }
+
+  Future<void> shareSlideChange(SlideData slideData) async {
+    try {
+      // Update internal state
+      _currentSlideFileId = slideData.fileId;
+      _currentSlideFileName = slideData.fileName;
+      _currentSlidePdfUrl = slideData.pdfUrl;
+      _currentSlideNumber = slideData.currentSlide;
+      _totalSlides = slideData.totalSlides;
+      
+      final message = {
+        'type': 'slide_change',
+        'slideFileId': slideData.fileId,
+        'fileName': slideData.fileName,
+        'currentSlide': slideData.currentSlide,
+        'totalSlides': slideData.totalSlides,
+        'pdfUrl': slideData.pdfUrl,
+        'userId': _userId,
+        'userName': _userName,
+      };
+      
+      await _sendDataMessage(message);
+      
+      // Update persisted slide position if this user can modify slide state
+      if (_isHost || slideData.uploadedBy == _userId) {
+        await _persistSlideDataToAppwrite();
+      }
+      
+      _logger.info('📊 Slide change broadcasted to all participants');
+    } catch (e) {
+      _logger.error('Error sharing slide change: $e');
     }
   }
 
@@ -250,6 +291,7 @@ class LiveKitMaterialSyncService {
         'totalSlides': totalPages,
         'pdfUrl': pdfUrl,
         'userId': _userId,
+        'userName': _userName,
       };
       
       await _sendDataMessage(message);
@@ -291,42 +333,54 @@ class LiveKitMaterialSyncService {
     if (_currentSlideFileId == null) return;
     
     try {
-      // Store in room_slide_state collection with roomId as document ID
-      await _appwrite.databases.createDocument(
-        databaseId: 'arena_db',
-        collectionId: AppwriteConstants.roomSlideStateCollection,
-        documentId: _roomId, // Use roomId as document ID for uniqueness
-        data: {
-          'roomId': _roomId,
-          'slideFileId': _currentSlideFileId,
-          'fileName': _currentSlideFileName ?? 'Presentation',
-          'pdfUrl': _currentSlidePdfUrl,
-          'currentSlide': _currentSlideNumber,
-          'totalSlides': _totalSlides,
-          'uploadedBy': _userId,
-          'updatedAt': DateTime.now().toIso8601String(),
-        },
-      );
-    } catch (e) {
-      // If document exists, update it instead
+      final slideData = {
+        'roomId': _roomId,
+        'slideFileId': _currentSlideFileId,
+        'fileName': _currentSlideFileName ?? 'Presentation',
+        'pdfUrl': _currentSlidePdfUrl,
+        'currentSlide': _currentSlideNumber,
+        'totalSlides': _totalSlides,
+        'uploadedBy': _userId,
+        'updatedAt': DateTime.now().toIso8601String(),
+      };
+      
+      // First try to get the existing document
       try {
+        await _appwrite.databases.getDocument(
+          databaseId: 'arena_db',
+          collectionId: AppwriteConstants.roomSlideStateCollection,
+          documentId: _roomId,
+        );
+        
+        // Document exists, update it
         await _appwrite.databases.updateDocument(
           databaseId: 'arena_db',
           collectionId: AppwriteConstants.roomSlideStateCollection,
           documentId: _roomId,
-          data: {
-            'slideFileId': _currentSlideFileId,
-            'fileName': _currentSlideFileName ?? 'Presentation',
-            'pdfUrl': _currentSlidePdfUrl,
-            'currentSlide': _currentSlideNumber,
-            'totalSlides': _totalSlides,
-            'uploadedBy': _userId,
-            'updatedAt': DateTime.now().toIso8601String(),
-          },
+          data: slideData,
         );
-      } catch (updateError) {
-        _logger.error('Error persisting slide data: $updateError');
+        _logger.info('📊 Updated slide data for room $_roomId');
+        
+      } catch (getError) {
+        // Document doesn't exist, create it
+        try {
+          await _appwrite.databases.createDocument(
+            databaseId: 'arena_db',
+            collectionId: AppwriteConstants.roomSlideStateCollection,
+            documentId: _roomId,
+            data: slideData,
+          );
+          _logger.info('📊 Created slide data for room $_roomId');
+          
+        } catch (createError) {
+          _logger.warning('📊 Could not create slide data document, collection may not exist: $createError');
+          // Don't treat this as a fatal error - the real-time sync via LiveKit still works
+        }
       }
+      
+    } catch (e) {
+      _logger.warning('📊 Error persisting slide data (non-critical): $e');
+      // Don't treat this as a fatal error - the presentation sync still works via LiveKit
     }
   }
 

@@ -45,6 +45,8 @@ class DebateMaterialSync with _$DebateMaterialSync {
   const factory DebateMaterialSync({
     required String type, // 'slide_change', 'source_share', 'pdf_upload'
     String? slideFileId,
+    String? fileName,
+    String? pdfUrl,
     int? currentSlide,
     int? totalSlides,
     String? sourceUrl,
@@ -56,4 +58,24 @@ class DebateMaterialSync with _$DebateMaterialSync {
 
   factory DebateMaterialSync.fromJson(Map<String, dynamic> json) =>
       _$DebateMaterialSyncFromJson(json);
+}
+
+@freezed
+class UserSlideLibrary with _$UserSlideLibrary {
+  const factory UserSlideLibrary({
+    required String id,
+    required String userId,
+    required String title,
+    required String fileName,
+    required String fileId, // Appwrite storage file ID
+    required int totalSlides,
+    String? thumbnailUrl, // Optional thumbnail preview
+    String? description, // Optional description
+    @Default('pdf') String fileType, // 'pdf', 'pptx', etc.
+    required DateTime uploadedAt,
+    DateTime? lastUsedAt, // Track when last used in presentation
+  }) = _UserSlideLibrary;
+
+  factory UserSlideLibrary.fromJson(Map<String, dynamic> json) =>
+      _$UserSlideLibraryFromJson(json);
 }

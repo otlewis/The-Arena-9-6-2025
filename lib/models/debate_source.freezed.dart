@@ -660,6 +660,8 @@ mixin _$DebateMaterialSync {
   String get type =>
       throw _privateConstructorUsedError; // 'slide_change', 'source_share', 'pdf_upload'
   String? get slideFileId => throw _privateConstructorUsedError;
+  String? get fileName => throw _privateConstructorUsedError;
+  String? get pdfUrl => throw _privateConstructorUsedError;
   int? get currentSlide => throw _privateConstructorUsedError;
   int? get totalSlides => throw _privateConstructorUsedError;
   String? get sourceUrl => throw _privateConstructorUsedError;
@@ -683,6 +685,8 @@ abstract class $DebateMaterialSyncCopyWith<$Res> {
   $Res call(
       {String type,
       String? slideFileId,
+      String? fileName,
+      String? pdfUrl,
       int? currentSlide,
       int? totalSlides,
       String? sourceUrl,
@@ -707,6 +711,8 @@ class _$DebateMaterialSyncCopyWithImpl<$Res, $Val extends DebateMaterialSync>
   $Res call({
     Object? type = null,
     Object? slideFileId = freezed,
+    Object? fileName = freezed,
+    Object? pdfUrl = freezed,
     Object? currentSlide = freezed,
     Object? totalSlides = freezed,
     Object? sourceUrl = freezed,
@@ -723,6 +729,14 @@ class _$DebateMaterialSyncCopyWithImpl<$Res, $Val extends DebateMaterialSync>
       slideFileId: freezed == slideFileId
           ? _value.slideFileId
           : slideFileId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      fileName: freezed == fileName
+          ? _value.fileName
+          : fileName // ignore: cast_nullable_to_non_nullable
+              as String?,
+      pdfUrl: freezed == pdfUrl
+          ? _value.pdfUrl
+          : pdfUrl // ignore: cast_nullable_to_non_nullable
               as String?,
       currentSlide: freezed == currentSlide
           ? _value.currentSlide
@@ -767,6 +781,8 @@ abstract class _$$DebateMaterialSyncImplCopyWith<$Res>
   $Res call(
       {String type,
       String? slideFileId,
+      String? fileName,
+      String? pdfUrl,
       int? currentSlide,
       int? totalSlides,
       String? sourceUrl,
@@ -789,6 +805,8 @@ class __$$DebateMaterialSyncImplCopyWithImpl<$Res>
   $Res call({
     Object? type = null,
     Object? slideFileId = freezed,
+    Object? fileName = freezed,
+    Object? pdfUrl = freezed,
     Object? currentSlide = freezed,
     Object? totalSlides = freezed,
     Object? sourceUrl = freezed,
@@ -805,6 +823,14 @@ class __$$DebateMaterialSyncImplCopyWithImpl<$Res>
       slideFileId: freezed == slideFileId
           ? _value.slideFileId
           : slideFileId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      fileName: freezed == fileName
+          ? _value.fileName
+          : fileName // ignore: cast_nullable_to_non_nullable
+              as String?,
+      pdfUrl: freezed == pdfUrl
+          ? _value.pdfUrl
+          : pdfUrl // ignore: cast_nullable_to_non_nullable
               as String?,
       currentSlide: freezed == currentSlide
           ? _value.currentSlide
@@ -844,6 +870,8 @@ class _$DebateMaterialSyncImpl implements _DebateMaterialSync {
   const _$DebateMaterialSyncImpl(
       {required this.type,
       this.slideFileId,
+      this.fileName,
+      this.pdfUrl,
       this.currentSlide,
       this.totalSlides,
       this.sourceUrl,
@@ -861,6 +889,10 @@ class _$DebateMaterialSyncImpl implements _DebateMaterialSync {
   @override
   final String? slideFileId;
   @override
+  final String? fileName;
+  @override
+  final String? pdfUrl;
+  @override
   final int? currentSlide;
   @override
   final int? totalSlides;
@@ -877,7 +909,7 @@ class _$DebateMaterialSyncImpl implements _DebateMaterialSync {
 
   @override
   String toString() {
-    return 'DebateMaterialSync(type: $type, slideFileId: $slideFileId, currentSlide: $currentSlide, totalSlides: $totalSlides, sourceUrl: $sourceUrl, sourceTitle: $sourceTitle, userId: $userId, userName: $userName, timestamp: $timestamp)';
+    return 'DebateMaterialSync(type: $type, slideFileId: $slideFileId, fileName: $fileName, pdfUrl: $pdfUrl, currentSlide: $currentSlide, totalSlides: $totalSlides, sourceUrl: $sourceUrl, sourceTitle: $sourceTitle, userId: $userId, userName: $userName, timestamp: $timestamp)';
   }
 
   @override
@@ -888,6 +920,9 @@ class _$DebateMaterialSyncImpl implements _DebateMaterialSync {
             (identical(other.type, type) || other.type == type) &&
             (identical(other.slideFileId, slideFileId) ||
                 other.slideFileId == slideFileId) &&
+            (identical(other.fileName, fileName) ||
+                other.fileName == fileName) &&
+            (identical(other.pdfUrl, pdfUrl) || other.pdfUrl == pdfUrl) &&
             (identical(other.currentSlide, currentSlide) ||
                 other.currentSlide == currentSlide) &&
             (identical(other.totalSlides, totalSlides) ||
@@ -905,8 +940,19 @@ class _$DebateMaterialSyncImpl implements _DebateMaterialSync {
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(runtimeType, type, slideFileId, currentSlide,
-      totalSlides, sourceUrl, sourceTitle, userId, userName, timestamp);
+  int get hashCode => Object.hash(
+      runtimeType,
+      type,
+      slideFileId,
+      fileName,
+      pdfUrl,
+      currentSlide,
+      totalSlides,
+      sourceUrl,
+      sourceTitle,
+      userId,
+      userName,
+      timestamp);
 
   @JsonKey(ignore: true)
   @override
@@ -927,6 +973,8 @@ abstract class _DebateMaterialSync implements DebateMaterialSync {
   const factory _DebateMaterialSync(
       {required final String type,
       final String? slideFileId,
+      final String? fileName,
+      final String? pdfUrl,
       final int? currentSlide,
       final int? totalSlides,
       final String? sourceUrl,
@@ -942,6 +990,10 @@ abstract class _DebateMaterialSync implements DebateMaterialSync {
   String get type;
   @override // 'slide_change', 'source_share', 'pdf_upload'
   String? get slideFileId;
+  @override
+  String? get fileName;
+  @override
+  String? get pdfUrl;
   @override
   int? get currentSlide;
   @override
@@ -959,5 +1011,374 @@ abstract class _DebateMaterialSync implements DebateMaterialSync {
   @override
   @JsonKey(ignore: true)
   _$$DebateMaterialSyncImplCopyWith<_$DebateMaterialSyncImpl> get copyWith =>
+      throw _privateConstructorUsedError;
+}
+
+UserSlideLibrary _$UserSlideLibraryFromJson(Map<String, dynamic> json) {
+  return _UserSlideLibrary.fromJson(json);
+}
+
+/// @nodoc
+mixin _$UserSlideLibrary {
+  String get id => throw _privateConstructorUsedError;
+  String get userId => throw _privateConstructorUsedError;
+  String get title => throw _privateConstructorUsedError;
+  String get fileName => throw _privateConstructorUsedError;
+  String get fileId =>
+      throw _privateConstructorUsedError; // Appwrite storage file ID
+  int get totalSlides => throw _privateConstructorUsedError;
+  String? get thumbnailUrl =>
+      throw _privateConstructorUsedError; // Optional thumbnail preview
+  String? get description =>
+      throw _privateConstructorUsedError; // Optional description
+  String get fileType =>
+      throw _privateConstructorUsedError; // 'pdf', 'pptx', etc.
+  DateTime get uploadedAt => throw _privateConstructorUsedError;
+  DateTime? get lastUsedAt => throw _privateConstructorUsedError;
+
+  Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
+  @JsonKey(ignore: true)
+  $UserSlideLibraryCopyWith<UserSlideLibrary> get copyWith =>
+      throw _privateConstructorUsedError;
+}
+
+/// @nodoc
+abstract class $UserSlideLibraryCopyWith<$Res> {
+  factory $UserSlideLibraryCopyWith(
+          UserSlideLibrary value, $Res Function(UserSlideLibrary) then) =
+      _$UserSlideLibraryCopyWithImpl<$Res, UserSlideLibrary>;
+  @useResult
+  $Res call(
+      {String id,
+      String userId,
+      String title,
+      String fileName,
+      String fileId,
+      int totalSlides,
+      String? thumbnailUrl,
+      String? description,
+      String fileType,
+      DateTime uploadedAt,
+      DateTime? lastUsedAt});
+}
+
+/// @nodoc
+class _$UserSlideLibraryCopyWithImpl<$Res, $Val extends UserSlideLibrary>
+    implements $UserSlideLibraryCopyWith<$Res> {
+  _$UserSlideLibraryCopyWithImpl(this._value, this._then);
+
+  // ignore: unused_field
+  final $Val _value;
+  // ignore: unused_field
+  final $Res Function($Val) _then;
+
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? id = null,
+    Object? userId = null,
+    Object? title = null,
+    Object? fileName = null,
+    Object? fileId = null,
+    Object? totalSlides = null,
+    Object? thumbnailUrl = freezed,
+    Object? description = freezed,
+    Object? fileType = null,
+    Object? uploadedAt = null,
+    Object? lastUsedAt = freezed,
+  }) {
+    return _then(_value.copyWith(
+      id: null == id
+          ? _value.id
+          : id // ignore: cast_nullable_to_non_nullable
+              as String,
+      userId: null == userId
+          ? _value.userId
+          : userId // ignore: cast_nullable_to_non_nullable
+              as String,
+      title: null == title
+          ? _value.title
+          : title // ignore: cast_nullable_to_non_nullable
+              as String,
+      fileName: null == fileName
+          ? _value.fileName
+          : fileName // ignore: cast_nullable_to_non_nullable
+              as String,
+      fileId: null == fileId
+          ? _value.fileId
+          : fileId // ignore: cast_nullable_to_non_nullable
+              as String,
+      totalSlides: null == totalSlides
+          ? _value.totalSlides
+          : totalSlides // ignore: cast_nullable_to_non_nullable
+              as int,
+      thumbnailUrl: freezed == thumbnailUrl
+          ? _value.thumbnailUrl
+          : thumbnailUrl // ignore: cast_nullable_to_non_nullable
+              as String?,
+      description: freezed == description
+          ? _value.description
+          : description // ignore: cast_nullable_to_non_nullable
+              as String?,
+      fileType: null == fileType
+          ? _value.fileType
+          : fileType // ignore: cast_nullable_to_non_nullable
+              as String,
+      uploadedAt: null == uploadedAt
+          ? _value.uploadedAt
+          : uploadedAt // ignore: cast_nullable_to_non_nullable
+              as DateTime,
+      lastUsedAt: freezed == lastUsedAt
+          ? _value.lastUsedAt
+          : lastUsedAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+    ) as $Val);
+  }
+}
+
+/// @nodoc
+abstract class _$$UserSlideLibraryImplCopyWith<$Res>
+    implements $UserSlideLibraryCopyWith<$Res> {
+  factory _$$UserSlideLibraryImplCopyWith(_$UserSlideLibraryImpl value,
+          $Res Function(_$UserSlideLibraryImpl) then) =
+      __$$UserSlideLibraryImplCopyWithImpl<$Res>;
+  @override
+  @useResult
+  $Res call(
+      {String id,
+      String userId,
+      String title,
+      String fileName,
+      String fileId,
+      int totalSlides,
+      String? thumbnailUrl,
+      String? description,
+      String fileType,
+      DateTime uploadedAt,
+      DateTime? lastUsedAt});
+}
+
+/// @nodoc
+class __$$UserSlideLibraryImplCopyWithImpl<$Res>
+    extends _$UserSlideLibraryCopyWithImpl<$Res, _$UserSlideLibraryImpl>
+    implements _$$UserSlideLibraryImplCopyWith<$Res> {
+  __$$UserSlideLibraryImplCopyWithImpl(_$UserSlideLibraryImpl _value,
+      $Res Function(_$UserSlideLibraryImpl) _then)
+      : super(_value, _then);
+
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? id = null,
+    Object? userId = null,
+    Object? title = null,
+    Object? fileName = null,
+    Object? fileId = null,
+    Object? totalSlides = null,
+    Object? thumbnailUrl = freezed,
+    Object? description = freezed,
+    Object? fileType = null,
+    Object? uploadedAt = null,
+    Object? lastUsedAt = freezed,
+  }) {
+    return _then(_$UserSlideLibraryImpl(
+      id: null == id
+          ? _value.id
+          : id // ignore: cast_nullable_to_non_nullable
+              as String,
+      userId: null == userId
+          ? _value.userId
+          : userId // ignore: cast_nullable_to_non_nullable
+              as String,
+      title: null == title
+          ? _value.title
+          : title // ignore: cast_nullable_to_non_nullable
+              as String,
+      fileName: null == fileName
+          ? _value.fileName
+          : fileName // ignore: cast_nullable_to_non_nullable
+              as String,
+      fileId: null == fileId
+          ? _value.fileId
+          : fileId // ignore: cast_nullable_to_non_nullable
+              as String,
+      totalSlides: null == totalSlides
+          ? _value.totalSlides
+          : totalSlides // ignore: cast_nullable_to_non_nullable
+              as int,
+      thumbnailUrl: freezed == thumbnailUrl
+          ? _value.thumbnailUrl
+          : thumbnailUrl // ignore: cast_nullable_to_non_nullable
+              as String?,
+      description: freezed == description
+          ? _value.description
+          : description // ignore: cast_nullable_to_non_nullable
+              as String?,
+      fileType: null == fileType
+          ? _value.fileType
+          : fileType // ignore: cast_nullable_to_non_nullable
+              as String,
+      uploadedAt: null == uploadedAt
+          ? _value.uploadedAt
+          : uploadedAt // ignore: cast_nullable_to_non_nullable
+              as DateTime,
+      lastUsedAt: freezed == lastUsedAt
+          ? _value.lastUsedAt
+          : lastUsedAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+    ));
+  }
+}
+
+/// @nodoc
+@JsonSerializable()
+class _$UserSlideLibraryImpl implements _UserSlideLibrary {
+  const _$UserSlideLibraryImpl(
+      {required this.id,
+      required this.userId,
+      required this.title,
+      required this.fileName,
+      required this.fileId,
+      required this.totalSlides,
+      this.thumbnailUrl,
+      this.description,
+      this.fileType = 'pdf',
+      required this.uploadedAt,
+      this.lastUsedAt});
+
+  factory _$UserSlideLibraryImpl.fromJson(Map<String, dynamic> json) =>
+      _$$UserSlideLibraryImplFromJson(json);
+
+  @override
+  final String id;
+  @override
+  final String userId;
+  @override
+  final String title;
+  @override
+  final String fileName;
+  @override
+  final String fileId;
+// Appwrite storage file ID
+  @override
+  final int totalSlides;
+  @override
+  final String? thumbnailUrl;
+// Optional thumbnail preview
+  @override
+  final String? description;
+// Optional description
+  @override
+  @JsonKey()
+  final String fileType;
+// 'pdf', 'pptx', etc.
+  @override
+  final DateTime uploadedAt;
+  @override
+  final DateTime? lastUsedAt;
+
+  @override
+  String toString() {
+    return 'UserSlideLibrary(id: $id, userId: $userId, title: $title, fileName: $fileName, fileId: $fileId, totalSlides: $totalSlides, thumbnailUrl: $thumbnailUrl, description: $description, fileType: $fileType, uploadedAt: $uploadedAt, lastUsedAt: $lastUsedAt)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is _$UserSlideLibraryImpl &&
+            (identical(other.id, id) || other.id == id) &&
+            (identical(other.userId, userId) || other.userId == userId) &&
+            (identical(other.title, title) || other.title == title) &&
+            (identical(other.fileName, fileName) ||
+                other.fileName == fileName) &&
+            (identical(other.fileId, fileId) || other.fileId == fileId) &&
+            (identical(other.totalSlides, totalSlides) ||
+                other.totalSlides == totalSlides) &&
+            (identical(other.thumbnailUrl, thumbnailUrl) ||
+                other.thumbnailUrl == thumbnailUrl) &&
+            (identical(other.description, description) ||
+                other.description == description) &&
+            (identical(other.fileType, fileType) ||
+                other.fileType == fileType) &&
+            (identical(other.uploadedAt, uploadedAt) ||
+                other.uploadedAt == uploadedAt) &&
+            (identical(other.lastUsedAt, lastUsedAt) ||
+                other.lastUsedAt == lastUsedAt));
+  }
+
+  @JsonKey(ignore: true)
+  @override
+  int get hashCode => Object.hash(
+      runtimeType,
+      id,
+      userId,
+      title,
+      fileName,
+      fileId,
+      totalSlides,
+      thumbnailUrl,
+      description,
+      fileType,
+      uploadedAt,
+      lastUsedAt);
+
+  @JsonKey(ignore: true)
+  @override
+  @pragma('vm:prefer-inline')
+  _$$UserSlideLibraryImplCopyWith<_$UserSlideLibraryImpl> get copyWith =>
+      __$$UserSlideLibraryImplCopyWithImpl<_$UserSlideLibraryImpl>(
+          this, _$identity);
+
+  @override
+  Map<String, dynamic> toJson() {
+    return _$$UserSlideLibraryImplToJson(
+      this,
+    );
+  }
+}
+
+abstract class _UserSlideLibrary implements UserSlideLibrary {
+  const factory _UserSlideLibrary(
+      {required final String id,
+      required final String userId,
+      required final String title,
+      required final String fileName,
+      required final String fileId,
+      required final int totalSlides,
+      final String? thumbnailUrl,
+      final String? description,
+      final String fileType,
+      required final DateTime uploadedAt,
+      final DateTime? lastUsedAt}) = _$UserSlideLibraryImpl;
+
+  factory _UserSlideLibrary.fromJson(Map<String, dynamic> json) =
+      _$UserSlideLibraryImpl.fromJson;
+
+  @override
+  String get id;
+  @override
+  String get userId;
+  @override
+  String get title;
+  @override
+  String get fileName;
+  @override
+  String get fileId;
+  @override // Appwrite storage file ID
+  int get totalSlides;
+  @override
+  String? get thumbnailUrl;
+  @override // Optional thumbnail preview
+  String? get description;
+  @override // Optional description
+  String get fileType;
+  @override // 'pdf', 'pptx', etc.
+  DateTime get uploadedAt;
+  @override
+  DateTime? get lastUsedAt;
+  @override
+  @JsonKey(ignore: true)
+  _$$UserSlideLibraryImplCopyWith<_$UserSlideLibraryImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

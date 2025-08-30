@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfx/pdfx.dart';
-import 'package:file_selector/file_selector.dart';
 import 'package:appwrite/appwrite.dart' as appwrite;
 import '../../services/livekit_material_sync_service.dart';
 import '../../services/appwrite_service.dart';
+import '../../services/slide_library_service.dart';
 import '../../models/debate_source.dart';
 import '../../core/logging/app_logger.dart';
 import '../../constants/appwrite.dart';
+import '../presentation_viewer.dart';
 
 class SlidesTab extends StatefulWidget {
   final String roomId;
@@ -33,16 +34,20 @@ class SlidesTab extends StatefulWidget {
 
 class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixin {
   static final _logger = AppLogger();
+  final SlideLibraryService _slideLibraryService = SlideLibraryService();
   
   PdfController? _pdfController;
   bool _isLoading = false;
   String? _errorMessage;
-  double _uploadProgress = 0.0;
   bool _isUploading = false;
   
   // Slide navigation
   int _currentPage = 1;
   int _totalPages = 0;
+  
+  // Slide library
+  List<UserSlideLibrary> _userSlides = [];
+  bool _loadingUserSlides = false;
   
   @override
   bool get wantKeepAlive => true;
@@ -53,6 +58,7 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
     _initializePdf();
     _listenToSlideChanges();
     _loadPersistedSlideData();
+    _loadUserSlides();
   }
   
   void _listenToSlideChanges() {
@@ -84,6 +90,27 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
       }
     } catch (e) {
       _logger.warning('Failed to load persisted slide data: $e');
+    }
+  }
+
+  Future<void> _loadUserSlides() async {
+    if (!widget.isHost) return; // Only hosts can see slide library
+    
+    setState(() => _loadingUserSlides = true);
+    
+    try {
+      final slides = await _slideLibraryService.getUserSlides();
+      if (mounted) {
+        setState(() {
+          _userSlides = slides;
+          _loadingUserSlides = false;
+        });
+      }
+    } catch (e) {
+      _logger.warning('Failed to load user slides: $e');
+      if (mounted) {
+        setState(() => _loadingUserSlides = false);
+      }
     }
   }
   
@@ -141,139 +168,134 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
     }
   }
   
-  Future<void> _uploadPdf() async {
+  Future<void> _selectFromLibrary() async {
     if (!widget.isHost) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Only hosts can upload slides')),
+        const SnackBar(content: Text('Only hosts can select slides')),
+      );
+      return;
+    }
+
+    if (_userSlides.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No slides in your library. Add slides from the home screen first.'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
     
+    // Show slide selection bottom sheet
+    final selectedSlide = await showModalBottomSheet<UserSlideLibrary>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => _SlideSelectionSheet(slides: _userSlides),
+    );
+
+    if (selectedSlide == null) return;
+
     try {
-      // Try to open file with proper type groups
-      XFile? file;
-      try {
-        file = await openFile(
-          acceptedTypeGroups: [
-            const XTypeGroup(
-              label: 'PDF Documents',
-              extensions: ['pdf'],
-              mimeTypes: ['application/pdf'],
-              uniformTypeIdentifiers: ['com.adobe.pdf'],
-            ),
-          ],
-        );
-      } catch (e) {
-        // Fallback for platforms that don't support full type groups
-        file = await openFile();
-      }
-      
-      if (file == null) return;
-      
-      // Validate file is PDF
-      if (!file.name.toLowerCase().endsWith('.pdf')) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please select a PDF file'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-      
-      setState(() {
-        _isUploading = true;
-        _uploadProgress = 0.0;
-      });
-      
-      final bytes = await file.readAsBytes();
-      final storage = appwrite.Storage(widget.appwriteService.client);
-      
-      // Upload to Appwrite Storage - try debate_slides bucket first, fallback to profile_images
-      String bucketId = AppwriteConstants.debateSlidesBucket;
-      late final dynamic uploadedFile;
-      
-      try {
-        uploadedFile = await storage.createFile(
-          bucketId: bucketId,
-          fileId: appwrite.ID.unique(),
-          file: appwrite.InputFile.fromBytes(
-            bytes: bytes,
-            filename: file.name,
-          ),
-          onProgress: (progress) {
-            setState(() {
-              _uploadProgress = progress.progress / 100;
-            });
-          },
-        );
-      } catch (e) {
-        // If debate_slides bucket doesn't exist, try profile_images as fallback
-        _logger.warning('debate_slides bucket not found, using profile_images fallback: $e');
-        bucketId = AppwriteConstants.profileImagesBucket;
-        uploadedFile = await storage.createFile(
-          bucketId: bucketId,
-          fileId: appwrite.ID.unique(),
-          file: appwrite.InputFile.fromBytes(
-            bytes: bytes,
-            filename: file.name,
-          ),
-          onProgress: (progress) {
-            setState(() {
-              _uploadProgress = progress.progress / 100;
-            });
-          },
-        );
-      }
-      
-      // Get page count
-      final document = await PdfDocument.openData(bytes);
-      final pageCount = document.pagesCount;
-      
+      setState(() => _isUploading = true);
+
+      // Load PDF from Appwrite storage using the selected slide's fileId
+      final pdfUrl = selectedSlide.fileId; // Use fileId as URL
+      await _loadPdfFromFileId(selectedSlide.fileId, selectedSlide.fileName, selectedSlide.totalSlides);
+
       // Notify other participants via LiveKit
       await widget.syncService.uploadPdf(
-        uploadedFile.$id,
-        file.name,
-        pageCount,
-        uploadedFile.$id,
+        selectedSlide.fileId,
+        selectedSlide.fileName,
+        selectedSlide.totalSlides,
+        selectedSlide.fileId,
       );
-      
-      // Load the PDF locally
-      _pdfController = PdfController(document: PdfDocument.openData(bytes));
-      
-      setState(() {
-        _isUploading = false;
-        _totalPages = pageCount;
-        _currentPage = 1;
-      });
-      
+
+      // Mark as recently used
+      await _slideLibraryService.shareSlideInRoom(selectedSlide.id, widget.roomId);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('PDF uploaded successfully')),
+          SnackBar(content: Text('Successfully loaded: ${selectedSlide.title}')),
         );
       }
     } catch (e) {
       setState(() {
         _isUploading = false;
-        _errorMessage = 'Failed to upload PDF: $e';
+        _errorMessage = 'Failed to load slides: $e';
       });
-      _logger.error('Error uploading PDF: $e');
+      _logger.error('Error loading slides from library: $e');
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to upload PDF: ${e.toString()}'),
+            content: Text('Failed to load slides: ${e.toString()}'),
             backgroundColor: Colors.red,
             action: SnackBarAction(
               label: 'Try Again',
               textColor: Colors.white,
-              onPressed: _uploadPdf,
+              onPressed: _selectFromLibrary,
             ),
           ),
         );
       }
+    }
+  }
+
+  Future<void> _loadPdfFromFileId(String fileId, String fileName, int totalSlides) async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    
+    try {
+      final pdfData = await _fetchPdfDataByFileId(fileId);
+      
+      _pdfController = PdfController(
+        document: PdfDocument.openData(pdfData),
+      );
+      
+      final document = await _pdfController!.document;
+      setState(() {
+        _totalPages = document.pagesCount;
+        _currentPage = 1;
+        _isLoading = false;
+        _isUploading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Failed to load PDF: $e';
+        _isLoading = false;
+        _isUploading = false;
+      });
+      _logger.error('Error loading PDF from fileId: $e');
+    }
+  }
+
+  Future<Uint8List> _fetchPdfDataByFileId(String fileId) async {
+    try {
+      final storage = appwrite.Storage(widget.appwriteService.client);
+      
+      // Try debate_slides bucket first, then profile_images as fallback
+      try {
+        final bytes = await storage.getFileDownload(
+          bucketId: AppwriteConstants.debateSlidesBucket,
+          fileId: fileId,
+        );
+        return bytes;
+      } catch (e) {
+        _logger.warning('Failed to fetch from debate_slides bucket, trying profile_images: $e');
+        final bytes = await storage.getFileDownload(
+          bucketId: AppwriteConstants.profileImagesBucket,
+          fileId: fileId,
+        );
+        return bytes;
+      }
+    } catch (e) {
+      _logger.error('Error fetching PDF data by fileId: $e');
+      rethrow;
     }
   }
   
@@ -324,6 +346,56 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
         ),
       ),
     );
+  }
+
+  void _openPresentationMode() async {
+    if (_pdfController == null) return;
+    
+    try {
+      // Get current slide data from the sync service
+      final persistedSlideData = await widget.syncService.loadPersistedSlideData();
+      
+      if (persistedSlideData != null) {
+        // Use persisted data with current page
+        final slideData = SlideData(
+          fileId: persistedSlideData.fileId,
+          fileName: persistedSlideData.fileName,
+          currentSlide: _currentPage,
+          totalSlides: _totalPages > 0 ? _totalPages : persistedSlideData.totalSlides,
+          pdfUrl: persistedSlideData.pdfUrl,
+          uploadedBy: persistedSlideData.uploadedBy,
+          uploadedByName: persistedSlideData.uploadedByName,
+          uploadedAt: persistedSlideData.uploadedAt,
+        );
+        
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PresentationViewer(
+                slideData: slideData,
+                syncService: widget.syncService,
+                appwriteService: widget.appwriteService,
+                isPresenter: widget.isHost,
+              ),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Unable to open presentation mode')),
+          );
+        }
+      }
+    } catch (e) {
+      _logger.error('Error opening presentation mode: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error opening presentation mode')),
+        );
+      }
+    }
   }
 
   Future<void> _removeSlides() async {
@@ -402,13 +474,13 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
     }
     
     if (_isUploading) {
-      return Center(
+      return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(value: _uploadProgress),
-            const SizedBox(height: 16),
-            Text('Uploading... ${(_uploadProgress * 100).toInt()}%'),
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading slides from library...'),
           ],
         ),
       );
@@ -425,9 +497,9 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
             const SizedBox(height: 16),
             if (widget.isHost)
               ElevatedButton.icon(
-                onPressed: _uploadPdf,
-                icon: const Icon(Icons.upload_file),
-                label: const Text('Upload PDF'),
+                onPressed: _selectFromLibrary,
+                icon: const Icon(Icons.library_books),
+                label: const Text('Select from Library'),
               ),
           ],
         ),
@@ -452,16 +524,16 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
             const SizedBox(height: 6),
             Text(
               widget.isHost 
-                ? 'Upload a PDF to share slides'
-                : 'Waiting for host to upload slides',
+                ? 'Select slides from your library'
+                : 'Waiting for host to select slides',
               style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
             ),
             const SizedBox(height: 16),
             if (widget.isHost) ...[
               ElevatedButton.icon(
-                onPressed: _uploadPdf,
-                icon: const Icon(Icons.upload_file),
-                label: const Text('Upload PDF'),
+                onPressed: _selectFromLibrary,
+                icon: const Icon(Icons.library_books),
+                label: const Text('Select from Library'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: theme.primaryColor,
                   foregroundColor: Colors.white,
@@ -515,6 +587,16 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
                         ),
                         tooltip: 'Remove Slides',
                       ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.present_to_all),
+                      onPressed: _openPresentationMode,
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.blue.withValues(alpha: 0.8),
+                        foregroundColor: Colors.white,
+                      ),
+                      tooltip: 'Present Slides',
+                    ),
                     const SizedBox(width: 4),
                     IconButton(
                       icon: const Icon(Icons.fullscreen),
@@ -615,5 +697,160 @@ class _FullscreenPdfViewer extends StatelessWidget {
         onPageChanged: (page) => onPageChanged(page + 1),
       ),
     );
+  }
+}
+
+class _SlideSelectionSheet extends StatelessWidget {
+  final List<UserSlideLibrary> slides;
+
+  const _SlideSelectionSheet({required this.slides});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.7,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 8),
+            width: 50,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          
+          // Header
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                const Icon(Icons.library_books, color: Colors.deepPurple),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Select Slides from Library',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          
+          // Slides list
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: slides.length,
+              itemBuilder: (context, index) {
+                final slide = slides[index];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.all(16),
+                    leading: Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.deepPurple[100]!, Colors.deepPurple[50]!],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.slideshow,
+                            color: Colors.deepPurple[400],
+                            size: 24,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${slide.totalSlides}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.deepPurple[600],
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    title: Text(
+                      slide.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          slide.fileName,
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatDate(slide.uploadedAt),
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                    trailing: const Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: Colors.deepPurple,
+                    ),
+                    onTap: () => Navigator.pop(context, slide),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inDays > 30) {
+      return '${date.month}/${date.day}/${date.year}';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays} days ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} hours ago';
+    } else {
+      return 'Just now';
+    }
   }
 }

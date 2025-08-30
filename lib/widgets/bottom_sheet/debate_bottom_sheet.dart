@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:appwrite/appwrite.dart';
 import 'slides_tab.dart';
 import 'sources_tab.dart';
 import '../../services/livekit_material_sync_service.dart';
@@ -76,8 +77,8 @@ class _DebateBottomSheetState extends State<DebateBottomSheet>
         databaseId: AppwriteConstants.databaseId,
         collectionId: AppwriteConstants.sharedSourcesCollection,
         queries: [
-          'equal("roomId", "${widget.roomId}")',
-          'orderDesc("\$createdAt")',
+          Query.equal('roomId', widget.roomId),
+          Query.orderDesc('\$createdAt'),
         ],
       );
       

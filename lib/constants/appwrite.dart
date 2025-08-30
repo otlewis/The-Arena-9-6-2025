@@ -22,6 +22,7 @@ class AppwriteConstants {
   static const String roomHandRaisesCollection = "room_hand_raises";
   static const String roomSlideStateCollection = "room_slide_state";
   static const String sharedSourcesCollection = "shared_sources";
+  static const String userSlideLibraryCollection = "user_slide_library";
 
   
   // Bucket IDs

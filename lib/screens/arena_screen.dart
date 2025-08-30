@@ -35,6 +35,7 @@ import '../widgets/bottom_sheet/debate_bottom_sheet.dart';
 import '../services/livekit_material_sync_service.dart';
 import '../services/pinned_link_service.dart';
 import '../widgets/shared_link_popup.dart';
+import '../widgets/slide_update_popup.dart';
 import '../models/debate_source.dart';
 
 // Legacy Debate Phase Enum - kept for backwards compatibility
@@ -1141,6 +1142,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             room: _liveKitService.room,
             roomId: widget.roomId,
             userId: currentUserId,
+            userName: _currentUser?.name,
             isHost: webrtcRole == 'moderator' || webrtcRole == 'affirmative' || webrtcRole == 'negative',
           );
           
@@ -1176,6 +1178,33 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               }
             }
           });
+          
+          // Listen for material updates and only show popup for NEW slide uploads (pdf_upload), not slide navigation (slide_change)
+          _materialSyncService!.materialUpdates.listen((materialSync) {
+            if (mounted && !_isExiting) {
+              // Only show popup for pdf_upload events (new slides shared), not slide_change events (slide navigation)
+              if (materialSync.type == 'pdf_upload' && materialSync.userId != currentUserId) {
+                AppLogger().info('📊 Showing NEW slides popup from MaterialSyncService: ${materialSync.slideFileId}');
+                
+                // Create SlideData from the material sync event
+                final slideData = SlideData(
+                  fileId: materialSync.slideFileId ?? '',
+                  fileName: materialSync.fileName ?? 'Presentation',
+                  currentSlide: materialSync.currentSlide ?? 1,
+                  totalSlides: materialSync.totalSlides ?? 0,
+                  pdfUrl: materialSync.pdfUrl,
+                  uploadedBy: materialSync.userId ?? '',
+                  uploadedByName: materialSync.userName,
+                  uploadedAt: DateTime.now(),
+                );
+                
+                _showSlideUpdatePopup(slideData);
+              } else if (materialSync.type == 'pdf_upload') {
+                AppLogger().info('📊 Not showing popup for own slide upload: ${materialSync.slideFileId}');
+              }
+            }
+          });
+          
           AppLogger().debug('📊 Material sync service initialized for role: $webrtcRole');
         }
       } catch (error) {
@@ -2907,6 +2936,24 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         sharedLink: sharedLink,
         onDismiss: () {
           AppLogger().info('📌 Shared link popup dismissed');
+        },
+      ),
+    );
+  }
+
+  void _showSlideUpdatePopup(SlideData slideData) {
+    if (!mounted || _isExiting || _materialSyncService == null) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => SlideUpdatePopup(
+        slideData: slideData,
+        syncService: _materialSyncService!,
+        appwriteService: _appwrite,
+        currentUserId: _currentUserId ?? '',
+        onDismiss: () {
+          AppLogger().info('📊 Slide update popup dismissed');
         },
       ),
     );

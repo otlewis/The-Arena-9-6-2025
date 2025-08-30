@@ -65,6 +65,8 @@ _$DebateMaterialSyncImpl _$$DebateMaterialSyncImplFromJson(
     _$DebateMaterialSyncImpl(
       type: json['type'] as String,
       slideFileId: json['slideFileId'] as String?,
+      fileName: json['fileName'] as String?,
+      pdfUrl: json['pdfUrl'] as String?,
       currentSlide: (json['currentSlide'] as num?)?.toInt(),
       totalSlides: (json['totalSlides'] as num?)?.toInt(),
       sourceUrl: json['sourceUrl'] as String?,
@@ -79,6 +81,8 @@ Map<String, dynamic> _$$DebateMaterialSyncImplToJson(
     <String, dynamic>{
       'type': instance.type,
       'slideFileId': instance.slideFileId,
+      'fileName': instance.fileName,
+      'pdfUrl': instance.pdfUrl,
       'currentSlide': instance.currentSlide,
       'totalSlides': instance.totalSlides,
       'sourceUrl': instance.sourceUrl,
@@ -86,4 +90,38 @@ Map<String, dynamic> _$$DebateMaterialSyncImplToJson(
       'userId': instance.userId,
       'userName': instance.userName,
       'timestamp': instance.timestamp.toIso8601String(),
+    };
+
+_$UserSlideLibraryImpl _$$UserSlideLibraryImplFromJson(
+        Map<String, dynamic> json) =>
+    _$UserSlideLibraryImpl(
+      id: json['id'] as String,
+      userId: json['userId'] as String,
+      title: json['title'] as String,
+      fileName: json['fileName'] as String,
+      fileId: json['fileId'] as String,
+      totalSlides: (json['totalSlides'] as num).toInt(),
+      thumbnailUrl: json['thumbnailUrl'] as String?,
+      description: json['description'] as String?,
+      fileType: json['fileType'] as String? ?? 'pdf',
+      uploadedAt: DateTime.parse(json['uploadedAt'] as String),
+      lastUsedAt: json['lastUsedAt'] == null
+          ? null
+          : DateTime.parse(json['lastUsedAt'] as String),
+    );
+
+Map<String, dynamic> _$$UserSlideLibraryImplToJson(
+        _$UserSlideLibraryImpl instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'userId': instance.userId,
+      'title': instance.title,
+      'fileName': instance.fileName,
+      'fileId': instance.fileId,
+      'totalSlides': instance.totalSlides,
+      'thumbnailUrl': instance.thumbnailUrl,
+      'description': instance.description,
+      'fileType': instance.fileType,
+      'uploadedAt': instance.uploadedAt.toIso8601String(),
+      'lastUsedAt': instance.lastUsedAt?.toIso8601String(),
     };

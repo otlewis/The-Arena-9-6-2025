@@ -3,6 +3,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'dart:async';
 import '../screens/debate_clubs_screen.dart';
 import '../screens/profile_screen.dart';
+import '../screens/slide_library_screen.dart';
 // import 'create_open_screen.dart'; // Disabled
 import '../models/user_profile.dart';
 import '../screens/arena_lobby_screen.dart';
@@ -975,7 +976,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ],
         ),
         const SizedBox(height: 12),
-        // Middle row - 2 cards
+        // Middle row - 3 cards
         Row(
           children: [
             Expanded(
@@ -992,8 +993,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ),
             const SizedBox(width: 12),
-            // Empty space to maintain grid
-            Expanded(child: Container()),
+            Expanded(
+              child: AnimatedScaleIn(
+                delay: const Duration(milliseconds: 1850),
+                child: _buildFeatureCard('MySlides', 'My Slides', () => _navigateToSlides()),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 12),
@@ -1030,6 +1035,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       'Debate': 'assets/images/1v1.png',
       'Take': 'assets/images/1take.png',
       'Discussion': 'assets/images/discussions1.png',
+      'MySlides': Icons.slideshow, // Use slideshow icon for My Slides
       'DebateClubs': 'assets/icons/debate clubs.png',
       'Tournaments': 'assets/images/bracket.png',
     };
@@ -1206,6 +1212,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         duration: Duration(seconds: 2),
       ),
     );
+  }
+
+  void _navigateToSlides() {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const SlideLibraryScreen()));
   }
 
   Widget _buildModeratorJudgeSection() {

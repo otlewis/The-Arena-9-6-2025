@@ -44,10 +44,10 @@ class PinnedLinkService {
         databaseId: AppwriteConstants.databaseId,
         collectionId: AppwriteConstants.sharedSourcesCollection,
         queries: [
-          'equal("roomId", "$_roomId")',
-          'equal("isPinned", true)',
-          'orderDesc("\$createdAt")',
-          'limit(1)',
+          Query.equal('roomId', _roomId),
+          Query.equal('isPinned', true),
+          Query.orderDesc('\$createdAt'),
+          Query.limit(1),
         ],
       );
 
@@ -202,7 +202,7 @@ class PinnedLinkService {
       _logger.info('📌 Successfully unpinned link');
     } catch (e) {
       _logger.error('📌 Error unpinning link: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -213,8 +213,8 @@ class PinnedLinkService {
         databaseId: AppwriteConstants.databaseId,
         collectionId: AppwriteConstants.sharedSourcesCollection,
         queries: [
-          'equal("roomId", "$_roomId")',
-          'equal("isPinned", true)',
+          Query.equal('roomId', _roomId),
+          Query.equal('isPinned', true),
         ],
       );
 
