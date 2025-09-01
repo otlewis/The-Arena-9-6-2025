@@ -214,7 +214,7 @@ class _ClubDetailsScreenState extends State<ClubDetailsScreen> {
                   _transferPresidency(member['userId']);
                 },
               );
-            }).toList(),
+            }),
           ],
         ),
         actions: [

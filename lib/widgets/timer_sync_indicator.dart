@@ -15,11 +15,11 @@ class TimerSyncIndicator extends StatefulWidget {
   final VoidCallback? onSyncPressed;
 
   const TimerSyncIndicator({
-    Key? key,
+    super.key,
     this.compact = false,
     this.showSyncButton = true,
     this.onSyncPressed,
-  }) : super(key: key);
+  });
 
   @override
   State<TimerSyncIndicator> createState() => _TimerSyncIndicatorState();
@@ -365,7 +365,7 @@ class _TimerSyncIndicatorState extends State<TimerSyncIndicator>
 
 /// Connection status widget for app bars
 class ConnectionStatusBadge extends StatefulWidget {
-  const ConnectionStatusBadge({Key? key}) : super(key: key);
+  const ConnectionStatusBadge({super.key});
 
   @override
   State<ConnectionStatusBadge> createState() => _ConnectionStatusBadgeState();
@@ -432,7 +432,7 @@ class _ConnectionStatusBadgeState extends State<ConnectionStatusBadge> {
 
 /// Bottom sheet for detailed sync status
 class SyncStatusBottomSheet extends StatelessWidget {
-  const SyncStatusBottomSheet({Key? key}) : super(key: key);
+  const SyncStatusBottomSheet({super.key});
 
   static void show(BuildContext context) {
     showModalBottomSheet(

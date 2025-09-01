@@ -1,5 +1,5 @@
-/// Individual providers for discussion room functionality
-/// These are convenience providers that extract specific parts of the comprehensive state
+// Individual providers for discussion room functionality
+// These are convenience providers that extract specific parts of the comprehensive state
 
 export 'discussion_comprehensive_provider.dart';
 

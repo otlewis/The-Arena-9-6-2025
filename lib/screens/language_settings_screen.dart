@@ -59,7 +59,7 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
                         setState(() {});
                       },
                     );
-                  }).toList(),
+                  }),
                 ],
               ),
             ),

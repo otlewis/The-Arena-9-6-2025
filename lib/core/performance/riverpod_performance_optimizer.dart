@@ -107,7 +107,7 @@ class RiverpodPerformanceOptimizer {
 
 /// Enhanced StateNotifier with automatic performance optimization
 abstract class OptimizedStateNotifier<T> extends StateNotifier<T> {
-  OptimizedStateNotifier(T state) : super(state);
+  OptimizedStateNotifier(super.state);
   
   final RiverpodPerformanceOptimizer _optimizer = RiverpodPerformanceOptimizer();
   String get providerId;

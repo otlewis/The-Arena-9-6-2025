@@ -9,11 +9,11 @@ class SimpleTimerWidget extends StatefulWidget {
   final bool compact;
 
   const SimpleTimerWidget({
-    Key? key,
+    super.key,
     required this.isModerator,
     this.onTimerExpired,
     this.compact = false,
-  }) : super(key: key);
+  });
 
   @override
   State<SimpleTimerWidget> createState() => _SimpleTimerWidgetState();

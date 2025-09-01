@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 // import 'dart:async'; // Removed - no longer needed
 import '../../../core/logging/app_logger.dart';
 import '../../../screens/arena_modals.dart';
-import '../../../widgets/appwrite_timer_widget.dart';
+import '../../../widgets/enhanced_appwrite_timer_widget.dart';
 import '../../../widgets/challenge_bell.dart';
-import '../../../widgets/instant_message_bell.dart';
 import '../../../widgets/network_quality_indicator.dart';
 import '../../../models/timer_state.dart';
 // import '../../../services/livekit_service.dart'; // Removed unused import
@@ -42,6 +41,8 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 380;
+    
+    AppLogger().debug('⚙️ ArenaAppBar building - isModerator: $isModerator, showControls: $isModerator');
     
     return AppBar(
       backgroundColor: Colors.black,
@@ -101,24 +102,50 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ],
                 ),
               
-              // Appwrite Timer (synchronized across devices) - better space management
+              // Appwrite Timer (synchronized across devices) with gear icon for moderators
               Expanded(
                 child: Container(
                   constraints: BoxConstraints(
                     maxWidth: availableWidth * (isSmallScreen ? 1.0 : 0.9), // Use more space on small screens
                   ),
                   child: Center(
-                    child: AppwriteTimerWidget(
-                      roomId: roomId,
-                      roomType: RoomType.arena,
-                      isModerator: isModerator,
-                      userId: userId,
-                      compact: true,
-                      showControls: isModerator,
-                      showConnectionStatus: false,
-                      onTimerExpired: () {
-                        // Handle timer expiration for debate phases
-                      },
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        EnhancedAppwriteTimerWidget(
+                          roomId: roomId,
+                          roomType: RoomType.arena,
+                          isModerator: isModerator,
+                          userId: userId,
+                          compact: true,
+                          showControls: isModerator,
+                          showConnectionStatus: true, // Show connection status in arena
+                          onTimerExpired: () {
+                            // Handle timer expiration for debate phases
+                          },
+                        ),
+                        // Timer control gear icon for moderators
+                        if (isModerator) ...[
+                          const SizedBox(width: 8),
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: BoxConstraints(
+                              minWidth: isSmallScreen ? 24 : 28,
+                              minHeight: isSmallScreen ? 24 : 28,
+                            ),
+                            onPressed: () {
+                              AppLogger().debug('⚙️ Timer gear icon tapped by moderator');
+                              onShowTimerControls();
+                            },
+                            icon: Icon(
+                              Icons.settings,
+                              color: Colors.white70,
+                              size: isSmallScreen ? 16 : 18,
+                            ),
+                            tooltip: 'Timer Controls',
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ),
@@ -145,22 +172,13 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
             ),
           ),
         ),
-        // Message notification bell - more compact on small screens
-        SizedBox(
-          width: isSmallScreen ? 28 : 32,
-          child: Center(
-            child: InstantMessageBell(
-              iconColor: Colors.white,
-              iconSize: isSmallScreen ? 16 : 18,
-            ),
-          ),
-        ),
-        // Rules and Guidelines button - more compact on small screens
+        // Info/Rules button for everyone
         SizedBox(
           width: isSmallScreen ? 28 : 32,
           child: IconButton(
             padding: EdgeInsets.zero,
             onPressed: () {
+              AppLogger().debug('ℹ️ Opening debate rules');
               showDialog(
                 context: context,
                 builder: (context) => const DebateRulesModal(),

@@ -128,15 +128,15 @@ class ErrorHandler {
   
   static String getUserFriendlyMessage(AppError error) {
     switch (error.runtimeType) {
-      case NetworkError:
+      case NetworkError _:
         return 'Please check your internet connection and try again.';
-      case AuthError:
+      case AuthError _:
         return 'Please log in again to continue.';
-      case ValidationError:
+      case ValidationError _:
         return error.message;
-      case PermissionError:
+      case PermissionError _:
         return 'You don\'t have permission to perform this action.';
-      case ArenaError:
+      case ArenaError _:
         return error.message;
       default:
         return 'Something went wrong. Please try again.';

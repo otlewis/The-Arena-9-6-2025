@@ -321,7 +321,7 @@ class _ModerationActionDialogState extends State<ModerationActionDialog> {
               ),
             ),
           );
-        }).toList(),
+        }),
       ],
     );
   }

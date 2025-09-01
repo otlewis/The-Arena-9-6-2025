@@ -14,14 +14,14 @@ class AudienceGridWidget extends StatelessWidget {
   final String userRole;
 
   const AudienceGridWidget({
-    Key? key,
+    super.key,
     required this.audience,
     this.onPromoteToSpeaker,
     this.onDenyHandRaise,
     this.onShowParticipantOptions,
     this.currentUserId,
     required this.userRole,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

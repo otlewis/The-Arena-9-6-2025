@@ -15,7 +15,7 @@ class SpeakersPanelWidget extends StatelessWidget {
   final String userRole;
 
   const SpeakersPanelWidget({
-    Key? key,
+    super.key,
     required this.speakers,
     this.moderator,
     this.onPromoteToSpeaker,
@@ -23,7 +23,7 @@ class SpeakersPanelWidget extends StatelessWidget {
     this.onShowParticipantOptions,
     this.currentUserId,
     required this.userRole,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

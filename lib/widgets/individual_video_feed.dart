@@ -12,7 +12,7 @@ class IndividualVideoFeed extends StatefulWidget {
   final bool showControls;
 
   const IndividualVideoFeed({
-    Key? key,
+    super.key,
     required this.userId,
     required this.userName,
     required this.hasVideo,
@@ -21,7 +21,7 @@ class IndividualVideoFeed extends StatefulWidget {
     this.videoRenderer,
     this.onToggleVideo,
     this.showControls = true,
-  }) : super(key: key);
+  });
 
   @override
   State<IndividualVideoFeed> createState() => _IndividualVideoFeedState();

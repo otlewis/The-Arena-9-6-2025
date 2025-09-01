@@ -440,7 +440,7 @@ class _LinkSharingBottomSheetState extends State<LinkSharingBottomSheet> {
                         ),
                       ),
                     );
-                  }).toList(),
+                  }),
                   
                   const SizedBox(height: 80), // Space for floating button
                 ],

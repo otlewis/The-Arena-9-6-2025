@@ -17,7 +17,7 @@ class RoomControlsWidget extends StatelessWidget {
   final Function()? onEndRoom;
 
   const RoomControlsWidget({
-    Key? key,
+    super.key,
     required this.userRole,
     required this.isMuted,
     required this.isHandRaised,
@@ -29,7 +29,7 @@ class RoomControlsWidget extends StatelessWidget {
     this.onShowParticipantList,
     this.onShowRoomChat,
     this.onEndRoom,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -263,10 +263,10 @@ class ConnectionStatusWidget extends StatelessWidget {
   final String connectionQuality;
 
   const ConnectionStatusWidget({
-    Key? key,
+    super.key,
     required this.isConnected,
     required this.connectionQuality,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

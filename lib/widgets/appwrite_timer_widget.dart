@@ -25,7 +25,7 @@ class AppwriteTimerWidget extends StatefulWidget {
   final bool showConnectionStatus;
 
   const AppwriteTimerWidget({
-    Key? key,
+    super.key,
     required this.roomId,
     required this.roomType,
     required this.isModerator,
@@ -37,7 +37,7 @@ class AppwriteTimerWidget extends StatefulWidget {
     this.compact = false,
     this.showControls = true,
     this.showConnectionStatus = true,
-  }) : super(key: key);
+  });
 
   @override
   State<AppwriteTimerWidget> createState() => _AppwriteTimerWidgetState();
@@ -150,7 +150,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
     
   }
 
-  void _onStreamError(error) {
+  void _onStreamError(dynamic error) {
     AppLogger().debug('Timer stream error: $error');
     _setConnectionError('Connection lost: $error');
   }

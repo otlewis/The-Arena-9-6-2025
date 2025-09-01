@@ -20,7 +20,7 @@ class SynchronizedTimerWidget extends StatefulWidget {
   final bool showControls;
 
   const SynchronizedTimerWidget({
-    Key? key,
+    super.key,
     required this.roomId,
     required this.roomType,
     required this.isModerator,
@@ -31,7 +31,7 @@ class SynchronizedTimerWidget extends StatefulWidget {
     this.onTimerStopped,
     this.compact = false,
     this.showControls = true,
-  }) : super(key: key);
+  });
 
   @override
   State<SynchronizedTimerWidget> createState() => _SynchronizedTimerWidgetState();
