@@ -9,15 +9,15 @@ class LiveKitConfigService {
   
   LiveKitConfigService._();
 
-  // Production LiveKit server configuration (Linode server)
-  static const String _productionServerUrl = 'ws://172.236.109.9:7880';
-  static const String _productionApiKey = 'LKAPI1234567890';
-  static const String _productionSecretKey = '7e9fb42854e466daf92dabbc9b88e98f7811486704338e062d30815a592de45d';
+  // Production LiveKit server configuration (Google Cloud Platform server)
+  static const String _productionServerUrl = 'ws://34.171.185.205:7879';
+  static const String _productionApiKey = 'APIwzQr7qFmXHcy';
+  static const String _productionSecretKey = '2gVhXTdGbSJ4bPSpomxfaHjCA8PBdmJ4N7h89dZAJT9';
 
   // Development/fallback configuration (same as production for now)
-  static const String _developmentServerUrl = 'ws://172.236.109.9:7880'; 
-  static const String _developmentApiKey = 'LKAPI1234567890';
-  static const String _developmentSecretKey = '7e9fb42854e466daf92dabbc9b88e98f7811486704338e062d30815a592de45d';
+  static const String _developmentServerUrl = 'ws://34.171.185.205:7879'; 
+  static const String _developmentApiKey = 'APIwzQr7qFmXHcy';
+  static const String _developmentSecretKey = '2gVhXTdGbSJ4bPSpomxfaHjCA8PBdmJ4N7h89dZAJT9';
 
   // Current environment detection
   bool get isProduction => const bool.fromEnvironment('dart.vm.product', defaultValue: false);
@@ -30,8 +30,8 @@ class LiveKitConfigService {
     if (url.startsWith('wss://')) {
       AppLogger().debug('🔒 Using secure WebSocket (wss://) - iOS ATS compatible');
     } else if (url.startsWith('ws://')) {
-      AppLogger().debug('📡 Using WebSocket (ws://) connection to Linode server');
-      AppLogger().debug('💡 Note: iOS ATS exception configured for 172.236.109.9');
+      AppLogger().debug('📡 Using WebSocket (ws://) connection to GCP server');
+      AppLogger().debug('💡 Note: iOS ATS exception configured for 34.171.185.205');
     }
     
     AppLogger().debug('🔧 LiveKit Server URL: $url (${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'})');

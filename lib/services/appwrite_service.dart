@@ -1,5 +1,6 @@
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
+import 'package:appwrite/enums.dart';
 import 'package:flutter/foundation.dart';
 import '../constants/appwrite.dart';
 import 'dart:convert';
@@ -342,6 +343,23 @@ class AppwriteService {
     }
   }
 
+  // Google OAuth Sign-In
+  Future<models.Session> signInWithGoogle() async {
+    try {
+      AppLogger().debug('🔐 Starting Google OAuth sign-in');
+      
+      final session = await account.createOAuth2Session(
+        provider: OAuthProvider.google,
+      );
+      
+      AppLogger().debug('🔐 ✅ Google OAuth successful');
+      return session;
+    } catch (e) {
+      AppLogger().debug('🔐 ❌ Error with Google OAuth: $e');
+      rethrow;
+    }
+  }
+
   // User Methods
   Future<models.User?> getCurrentUser() async {
     AppLogger().debug('🔐 getCurrentUser - checking authentication status');
@@ -386,6 +404,7 @@ class AppwriteService {
     String? facebookHandle,
     String? instagramHandle,
     List<String>? interests,
+    Map<String, dynamic>? metadata,
   }) async {
     try {
       final profileData = {
@@ -416,6 +435,11 @@ class AppwriteService {
         'isAvailableAsModerator': false,
         'isAvailableAsJudge': false,
       };
+      
+      // Add metadata if provided (for TOS/Privacy acceptance tracking)
+      if (metadata != null) {
+        profileData.addAll(metadata);
+      }
 
       // First, try to check if user profile already exists
       try {
@@ -612,7 +636,7 @@ class AppwriteService {
     int? coinBalance,
     int? totalGiftsSent,
     int? totalGiftsReceived,
-    int? reputation,
+    // Note: reputation is now reputationPercentage and managed by ModeratorReputationService only
   }) async {
     try {
       final updateData = <String, dynamic>{};
@@ -634,7 +658,6 @@ class AppwriteService {
       if (coinBalance != null) updateData['coinBalance'] = coinBalance;
       if (totalGiftsSent != null) updateData['totalGiftsSent'] = totalGiftsSent;
       if (totalGiftsReceived != null) updateData['totalGiftsReceived'] = totalGiftsReceived;
-      if (reputation != null) updateData['reputation'] = reputation;
 
       await databases.updateDocument(
         databaseId: 'arena_db',
@@ -4687,13 +4710,10 @@ class AppwriteService {
       // Update recipient's profile (increment gifts received, add reputation)
       final recipientProfile = await getUserProfile(recipientId);
       if (recipientProfile != null) {
-        // Higher tier gifts give more reputation
-        int reputationBonus = cost >= 50 ? 10 : (cost >= 15 ? 5 : (cost >= 5 ? 3 : 1));
-        
+        // Update recipient's gift count (reputation is now controlled by moderators only)
         await updateUserProfile(
           userId: recipientId,
           totalGiftsReceived: recipientProfile.totalGiftsReceived + 1,
-          reputation: recipientProfile.reputation + reputationBonus,
         );
       }
 

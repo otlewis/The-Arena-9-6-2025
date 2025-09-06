@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../widgets/user_avatar.dart';
+import '../widgets/premium_badge.dart';
+import '../widgets/gift_send_bottom_sheet.dart';
+import '../widgets/simple_gift_bottom_sheet.dart';
 import '../models/user_profile.dart';
 
 // Color constants used in participant displays
@@ -385,17 +388,25 @@ class ArenaParticipantWidgets {
         
         SizedBox(height: isSmall ? 4 : 8),
         
-        // Participant name
-        Text(
-          participant.name,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: nameSize,
-            fontWeight: FontWeight.w600,
-          ),
-          textAlign: TextAlign.center,
-          maxLines: isSmall ? 1 : 2,
-          overflow: TextOverflow.ellipsis,
+        // Participant name with premium badge
+        Column(
+          children: [
+            Text(
+              participant.name,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: nameSize,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: isSmall ? 1 : 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (participant.isPremium && !isSmall) ...[
+              const SizedBox(height: 2),
+              CompactPremiumBadge(user: participant, size: 10),
+            ],
+          ],
         ),
         
         // Winner badge
@@ -469,13 +480,20 @@ class ArenaParticipantWidgets {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  user.name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        user.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    if (user.isPremium) PremiumBadge(user: user, size: 14),
+                  ],
                 ),
                 Text(
                   role.toUpperCase(),
@@ -498,12 +516,19 @@ class ArenaParticipantWidgets {
     BuildContext context,
     UserProfile participant,
     String role,
-    {VoidCallback? onInvite, VoidCallback? onRemove}
+    {VoidCallback? onInvite, VoidCallback? onRemove, String? roomId, String? roomType, String? roomName}
   ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('${participant.name} - ${role.toUpperCase()}'),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text('${participant.name} - ${role.toUpperCase()}'),
+            ),
+            if (participant.isPremium) PremiumBadge(user: participant),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -513,12 +538,21 @@ class ArenaParticipantWidgets {
               radius: 50,
             ),
             const SizedBox(height: 16),
-            Text(
-              participant.name,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  participant.name,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (participant.isPremium) ...[
+                  const SizedBox(width: 8),
+                  GlowingPremiumBadge(user: participant, showText: false),
+                ],
+              ],
             ),
             const SizedBox(height: 8),
             if (participant.bio?.isNotEmpty == true) ...[
@@ -561,7 +595,7 @@ class ArenaParticipantWidgets {
                 Column(
                   children: [
                     Text(
-                      '${participant.reputation}',
+                      '${participant.reputationPercentage}%',
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -576,6 +610,25 @@ class ArenaParticipantWidgets {
           ],
         ),
         actions: [
+          // Gift sending button
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              showSimpleGiftBottomSheet(
+                context,
+                recipient: participant,
+              );
+            },
+            icon: const Icon(Icons.card_giftcard, size: 16),
+            label: const Text('Send Gift'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8B5CF6),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
           if (onInvite != null)
             TextButton(
               onPressed: () {

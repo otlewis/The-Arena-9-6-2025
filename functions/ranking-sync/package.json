@@ -1,0 +1,15 @@
+{
+  "name": "ranking-sync",
+  "version": "1.0.0",
+  "description": "Appwrite function to sync and calculate user rankings accurately",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {
+    "node-appwrite": "^13.0.0"
+  },
+  "keywords": ["appwrite", "rankings", "sync", "arena"],
+  "author": "Arena DTD",
+  "license": "MIT"
+}

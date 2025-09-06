@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../screens/email_inbox_screen.dart';
 import '../../screens/home_screen.dart';
-import '../../screens/premium_screen.dart';
+import '../../screens/premium_store_screen.dart';
 import '../../screens/profile_screen.dart';
 import '../../screens/login_screen.dart';
 import '../../screens/arena_screen.dart';
@@ -103,7 +103,7 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
       ),
       const _PersistentScreenWrapper(
         screenIndex: 2,
-        child: PremiumScreen(),
+        child: PremiumStoreScreen(),
       ),
       _PersistentScreenWrapper(
         screenIndex: 3,

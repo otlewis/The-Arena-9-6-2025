@@ -201,39 +201,47 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   child: Column(
                     children: [
                       Container(
-                        width: 100,
-                        height: 100,
+                        width: 120,
+                        height: 120,
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          shape: BoxShape.circle,
-                          boxShadow: const [
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFF6B46C1), // Purple
+                              Color(0xFF8B5CF6), // Lighter purple
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: [
                             BoxShadow(
-                              color: Colors.white,
-                              offset: Offset(-4, -4),
-                              blurRadius: 8,
-                              spreadRadius: 0,
-                            ),
-                            BoxShadow(
-                              color: Colors.grey,
-                              offset: Offset(4, 4),
-                              blurRadius: 8,
-                              spreadRadius: 0,
+                              color: const Color(0xFF6B46C1).withOpacity(0.3),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10),
                             ),
                           ],
                         ),
                         child: Center(
-                          child: Image.asset(
-                            'assets/images/Arenalogo.png',
-                            width: 80,
-                            height: 80,
-                            fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Icon(
-                                Icons.gavel,
-                                size: 60,
-                                color: Color(0xFF8B5CF6),
-                              );
-                            },
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(25),
+                            child: Container(
+                              width: 100,
+                              height: 100,
+                              color: Colors.white,
+                              child: Image.asset(
+                                'assets/images/2logo.png',
+                                width: 80,
+                                height: 80,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const Icon(
+                                    Icons.gavel,
+                                    size: 60,
+                                    color: Color(0xFF8B5CF6),
+                                  );
+                                },
+                              ),
+                            ),
                           ),
                         ),
                       ),

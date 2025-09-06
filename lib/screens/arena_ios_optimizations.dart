@@ -192,7 +192,7 @@ class ArenaIOSOptimizations {
         email: userData.data['email'] ?? '',
         avatar: userData.data['avatar'],
         bio: userData.data['bio'],
-        reputation: userData.data['reputation'] ?? 0,
+        reputationPercentage: (userData.data['reputationPercentage'] is int) ? userData.data['reputationPercentage'] : 100,
         totalWins: userData.data['totalWins'] ?? 0,
         totalDebates: userData.data['totalDebates'] ?? 0,
         createdAt: DateTime.parse(userData.$createdAt),

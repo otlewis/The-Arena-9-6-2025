@@ -115,13 +115,13 @@ class NoiseCancellationService {
   /// iOS-specific noise cancellation using AVAudioSession
   Future<void> _enableIOSNoiseCancellation() async {
     try {
-      // iOS automatically applies noise cancellation in voiceChat mode
+      // iOS automatically applies noise cancellation in videoChat mode
       // Additional processing can be enabled through AVAudioSession
-      AppLogger().debug('🍎 iOS noise cancellation enabled via AVAudioSession voiceChat mode');
+      AppLogger().debug('🍎 iOS noise cancellation enabled via AVAudioSession videoChat mode');
       
       // Note: iOS 15+ includes Voice Isolation mode which provides
       // advanced noise cancellation. This is automatically applied
-      // when using voiceChat mode on supported devices.
+      // when using videoChat mode on supported devices.
       
     } catch (e) {
       AppLogger().error('❌ iOS noise cancellation failed: $e');

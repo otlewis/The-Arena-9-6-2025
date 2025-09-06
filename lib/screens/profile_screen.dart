@@ -8,6 +8,10 @@ import 'language_settings_screen.dart';
 import 'package:appwrite/models.dart' as models;
 import '../core/logging/app_logger.dart';
 import '../services/theme_service.dart';
+import '../widgets/gift_bell.dart';
+import '../services/revenue_cat_service.dart';
+import 'package:get_it/get_it.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
 class ProfileScreen extends StatefulWidget {
   final VoidCallback? onLogout;
   
@@ -20,12 +24,14 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final AppwriteService _appwrite = AppwriteService();
   final ThemeService _themeService = ThemeService();
+  final RevenueCatService _revenueCatService = GetIt.instance<RevenueCatService>();
   List<Map<String, dynamic>> _memberships = [];
   bool _isLoading = true;
   UserProfile? _userProfile;
   models.User? _currentUser;
   int _followerCount = 0;
   int _followingCount = 0;
+  CustomerInfo? _customerInfo;
 
   // Colors matching home screen
   static const Color scarletRed = Color(0xFFFF2400);
@@ -37,6 +43,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadUserData();
+    _loadSubscriptionInfo();
   }
 
   Future<void> _loadUserData() async {
@@ -184,6 +191,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _loadSubscriptionInfo() async {
+    try {
+      final customerInfo = await _revenueCatService.getCustomerInfo();
+      if (mounted) {
+        setState(() {
+          _customerInfo = customerInfo;
+        });
+      }
+    } catch (e) {
+      AppLogger().error('Error loading subscription info: $e');
+    }
+  }
+
+  bool get _hasPremiumSubscription {
+    // Use profile data for premium status (works on web)
+    final isPremium = _userProfile?.isPremium == true;
+    AppLogger().debug('🏆 Premium status check: isPremium=$isPremium, profile=${_userProfile?.isPremium}, revenueCat=${_customerInfo?.entitlements.active.containsKey(RevenueCatService.premiumEntitlement)}');
+    if (isPremium) {
+      return true;
+    }
+    // Fall back to RevenueCat for native platforms
+    return _customerInfo?.entitlements.active.containsKey(RevenueCatService.premiumEntitlement) ?? false;
+  }
+
   Future<void> _editProfile() async {
     final result = await Navigator.push<bool>(
       context,
@@ -222,11 +253,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
           color: _themeService.isDarkMode ? Colors.white70 : scarletRed,
         ),
         actions: [
-          if (_currentUser != null)
+          if (_currentUser != null) ...[
+            GiftBell(
+              iconColor: _themeService.isDarkMode ? Colors.white70 : const Color(0xFF8B5CF6),
+              iconSize: 20,
+            ),
+            const SizedBox(width: 12),
             _buildNeumorphicIcon(
               icon: Icons.edit,
               onTap: _editProfile,
             ),
+          ],
           const SizedBox(width: 12),
         ],
       ),
@@ -296,51 +333,135 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       child: Column(
         children: [
-          Container(
-            width: 120,
-            height: 120,
-            decoration: BoxDecoration(
-              color: _themeService.isDarkMode 
-                  ? const Color(0xFF2D2D2D)
-                  : const Color(0xFFE8E8E8),
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
+          Stack(
+            children: [
+              Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
                   color: _themeService.isDarkMode 
-                      ? Colors.black.withValues(alpha: 0.6)
-                      : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
-                  offset: const Offset(4, 4),
-                  blurRadius: 8,
-                  spreadRadius: -2,
+                      ? const Color(0xFF2D2D2D)
+                      : const Color(0xFFE8E8E8),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: _themeService.isDarkMode 
+                          ? Colors.black.withValues(alpha: 0.6)
+                          : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                      offset: const Offset(4, 4),
+                      blurRadius: 8,
+                      spreadRadius: -2,
+                    ),
+                    BoxShadow(
+                      color: _themeService.isDarkMode 
+                          ? Colors.white.withValues(alpha: 0.02)
+                          : Colors.white.withValues(alpha: 0.8),
+                      offset: const Offset(-4, -4),
+                      blurRadius: 8,
+                      spreadRadius: -2,
+                    ),
+                  ],
                 ),
-                BoxShadow(
-                  color: _themeService.isDarkMode 
-                      ? Colors.white.withValues(alpha: 0.02)
-                      : Colors.white.withValues(alpha: 0.8),
-                  offset: const Offset(-4, -4),
-                  blurRadius: 8,
-                  spreadRadius: -2,
+                child: ClipOval(
+                  child: UserAvatar(
+                    avatarUrl: profile?.avatar,
+                    initials: profile?.initials,
+                    radius: 60,
+                    backgroundColor: lightScarlet,
+                    textColor: scarletRed,
+                  ),
                 ),
-              ],
-            ),
-            child: ClipOval(
-              child: UserAvatar(
-                avatarUrl: profile?.avatar,
-                initials: profile?.initials,
-                radius: 60,
-                backgroundColor: lightScarlet,
-                textColor: scarletRed,
               ),
-            ),
+              if (!isGuest && _hasPremiumSubscription)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _themeService.isDarkMode 
+                            ? const Color(0xFF2D2D2D)
+                            : const Color(0xFFE8E8E8),
+                        width: 3,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.orange.withOpacity(0.4),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.workspace_premium,
+                      size: 20,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 16),
-          Text(
-            isGuest ? 'Guest User' : (profile?.displayName ?? 'Unknown User'),
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
-              color: _themeService.isDarkMode ? Colors.white : deepPurple,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                isGuest ? 'Guest User' : (profile?.displayName ?? 'Unknown User'),
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                  color: _themeService.isDarkMode ? Colors.white : deepPurple,
+                ),
+              ),
+              if (!isGuest && _hasPremiumSubscription) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.orange.withOpacity(0.3),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.workspace_premium,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Premium',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
           ),
           if (profile?.location != null && profile!.location!.isNotEmpty) ...[
             const SizedBox(height: 4),

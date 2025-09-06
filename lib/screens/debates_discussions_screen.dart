@@ -9,6 +9,7 @@ import 'package:appwrite/appwrite.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../services/appwrite_service.dart';
 import '../services/firebase_gift_service.dart';
+import '../widgets/simple_gift_bottom_sheet.dart';
 import '../services/livekit_service.dart';
 import '../services/livekit_token_service.dart';
 import '../services/livekit_config_service.dart';
@@ -318,6 +319,21 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   
   Future<void> _toggleMute() async {
     try {
+      // Only allow audio toggle for moderators and speakers
+      if (!_isCurrentUserModerator && !_isCurrentUserSpeaker) {
+        AppLogger().debug('🔇 Mute Toggle: Audience members are listen-only');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🔇 Audience members are listen-only. Raise your hand to request speaking permission.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+      
       // Connect to audio first if not connected
       if (!_isAudioConnected) {
         await _connectToAudio();
@@ -500,9 +516,12 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           // - Enough time has passed since last attempt
           if (_consecutiveUnhealthyChecks >= _unhealthyThreshold && timeSinceLastAttempt > _minTimeBetweenReconnections) {
             AppLogger().warning('⚠️ WebRTC disconnected for $_consecutiveUnhealthyChecks consecutive checks - attempting restoration');
-            // Reconnect to audio if user should be connected
+            // Reconnect to audio if user should be connected (only moderators/speakers)
             if ((_isCurrentUserModerator || _isCurrentUserSpeaker) && !_isAudioConnected) {
+              AppLogger().debug('🔄 Health Monitor: Reconnecting audio for moderator/speaker');
               _connectToAudio();
+            } else if (!_isCurrentUserModerator && !_isCurrentUserSpeaker) {
+              AppLogger().debug('🔇 Health Monitor: Skipping audio reconnection for audience member (listen-only)');
             }
             _consecutiveUnhealthyChecks = 0; // Reset counter
           } else {
@@ -557,9 +576,12 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       // Step 2: Refresh participants
       await _loadParticipants();
       
-      // Step 3: Restore audio connection
+      // Step 3: Restore audio connection (only for moderators/speakers)
       if ((_isCurrentUserModerator || _isCurrentUserSpeaker) && !_isAudioConnected) {
+        AppLogger().debug('🔄 Automatic Reconnect: Restoring audio for moderator/speaker');
         await _connectToAudio();
+      } else if (!_isCurrentUserModerator && !_isCurrentUserSpeaker) {
+        AppLogger().debug('🔇 Automatic Reconnect: Audience member remains listen-only');
       }
       
       // Step 4: Verify speaker status
@@ -767,7 +789,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   }
 
   void _autoConnectAudio() {
-    AppLogger().debug('🔥 AUTO-CONNECT: _autoConnectAudio() called - attempting to connect ALL users');
+    AppLogger().debug('🔥 AUTO-CONNECT: _autoConnectAudio() called - checking permissions for moderators/speakers only');
     AppLogger().debug('🔥 AUTO-CONNECT: Current user: ${_currentUser?.id}, isModerator: $_isCurrentUserModerator, isSpeaker: $_isCurrentUserSpeaker');
     AppLogger().debug('🔥 AUTO-CONNECT: Audio state - connected: $_isAudioConnected, connecting: $_isAudioConnecting');
     AppLogger().debug('🔥 AUTO-CONNECT: Participant roles: $_participantRoles');
@@ -775,6 +797,12 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     // Safety check - make sure we have current user data
     if (_currentUser == null) {
       AppLogger().warning('🔥 AUTO-CONNECT: ⚠️ Cannot auto-connect audio - current user is null');
+      return;
+    }
+    
+    // Only auto-connect for users with speaking permissions
+    if (!_isCurrentUserModerator && !_isCurrentUserSpeaker) {
+      AppLogger().debug('🔇 AUTO-CONNECT: Skipping auto-connect for audience member (listen-only)');
       return;
     }
     
@@ -1779,15 +1807,20 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         AppLogger().info('🎤 ROLE DEBUG: Current user in speaker panel: ${_speakerPanelists.any((s) => s.id == _currentUser!.id)}');
       }
       
-      // AUTO-CONNECT: Automatically connect to audio for all users
+      // AUTO-CONNECT: Automatically connect to audio only for moderators and speakers
       if (!_isAudioConnected && !_isAudioConnecting && _currentUser != null) {
-        AppLogger().debug('🔥 AUTO-CONNECT: Initiating automatic audio connection after participants loaded');
-        AppLogger().debug('🔥 AUTO-CONNECT: User role - moderator: $_isCurrentUserModerator, speaker: $_isCurrentUserSpeaker');
-        _connectToAudio().then((_) {
-          AppLogger().debug('🔥 AUTO-CONNECT: Audio connection successful');
-        }).catchError((error) {
-          AppLogger().error('🔥 AUTO-CONNECT: Audio connection failed: $error');
-        });
+        // Only connect audio for users with speaking permissions
+        if (_isCurrentUserModerator || _isCurrentUserSpeaker) {
+          AppLogger().debug('🔥 AUTO-CONNECT: Initiating automatic audio connection for moderator/speaker');
+          AppLogger().debug('🔥 AUTO-CONNECT: User role - moderator: $_isCurrentUserModerator, speaker: $_isCurrentUserSpeaker');
+          _connectToAudio().then((_) {
+            AppLogger().debug('🔥 AUTO-CONNECT: Audio connection successful');
+          }).catchError((error) {
+            AppLogger().error('🔥 AUTO-CONNECT: Audio connection failed: $error');
+          });
+        } else {
+          AppLogger().debug('🔇 AUTO-CONNECT: Skipping audio connection for audience member (listen-only)');
+        }
       }
       
       // Participant loading completed
@@ -5240,30 +5273,22 @@ $roomJoinLink
     }
   }
 
-  // Gift modal methods (Open Discussion room implementation)
+  // Gift modal methods - simplified to use working gift bottom sheet
   void _showGiftModal() {
     AppLogger().debug('🎁 DEBUG: Gift modal button pressed');
     
     // Get eligible recipients (moderator and speakers only, excluding self)
-    final eligibleRecipients = <Map<String, dynamic>>[];
+    final eligibleRecipients = <UserProfile>[];
     
     // Add moderator if not current user
     if (_moderator != null && _moderator!.id != _currentUser!.id) {
-      eligibleRecipients.add({
-        'userId': _moderator!.id,
-        'name': _moderator!.name,
-        'role': 'moderator',
-      });
+      eligibleRecipients.add(_moderator!);
     }
     
     // Add speakers if not current user
     for (final speaker in _speakerPanelists) {
-      if (speaker.id != _currentUser!.id && !eligibleRecipients.any((r) => r['userId'] == speaker.id)) {
-        eligibleRecipients.add({
-          'userId': speaker.id,
-          'name': speaker.name,
-          'role': 'speaker',
-        });
+      if (speaker.id != _currentUser!.id && !eligibleRecipients.any((r) => r.id == speaker.id)) {
+        eligibleRecipients.add(speaker);
       }
     }
 
@@ -5277,98 +5302,41 @@ $roomJoinLink
       return;
     }
 
+    // Simple recipient selection modal that opens working gift bottom sheet
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.85,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-          ),
-        ),
-        child: DefaultTabController(
-          length: 2,
-          child: Column(
-            children: [
-              // Handle bar
-              Container(
-                margin: const EdgeInsets.only(top: 8),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Select Gift Recipient',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
               ),
-              
-              // Header
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const Text(
-                      'Send Gift',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF8B5CF6),
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            '🪙',
-                            style: TextStyle(fontSize: 16),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$_currentUserCoinBalance',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+            ),
+            const SizedBox(height: 20),
+            ...eligibleRecipients.map((recipient) => ListTile(
+              leading: CircleAvatar(
+                child: Text(recipient.initials),
               ),
-              
-              // Tab bar
-              const TabBar(
-                labelColor: Color(0xFF8B5CF6),
-                unselectedLabelColor: Colors.grey,
-                indicatorColor: Color(0xFF8B5CF6),
-                tabs: [
-                  Tab(text: 'Select Gift'),
-                  Tab(text: 'Recipients'),
-                ],
-              ),
-              
-              // Tab content
-              Expanded(
-                child: TabBarView(
-                  children: [
-                    _buildGiftSelectionTab(),
-                    _buildRecipientSelectionTab(eligibleRecipients),
-                  ],
-                ),
-              ),
-            ],
-          ),
+              title: Text(recipient.displayName),
+              subtitle: Text(_moderator?.id == recipient.id ? 'Moderator' : 'Speaker'),
+              onTap: () {
+                Navigator.pop(context);
+                showSimpleGiftBottomSheet(
+                  context,
+                  recipient: recipient,
+                );
+              },
+            )).toList(),
+            const SizedBox(height: 10),
+          ],
         ),
       ),
     );

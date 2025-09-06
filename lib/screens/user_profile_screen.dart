@@ -1,17 +1,12 @@
-import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user_profile.dart';
 import '../models/gift.dart';
 import '../widgets/user_avatar.dart';
-import '../widgets/challenge_bell.dart';
-import '../widgets/gift_bell.dart';
 import '../widgets/report_user_dialog.dart';
 import '../widgets/block_user_dialog.dart';
 import '../widgets/report_user_icon.dart';
 import '../services/gift_service.dart';
-import '../services/coin_service.dart';
-import '../services/appwrite_service.dart';
 import '../features/user/providers/user_profile_provider.dart';
 
 class UserProfileScreen extends ConsumerStatefulWidget {
@@ -33,31 +28,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
   // Gift service and data
   final GiftService _giftService = GiftService();
-  final CoinService _coinService = CoinService();
   
-  Future<int> _getCurrentUserCoins() async {
-    try {
-      final appwriteService = AppwriteService();
-      final currentUser = await appwriteService.getCurrentUser();
-      AppLogger().debug('🪙 DEBUG: Current user: ${currentUser?.$id}');
-      
-      if (currentUser != null) {
-        final userProfile = await appwriteService.getUserProfile(currentUser.$id);
-        AppLogger().debug('🪙 DEBUG: User profile found: ${userProfile != null}');
-        AppLogger().debug('🪙 DEBUG: Current reputation: ${userProfile?.reputation}');
-        
-        final coins = await _coinService.getUserCoins(currentUser.$id);
-        AppLogger().debug('🪙 DEBUG: Coin service returned: $coins');
-        return coins;
-      }
-    } catch (e) {
-      // If error getting current user, still try to get coins with fallback
-      AppLogger().debug('🪙 ERROR: Error getting current user for coins: $e');
-    }
-    // Return 500 as fallback for testing (same as coin service)
-    AppLogger().debug('🪙 DEBUG: Returning fallback 500 coins');
-    return 500;
-  }
 
   // Removed unused _debugInitializeCoins method
   Map<String, int> _giftStats = {};
@@ -114,6 +85,50 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
         );
       }
     }
+  }
+
+  void _showChallengeRestrictedMessage() {
+    final currentUserState = ref.read(userProfileProvider('current'));
+    final isCurrentUserPremium = currentUserState.userProfile?.isPremium == true;
+    final profileState = ref.read(userProfileProvider(widget.userId));
+    final targetUserName = profileState.userProfile?.name ?? 'User';
+    
+    String message;
+    if (!isCurrentUserPremium) {
+      message = 'Premium subscription required to send challenges';
+    } else {
+      message = 'You can only challenge other premium subscribers';
+    }
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.workspace_premium, color: Colors.amber, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: deepPurple,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        action: !isCurrentUserPremium ? SnackBarAction(
+          label: 'Upgrade',
+          textColor: Colors.amber,
+          onPressed: () {
+            Navigator.pushNamed(context, '/premium_store');
+          },
+        ) : null,
+      ),
+    );
   }
 
   Future<void> _showChallengeModal() async {
@@ -430,10 +445,6 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
           fontWeight: FontWeight.w600,
         ),
         actions: [
-          const ChallengeBell(iconColor: Color(0xFF6B46C1)),
-          const SizedBox(width: 12),
-          const GiftBell(iconColor: Color(0xFF8B5CF6)),
-          const SizedBox(width: 8),
           ReportUserIcon(
             userId: widget.userId,
             userName: userProfile?.name,
@@ -478,14 +489,49 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     final notifier = ref.read(userProfileProvider(widget.userId).notifier);
     final canInteract = notifier.canInteract;
     
+    // Get current user's premium status for challenge gating
+    final currentUserState = ref.watch(userProfileProvider('current'));
+    final isCurrentUserPremium = currentUserState.userProfile?.isPremium == true;
+    final isTargetUserPremium = userProfile.isPremium == true;
+    final canChallenge = isCurrentUserPremium && isTargetUserPremium;
+    
+    // Debug logging for premium status
+    print('🔍 Challenge Debug:');
+    print('  Current user premium: $isCurrentUserPremium (${currentUserState.userProfile?.isPremium})');
+    print('  Target user premium: $isTargetUserPremium (${userProfile.isPremium})');
+    print('  Target user name: ${userProfile.name}');
+    print('  Can challenge: $canChallenge');
+    
     return Column(
       children: [
-        UserAvatar(
-          avatarUrl: userProfile.avatar,
-          initials: userProfile.initials,
-          radius: 60,
-          backgroundColor: lightScarlet,
-          textColor: scarletRed,
+        Stack(
+          children: [
+            UserAvatar(
+              avatarUrl: userProfile.avatar,
+              initials: userProfile.initials,
+              radius: 60,
+              backgroundColor: lightScarlet,
+              textColor: scarletRed,
+            ),
+            // Premium badge overlay
+            if (userProfile.isPremium == true)
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
+                    ),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 3),
+                  ),
+                  child: const Icon(Icons.workspace_premium, size: 20, color: Colors.white),
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 16),
         Text(
@@ -551,12 +597,12 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: _showChallengeModal,
+                  onPressed: canChallenge ? _showChallengeModal : _showChallengeRestrictedMessage,
                   icon: const Icon(Icons.flash_on),
                   label: const Text('Challenge'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: scarletRed,
-                    foregroundColor: Colors.white,
+                    backgroundColor: canChallenge ? scarletRed : Colors.grey[400],
+                    foregroundColor: canChallenge ? Colors.white : Colors.grey[600],
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                 ),
@@ -615,7 +661,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(child: _buildStatItem('Reputation', userProfile.reputation.toString())),
+                Expanded(child: _buildStatItem('Reputation', '${userProfile.reputationPercentage}%')),
                 Expanded(child: _buildStatItem('Debates', userProfile.totalDebates.toString())),
                 Expanded(child: _buildStatItem('Wins', userProfile.totalWins.toString())),
               ],

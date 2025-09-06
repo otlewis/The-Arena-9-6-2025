@@ -5,6 +5,9 @@ import '../services/challenge_messaging_service.dart';
 import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
 import '../widgets/report_user_dialog.dart';
+import '../widgets/premium_badge.dart';
+import '../widgets/gift_send_bottom_sheet.dart';
+import '../widgets/simple_gift_bottom_sheet.dart';
 
 /// Beautiful user profile bottom sheet modal
 class UserProfileBottomSheet extends StatefulWidget {
@@ -180,13 +183,26 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              widget.user.name,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    widget.user.name,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                if (widget.user.isPremium) ...[
+                                  const SizedBox(width: 8),
+                                  GlowingPremiumBadge(
+                                    user: widget.user, 
+                                    size: 18,
+                                  ),
+                                ],
+                              ],
                             ),
                             Text(
                               '${widget.user.name.toLowerCase()}@arena.dtd',
@@ -235,7 +251,7 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                     children: [
                       _buildStatColumn('${widget.user.totalWins}', 'Wins'),
                       _buildStatColumn('${widget.user.totalDebates}', 'Debates'),
-                      _buildStatColumn('${widget.user.reputation}', 'Reputation'),
+                      _buildStatColumn('${widget.user.reputationPercentage}%', 'Reputation'),
                       _buildStatColumn(
                         widget.user.totalDebates > 0 
                           ? '${((widget.user.totalWins / widget.user.totalDebates) * 100).toStringAsFixed(1)}%'
@@ -399,6 +415,57 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                             ),
                           ),
                         ],
+                      ),
+                      
+                      const SizedBox(height: 12),
+                      
+                      // Gift button (full width)
+                      GestureDetector(
+                        onTap: () {
+                          // Close this modal and show gift sending sheet
+                          Navigator.pop(context);
+                          showSimpleGiftBottomSheet(
+                            context,
+                            recipient: widget.user,
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF8B5CF6), Color(0xFF6B46C1)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF8B5CF6).withValues(alpha: 0.4),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.card_giftcard,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'Send Gift',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                       
                       const SizedBox(height: 12),

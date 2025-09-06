@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import '../services/gift_service.dart';
 import '../models/received_gift.dart';
 import '../core/logging/app_logger.dart';
+import '../services/appwrite_service.dart';
 
 /// Global gift bell widget that shows new gifts anywhere in the app
 class GiftBell extends StatefulWidget {
@@ -66,8 +67,30 @@ class _GiftBellState extends State<GiftBell> with TickerProviderStateMixin {
       curve: Curves.easeOut,
     ));
     
-    _subscribeToNewGifts();
-    _loadUnreadCount();
+    _initializeGiftService();
+  }
+
+  void _initializeGiftService() async {
+    try {
+      // Get current user and initialize gift service if needed
+      final appwriteService = AppwriteService();
+      final user = await appwriteService.getCurrentUser();
+      
+      if (user != null) {
+        await _giftService.initialize(user.$id);
+        AppLogger().debug('🎁 GiftBell: GiftService initialized successfully');
+        
+        _subscribeToNewGifts();
+        _loadUnreadCount();
+      } else {
+        AppLogger().warning('🎁 GiftBell: No authenticated user found');
+      }
+    } catch (e) {
+      AppLogger().error('🎁 GiftBell: Failed to initialize GiftService: $e');
+      // Still try to subscribe and load count in case service was already initialized
+      _subscribeToNewGifts();
+      _loadUnreadCount();
+    }
   }
 
   void _subscribeToNewGifts() {

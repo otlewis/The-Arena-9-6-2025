@@ -47,7 +47,7 @@ class ReportUserIcon extends StatelessWidget {
           avatar: null, // Not needed for reporting
           totalDebates: 0,
           totalWins: 0,
-          reputation: 0,
+          reputationPercentage: 100,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );

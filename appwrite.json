@@ -1,0 +1,24 @@
+{
+  "projectId": "683a37a8003719978879",
+  "functions": [
+    {
+      "$id": "ranking-sync",
+      "name": "Ranking Sync",
+      "runtime": "node-18.0",
+      "execute": ["users"],
+      "events": [],
+      "schedule": "",
+      "timeout": 30,
+      "enabled": true,
+      "logging": true,
+      "entrypoint": "src/main.js",
+      "commands": "npm install",
+      "ignore": [
+        "node_modules",
+        ".git",
+        ".appwrite"
+      ],
+      "path": "functions/ranking-sync"
+    }
+  ]
+}

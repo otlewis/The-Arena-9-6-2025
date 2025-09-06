@@ -151,7 +151,7 @@ class LiveKitTokenService {
       final videoGrants = {
         'roomJoin': true,
         'roomList': true,
-        'canPublish': true, // Allow publishing for all Arena roles
+        'canPublish': false, // Lobby users cannot publish audio by default
         'canSubscribe': true, // Can receive all audio
         'canPublishData': true, // Can send metadata updates
         'roomAdmin': false, // Not an admin

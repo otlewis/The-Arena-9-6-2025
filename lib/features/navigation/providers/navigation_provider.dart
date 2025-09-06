@@ -4,6 +4,7 @@ import '../../../services/appwrite_service.dart';
 import '../../../services/challenge_messaging_service.dart';
 import '../../../services/sound_service.dart';
 import '../../../services/audio_initialization_service.dart';
+import '../../../services/gift_service.dart';
 import '../../../core/logging/app_logger.dart';
 import 'package:get_it/get_it.dart';
 import '../../../core/providers/app_providers.dart';
@@ -11,7 +12,7 @@ import '../../../screens/home_screen.dart';
 import '../../../screens/login_screen.dart';
 import '../../../screens/profile_screen.dart';
 import '../../../screens/email_inbox_screen.dart';
-import '../../../screens/premium_screen.dart';
+import '../../../screens/premium_store_screen.dart';
 
 /// Navigation state
 class NavigationState {
@@ -80,7 +81,7 @@ class NavigationNotifier extends StateNotifier<NavigationState> {
       state.isAuthenticated ? const HomeScreen() : LoginScreen(
         onLoginSuccess: onLoginSuccess,
       ),
-      const PremiumScreen(),
+      const PremiumStoreScreen(),
       state.isAuthenticated ? ProfileScreen(
         key: _profileKey,
         onLogout: onLogout,
@@ -116,6 +117,15 @@ class NavigationNotifier extends StateNotifier<NavigationState> {
       _logger.debug('🔍 User authenticated - staying on Account tab (HomeScreen)');
       await _messagingService.initialize(user.$id);
       _setupMessageListening();
+      
+      // Initialize gift service for authenticated user
+      try {
+        await GiftService().initialize(user.$id);
+        _logger.debug('🎁 GiftService initialized successfully');
+      } catch (e) {
+        _logger.warning('Failed to initialize gift service: $e');
+        // Don't block authentication for gift service issues
+      }
       
       // Initialize persistent audio service for authenticated user
       try {

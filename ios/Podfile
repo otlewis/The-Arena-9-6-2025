@@ -1,4 +1,4 @@
-platform :ios, '15.1'
+platform :ios, '16.0'
 
 project 'Runner', {
   'Debug' => :debug,
@@ -11,7 +11,6 @@ def flutter_root
   unless File.exist?(generated_xcode_build_settings_path)
     raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
   end
-
   File.foreach(generated_xcode_build_settings_path) do |line|
     matches = line.match(/FLUTTER_ROOT\=(.*)/)
     return matches[1].strip if matches
@@ -24,8 +23,9 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  use_frameworks!
-  use_modular_headers!
+  # Use static frameworks (more reliable for Flutter pods + resource bundles)
+  use_frameworks! :linkage => :static
+  # ❌ Do NOT use `use_modular_headers!` globally
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 end
@@ -33,39 +33,11 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+
+    # Keep customizations minimal; don’t blanket-edit every pod's build settings.
+    # If you *must* relax privacy manifest validation (optional):
     target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-      # Fix for gRPC-C++ and Firebase
-      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
-        '$(inherited)',
-        'PERMISSION_EVENTS=1',
-        'PERMISSION_REMINDERS=1',
-        'PERMISSION_CONTACTS=1',
-        'PERMISSION_CAMERA=1',
-        'PERMISSION_MICROPHONE=1',
-        'PERMISSION_SPEECH_RECOGNIZER=1',
-        'PERMISSION_PHOTOS=1',
-      ]
-    end
-    
-    # Fix for Firebase and gRPC header issues
-    if target.name == 'gRPC-C++-gRPCCertificates-Cpp' || 
-       target.name == 'gRPC-C++' || 
-       target.name == 'gRPC-Core' ||
-       target.name == 'abseil' ||
-       target.name == 'BoringSSL-GRPC'
-      target.build_configurations.each do |config|
-        config.build_settings['HEADER_SEARCH_PATHS'] ||= '$(inherited)'
-      end
-    end
-  end
-  
-  # Fix for Xcode 14+ resource bundle signing
-  installer.pods_project.targets.each do |target|
-    if target.respond_to?(:product_type) and target.product_type == "com.apple.product-type.bundle"
-      target.build_configurations.each do |config|
-        config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
-      end
+      config.build_settings['VALIDATE_PRIVACY_MANIFESTS'] = 'NO'
     end
   end
 end

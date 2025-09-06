@@ -47,46 +47,99 @@ class InAppPurchaseService {
   Future<void> initialize() async {
     AppLogger().debug('🛒 Initializing In-App Purchase Service...');
     
-    // Check if in-app purchase is available on this device
-    final bool available = await _inAppPurchase.isAvailable();
-    if (!available) {
-      AppLogger().debug('❌ In-app purchase not available on this device');
-      onPurchaseError?.call('In-app purchases not available on this device');
-      return;
+    try {
+      // Check if in-app purchase is available on this device with timeout
+      AppLogger().debug('🔍 Checking in-app purchase availability...');
+      final bool available = await _inAppPurchase.isAvailable()
+          .timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              AppLogger().warning('⏱️ Availability check timed out - assuming unavailable');
+              return false;
+            },
+          );
+      
+      if (!available) {
+        AppLogger().warning('❌ In-app purchase not available on this device');
+        // Call the callback to stop loading on the UI
+        onProductsLoaded?.call([]);
+        return;
+      }
+      
+      AppLogger().debug('✅ In-app purchase is available');
+
+      // Enable pending purchases (required for subscriptions)
+      if (Platform.isIOS) {
+        try {
+          AppLogger().debug('📱 Setting up iOS payment queue delegate...');
+          final InAppPurchaseStoreKitPlatformAddition iosAddition =
+              _inAppPurchase.getPlatformAddition<InAppPurchaseStoreKitPlatformAddition>();
+          await iosAddition.setDelegate(ExamplePaymentQueueDelegate())
+              .timeout(
+                const Duration(seconds: 5),
+                onTimeout: () {
+                  AppLogger().warning('⏱️ iOS delegate setup timed out');
+                },
+              );
+          AppLogger().debug('✅ iOS payment queue delegate set up successfully');
+        } catch (e) {
+          AppLogger().warning('❌ Failed to set iOS delegate: $e');
+          // Continue anyway - the delegate is optional
+        }
+      }
+      
+      // Android doesn't need special setup for pending purchases,
+      // but we should ensure the stream is ready
+      if (Platform.isAndroid) {
+        AppLogger().debug('📱 Initializing Android in-app purchase...');
+        // Android automatically handles pending purchases
+      }
+
+      // Listen to purchase updates
+      _subscription = _inAppPurchase.purchaseStream.listen(
+        _onPurchaseUpdated,
+        onDone: () => _subscription.cancel(),
+        onError: (error) {
+          AppLogger().warning('❌ Purchase stream error: $error');
+          // Don't show error dialog on app startup - just log the error
+        },
+      );
+
+      // Load products
+      await loadProducts();
+      
+      AppLogger().debug('✅ In-App Purchase Service initialized successfully');
+    } catch (e) {
+      AppLogger().warning('❌ Failed to initialize in-app purchase service: $e');
+      // Make sure to call the callback to stop loading
+      onProductsLoaded?.call([]);
     }
-
-    // Enable pending purchases (required for subscriptions)
-    if (Platform.isIOS) {
-      final InAppPurchaseStoreKitPlatformAddition iosAddition =
-          _inAppPurchase.getPlatformAddition<InAppPurchaseStoreKitPlatformAddition>();
-      await iosAddition.setDelegate(ExamplePaymentQueueDelegate());
-    }
-
-    // Listen to purchase updates
-    _subscription = _inAppPurchase.purchaseStream.listen(
-      _onPurchaseUpdated,
-      onDone: () => _subscription.cancel(),
-      onError: (error) {
-        AppLogger().debug('❌ Purchase stream error: $error');
-        onPurchaseError?.call('Purchase error: $error');
-      },
-    );
-
-    // Load products
-    await loadProducts();
-    
-    AppLogger().debug('✅ In-App Purchase Service initialized successfully');
   }
 
   Future<void> loadProducts() async {
     AppLogger().debug('📦 Loading products...');
     
     try {
-      final ProductDetailsResponse response = await _inAppPurchase.queryProductDetails(_productIds);
+      // Add a timeout to prevent hanging on Android
+      final ProductDetailsResponse response = await _inAppPurchase
+          .queryProductDetails(_productIds)
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              AppLogger().warning('⏱️ Product loading timed out after 10 seconds');
+              // Return empty response on timeout
+              return ProductDetailsResponse(
+                productDetails: [],
+                notFoundIDs: _productIds.toList(),
+              );
+            },
+          );
       
       if (response.error != null) {
-        AppLogger().debug('❌ Error loading products: ${response.error}');
-        onPurchaseError?.call('Failed to load products: ${response.error!.message}');
+        AppLogger().warning('❌ Error loading products: ${response.error}');
+        // Still call callback with empty products list to stop loading
+        _products = [];
+        onProductsLoaded?.call(_products);
         return;
       }
 
@@ -104,8 +157,10 @@ class InAppPurchaseService {
       onProductsLoaded?.call(_products);
       
     } catch (e) {
-      AppLogger().debug('❌ Exception loading products: $e');
-      onPurchaseError?.call('Failed to load products: $e');
+      AppLogger().warning('❌ Exception loading products: $e');
+      // Still call callback with empty products list to stop loading
+      _products = [];
+      onProductsLoaded?.call(_products);
     }
   }
 

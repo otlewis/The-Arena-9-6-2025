@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/appwrite_service.dart';
 import 'forgot_password_screen.dart';
+import 'policy_viewer_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final VoidCallback? onLoginSuccess;
@@ -21,6 +22,9 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _isSignUp = false; // false = Sign In, true = Sign Up
   bool _obscurePassword = true;
+  DateTime? _selectedBirthDate;
+  bool _acceptedTos = false;
+  bool _acceptedPrivacy = false;
 
   // Colors matching app theme (keeping scarletRed for potential future use)
   static const Color scarletRed = Color(0xFFFF2400);
@@ -35,6 +39,41 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleEmailAuth() async {
     if (!_formKey.currentState!.validate()) return;
+    
+    // Check age and TOS/Privacy acceptance for sign up
+    if (_isSignUp) {
+      if (_selectedBirthDate == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please select your date of birth'),
+            backgroundColor: Color(0xFFFF2400),
+          ),
+        );
+        return;
+      }
+      
+      // Check if user is 18+
+      final age = DateTime.now().difference(_selectedBirthDate!).inDays ~/ 365;
+      if (age < 18) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You must be 18 or older to use The Arena DTD'),
+            backgroundColor: Color(0xFFFF2400),
+          ),
+        );
+        return;
+      }
+      
+      if (!_acceptedTos || !_acceptedPrivacy) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please accept the Terms of Service and Privacy Policy'),
+            backgroundColor: Color(0xFFFF2400),
+          ),
+        );
+        return;
+      }
+    }
 
     setState(() => _isLoading = true);
     
@@ -63,6 +102,15 @@ class _LoginScreenState extends State<LoginScreen> {
             userId: user.$id,
             name: _nameController.text.trim(),
             email: _emailController.text.trim(),
+            metadata: {
+              'birthDate': _selectedBirthDate!.toIso8601String(),
+              'tosAccepted': true,
+              'tosAcceptedAt': DateTime.now().toIso8601String(),
+              'tosVersion': '1.0',
+              'privacyAccepted': true,
+              'privacyAcceptedAt': DateTime.now().toIso8601String(),
+              'privacyVersion': '1.0',
+            },
           );
         }
         
@@ -110,6 +158,41 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _handleGoogleAuth() async {
+    setState(() => _isLoading = true);
+    
+    // Capture ScaffoldMessenger reference before async operations
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    try {
+      await _appwrite.signInWithGoogle();
+      
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(
+            content: Text('Successfully signed in with Google!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Notify parent and go back
+        widget.onLoginSuccess?.call();
+      }
+    } catch (e) {
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('Google sign-in failed: ${_getErrorMessage(e.toString())}'),
+            backgroundColor: const Color(0xFFFF2400),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   String _getErrorMessage(String error) {
     if (error.contains('user_already_exists')) {
       return 'This email is already registered. Try signing in instead.';
@@ -130,7 +213,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   // Helper method for neumorphic input decoration
-  InputDecoration _buildNeumorphicInputDecoration({
+  InputDecoration _buildModernInputDecoration({
     required String labelText,
     required IconData icon,
     bool isPassword = false,
@@ -138,51 +221,38 @@ class _LoginScreenState extends State<LoginScreen> {
   }) {
     return InputDecoration(
       labelText: labelText,
-      labelStyle: TextStyle(color: Colors.grey.shade600),
+      labelStyle: TextStyle(
+        color: Colors.grey.shade600,
+        fontSize: 16,
+        fontWeight: FontWeight.w500,
+      ),
       prefixIcon: Container(
-        margin: const EdgeInsets.all(12),
+        margin: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Colors.grey.shade100,
-          shape: BoxShape.circle,
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.white,
-              offset: Offset(-2, -2),
-              blurRadius: 4,
-              spreadRadius: 0,
-            ),
-            BoxShadow(
-              color: Colors.grey,
-              offset: Offset(2, 2),
-              blurRadius: 4,
-              spreadRadius: 0,
-            ),
-          ],
+          gradient: const LinearGradient(
+            colors: [
+              Color(0xFF6B46C1),
+              Color(0xFF8B5CF6),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(icon, color: Colors.grey.shade600, size: 20),
+        child: Icon(
+          icon,
+          color: Colors.white,
+          size: 20,
+        ),
       ),
       suffixIcon: isPassword
           ? GestureDetector(
               onTap: onSuffixTap,
               child: Container(
-                margin: const EdgeInsets.all(12),
+                margin: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
-                  shape: BoxShape.circle,
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.white,
-                      offset: Offset(-2, -2),
-                      blurRadius: 4,
-                      spreadRadius: 0,
-                    ),
-                    BoxShadow(
-                      color: Colors.grey,
-                      offset: Offset(2, 2),
-                      blurRadius: 4,
-                      spreadRadius: 0,
-                    ),
-                  ],
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   _obscurePassword ? Icons.visibility_off : Icons.visibility,
@@ -194,27 +264,27 @@ class _LoginScreenState extends State<LoginScreen> {
           : null,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.blue.shade300, width: 1),
+        borderSide: const BorderSide(color: Color(0xFF6B46C1), width: 2),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.red.shade300, width: 1),
+        borderSide: const BorderSide(color: Color(0xFFDC2626), width: 2),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.red.shade300, width: 1),
+        borderSide: const BorderSide(color: Color(0xFFDC2626), width: 2),
       ),
       filled: true,
-      fillColor: Colors.grey.shade100,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
     );
   }
 
@@ -232,90 +302,103 @@ class _LoginScreenState extends State<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 40),
-                // Logo and Title with Neumorphism
+                // Modern Logo and Title Header
                 Container(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
                   decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.white,
-                          offset: Offset(-8, -8),
-                          blurRadius: 16,
-                          spreadRadius: 0,
-                        ),
-                        BoxShadow(
-                          color: Colors.grey,
-                          offset: Offset(8, 8),
-                          blurRadius: 16,
-                          spreadRadius: 0,
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        Container(
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            shape: BoxShape.circle,
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Colors.white,
-                                offset: Offset(-4, -4),
-                                blurRadius: 8,
-                                spreadRadius: 0,
-                              ),
-                              BoxShadow(
-                                color: Colors.grey,
-                                offset: Offset(4, 4),
-                                blurRadius: 8,
-                                spreadRadius: 0,
-                              ),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                        spreadRadius: 0,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      // Logo with gradient background
+                      Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFF6B46C1), // Purple
+                              Color(0xFF8B5CF6), // Lighter purple
                             ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
-                          child: Center(
-                            child: Image.asset(
-                              'assets/images/Arenalogo.png',
-                              width: 80,
-                              height: 80,
-                              fit: BoxFit.contain,
-                              errorBuilder: (context, error, stackTrace) {
-                                return const Icon(
-                                  Icons.gavel,
-                                  size: 60,
-                                  color: Color(0xFF8B5CF6),
-                                );
-                              },
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF6B46C1).withOpacity(0.3),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(25),
+                            child: Container(
+                              width: 100,
+                              height: 100,
+                              color: Colors.white,
+                              child: Image.asset(
+                                'assets/images/2logo.png',
+                                width: 80,
+                                height: 80,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const Icon(
+                                    Icons.gavel,
+                                    size: 60,
+                                    color: Color(0xFF8B5CF6),
+                                  );
+                                },
+                              ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 20),
-                        Text(
-                          _isSignUp ? 'Join Arena' : 'The Arena D&D',
+                      ),
+                      const SizedBox(height: 24),
+                      // App title with gradient text effect
+                      ShaderMask(
+                        shaderCallback: (bounds) => const LinearGradient(
+                          colors: [
+                            Color(0xFFDC2626), // Red
+                            Color(0xFFEF4444), // Lighter red
+                          ],
+                        ).createShader(bounds),
+                        child: Text(
+                          _isSignUp ? 'Join The Arena DTD' : 'The Arena DTD',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 28,
+                            fontSize: _isSignUp ? 26 : 32,
                             fontWeight: FontWeight.bold,
-                            color: _isSignUp ? Colors.grey.shade800 : const Color(0xFFDC2626), // Scarlet for "The Arena D&D"
+                            color: Colors.white, // This will be overridden by the shader
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _isSignUp 
-                            ? 'Create your account to start debating'
-                            : 'Sign in to enter the arena',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey.shade600,
-                          ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _isSignUp 
+                          ? 'Create your account to start debating'
+                          : 'Sign in to enter the arena',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey.shade600,
+                          height: 1.4,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
+                ),
                   
                   const SizedBox(height: 40),
                   
@@ -324,25 +407,22 @@ class _LoginScreenState extends State<LoginScreen> {
                     Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(16),
-                        boxShadow: const [
+                        boxShadow: [
                           BoxShadow(
-                            color: Colors.grey,
-                            offset: Offset(4, 4),
-                            blurRadius: 8,
-                            spreadRadius: 0,
-                          ),
-                          BoxShadow(
-                            color: Colors.white,
-                            offset: Offset(-4, -4),
-                            blurRadius: 8,
-                            spreadRadius: 0,
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
                           ),
                         ],
                       ),
                       child: TextFormField(
                         controller: _nameController,
-                        style: TextStyle(color: Colors.grey.shade800),
-                        decoration: _buildNeumorphicInputDecoration(
+                        style: TextStyle(
+                          color: Colors.grey.shade800,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        decoration: _buildModernInputDecoration(
                           labelText: 'Full Name',
                           icon: Icons.person,
                         ),
@@ -358,23 +438,102 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    // Date of Birth Picker
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: InkWell(
+                        onTap: () async {
+                          final DateTime? picked = await showDatePicker(
+                            context: context,
+                            initialDate: DateTime.now().subtract(const Duration(days: 6570)), // 18 years ago
+                            firstDate: DateTime(1900),
+                            lastDate: DateTime.now(),
+                            builder: (context, child) {
+                              return Theme(
+                                data: Theme.of(context).copyWith(
+                                  colorScheme: const ColorScheme.light(
+                                    primary: Color(0xFF6B46C1),
+                                    onPrimary: Colors.white,
+                                    surface: Colors.white,
+                                    onSurface: Colors.black,
+                                  ),
+                                ),
+                                child: child!,
+                              );
+                            },
+                          );
+                          if (picked != null && picked != _selectedBirthDate) {
+                            setState(() {
+                              _selectedBirthDate = picked;
+                            });
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.grey.shade300, width: 1.5),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                margin: const EdgeInsets.only(right: 12),
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFF6B46C1),
+                                      Color(0xFF8B5CF6),
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.cake,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
+                              Text(
+                                _selectedBirthDate == null
+                                    ? 'Date of Birth (Must be 18+)'
+                                    : '${_selectedBirthDate!.month}/${_selectedBirthDate!.day}/${_selectedBirthDate!.year}',
+                                style: TextStyle(
+                                  color: _selectedBirthDate == null
+                                      ? Colors.grey.shade600
+                                      : Colors.grey.shade800,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                   ],
                   
                   Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
-                      boxShadow: const [
+                      boxShadow: [
                         BoxShadow(
-                          color: Colors.grey,
-                          offset: Offset(4, 4),
-                          blurRadius: 8,
-                          spreadRadius: 0,
-                        ),
-                        BoxShadow(
-                          color: Colors.white,
-                          offset: Offset(-4, -4),
-                          blurRadius: 8,
-                          spreadRadius: 0,
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
@@ -382,7 +541,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
                       style: TextStyle(color: Colors.grey.shade800),
-                      decoration: _buildNeumorphicInputDecoration(
+                      decoration: _buildModernInputDecoration(
                         labelText: 'Email',
                         icon: Icons.email,
                       ),
@@ -403,18 +562,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
-                      boxShadow: const [
+                      boxShadow: [
                         BoxShadow(
-                          color: Colors.grey,
-                          offset: Offset(4, 4),
-                          blurRadius: 8,
-                          spreadRadius: 0,
-                        ),
-                        BoxShadow(
-                          color: Colors.white,
-                          offset: Offset(-4, -4),
-                          blurRadius: 8,
-                          spreadRadius: 0,
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
@@ -422,7 +574,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _passwordController,
                       obscureText: _obscurePassword,
                       style: TextStyle(color: Colors.grey.shade800),
-                      decoration: _buildNeumorphicInputDecoration(
+                      decoration: _buildModernInputDecoration(
                         labelText: 'Password',
                         icon: Icons.lock,
                         isPassword: true,
@@ -443,6 +595,107 @@ class _LoginScreenState extends State<LoginScreen> {
                       },
                     ),
                   ),
+                  
+                  // Terms of Service and Privacy Policy Checkboxes (Sign Up only)
+                  if (_isSignUp) ...[
+                    const SizedBox(height: 24),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: _acceptedTos,
+                                onChanged: (bool? value) {
+                                  setState(() {
+                                    _acceptedTos = value ?? false;
+                                  });
+                                },
+                                activeColor: const Color(0xFF6B46C1),
+                              ),
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => _showPolicyDialog('Terms of Service'),
+                                  child: RichText(
+                                    text: TextSpan(
+                                      style: TextStyle(
+                                        color: Colors.grey.shade800,
+                                        fontSize: 14,
+                                      ),
+                                      children: const [
+                                        TextSpan(text: 'I accept the '),
+                                        TextSpan(
+                                          text: 'Terms of Service',
+                                          style: TextStyle(
+                                            color: Color(0xFF6B46C1),
+                                            decoration: TextDecoration.underline,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: _acceptedPrivacy,
+                                onChanged: (bool? value) {
+                                  setState(() {
+                                    _acceptedPrivacy = value ?? false;
+                                  });
+                                },
+                                activeColor: const Color(0xFF6B46C1),
+                              ),
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => _showPolicyDialog('Privacy Policy'),
+                                  child: RichText(
+                                    text: TextSpan(
+                                      style: TextStyle(
+                                        color: Colors.grey.shade800,
+                                        fontSize: 14,
+                                      ),
+                                      children: const [
+                                        TextSpan(text: 'I accept the '),
+                                        TextSpan(
+                                          text: 'Privacy Policy',
+                                          style: TextStyle(
+                                            color: Color(0xFF6B46C1),
+                                            decoration: TextDecoration.underline,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'You must be 18 years or older to use The Arena DTD',
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   
                   const SizedBox(height: 32),
                   
@@ -492,6 +745,76 @@ class _LoginScreenState extends State<LoginScreen> {
                                       color: Colors.grey.shade800,
                                     ),
                                   ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // Google Sign-In Button
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: _isLoading ? [] : const [
+                        BoxShadow(
+                          color: Colors.grey,
+                          offset: Offset(4, 4),
+                          blurRadius: 8,
+                          spreadRadius: 0,
+                        ),
+                        BoxShadow(
+                          color: Colors.white,
+                          offset: Offset(-4, -4),
+                          blurRadius: 8,
+                          spreadRadius: 0,
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      child: InkWell(
+                        onTap: _isLoading ? null : _handleGoogleAuth,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.all(18),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Image.asset(
+                                'assets/images/google_logo.png',
+                                height: 20,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    width: 20,
+                                    height: 20,
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.shade100,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Text('G', 
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: Colors.red,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                _isSignUp ? 'Sign up with Google' : 'Sign in with Google',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -556,5 +879,16 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       );
+  }
+
+  void _showPolicyDialog(String policyType) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PolicyViewerScreen(
+          policyType: policyType,
+        ),
+      ),
+    );
   }
 } 

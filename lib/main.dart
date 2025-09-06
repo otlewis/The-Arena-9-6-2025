@@ -50,6 +50,10 @@ import 'widgets/network_quality_indicator.dart';
 import 'package:mcp_toolkit/mcp_toolkit.dart';
 import 'services/firebase_participant_sync_service.dart';
 import 'services/super_moderator_service.dart';
+import 'services/revenue_cat_service.dart';
+import 'services/reputation_service.dart';
+import 'services/moderator_reputation_service.dart';
+import 'services/gamified_ranking_service.dart';
 
 // Service locator instance
 final getIt = GetIt.instance;
@@ -101,6 +105,18 @@ void setupServiceLocator() {
   
   // Register Super Moderator service
   getIt.registerLazySingleton<SuperModeratorService>(() => SuperModeratorService());
+  
+  // Register RevenueCat service
+  getIt.registerLazySingleton<RevenueCatService>(() => RevenueCatService());
+  
+  // Register Reputation service
+  getIt.registerLazySingleton<ReputationService>(() => ReputationService());
+  
+  // Register Moderator Reputation service
+  getIt.registerLazySingleton<ModeratorReputationService>(() => ModeratorReputationService());
+  
+  // Register Gamified Ranking service
+  getIt.registerLazySingleton<GamifiedRankingService>(() => GamifiedRankingService());
   
   // Register audio/video services
   getIt.registerLazySingleton<LiveKitService>(() => LiveKitService());
@@ -179,6 +195,18 @@ void main() async {
       logger.info('🛡️ Super Moderator service initialized');
     } catch (e) {
       logger.error('Failed to initialize Super Moderator service: $e');
+    }
+    
+    // Initialize RevenueCat service
+    try {
+      final revenueCatInitialized = await getIt<RevenueCatService>().initialize();
+      if (revenueCatInitialized) {
+        logger.info('🏪 RevenueCat service initialized');
+      } else {
+        logger.warning('⚠️ RevenueCat service failed to initialize');
+      }
+    } catch (e) {
+      logger.error('Failed to initialize RevenueCat service: $e');
     }
     
     // Set up global error handling with proper logging

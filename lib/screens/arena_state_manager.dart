@@ -202,7 +202,7 @@ class ArenaStateManager {
         email: userData.data['email'] ?? '',
         avatar: userData.data['avatar'],
         bio: userData.data['bio'],
-        reputation: safeParseInt(userData.data['reputation'], 0),
+        reputationPercentage: safeParseInt(userData.data['reputationPercentage'], 100),
         totalWins: safeParseInt(userData.data['totalWins'], 0),
         totalDebates: safeParseInt(userData.data['totalDebates'], 0),
         createdAt: DateTime.parse(userData.$createdAt),

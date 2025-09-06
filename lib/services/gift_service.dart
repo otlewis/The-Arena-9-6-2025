@@ -30,8 +30,25 @@ class GiftService {
   /// Initialize gift service for a user
   Future<void> initialize(String userId) async {
     _currentUserId = userId;
-    await _setupRealtimeSubscription();
-    await _loadReceivedGifts();
+    
+    // Add a small delay to ensure AppwriteService is ready
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    try {
+      await _setupRealtimeSubscription();
+      await _loadReceivedGifts();
+    } catch (e) {
+      AppLogger().error('Error initializing GiftService: $e');
+      // Schedule retry after a delay
+      Future.delayed(const Duration(seconds: 2), () async {
+        try {
+          await _setupRealtimeSubscription();
+          await _loadReceivedGifts();
+        } catch (retryError) {
+          AppLogger().error('Retry failed for GiftService initialization: $retryError');
+        }
+      });
+    }
   }
 
   /// Set up real-time subscription for new gifts
@@ -40,6 +57,11 @@ class GiftService {
     
     try {
       _giftsSubscription?.close();
+      
+      // Ensure AppwriteService is ready before using realtime
+      if (_appwrite.realtimeInstance == null) {
+        throw Exception('AppwriteService realtime instance not ready');
+      }
       
       _giftsSubscription = _appwrite.realtimeInstance.subscribe([
         'databases.arena_db.collections.received_gifts.documents'

@@ -190,6 +190,30 @@ lib/features/[feature_name]/
   - All LiveKit configurations should be deployed to `/opt/livekit-arena/` on the server
   - Use SSH key authentication or password to deploy: `ssh root@172.236.109.9`
 
+## Appwrite API Deprecation Warnings (Info Only)
+
+### Current Status (January 2025)
+The Appwrite Flutter SDK v18.0.0 shows deprecation warnings for methods like:
+- `listDocuments` → `TablesDB.listRows`
+- `getDocument` → `TablesDB.getRow` 
+- `createDocument` → `TablesDB.createRow`
+- `updateDocument` → `TablesDB.updateRow`
+- `deleteDocument` → `TablesDB.deleteRow`
+
+**IMPORTANT**: These warnings are premature. The TablesDB API is not yet available in the Flutter SDK v18.0.0, despite the deprecation messages. The current document-based methods still work correctly and should continue to be used until TablesDB is actually implemented in the Flutter SDK.
+
+### When to Migrate
+- Monitor Appwrite Flutter SDK releases for TablesDB support
+- Only migrate once TablesDB methods are confirmed available in the SDK
+- Test thoroughly as this will be a major API change
+- The migration should maintain all current functionality while updating to the new relational model
+
+### Migration Preparation
+- All database calls are centralized in `AppwriteService`
+- Service layer abstraction makes future migration easier
+- Current method names map directly to TablesDB equivalents
+- Real-time subscriptions will also need updates
+
 ## New Feature Integration Guidelines
 
 ### Instant Messaging

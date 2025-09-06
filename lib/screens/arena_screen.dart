@@ -10,8 +10,11 @@ import '../models/message.dart';
 import '../models/judge_scorecard.dart';
 import '../widgets/user_profile_bottom_sheet.dart';
 import '../widgets/mattermost_chat_widget.dart';
+import '../widgets/timer_control_bottom_sheet.dart';
 import '../models/discussion_chat_message.dart';
+import '../models/timer_state.dart';
 import '../screens/email_compose_screen.dart';
+import '../services/appwrite_timer_service.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
 import '../main.dart' show ArenaApp, getIt;
@@ -294,7 +297,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           avAudioSessionCategory: audio_session.AVAudioSessionCategory.playAndRecord,
           avAudioSessionCategoryOptions: audio_session.AVAudioSessionCategoryOptions.allowBluetooth |
               audio_session.AVAudioSessionCategoryOptions.defaultToSpeaker,
-          avAudioSessionMode: audio_session.AVAudioSessionMode.voiceChat,
+          avAudioSessionMode: audio_session.AVAudioSessionMode.videoChat,
         ));
       }
       
@@ -1257,7 +1260,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               audio_session.AVAudioSessionCategoryOptions.allowBluetooth |
               audio_session.AVAudioSessionCategoryOptions.duckOthers, // Duck other audio when speaking
           // REMOVED mixWithOthers to prevent feedback loops
-          avAudioSessionMode: audio_session.AVAudioSessionMode.voiceChat, // VoiceChat mode for best echo cancellation
+          avAudioSessionMode: audio_session.AVAudioSessionMode.videoChat, // VideoChat mode - compatible with WebRTC voice processing
           avAudioSessionRouteSharingPolicy: audio_session.AVAudioSessionRouteSharingPolicy.defaultPolicy,
           avAudioSessionSetActiveOptions: audio_session.AVAudioSessionSetActiveOptions.notifyOthersOnDeactivation,
           androidAudioAttributes: const audio_session.AndroidAudioAttributes(
@@ -1277,7 +1280,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           if (defaultTargetPlatform == TargetPlatform.iOS) {
             // iOS-specific audio enhancements
             AppLogger().debug('🍎 Configuring iOS-specific noise cancellation');
-            // iOS automatically applies noise cancellation in voiceChat mode
+            // iOS automatically applies noise cancellation in videoChat mode
           } else if (defaultTargetPlatform == TargetPlatform.android) {
             // Android-specific audio enhancements
             AppLogger().debug('🤖 Configuring Android-specific noise cancellation');
@@ -2884,7 +2887,20 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     );
   }
 
-
+  void _showTimerControls() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => TimerControlBottomSheet(
+        roomId: widget.roomId,
+        roomType: RoomType.arena,
+        userId: _currentUserId ?? 'unknown',
+        activeTimer: null, // Will be fetched by the bottom sheet
+        timerService: AppwriteTimerService(),
+      ),
+    );
+  }
 
   void _showUserProfile(UserProfile userProfile, String? userRole) {
     showModalBottomSheet(
@@ -2968,7 +2984,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           isTimerRunning: false, // This will be managed by AppwriteTimerWidget
           formattedTime: '00:00', // This will be managed by AppwriteTimerWidget
           onShowModeratorControls: _showModeratorControlModal,
-          onShowTimerControls: () {}, // Disabled: AppwriteTimerWidget handles its own controls
+          onShowTimerControls: _showTimerControls,
           onExitArena: _exitArena,
           onEmergencyCloseRoom: _emergencyCloseRoom,
           roomId: widget.roomId,

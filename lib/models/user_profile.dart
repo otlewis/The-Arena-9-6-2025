@@ -16,7 +16,7 @@ class UserProfile {
   final String? facebookHandle;
   final String? instagramHandle;
   final Map<String, dynamic> preferences;
-  final int reputation;
+  final int reputationPercentage; // 0-100% rating, only moderators can change
   final int totalDebates;
   final int totalWins;
   final int totalRoomsCreated;
@@ -32,6 +32,10 @@ class UserProfile {
   final bool isPublicProfile;
   final bool isAvailableAsModerator;
   final bool isAvailableAsJudge;
+  final bool isPremium;
+  final String? premiumType; // 'monthly' or 'yearly'
+  final DateTime? premiumExpiry;
+  final bool isTestSubscription;
 
   UserProfile({
     required this.id,
@@ -47,7 +51,7 @@ class UserProfile {
     this.facebookHandle,
     this.instagramHandle,
     this.preferences = const {},
-    this.reputation = 0,
+    this.reputationPercentage = 100, // Start with 100% reputation
     this.totalDebates = 0,
     this.totalWins = 0,
     this.totalRoomsCreated = 0,
@@ -63,6 +67,10 @@ class UserProfile {
     this.isPublicProfile = true,
     this.isAvailableAsModerator = false,
     this.isAvailableAsJudge = false,
+    this.isPremium = false,
+    this.premiumType,
+    this.premiumExpiry,
+    this.isTestSubscription = false,
   });
 
   /// Safely parse preferences field with proper error handling
@@ -112,7 +120,7 @@ class UserProfile {
       facebookHandle: map['facebookHandle'],
       instagramHandle: map['instagramHandle'],
       preferences: _safeParsePreferences(map['preferences']),
-      reputation: _safeParseInt(map['reputation'], defaultValue: 0),
+      reputationPercentage: _safeParseInt(map['reputationPercentage'], defaultValue: 100),
       totalDebates: _safeParseInt(map['totalDebates'], defaultValue: 0),
       totalWins: _safeParseInt(map['totalWins'], defaultValue: 0),
       totalRoomsCreated: _safeParseInt(map['totalRoomsCreated'], defaultValue: 0),
@@ -132,6 +140,10 @@ class UserProfile {
       isPublicProfile: map['isPublicProfile'] ?? true,
       isAvailableAsModerator: map['isAvailableAsModerator'] ?? false,
       isAvailableAsJudge: map['isAvailableAsJudge'] ?? false,
+      isPremium: map['isPremium'] ?? false,
+      premiumType: map['premiumType'],
+      premiumExpiry: DateTime.tryParse(map['premiumExpiry'] ?? ''),
+      isTestSubscription: map['isTestSubscription'] ?? false,
     );
   }
 
@@ -151,7 +163,7 @@ class UserProfile {
       'facebookHandle': facebookHandle,
       'instagramHandle': instagramHandle,
       'preferences': json.encode(preferences),
-      'reputation': reputation,
+      'reputationPercentage': reputationPercentage,
       'totalDebates': totalDebates,
       'totalWins': totalWins,
       'totalRoomsCreated': totalRoomsCreated,
@@ -167,6 +179,10 @@ class UserProfile {
       'isPublicProfile': isPublicProfile,
       'isAvailableAsModerator': isAvailableAsModerator,
       'isAvailableAsJudge': isAvailableAsJudge,
+      'isPremium': isPremium,
+      'premiumType': premiumType,
+      'premiumExpiry': premiumExpiry?.toIso8601String(),
+      'isTestSubscription': isTestSubscription,
     };
   }
 
@@ -185,7 +201,7 @@ class UserProfile {
     String? facebookHandle,
     String? instagramHandle,
     Map<String, dynamic>? preferences,
-    int? reputation,
+    int? reputationPercentage,
     int? totalDebates,
     int? totalWins,
     int? totalRoomsCreated,
@@ -201,6 +217,10 @@ class UserProfile {
     bool? isPublicProfile,
     bool? isAvailableAsModerator,
     bool? isAvailableAsJudge,
+    bool? isPremium,
+    String? premiumType,
+    DateTime? premiumExpiry,
+    bool? isTestSubscription,
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -216,7 +236,7 @@ class UserProfile {
       facebookHandle: facebookHandle ?? this.facebookHandle,
       instagramHandle: instagramHandle ?? this.instagramHandle,
       preferences: preferences ?? this.preferences,
-      reputation: reputation ?? this.reputation,
+      reputationPercentage: reputationPercentage ?? this.reputationPercentage,
       totalDebates: totalDebates ?? this.totalDebates,
       totalWins: totalWins ?? this.totalWins,
       totalRoomsCreated: totalRoomsCreated ?? this.totalRoomsCreated,
@@ -232,6 +252,10 @@ class UserProfile {
       isPublicProfile: isPublicProfile ?? this.isPublicProfile,
       isAvailableAsModerator: isAvailableAsModerator ?? this.isAvailableAsModerator,
       isAvailableAsJudge: isAvailableAsJudge ?? this.isAvailableAsJudge,
+      isPremium: isPremium ?? this.isPremium,
+      premiumType: premiumType ?? this.premiumType,
+      premiumExpiry: premiumExpiry ?? this.premiumExpiry,
+      isTestSubscription: isTestSubscription ?? this.isTestSubscription,
     );
   }
 
@@ -260,19 +284,14 @@ class UserProfile {
   /// Check if profile has avatar
   bool get hasAvatar => avatar != null && avatar!.isNotEmpty;
 
-  /// Get formatted reputation display
+  /// Get formatted reputation display as percentage
   String get formattedReputation {
-    if (reputation >= 1000000) {
-      return '${(reputation / 1000000).toStringAsFixed(1)}M';
-    } else if (reputation >= 1000) {
-      return '${(reputation / 1000).toStringAsFixed(1)}K';
-    }
-    return reputation.toString();
+    return '$reputationPercentage%';
   }
 
   @override
   String toString() {
-    return 'UserProfile(id: $id, name: $name, email: $email, reputation: $reputation)';
+    return 'UserProfile(id: $id, name: $name, email: $email, reputationPercentage: $reputationPercentage%)';
   }
 
   @override

@@ -5,6 +5,8 @@ import '../services/in_app_purchase_service.dart';
 import '../services/coin_service.dart';
 import '../services/appwrite_service.dart';
 import '../widgets/challenge_bell.dart';
+import '../services/mock_payment_service.dart';
+import '../widgets/mock_payment_dialog.dart';
 // Removed unused import: package:in_app_purchase/in_app_purchase.dart
 
 /// Premium store screen for subscriptions, coins, and other premium features
@@ -68,7 +70,18 @@ class _PremiumScreenState extends State<PremiumScreen> {
       }
     };
     
-    await _purchaseService.initialize();
+    try {
+      await _purchaseService.initialize();
+      // Ensure loading stops even if products fail to load
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+      AppLogger().debug('Failed to initialize purchase service: $e');
+    }
   }
   
   Future<void> _getCurrentUser() async {
@@ -193,6 +206,50 @@ class _PremiumScreenState extends State<PremiumScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Beta Test Mode Banner
+            if (MockPaymentService.inTestMode)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.3),
+                    width: 1.5,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.science, color: Colors.orange, size: 24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'BETA TEST MODE',
+                            style: TextStyle(
+                              color: Colors.orange[700],
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'No real charges will occur. Use test cards to simulate purchases.',
+                            style: TextStyle(
+                              color: Colors.orange[600],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             // Premium Subscription Section
             _buildSection(
               title: 'Premium Subscriptions',
@@ -739,29 +796,52 @@ class _PremiumScreenState extends State<PremiumScreen> {
   Future<void> _purchaseSubscription(String title, String price) async {
     if (_isLoading) return;
     
-    setState(() => _isLoading = true);
+    // Determine product ID based on title
+    String productId;
+    if (title.contains('Monthly')) {
+      productId = InAppPurchaseService.monthlySubscriptionId;
+    } else if (title.contains('Yearly')) {
+      productId = InAppPurchaseService.yearlySubscriptionId;
+    } else {
+      _showErrorDialog('Error', 'Unknown subscription type');
+      return;
+    }
     
-    try {
-      // Determine product ID based on title
-      String productId;
-      if (title.contains('Monthly')) {
-        productId = InAppPurchaseService.monthlySubscriptionId;
-      } else if (title.contains('Yearly')) {
-        productId = InAppPurchaseService.yearlySubscriptionId;
-      } else {
-        throw Exception('Unknown subscription type');
-      }
+    // Check if we're in test mode
+    if (MockPaymentService.inTestMode) {
+      // Show mock payment dialog for beta testing
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => MockPaymentDialog(
+          productId: productId,
+          productName: title,
+          price: price,
+          onPaymentComplete: (result) {
+            if (result.success) {
+              _handlePurchaseSuccess(productId);
+            } else {
+              _showErrorDialog('Payment Failed', result.error ?? 'Unknown error');
+            }
+          },
+        ),
+      );
+    } else {
+      // Use real in-app purchase (original code)
+      setState(() => _isLoading = true);
       
-      final product = _purchaseService.getProduct(productId);
-      if (product != null) {
-        await _purchaseService.purchaseProduct(product);
-      } else {
-        _showErrorDialog('Product Not Found', 'This subscription is not available.');
+      try {
+        final product = _purchaseService.getProduct(productId);
+        if (product != null) {
+          await _purchaseService.purchaseProduct(product);
+        } else {
+          _showErrorDialog('Product Not Found', 'This subscription is not available.');
+          setState(() => _isLoading = false);
+        }
+      } catch (e) {
+        _showErrorDialog('Purchase Error', 'Failed to start purchase: $e');
         setState(() => _isLoading = false);
       }
-    } catch (e) {
-      _showErrorDialog('Purchase Error', 'Failed to start purchase: $e');
-      setState(() => _isLoading = false);
     }
   }
   
@@ -780,8 +860,29 @@ class _PremiumScreenState extends State<PremiumScreen> {
     final package = coinPackages[packageIndex];
     final productId = package['productId']!;
     
-    // For beta testing, we'll simulate the purchase by directly adding coins
-    await _simulateCoinPurchase(productId, package['coins']!, package['price']!);
+    // Check if we're in test mode
+    if (MockPaymentService.inTestMode) {
+      // Show mock payment dialog for beta testing
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => MockPaymentDialog(
+          productId: productId,
+          productName: '${package['coins']} Arena Coins',
+          price: package['price']!,
+          onPaymentComplete: (result) {
+            if (result.success) {
+              _handlePurchaseSuccess(productId);
+            } else {
+              _showErrorDialog('Payment Failed', result.error ?? 'Unknown error');
+            }
+          },
+        ),
+      );
+    } else {
+      // For now, simulate the purchase since real IAP is not set up
+      await _simulateCoinPurchase(productId, package['coins']!, package['price']!);
+    }
   }
   
   Future<void> _simulateCoinPurchase(String productId, String coins, String price) async {

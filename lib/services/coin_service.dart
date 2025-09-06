@@ -1,5 +1,7 @@
 import '../services/appwrite_service.dart';
+import '../services/reputation_service.dart';
 import '../core/logging/app_logger.dart';
+import 'package:get_it/get_it.dart';
 
 class CoinService {
   static final CoinService _instance = CoinService._internal();
@@ -7,6 +9,7 @@ class CoinService {
   CoinService._internal();
 
   final AppwriteService _appwrite = AppwriteService();
+  ReputationService get _reputationService => GetIt.instance<ReputationService>();
 
   /// Get user's current coin balance
   Future<int> getUserCoins(String userId) async {
@@ -18,22 +21,18 @@ class CoinService {
       AppLogger().debug('User profile found: ${userProfile != null}');
       
       if (userProfile != null) {
-        AppLogger().debug('User reputation: ${userProfile.reputation}');
-        // If coin balance exists in profile and is greater than 0, return it
-        if (userProfile.reputation > 0) {
-          AppLogger().debug('Returning existing reputation: ${userProfile.reputation}');
-          return userProfile.reputation; // Using reputation as coins for now
-        }
+        AppLogger().debug('User coinBalance: ${userProfile.coinBalance}');
+        // Return the actual coin balance from the profile
+        return userProfile.coinBalance;
       }
       
       // Default balance for new users - automatically give them starting coins
       AppLogger().debug('Initializing coins for new user');
       await _initializeUserCoins(userId);
-      return 500; // Give new users 500 coins to start with for testing
+      return 500; // Give new users 500 coins to start with
     } catch (e) {
       AppLogger().error('Error getting user coins: $e');
-      // Error already logged above
-      // Even on error, give some coins for testing
+      // Even on error, give some coins for new users
       return 500;
     }
   }
@@ -41,9 +40,14 @@ class CoinService {
   /// Initialize coins for new users
   Future<void> _initializeUserCoins(String userId) async {
     try {
-      await _appwrite.updateUserProfile(
-        userId: userId,
-        reputation: 500, // Starting balance
+      await _appwrite.databases.updateDocument(
+        databaseId: 'arena_db',
+        collectionId: 'users',
+        documentId: userId,
+        data: {
+          'coinBalance': 500, // Starting coin balance
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
       );
       AppLogger().info('Initialized user $userId with 500 starting coins');
     } catch (e) {
@@ -57,11 +61,15 @@ class CoinService {
       final currentCoins = await getUserCoins(userId);
       final newBalance = currentCoins + amount;
       
-      // For now, update the reputation field to store coins
-      // In a real app, you'd have a separate coins field
-      await _appwrite.updateUserProfile(
-        userId: userId,
-        reputation: newBalance,
+      // Update the coin balance in the user profile
+      await _appwrite.databases.updateDocument(
+        databaseId: 'arena_db',
+        collectionId: 'users',
+        documentId: userId,
+        data: {
+          'coinBalance': newBalance,
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
       );
       
       AppLogger().info('Added $amount coins to user $userId. New balance: $newBalance');
@@ -84,10 +92,15 @@ class CoinService {
       
       final newBalance = currentCoins - amount;
       
-      // Update the user's balance
-      await _appwrite.updateUserProfile(
-        userId: userId,
-        reputation: newBalance,
+      // Update the user's coin balance
+      await _appwrite.databases.updateDocument(
+        databaseId: 'arena_db',
+        collectionId: 'users',
+        documentId: userId,
+        data: {
+          'coinBalance': newBalance,
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
       );
       
       AppLogger().info('Deducted $amount coins from user $userId. New balance: $newBalance');
@@ -95,6 +108,76 @@ class CoinService {
     } catch (e) {
       AppLogger().error('Error deducting coins: $e');
       return false;
+    }
+  }
+
+  /// Send gift from one user to another (awards reputation to both users)
+  Future<bool> sendGift(String senderId, String receiverId, int giftAmount) async {
+    try {
+      AppLogger().info('🎁 Processing gift: $senderId → $receiverId ($giftAmount coins)');
+      
+      // Check if sender has enough coins
+      final senderCoins = await getUserCoins(senderId);
+      if (senderCoins < giftAmount) {
+        AppLogger().warning('Insufficient coins for gift. Sender has: $senderCoins, needs: $giftAmount');
+        return false;
+      }
+      
+      // Deduct coins from sender
+      final deductSuccess = await deductCoins(senderId, giftAmount);
+      if (!deductSuccess) {
+        return false;
+      }
+      
+      // Award reputation to sender for being generous
+      await _reputationService.awardGiftSent(senderId, giftAmount);
+      
+      // Award reputation to receiver for receiving community support
+      await _reputationService.awardGiftReceived(receiverId, giftAmount);
+      
+      // Update gift statistics
+      await _updateGiftStatistics(senderId, receiverId, giftAmount);
+      
+      AppLogger().info('✅ Gift sent successfully and reputation awarded');
+      return true;
+    } catch (e) {
+      AppLogger().error('Error sending gift: $e');
+      return false;
+    }
+  }
+
+  /// Update gift statistics for both users
+  Future<void> _updateGiftStatistics(String senderId, String receiverId, int amount) async {
+    try {
+      // Update sender's gifts sent count
+      final senderProfile = await _appwrite.getUserProfile(senderId);
+      if (senderProfile != null) {
+        await _appwrite.databases.updateDocument(
+          databaseId: 'arena_db',
+          collectionId: 'users',
+          documentId: senderId,
+          data: {
+            'totalGiftsSent': senderProfile.totalGiftsSent + 1,
+            'updatedAt': DateTime.now().toIso8601String(),
+          },
+        );
+      }
+      
+      // Update receiver's gifts received count
+      final receiverProfile = await _appwrite.getUserProfile(receiverId);
+      if (receiverProfile != null) {
+        await _appwrite.databases.updateDocument(
+          databaseId: 'arena_db',
+          collectionId: 'users',
+          documentId: receiverId,
+          data: {
+            'totalGiftsReceived': receiverProfile.totalGiftsReceived + 1,
+            'updatedAt': DateTime.now().toIso8601String(),
+          },
+        );
+      }
+    } catch (e) {
+      AppLogger().error('Error updating gift statistics: $e');
     }
   }
 

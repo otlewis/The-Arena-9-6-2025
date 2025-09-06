@@ -279,6 +279,27 @@ class AppwriteTimerService {
     }
   }
 
+  /// Get all timers for a room (synchronous call)
+  Future<List<TimerState>> getRoomTimers(String roomId) async {
+    await _ensureInitialized();
+    
+    try {
+      final response = await _appwriteService.databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: _timersCollectionId,
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.orderDesc('\$createdAt'),
+        ],
+      );
+
+      return response.documents.map((doc) => _mapToTimerState(doc.data)).toList();
+    } catch (e) {
+      AppLogger().error('🕐 Error loading room timers: $e');
+      return [];
+    }
+  }
+
   /// Load all timers for a room
   Future<void> _loadRoomTimers(String roomId, StreamController<List<TimerState>> controller) async {
     try {

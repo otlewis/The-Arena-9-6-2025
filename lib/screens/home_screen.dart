@@ -25,11 +25,13 @@ import '../widgets/challenge_bell.dart';
 import '../widgets/audio_status_indicator.dart';
 import 'package:get_it/get_it.dart';
 import '../core/logging/app_logger.dart';
-import '../debug_coin_initializer.dart';
 import '../widgets/ping_notification_modal.dart';
 import '../models/moderator_judge.dart';
 import 'super_mod_dashboard.dart';
 import '../services/super_moderator_service.dart';
+import '../services/gamified_ranking_service.dart';
+import '../services/ranking_sync_service.dart';
+import 'rankings_screen.dart';
 // All test screen imports removed - files deleted
 
 class HomeScreen extends StatefulWidget {
@@ -43,7 +45,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final AppwriteService _appwrite = AppwriteService();
   final ThemeService _themeService = ThemeService();
   late final ChallengeMessagingService _messagingService;
+  final GamifiedRankingService _rankingService = GetIt.instance<GamifiedRankingService>();
+  final RankingSyncService _syncService = RankingSyncService();
   UserProfile? _currentUserProfile;
+  Map<String, dynamic>? _userRankingData;
   int _arenaRoleInvitations = 0;
   bool _isLoading = true;
   RealtimeSubscription? _pingSubscription;
@@ -56,6 +61,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _messagingService = GetIt.instance<ChallengeMessagingService>();
+    _syncService.initialize();
     _loadCurrentUserProfile();
     _setupArenaRoleInvitationListener();
     _setupChallengeDeclinedListener();
@@ -95,9 +101,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final currentUser = await _appwrite.getCurrentUser();
       if (currentUser != null) {
         final profile = await _appwrite.getUserProfile(currentUser.$id);
+        
+        // Load user ranking data from the proper ranking system
+        Map<String, dynamic>? rankingData;
+        try {
+          AppLogger().info('🎯 Loading ranking data for user: ${currentUser.$id}');
+          rankingData = await _rankingService.getUserCurrentStats(currentUser.$id);
+          
+        } catch (e) {
+          AppLogger().debug('Error loading user ranking data: $e');
+        }
+        
         if (mounted) {
           setState(() {
             _currentUserProfile = profile;
+            _userRankingData = rankingData;
             _isLoading = false;
           });
           // Check roles after profile is loaded
@@ -235,9 +253,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildHeader() {
-    return GestureDetector(
-      onLongPress: _showDebugOptions,
-      child: Container(
+    return Container(
         color: _themeService.isDarkMode 
             ? const Color(0xFF2D2D2D)
             : const Color(0xFFE8E8E8),
@@ -272,6 +288,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
+                          if (_userRankingData != null) ...[
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: _getTierGradient(_userRankingData!['tier'] ?? 'bronze'),
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${_getTierEmoji(_userRankingData!['tier'] ?? 'bronze')} ${(_userRankingData!['tier'] ?? 'bronze').toString().toUpperCase()}',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -476,47 +512,53 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                   child: Column(
                     children: [
-                      // Arena logo with neumorphic circle - smaller
+                      // Modern Arena logo with gradient background
                       AnimatedScaleIn(
                         delay: const Duration(milliseconds: 800),
                         curve: Curves.elasticOut,
                         child: Container(
-                          width: 80,
-                          height: 80,
+                          width: 90,
+                          height: 90,
                           decoration: BoxDecoration(
-                            color: _themeService.isDarkMode 
-                                ? const Color(0xFF3A3A3A)
-                                : const Color(0xFFF0F0F3),
-                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              colors: [
+                                Color(0xFF6B46C1), // Purple
+                                Color(0xFF8B5CF6), // Lighter purple
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(25),
                             boxShadow: [
                               BoxShadow(
-                                color: _themeService.isDarkMode 
-                                    ? Colors.white.withValues(alpha: 0.03)
-                                    : Colors.white.withValues(alpha: 0.7),
-                                offset: const Offset(-6, -6),
-                                blurRadius: 12,
-                              ),
-                              BoxShadow(
-                                color: _themeService.isDarkMode 
-                                    ? Colors.black.withValues(alpha: 0.5)
-                                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
-                                offset: const Offset(6, 6),
-                                blurRadius: 12,
+                                color: const Color(0xFF6B46C1).withOpacity(0.3),
+                                blurRadius: 15,
+                                offset: const Offset(0, 8),
                               ),
                             ],
                           ),
-                          child: Image.asset(
-                            'assets/images/3logo.png',
-                            width: 60,
-                            height: 60,
-                            fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Icon(
-                                Icons.gavel,
-                                size: 40,
-                                color: Color(0xFF8B5CF6),
-                              );
-                            },
+                          child: Center(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                width: 75,
+                                height: 75,
+                                color: Colors.white,
+                                child: Image.asset(
+                                  'assets/images/2logo.png',
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return const Icon(
+                                      Icons.gavel,
+                                      size: 40,
+                                      color: Color(0xFF8B5CF6),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -524,7 +566,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       const AnimatedFadeIn(
                         delay: Duration(milliseconds: 1000),
                         child: Text(
-                          'Welcome to The Arena',
+                          'Welcome to The Arena DTD',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -555,17 +597,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
                             _buildStatColumn(
-                              '${_currentUserProfile?.totalWins ?? 0}',
+                              '${_userRankingData?['monthlyWins'] ?? _currentUserProfile?.totalWins ?? 0}',
                               'Wins',
                             ),
                             _buildStatColumn(
-                              '${_currentUserProfile?.totalDebates ?? 0}',
-                              'Debates',
+                              '${_userRankingData?['monthlyPoints'] ?? 0}',
+                              'Points',
                             ),
                             _buildStatColumn(
-                              _currentUserProfile?.reputation != null
-                                  ? (_currentUserProfile!.reputation / 100).toStringAsFixed(1)
-                                  : '0.0',
+                              _userRankingData?['globalRank']?.toString() ?? '—',
                               'Rank',
                             ),
                           ],
@@ -576,7 +616,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
               ),
             ],
-          ),
           ),
         ),
       ),
@@ -1019,8 +1058,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ),
             const SizedBox(width: 12),
-            // Empty space to maintain grid
-            Expanded(child: Container()),
+            Expanded(
+              child: AnimatedScaleIn(
+                delay: const Duration(milliseconds: 2100),
+                child: _buildFeatureCard('Rankings', 'Rankings', () => _navigateToRankings()),
+              ),
+            ),
           ],
         ),
       ],
@@ -1033,11 +1076,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       'TheArena': Icons.gavel, // Use gavel icon for Arena
       'FindUsers': 'assets/icons/find.png',
       'Debate': 'assets/images/1v1.png',
-      'Take': 'assets/images/1take.png',
+      'Take': 'assets/icons/debatetakesdiscuss.png',
       'Discussion': 'assets/images/discussions1.png',
       'MySlides': Icons.slideshow, // Use slideshow icon for My Slides
       'DebateClubs': 'assets/icons/debate clubs.png',
       'Tournaments': 'assets/images/bracket.png',
+      'Rankings': 'assets/icons/rank1.png',
     };
     
     final iconAsset = iconMap[feature];
@@ -1210,6 +1254,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         content: Text('Tournament feature coming soon!'),
         backgroundColor: Colors.orange,
         duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _navigateToRankings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const RankingsScreen(),
       ),
     );
   }
@@ -1499,45 +1552,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _showDebugOptions() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              '🔧 Debug Options',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 20),
-            DebugCoinInitializer.debugButton(context),
-            const SizedBox(height: 10),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                DebugCoinInitializer.showAppwriteInstructions(context);
-              },
-              icon: const Icon(Icons.help_outline),
-              label: const Text('📋 Appwrite Setup Guide'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget? _buildFloatingActionButton() {
     // Check if current user is a super moderator
@@ -1568,6 +1582,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return null;
   }
 
+  List<Color> _getTierGradient(String tier) {
+    switch (tier.toLowerCase()) {
+      case 'diamond':
+        return [const Color(0xFF00D4FF), const Color(0xFF0099CC)]; // Cyan gradient
+      case 'platinum':
+        return [const Color(0xFF9945FF), const Color(0xFF7C3AED)]; // Purple gradient
+      case 'gold':
+        return [const Color(0xFFFFD700), const Color(0xFFDAA520)]; // Gold gradient
+      case 'silver':
+        return [const Color(0xFF8C8C8C), const Color(0xFF696969)]; // Silver gradient
+      case 'bronze':
+      default:
+        return [const Color(0xFFCD7F32), const Color(0xFFA0522D)]; // Bronze gradient
+    }
+  }
 
+  String _getTierEmoji(String tier) {
+    switch (tier.toLowerCase()) {
+      case 'diamond':
+        return '💠';
+      case 'platinum':
+        return '💎';
+      case 'gold':
+        return '🥇';
+      case 'silver':
+        return '🥈';
+      case 'bronze':
+      default:
+        return '🥉';
+    }
+  }
 }
 
