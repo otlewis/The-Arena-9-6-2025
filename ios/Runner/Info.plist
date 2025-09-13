@@ -81,5 +81,17 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.example.arena</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.example.arena</string>
+				<string>com.googleusercontent.apps.18237618385-159de79359b3a43e52edf0</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

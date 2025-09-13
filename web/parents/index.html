@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>For Parents | The Arena DTD - Teen Safety & Parental Control</title>
+    <meta name="description" content="Learn how The Arena DTD protects teen users with parental consent, supervision, and comprehensive safety features. Full parental control over your teen's account.">
+    <meta name="keywords" content="teen safety, parental consent, debate platform, COPPA compliance, teen supervision">
+    
+    <!-- Open Graph / Social Media -->
+    <meta property="og:title" content="Parent Information - The Arena DTD">
+    <meta property="og:description" content="Comprehensive teen safety and parental control information">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://dialecticlabs.com/parents">
+    
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+    
+    <!-- Google Analytics - Replace with your tracking ID -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GA_TRACKING_ID"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'GA_TRACKING_ID');
+    </script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8fafc;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #6B46C1 0%, #8B5CF6 100%);
+            color: white;
+            padding: 60px 0;
+            text-align: center;
+        }
+        
+        .hero-title {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 20px;
+        }
+        
+        .hero-subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        /* Navigation */
+        .nav {
+            background: white;
+            padding: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .nav ul {
+            list-style: none;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 30px;
+        }
+        
+        .nav a {
+            text-decoration: none;
+            color: #4B5563;
+            font-weight: 600;
+            padding: 10px 15px;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        
+        .nav a:hover {
+            background-color: #6B46C1;
+            color: white;
+        }
+        
+        /* Content Sections */
+        .section {
+            padding: 60px 0;
+        }
+        
+        .section:nth-child(even) {
+            background-color: white;
+        }
+        
+        .section h2 {
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            color: #1F2937;
+            text-align: center;
+        }
+        
+        .section h3 {
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            color: #374151;
+        }
+        
+        /* Feature Grid */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin: 40px 0;
+        }
+        
+        .feature-card {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border: 1px solid #E5E7EB;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 12px rgba(0,0,0,0.1);
+        }
+        
+        .feature-icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+        }
+        
+        /* Call-to-Action */
+        .cta {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+            color: white;
+            padding: 60px 0;
+            text-align: center;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background: white;
+            color: #059669;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin: 20px 10px;
+            transition: transform 0.2s;
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+        }
+        
+        /* FAQ */
+        .faq-item {
+            background: white;
+            margin: 20px 0;
+            border-radius: 12px;
+            border: 1px solid #E5E7EB;
+            overflow: hidden;
+            transition: box-shadow 0.2s;
+        }
+        
+        .faq-item:hover {
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        
+        .faq-question {
+            background: #F9FAFB;
+            padding: 20px;
+            cursor: pointer;
+            font-weight: 600;
+            border-bottom: 1px solid #E5E7EB;
+            position: relative;
+        }
+        
+        .faq-question:after {
+            content: '+';
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.5rem;
+            color: #6B46C1;
+            transition: transform 0.2s;
+        }
+        
+        .faq-item.open .faq-question:after {
+            transform: translateY(-50%) rotate(45deg);
+        }
+        
+        .faq-answer {
+            padding: 20px;
+            display: none;
+        }
+        
+        .faq-item.open .faq-answer {
+            display: block;
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        /* Footer */
+        .footer {
+            background: #1F2937;
+            color: white;
+            padding: 40px 0;
+            text-align: center;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero-title {
+                font-size: 2rem;
+            }
+            
+            .nav ul {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .section {
+                padding: 40px 0;
+            }
+            
+            .section h2 {
+                font-size: 2rem;
+            }
+            
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .two-column-grid {
+                grid-template-columns: 1fr !important;
+            }
+        }
+        
+        /* Trust Indicators */
+        .trust-badges {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin: 40px 0;
+            flex-wrap: wrap;
+        }
+        
+        .badge {
+            text-align: center;
+            color: #6B7280;
+            transition: transform 0.2s;
+        }
+        
+        .badge:hover {
+            transform: scale(1.05);
+        }
+        
+        .badge-icon {
+            font-size: 2rem;
+            color: #059669;
+            margin-bottom: 10px;
+        }
+        
+        /* Two column layout */
+        .two-column-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin: 40px 0;
+        }
+        
+        .rights-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .rights-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid #E5E7EB;
+            transition: background-color 0.2s;
+        }
+        
+        .rights-list li:hover {
+            background-color: #F9FAFB;
+            margin: 0 -10px;
+            padding-left: 10px;
+            padding-right: 10px;
+            border-radius: 4px;
+        }
+        
+        /* Contact card */
+        .contact-card {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            max-width: 600px;
+            margin: 0 auto;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        
+        .contact-divider {
+            margin: 30px 0;
+            border: none;
+            border-top: 1px solid #E5E7EB;
+        }
+        
+        /* Loading animation for page elements */
+        .fade-in {
+            animation: fadeInUp 0.6s ease-out;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header fade-in">
+        <div class="container">
+            <h1 class="hero-title">🛡️ Parent Information</h1>
+            <p class="hero-subtitle">Everything you need to know about your teen's safety on The Arena DTD</p>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="container">
+            <ul>
+                <li><a href="#overview">Overview</a></li>
+                <li><a href="#safety">Safety Features</a></li>
+                <li><a href="#rights">Your Rights</a></li>
+                <li><a href="#faq">FAQ</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Overview Section -->
+    <section id="overview" class="section">
+        <div class="container">
+            <h2>Your Teen's Safety is Our Priority</h2>
+            <div class="feature-grid">
+                <div class="feature-card fade-in">
+                    <div class="feature-icon">👥</div>
+                    <h3>Ages 13-17 Only</h3>
+                    <p>Children under 13 cannot use the platform. Teens 13-17 require your explicit consent and supervision.</p>
+                </div>
+                <div class="feature-card fade-in">
+                    <div class="feature-icon">🎓</div>
+                    <h3>Educational Focus</h3>
+                    <p>Structured debates and discussions that build critical thinking, communication skills, and civic engagement.</p>
+                </div>
+                <div class="feature-card fade-in">
+                    <div class="feature-icon">🛡️</div>
+                    <h3>No Advertising to Teens</h3>
+                    <p>We never use teen accounts for targeted advertising. Their safety comes before profits.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Trust Badges -->
+    <section class="section">
+        <div class="container">
+            <div class="trust-badges">
+                <div class="badge">
+                    <div class="badge-icon">🔒</div>
+                    <strong>COPPA Compliant</strong><br>
+                    Children's Online Privacy Protection Act
+                </div>
+                <div class="badge">
+                    <div class="badge-icon">🌍</div>
+                    <strong>GDPR Ready</strong><br>
+                    European Privacy Standards
+                </div>
+                <div class="badge">
+                    <div class="badge-icon">⚖️</div>
+                    <strong>Ohio LLC</strong><br>
+                    US-based legal entity
+                </div>
+                <div class="badge">
+                    <div class="badge-icon">📧</div>
+                    <strong>Direct Contact</strong><br>
+                    Real support team
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Safety Features -->
+    <section id="safety" class="section">
+        <div class="container">
+            <h2>Comprehensive Safety Features</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">👮</div>
+                    <h3>Content Moderation</h3>
+                    <p>Trained human moderators oversee all debates and discussions. Inappropriate content is removed immediately.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⏰</div>
+                    <h3>Time Controls</h3>
+                    <p>Structured debate sessions with built-in time limits prevent excessive usage.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🚨</div>
+                    <h3>Reporting System</h3>
+                    <p>Easy reporting tools allow teens to flag inappropriate behavior or content.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔐</div>
+                    <h3>Data Protection</h3>
+                    <p>End-to-end encryption for voice/video. Minimal data collection. No data selling ever.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📚</div>
+                    <h3>Educational Topics</h3>
+                    <p>Curated debate topics focused on civics, current events, and academic subjects.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">👥</div>
+                    <h3>Peer Learning</h3>
+                    <p>Teens learn from structured interaction with peers in a supervised environment.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Parental Rights -->
+    <section id="rights" class="section">
+        <div class="container">
+            <h2>Your Rights & Responsibilities</h2>
+            
+            <div class="two-column-grid">
+                <div>
+                    <h3>✅ You Have the Right To:</h3>
+                    <ul class="rights-list">
+                        <li>📋 Review your teen's account information</li>
+                        <li>🗑️ Request immediate account deletion</li>
+                        <li>❌ Withdraw consent anytime</li>
+                        <li>📁 Export your teen's data</li>
+                        <li>📞 Contact support directly</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h3>🎯 Your Responsibilities:</h3>
+                    <ul class="rights-list">
+                        <li>👁️ Supervise your teen's usage</li>
+                        <li>📖 Ensure they follow community guidelines</li>
+                        <li>💬 Discuss appropriate online behavior</li>
+                        <li>🚨 Monitor for any concerning activity</li>
+                        <li>📧 Keep contact information current</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta">
+        <div class="container">
+            <h2>Questions About Your Teen's Account?</h2>
+            <p style="font-size: 1.2rem; margin: 20px 0;">We're here to help. Contact us directly for immediate assistance.</p>
+            <a href="mailto:thearenadtd@gmail.com?subject=Teen Account Question" class="cta-button">📧 Email Support</a>
+            <a href="#faq" class="cta-button">❓ View FAQ</a>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section id="faq" class="section">
+        <div class="container">
+            <h2>Frequently Asked Questions</h2>
+            
+            <div class="faq-item">
+                <div class="faq-question">How do I delete my teen's account?</div>
+                <div class="faq-answer">
+                    <p>Email us at <strong>thearenadtd@gmail.com</strong> with your teen's name and account email. We'll process the deletion within 24 hours and confirm when it's complete. All personal data will be permanently removed.</p>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">What information do you collect about teen users?</div>
+                <div class="faq-answer">
+                    <p>We collect only the minimum necessary:</p>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li>Account information (email, username, birth date)</li>
+                        <li>Debate participation (posts, comments)</li>
+                        <li>Voice/video during debates (not stored permanently)</li>
+                        <li>Optional parent email (if provided)</li>
+                        <li>Basic technical data (device type, IP for security)</li>
+                    </ul>
+                    <p>We <strong>never</strong> use this data for advertising or sell it to third parties.</p>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">How do you ensure my teen's safety during debates?</div>
+                <div class="faq-answer">
+                    <p>Multiple safety layers protect your teen:</p>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li><strong>Human Moderators:</strong> Trained staff oversee all debates</li>
+                        <li><strong>Content Guidelines:</strong> Clear rules against harassment or inappropriate content</li>
+                        <li><strong>Reporting Tools:</strong> Easy one-click reporting of problems</li>
+                        <li><strong>Time Limits:</strong> Structured sessions prevent excessive usage</li>
+                        <li><strong>Educational Focus:</strong> Topics are curated for learning</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">Can I monitor my teen's activity on the platform?</div>
+                <div class="faq-answer">
+                    <p>Yes, as their parent/guardian you can:</p>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li>Request a full report of their account activity</li>
+                        <li>See what debates they've participated in</li>
+                        <li>Review any content they've posted</li>
+                        <li>Contact us for real-time concerns</li>
+                    </ul>
+                    <p>Email <strong>thearenadtd@gmail.com</strong> to request an activity report.</p>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">What happens if policies are updated?</div>
+                <div class="faq-answer">
+                    <p>When we update our Terms of Service or Privacy Policy:</p>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li>Your teen's account is temporarily restricted</li>
+                        <li>You receive an email notification (if provided)</li>
+                        <li>New consent is required before they can continue using the app</li>
+                        <li>You can review all changes before deciding</li>
+                    </ul>
+                    <p>This ensures you always know what you're agreeing to.</p>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">How do you handle cyberbullying or harassment?</div>
+                <div class="faq-answer">
+                    <p>Zero tolerance policy for harassment:</p>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li><strong>Immediate Action:</strong> Reported harassment is investigated within hours</li>
+                        <li><strong>Account Suspension:</strong> Violators lose access immediately</li>
+                        <li><strong>Parent Notification:</strong> All parents involved are contacted</li>
+                        <li><strong>Support Resources:</strong> We provide guidance on next steps</li>
+                    </ul>
+                    <p>Your teen's safety is non-negotiable.</p>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">Is The Arena DTD free to use?</div>
+                <div class="faq-answer">
+                    <p>The Arena DTD offers both free and premium features. Teen users can participate in debates and discussions at no cost. Premium features may be available but are not required for the core educational experience.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="section">
+        <div class="container" style="text-align: center;">
+            <h2>Contact Information</h2>
+            <div class="contact-card">
+                <h3>📧 Email Support</h3>
+                <p style="font-size: 1.2rem; margin: 20px 0;"><strong>thearenadtd@gmail.com</strong></p>
+                <p>Response time: Within 24 hours</p>
+                
+                <hr class="contact-divider">
+                
+                <h3>🏢 Company Information</h3>
+                <p><strong>Dialectic Labs, LLC</strong><br>
+                Ohio, United States</p>
+                
+                <hr class="contact-divider">
+                
+                <h3>⚡ Emergency Contact</h3>
+                <p>For urgent safety concerns, email us immediately at <strong>thearenadtd@gmail.com</strong> with "URGENT" in the subject line.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 The Arena DTD - Dialectic Labs, LLC. All rights reserved.</p>
+            <p style="margin-top: 10px; opacity: 0.8;">Committed to teen safety, parental control, and educational excellence.</p>
+        </div>
+    </footer>
+
+    <script>
+        // FAQ Toggle with smooth animations
+        document.querySelectorAll('.faq-question').forEach(question => {
+            question.addEventListener('click', () => {
+                const item = question.closest('.faq-item');
+                const wasOpen = item.classList.contains('open');
+                
+                // Close all other items
+                document.querySelectorAll('.faq-item').forEach(otherItem => {
+                    otherItem.classList.remove('open');
+                });
+                
+                // Toggle current item
+                if (!wasOpen) {
+                    item.classList.add('open');
+                }
+            });
+        });
+
+        // Smooth Scrolling
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Intersection Observer for animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        // Observe all feature cards for staggered animations
+        document.querySelectorAll('.feature-card').forEach((card, index) => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(20px)';
+            card.style.transition = `opacity 0.6s ease-out ${index * 0.1}s, transform 0.6s ease-out ${index * 0.1}s`;
+            observer.observe(card);
+        });
+
+        // Track interactions for analytics
+        function trackInteraction(action, element) {
+            if (typeof gtag !== 'undefined') {
+                gtag('event', action, {
+                    'event_category': 'Parent Page',
+                    'event_label': element
+                });
+            }
+        }
+
+        // Track FAQ clicks
+        document.querySelectorAll('.faq-question').forEach(question => {
+            question.addEventListener('click', () => {
+                trackInteraction('FAQ_Open', question.textContent);
+            });
+        });
+
+        // Track email clicks
+        document.querySelectorAll('a[href^="mailto"]').forEach(link => {
+            link.addEventListener('click', () => {
+                trackInteraction('Email_Click', 'Support_Contact');
+            });
+        });
+
+        // Track section views
+        const sections = ['overview', 'safety', 'rights', 'faq', 'contact'];
+        sections.forEach(sectionId => {
+            const section = document.getElementById(sectionId);
+            if (section) {
+                observer.observe(section);
+            }
+        });
+    </script>
+</body>
+</html>

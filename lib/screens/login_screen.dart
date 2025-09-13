@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../services/appwrite_service.dart';
 import 'forgot_password_screen.dart';
 import 'policy_viewer_screen.dart';
+import 'parental_consent_screen.dart';
+import '../services/consent_logging_service.dart';
 
 class LoginScreen extends StatefulWidget {
   final VoidCallback? onLoginSuccess;
@@ -52,13 +54,36 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
       
-      // Check if user is 18+
+      // Check age and handle teen users (13-17)
       final age = DateTime.now().difference(_selectedBirthDate!).inDays ~/ 365;
-      if (age < 18) {
+      if (age < 13) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('You must be 18 or older to use The Arena DTD'),
+            content: Text('You must be at least 13 years old to use The Arena DTD'),
             backgroundColor: Color(0xFFFF2400),
+          ),
+        );
+        return;
+      }
+      
+      // If user is 13-17, show parental consent screen
+      if (age >= 13 && age < 18) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ParentalConsentScreen(
+              email: _emailController.text.trim(),
+              password: _passwordController.text,
+              name: _nameController.text.trim(),
+              birthDate: _selectedBirthDate!,
+              onConsentGiven: (String? parentEmail) {
+                Navigator.pop(context);
+                _proceedWithSignup(isTeenUser: true, parentEmail: parentEmail);
+              },
+              onConsentDeclined: () {
+                Navigator.pop(context);
+              },
+            ),
           ),
         );
         return;
@@ -75,6 +100,11 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     }
 
+    // For 18+ users, proceed directly with signup
+    _proceedWithSignup();
+  }
+  
+  Future<void> _proceedWithSignup({bool isTeenUser = false, String? parentEmail}) async {
     setState(() => _isLoading = true);
     
     // Capture ScaffoldMessenger reference before async operations
@@ -98,20 +128,55 @@ class _LoginScreenState extends State<LoginScreen> {
         // Create user profile in database
         final user = await _appwrite.getCurrentUser();
         if (user != null) {
+          final age = DateTime.now().difference(_selectedBirthDate!).inDays ~/ 365;
           await _appwrite.createUserProfile(
             userId: user.$id,
             name: _nameController.text.trim(),
             email: _emailController.text.trim(),
             metadata: {
               'birthDate': _selectedBirthDate!.toIso8601String(),
+              'age': age,
+              'isTeenUser': isTeenUser,
+              'parentalConsentGiven': isTeenUser,
+              'parentalConsentDate': isTeenUser ? DateTime.now().toIso8601String() : null,
+              'parentEmail': parentEmail,
               'tosAccepted': true,
               'tosAcceptedAt': DateTime.now().toIso8601String(),
-              'tosVersion': '1.0',
+              'tosVersion': '1.1',
               'privacyAccepted': true,
               'privacyAcceptedAt': DateTime.now().toIso8601String(),
-              'privacyVersion': '1.0',
+              'privacyVersion': '1.1',
             },
           );
+
+          // Log consent event for teen users
+          if (isTeenUser) {
+            await ConsentLoggingService.logConsentEvent(
+              userId: user.$id,
+              action: 'given',
+              parentEmail: parentEmail,
+              reason: 'Initial parental consent during signup',
+              tosVersion: '1.1',
+              privacyVersion: '1.1',
+              additionalMetadata: {
+                'signupFlow': 'mobile_app',
+                'userAge': age,
+              },
+            );
+
+            // Send parental notification if email provided
+            if (parentEmail != null) {
+              await ConsentLoggingService.sendParentalNotification(
+                parentEmail: parentEmail,
+                notificationType: 'account_created',
+                teenName: _nameController.text.trim(),
+                additionalData: {
+                  'userAge': age,
+                  'signupDate': DateTime.now().toIso8601String(),
+                },
+              );
+            }
+          }
         }
         
         if (mounted) {
@@ -310,7 +375,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
+                        color: Colors.black.withValues(alpha: 0.05),
                         blurRadius: 20,
                         offset: const Offset(0, 10),
                         spreadRadius: 0,
@@ -335,7 +400,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderRadius: BorderRadius.circular(30),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF6B46C1).withOpacity(0.3),
+                              color: const Color(0xFF6B46C1).withValues(alpha: 0.3),
                               blurRadius: 20,
                               offset: const Offset(0, 10),
                             ),
@@ -409,7 +474,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
+                            color: Colors.black.withValues(alpha: 0.05),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -423,7 +488,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           fontWeight: FontWeight.w500,
                         ),
                         decoration: _buildModernInputDecoration(
-                          labelText: 'Full Name',
+                          labelText: 'Display Name',
                           icon: Icons.person,
                         ),
                         validator: (value) {
@@ -444,7 +509,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
+                            color: Colors.black.withValues(alpha: 0.05),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -454,7 +519,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         onTap: () async {
                           final DateTime? picked = await showDatePicker(
                             context: context,
-                            initialDate: DateTime.now().subtract(const Duration(days: 6570)), // 18 years ago
+                            initialDate: DateTime.now().subtract(const Duration(days: 4745)), // 13 years ago
                             firstDate: DateTime(1900),
                             lastDate: DateTime.now(),
                             builder: (context, child) {
@@ -508,7 +573,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               Text(
                                 _selectedBirthDate == null
-                                    ? 'Date of Birth (Must be 18+)'
+                                    ? 'Date of Birth (Must be 13+)'
                                     : '${_selectedBirthDate!.month}/${_selectedBirthDate!.day}/${_selectedBirthDate!.year}',
                                 style: TextStyle(
                                   color: _selectedBirthDate == null
@@ -531,7 +596,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: Colors.black.withValues(alpha: 0.05),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -564,7 +629,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: Colors.black.withValues(alpha: 0.05),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -684,7 +749,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'You must be 18 years or older to use The Arena DTD',
+                            'You must be 13 years or older to use The Arena DTD. Teens 13-17 require parental consent.',
                             style: TextStyle(
                               color: Colors.grey.shade600,
                               fontSize: 12,
@@ -785,12 +850,12 @@ class _LoginScreenState extends State<LoginScreen> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Image.asset(
-                                'assets/images/google_logo.png',
-                                height: 20,
+                                'assets/images/google2.png',
+                                height: 34,
                                 errorBuilder: (context, error, stackTrace) {
                                   return Container(
-                                    width: 20,
-                                    height: 20,
+                                    width: 34,
+                                    height: 34,
                                     decoration: BoxDecoration(
                                       color: Colors.red.shade100,
                                       shape: BoxShape.circle,
@@ -800,6 +865,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       style: TextStyle(
                                         color: Colors.red,
                                         fontWeight: FontWeight.bold,
+                                        fontSize: 14,
                                       ),
                                     ),
                                   );

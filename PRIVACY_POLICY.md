@@ -2,7 +2,7 @@
 **The Arena DTD**
 
 *Last Updated: September 2025*
-*Version: 1.0*
+*Version: 1.1*
 
 ## 1. Introduction
 
@@ -10,7 +10,13 @@ This Privacy Policy explains how The Arena DTD ("we," "us," "the App") collects,
 
 ## 2. Age Requirement
 
-The Arena DTD is only for users who are 18 years of age or older. We do not knowingly collect personal information from anyone under 18.
+The Arena DTD is only for users who are 13 years of age or older.
+
+If you are under 13, you may not use the App.
+
+If you are between 13 and 17, you may only use the App with the consent and supervision of a parent or legal guardian, who is responsible for your use of the App.
+
+**For Parents:** Complete information about teen safety, parental rights, data practices, and account management is available at https://dialecticlabs.com/parents
 
 ## 3. Information We Collect
 
@@ -109,6 +115,8 @@ If you are a California resident, you have the right to:
 
 Your information may be transferred to and processed in countries other than your own. We ensure appropriate safeguards are in place for such transfers in compliance with applicable laws.
 
+If you are a resident of the United States, your data is processed under the laws of the State of Ohio, where Dialectic Labs, LLC is organized.
+
 ## 9. Third-Party Services
 
 ### 9.1 Integrated Services
@@ -134,9 +142,15 @@ The mobile app does not use cookies. The web version may use essential cookies f
 
 In the event of a data breach affecting your personal information, we will notify affected users within 72 hours via email and in-app notification.
 
-## 12. Children's Privacy
+## 12. Children's & Teens' Privacy
 
-The Arena DTD is not intended for children under 18. If we learn we have collected information from someone under 18, we will delete that information immediately.
+We do not knowingly collect personal information from children under 13. If we learn we have collected information from someone under 13, we will delete it immediately.
+
+Teen users aged 13–17 may use the App with parental or guardian consent. We collect only the information necessary to operate the App (such as username, email, and participation data).
+
+We do not use teen account data for targeted advertising.
+
+Parents and guardians may contact us at thearenadtd@gmail.com to review or request deletion of their teen's account or data.
 
 ## 13. Changes to This Policy
 
