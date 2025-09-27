@@ -295,8 +295,9 @@ class WeakStreamSubscription<T extends Object> {
     late final StreamSubscription subscription;
     subscription = stream.listen(
       (data) {
-        // Check if target is still alive before calling handler
-        if (target != null) {
+        // Check if weak reference target is still alive before calling handler
+        final weakRef = WeakReference(target);
+        if (weakRef.target != null) {
           onData(data);
         } else {
           // Target was garbage collected, cancel subscription

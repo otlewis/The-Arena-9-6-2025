@@ -2732,7 +2732,6 @@ class AppwriteService {
       }
 
       // 2. Update arena room status to completed (with retry logic)
-      bool roomStatusUpdated = false;
       for (int attempt = 1; attempt <= 2; attempt++) {
         try {
           await databases.updateDocument(
@@ -2744,7 +2743,6 @@ class AppwriteService {
               'endedAt': DateTime.now().toIso8601String(),
             },
           );
-          roomStatusUpdated = true;
           AppLogger().debug('✅ Room status updated on attempt $attempt');
           break;
         } catch (e) {
@@ -5282,7 +5280,7 @@ class AppwriteService {
                 onUpdate({'type': 'reload', 'roomId': roomId});
               } else {
                 // Handle create/update events
-                final data = payload as Map<String, dynamic>;
+                final data = payload;
                 if (data['roomId'] == roomId) {
                   onUpdate(data);
                 }

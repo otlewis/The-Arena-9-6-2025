@@ -88,57 +88,6 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     }
   }
 
-  void _showChallengeRestrictedMessage() {
-    // BETA TESTING: This method should never be called during beta testing
-    // since all users are forced to be premium, but adding fallback just in case
-    AppLogger().warning('🧪 BETA: Challenge restriction message called - this should not happen during beta testing');
-
-    final currentUserState = ref.read(userProfileProvider('current'));
-
-    // BETA TESTING: Force premium status
-    final isCurrentUserPremium = true; // Force premium for beta testing
-
-    /* TODO: Restore original premium logic when beta testing is complete
-    final isCurrentUserPremium = currentUserState.userProfile?.isPremium == true;
-    */
-
-    String message;
-    if (!isCurrentUserPremium) {
-      message = 'Premium subscription required to send challenges';
-    } else {
-      message = 'You can only challenge other premium subscribers';
-    }
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.workspace_premium, color: Colors.amber, size: 20),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: deepPurple,
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-        action: !isCurrentUserPremium ? SnackBarAction(
-          label: 'Upgrade',
-          textColor: Colors.amber,
-          onPressed: () {
-            Navigator.pushNamed(context, '/premium_store');
-          },
-        ) : null,
-      ),
-    );
-  }
 
   Future<void> _showChallengeModal() async {
     final notifier = ref.read(userProfileProvider(widget.userId).notifier);
@@ -498,27 +447,15 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     final notifier = ref.read(userProfileProvider(widget.userId).notifier);
     final canInteract = notifier.canInteract;
     
-    // Get current user's premium status for challenge gating
-    final currentUserState = ref.watch(userProfileProvider('current'));
-
-    // BETA TESTING: Force all users to be premium during beta
-    final isCurrentUserPremium = true; // Force premium for beta testing
-    final isTargetUserPremium = true; // Force premium for beta testing
-    final canChallenge = isCurrentUserPremium && isTargetUserPremium;
+    // BETA TESTING: Force all users to be premium during beta - challenges always enabled
+    AppLogger().info('🧪 BETA MODE: Challenge enabled for all users in user_profile_screen');
 
     /* TODO: Restore original premium logic when beta testing is complete
+    final currentUserState = ref.watch(userProfileProvider('current'));
     final isCurrentUserPremium = currentUserState.userProfile?.isPremium == true;
     final isTargetUserPremium = userProfile.isPremium == true;
     final canChallenge = isCurrentUserPremium && isTargetUserPremium;
     */
-    
-    // Debug logging for premium status
-    AppLogger().info('🧪 BETA MODE: Challenge enabled for all users in user_profile_screen');
-    AppLogger().debug('🔍 Challenge Debug:');
-    AppLogger().debug('  Current user premium: $isCurrentUserPremium (FORCED FOR BETA - actual: ${currentUserState.userProfile?.isPremium})');
-    AppLogger().debug('  Target user premium: $isTargetUserPremium (FORCED FOR BETA - actual: ${userProfile.isPremium})');
-    AppLogger().debug('  Target user name: ${userProfile.name}');
-    AppLogger().debug('  Can challenge: $canChallenge');
     
     return Column(
       children: [
@@ -615,12 +552,12 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: canChallenge ? _showChallengeModal : _showChallengeRestrictedMessage,
+                  onPressed: _showChallengeModal, // Always enabled in beta
                   icon: const Icon(Icons.flash_on),
                   label: const Text('Challenge'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: canChallenge ? scarletRed : Colors.grey[400],
-                    foregroundColor: canChallenge ? Colors.white : Colors.grey[600],
+                    backgroundColor: scarletRed, // Always enabled in beta
+                    foregroundColor: Colors.white, // Always enabled in beta
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                 ),

@@ -1,4 +1,4 @@
-import 'package:appwrite/appwrite.dart';
+// import 'package:appwrite/appwrite.dart'; // Commented out - deprecated APIs
 
 // Script to create the speaker_queue collection for discussions rooms
 // NOTE: This script uses deprecated Appwrite APIs that are not yet replaced in Flutter SDK
@@ -6,13 +6,13 @@ void main() async {
   // ignore: avoid_print
   print('🔥 Creating speaker_queue collection...');
 
-  // Initialize Appwrite client
-  final client = Client()
-      .setEndpoint('https://cloud.appwrite.io/v1')
-      .setProject('683a37a8003719978879'); // Your project ID
-      // .setKey('your-api-key'); // Replace with your API key - deprecated method
+  // Initialize Appwrite client - commented out as APIs are deprecated
+  // final client = Client()
+  //     .setEndpoint('https://cloud.appwrite.io/v1')
+  //     .setProject('683a37a8003719978879'); // Your project ID
+  //     // .setKey('your-api-key'); // Replace with your API key - deprecated method
 
-  final databases = Databases(client);
+  // final databases = Databases(client); // Commented out as APIs are deprecated
 
   try {
     // Create the speaker_queue collection

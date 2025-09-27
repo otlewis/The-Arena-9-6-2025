@@ -11,6 +11,24 @@ Arena is a Flutter application for real-time debates and discussions with multip
 4. **Timer System**: Synchronized timers across all participants with audio feedback
 5. **Notification System**: Real-time notifications for challenges, messages, and room events
 
+## CRITICAL SAFETY GUIDELINES
+
+### File Operations Safety Rules
+1. **NEVER move, delete, or reorganize core project files** without explicit permission
+2. **Always ask before touching file structure** - only suggest commands, don't execute them
+3. **When dealing with dependency issues, focus only on:**
+   - Updating pubspec.yaml
+   - Suggesting flutter/pod commands to run
+   - **NOT touching actual project files**
+4. **Be extra cautious with any `mv`, `rm`, or file structure commands**
+5. **Don't change the UI layout or the app features when fixing errors, warnings, and issues**
+
+### Before Making Any File Changes
+- Always confirm the scope of changes with the user
+- Ask explicit permission for any destructive operations
+- Suggest commands for the user to run rather than executing them
+- Focus on code changes and configuration updates, not file reorganization
+
 ## Essential Commands
 
 ### Development

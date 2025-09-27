@@ -1412,13 +1412,6 @@ class LiveKitService extends ChangeNotifier {
     return forceSetupArenaAudio();
   }
 
-  /// Auto-fix arena audio on connection (runs automatically) - DISABLED FOR SAFETY
-  Future<void> _forceArenaAudioOnConnect() async {
-    AppLogger().debug('🏟️ ARENA AUTO-CONNECT: Auto-fix disabled to prevent UI crashes');
-    AppLogger().debug('🏟️ ARENA AUTO-CONNECT: Use manual methods instead');
-    // This method is disabled because it was causing screen crashes
-    // Use forceUnmute() or emergencyEnableArenaAudio() manually instead
-  }
 
   /// Emergency method to force enable audio bypassing token restrictions
   Future<void> emergencyEnableArenaAudio() async {
@@ -1609,68 +1602,10 @@ class LiveKitService extends ChangeNotifier {
     }
   }
 
-  /// Aggressive arena audio setup for token mismatch issues
-  Future<void> _aggressiveArenaAudioSetup(LocalParticipant participant) async {
-    AppLogger().debug('🏟️ AGGRESSIVE ARENA SETUP: Starting aggressive audio setup');
-
-    try {
-      // Step 1: Disable any existing audio tracks
-      AppLogger().debug('🏟️ AGGRESSIVE SETUP: Disabling existing audio tracks');
-      await participant.setMicrophoneEnabled(false);
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      // Step 2: Wait for track cleanup
-      AppLogger().debug('🏟️ AGGRESSIVE SETUP: Waiting for track cleanup');
-      await Future.delayed(const Duration(milliseconds: 1000));
-
-      // Step 3: Create new audio track with explicit permissions
-      AppLogger().debug('🏟️ AGGRESSIVE SETUP: Creating new audio track');
-      final audioTrack = await LocalAudioTrack.create();
-
-      // Step 4: Publish the track manually
-      AppLogger().debug('🏟️ AGGRESSIVE SETUP: Publishing audio track manually');
-      await participant.publishAudioTrack(audioTrack);
-
-      // Step 5: Update state
-      if (!_isDisposed) {
-        _isMuted = false;
-        notifyListeners();
-      }
-
-      AppLogger().debug('✅ AGGRESSIVE SETUP: Successfully enabled audio with new track');
-
-    } catch (e) {
-      AppLogger().debug('❌ AGGRESSIVE SETUP: Failed: $e');
-
-      // Last resort: Try to request a completely new token (only if functions are deployed)
-      if (_currentRoom != null) {
-        AppLogger().debug('🎫 TOKEN REFRESH: Checking if backend functions are available');
-        try {
-          await _requestNewToken();
-          throw Exception('Token refresh requested - please try again in a moment');
-        } catch (tokenError) {
-          if (tokenError.toString().contains('deployment_not_found')) {
-            AppLogger().debug('🔧 BACKEND NOT DEPLOYED: Functions not available, skipping token refresh');
-            // Don't show error to user - this is expected during development
-          } else {
-            AppLogger().debug('🎫 TOKEN REFRESH: Other error: $tokenError');
-          }
-        }
-      }
-
-      rethrow;
-    }
-  }
 
   /// SIMPLE FIX: Allow audio for everyone except pure audience
   bool _canPublishMediaArenaOverride(String role, String roomType) {
     AppLogger().debug('🎤 SIMPLE AUDIO CHECK: role="$role", roomType="$roomType"');
-
-    // SAFETY: Handle null role
-    if (role == null) {
-      AppLogger().debug('⚠️ Role is null, allowing audio by default');
-      return true; // Default to allowing audio
-    }
 
     // SIMPLE RULE: Everyone can publish audio EXCEPT pure audience members
     // This works around all the token permission issues
@@ -2183,9 +2118,9 @@ class LiveKitService extends ChangeNotifier {
       'roomType': _currentRoomType,
       'isMuted': _isMuted,
       'permissions': {
-        'canPublish': permissions?.canPublish,
-        'canPublishData': permissions?.canPublishData,
-        'canSubscribe': permissions?.canSubscribe,
+        'canPublish': permissions.canPublish,
+        'canPublishData': permissions.canPublishData,
+        'canSubscribe': permissions.canSubscribe,
       },
       'metadata': metadata,
       'audioTracks': _localParticipant!.audioTrackPublications.length,

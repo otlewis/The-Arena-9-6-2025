@@ -112,7 +112,7 @@ class EnhancedAudioService {
       }
 
       // Check vibration capability
-      _hasVibrationPermission = await Vibration.hasVibrator() ?? false;
+      _hasVibrationPermission = await Vibration.hasVibrator();
 
       _logger.debug('Permissions - Audio: $_hasAudioPermission, Vibration: $_hasVibrationPermission');
     } catch (e) {

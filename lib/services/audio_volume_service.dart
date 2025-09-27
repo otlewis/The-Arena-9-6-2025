@@ -93,14 +93,6 @@ class AudioVolumeService {
   /// Configure LiveKit-specific audio settings for maximum volume
   void configureLiveKitAudio(Room room) {
     try {
-      // Enable automatic gain control and noise suppression
-      final audioOptions = const AudioCaptureOptions(
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        typingNoiseDetection: true,
-      );
-
       // Apply audio options to local participant
       room.localParticipant?.setMicrophoneEnabled(true);
 

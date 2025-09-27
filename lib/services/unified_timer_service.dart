@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:appwrite/appwrite.dart';
-import 'package:firebase_database/firebase_database.dart';
+// import 'package:firebase_database/firebase_database.dart';
 import '../models/timer_state.dart';
 import '../core/logging/app_logger.dart';
-import 'appwrite_service.dart';
 import 'consolidated_audio_service.dart';
 
 /// Unified timer service interface supporting multiple backends
@@ -275,7 +273,7 @@ enum TimerBackend {
 
 /// Appwrite timer backend implementation
 class AppwriteTimerBackend implements ITimerBackend {
-  final AppwriteService _appwriteService = AppwriteService();
+  // final AppwriteService _appwriteService = AppwriteService();
   final AppLogger _logger = AppLogger();
 
   @override
@@ -335,7 +333,7 @@ class AppwriteTimerBackend implements ITimerBackend {
 
 /// Firebase timer backend implementation
 class FirebaseTimerBackend implements ITimerBackend {
-  DatabaseReference? _timerRef;
+  // DatabaseReference? _timerRef; // Field set but not used elsewhere
   final AppLogger _logger = AppLogger();
 
   @override
@@ -346,7 +344,7 @@ class FirebaseTimerBackend implements ITimerBackend {
 
   @override
   Stream<TimerState> getTimerStream(String roomId) {
-    _timerRef = FirebaseDatabase.instance.ref('timers/$roomId');
+    // _timerRef = FirebaseDatabase.instance.ref('timers/$roomId');
     // Implementation would listen to Firebase realtime database
     return Stream.empty(); // Placeholder
   }

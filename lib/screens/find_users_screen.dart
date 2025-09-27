@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../services/appwrite_service.dart';
 import '../services/theme_service.dart';
 import '../services/challenge_messaging_service.dart';
-import '../services/feature_flag_service.dart';
 import '../models/user_profile.dart';
 import '../widgets/user_avatar.dart';
 import '../widgets/challenge_bell.dart';

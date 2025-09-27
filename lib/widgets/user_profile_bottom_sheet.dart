@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import '../models/user_profile.dart';
 import '../services/challenge_messaging_service.dart';
 import '../services/appwrite_service.dart';
-import '../services/feature_flag_service.dart';
 import '../core/logging/app_logger.dart';
 import '../widgets/report_user_dialog.dart';
 import '../widgets/premium_badge.dart';

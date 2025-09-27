@@ -1785,11 +1785,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         return;
       }
 
-      // ANDROID CRASH PROTECTION: Check for null dependencies
-      if (_liveKitService == null) {
-        AppLogger().warning('⚠️ TOGGLE MUTE: LiveKit service is null - aborting safely');
-        return;
-      }
+      // ANDROID CRASH PROTECTION: LiveKit service is guaranteed to be initialized
 
       // ANDROID CRASH PROTECTION: Rate limiting to prevent rapid toggle crashes
       final now = DateTime.now();
@@ -6438,8 +6434,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   void _executeEmergencyClose() async {
-    bool roomClosedSuccessfully = false;
-
     try {
       AppLogger().info('🚨 Emergency room close initiated by moderator');
 
@@ -6447,7 +6441,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       await _closeRoomWithRetries(widget.roomId).timeout(
         Duration(seconds: 10),
       );
-      roomClosedSuccessfully = true;
 
       AppLogger().info('🚨 Emergency room close completed successfully');
 

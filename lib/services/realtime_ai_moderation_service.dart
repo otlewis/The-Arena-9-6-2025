@@ -1,8 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:livekit_client/livekit_client.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:appwrite/appwrite.dart';
 import '../core/logging/app_logger.dart';
 import 'appwrite_service.dart';
@@ -33,8 +30,8 @@ class RealtimeAIModerationService {
   final Map<String, StreamSubscription> _audioStreams = {};
 
   // Deepgram API for speech-to-text (free tier available)
-  static const String _deepgramApiKey = 'YOUR_DEEPGRAM_API_KEY'; // Add to env
-  static const String _deepgramUrl = 'wss://api.deepgram.com/v1/listen';
+  // static const String _deepgramApiKey = 'YOUR_DEEPGRAM_API_KEY'; // Add to env
+  // static const String _deepgramUrl = 'wss://api.deepgram.com/v1/listen';
 
   /// Start monitoring a room for hostile speech
   Future<void> startRoomMonitoring(String roomId) async {
@@ -145,34 +142,6 @@ class RealtimeAIModerationService {
     }
   }
 
-  /// Start real-time transcription using Deepgram
-  Future<Stream<String>> _startTranscription(String participantId) async {
-    final controller = StreamController<String>();
-
-    try {
-      // Connect to Deepgram WebSocket
-      final ws = WebSocketChannel.connect(
-        Uri.parse('$_deepgramUrl?encoding=linear16&sample_rate=16000&language=en-US'),
-      );
-
-      // Process transcription results
-      ws.stream.listen((data) {
-        final json = jsonDecode(data);
-        final transcript = json['channel']?['alternatives']?[0]?['transcript'] ?? '';
-        if (transcript.isNotEmpty) {
-          controller.add(transcript);
-        }
-      });
-
-      // Note: In production, you'd stream actual audio data to Deepgram
-      // This is a simplified example
-
-    } catch (e) {
-      _logger.error('Transcription error: $e');
-    }
-
-    return controller.stream;
-  }
 
   /// Moderate text content for hostility
   Future<void> _moderateTextContent({

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:developer';
 import 'package:appwrite/appwrite.dart';
 import '../models/store_config.dart';
@@ -7,11 +6,11 @@ import '../services/appwrite_service.dart';
 /// Service for managing dynamic store configuration from Appwrite
 /// Handles caching, real-time updates, and fallback configurations
 class StoreConfigService {
-  static const String _cacheKey = 'store_data_cache';
-  static const Duration _cacheExpiration = Duration(hours: 6);
+  // static const String _cacheKey = 'store_data_cache';
+  // static const Duration _cacheExpiration = Duration(hours: 6);
 
   StoreData? _cachedStoreData;
-  DateTime? _cacheTimestamp;
+  // DateTime? _cacheTimestamp;
 
   static final StoreConfigService _instance = StoreConfigService._internal();
   factory StoreConfigService() => _instance;
@@ -57,7 +56,7 @@ class StoreConfigService {
       );
 
       _cachedStoreData = storeData;
-      _cacheTimestamp = DateTime.now();
+      // _cacheTimestamp = DateTime.now();
 
       // Cache the data locally
       await _saveToCache(storeData);
@@ -174,11 +173,6 @@ class StoreConfigService {
     }
   }
 
-  /// Check if cache is valid (not expired)
-  bool get _isCacheValid {
-    if (_cacheTimestamp == null) return false;
-    return DateTime.now().difference(_cacheTimestamp!) < _cacheExpiration;
-  }
 
   /// Load store data from local cache
   Future<void> _loadFromCache() async {
@@ -301,13 +295,13 @@ class StoreConfigService {
 
   /// Force refresh store config (bypass cache)
   Future<StoreData> forceRefresh() async {
-    _cacheTimestamp = null; // Invalidate cache
+    // _cacheTimestamp = null; // Invalidate cache
     return await refreshStoreConfig();
   }
 
   /// Clear all cached data
   void clearCache() {
     _cachedStoreData = null;
-    _cacheTimestamp = null;
+    // _cacheTimestamp = null;
   }
 }

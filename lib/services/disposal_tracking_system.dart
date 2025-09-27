@@ -211,7 +211,6 @@ class DisposalTrackingSystem {
     final leaks = <String>[];
 
     // Check for old subscriptions (older than 5 minutes with no activity)
-    final now = DateTime.now();
     for (final entry in _subscriptions.entries) {
       // This is a simplified leak detection - in practice you'd want more sophisticated tracking
       leaks.add('Subscription: ${entry.key}');

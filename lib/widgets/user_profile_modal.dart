@@ -3,8 +3,6 @@ import 'package:flutter/services.dart';
 import '../models/user_profile.dart';
 import '../core/logging/app_logger.dart';
 import '../services/challenge_messaging_service.dart';
-import '../services/feature_flag_service.dart';
-import '../services/appwrite_service.dart';
 
 /// Modal that displays user profile information when clicking on users in rooms
 class UserProfileModal extends StatefulWidget {
