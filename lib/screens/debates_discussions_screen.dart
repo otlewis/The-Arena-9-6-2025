@@ -5,8 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:appwrite/appwrite.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:appwrite/appwrite.dart';
 import '../services/appwrite_service.dart';
 import '../services/firebase_gift_service.dart';
 import '../widgets/simple_gift_bottom_sheet.dart';
@@ -37,12 +37,25 @@ import '../widgets/performance_optimized_audience_grid.dart';
 import '../core/performance/riverpod_performance_optimizer.dart';
 import '../core/performance/virtualized_list_optimizer.dart';
 import '../core/performance/network_performance_optimizer.dart';
-import '../widgets/streaming_destinations_modal.dart';
 import '../widgets/bottom_sheet/debate_bottom_sheet.dart';
 import '../services/livekit_material_sync_service.dart';
 import '../widgets/shared_link_popup.dart';
 import '../widgets/slide_update_popup.dart';
 import '../models/debate_source.dart';
+import '../services/participant_recruitment_service.dart';
+import '../services/audio_clip_service.dart';
+import '../services/realtime_ai_moderation_service.dart';
+import '../services/audio_volume_service.dart';
+import '../services/room_realtime_manager.dart';
+import '../services/participant_diff_manager.dart';
+import '../services/granular_state_manager.dart';
+import '../services/disposal_tracking_system.dart';
+import '../services/weak_reference_manager.dart';
+import '../services/batch_user_profile_service.dart';
+import '../services/audio_preloader_service.dart';
+import 'package:get_it/get_it.dart';
+
+final getIt = GetIt.instance;
 
 class DebatesDiscussionsScreen extends StatefulWidget {
   final String roomId;
@@ -60,8 +73,8 @@ class DebatesDiscussionsScreen extends StatefulWidget {
   State<DebatesDiscussionsScreen> createState() => _DebatesDiscussionsScreenState();
 }
 
-class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen> 
-    with NetworkOptimizationMixin, ListOptimizationMixin, WidgetsBindingObserver {
+class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
+    with NetworkOptimizationMixin, ListOptimizationMixin, WidgetsBindingObserver, AutomaticKeepAliveClientMixin, DisposalTrackingMixin, WeakReferenceMixin {
   final AppwriteService _appwrite = AppwriteService();
   final FirebaseGiftService _giftService = FirebaseGiftService();
   final LiveKitService _webrtcService = LiveKitService();
@@ -70,6 +83,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   final RiverpodPerformanceOptimizer _performanceOptimizer = RiverpodPerformanceOptimizer();
   final VirtualizedListOptimizer _listOptimizer = VirtualizedListOptimizer();
   final NetworkPerformanceOptimizer _networkOptimizer = NetworkPerformanceOptimizer();
+  final GranularStateManager _granularStateManager = GranularStateManager();
+  final BatchUserProfileService _batchProfileService = BatchUserProfileService();
+  late final AudioPreloaderService _audioPreloader;
   
   // Video/Audio WebRTC state
   bool _isWebRTCConnected = false;
@@ -93,6 +109,15 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   bool _isAudioConnecting = false;
   final LiveKitService _liveKitService = LiveKitService();
   
+  // Audio clipping state
+  final AudioClipService _audioClipService = AudioClipService();
+  bool _isRecordingClip = false;
+
+  // AI Moderation and Audio Volume services
+  final RealtimeAIModerationService _aiModerationService = RealtimeAIModerationService();
+  final AudioVolumeService _audioVolumeService = AudioVolumeService();
+  
+  
   // Room data
   Map<String, dynamic>? _roomData;
   UserProfile? _currentUser;
@@ -108,11 +133,20 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   final List<UserProfile> _speakerPanelists = []; // Max 6 speakers
   final List<UserProfile> _audienceMembers = [];
   final List<UserProfile> _speakerRequests = []; // Pending speaker requests
+
+  // Speaker Queue System for Discussions Mode
+  final List<String> _speakerQueue = []; // Queue of speaker user IDs waiting to speak
+  String? _currentSpeaker; // Current speaker from the queue
+  bool _queueEnabled = true; // Toggle for queue mode
+
+  // Real-time speaker queue sync
+  RealtimeSubscription? _speakerQueueSubscription;
   
   // Role mapping for participants (userId -> role)
   final Map<String, String> _participantRoles = {};
   
   // Performance optimization - cache last participants to prevent unnecessary rebuilds
+  final ParticipantDiffManager _diffManager = ParticipantDiffManager();
   List<dynamic> _lastParticipants = [];
   
   // Connection stability monitoring
@@ -158,18 +192,40 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     return false;
   }
   
-  // Real-time subscriptions - separate instances for reliability
-  RealtimeSubscription? _participantsSubscription;
-  RealtimeSubscription? _roomSubscription;
+  // Consolidated real-time subscription manager
+  final RoomRealtimeManager _realtimeManager = RoomRealtimeManager();
+  RoomSubscription? _roomSubscription;
+
+  // Separate subscription stream listeners
+  StreamSubscription? _participantStreamListener;
+  StreamSubscription? _chatStreamListener;
+  StreamSubscription? _roomStatusStreamListener;
+  StreamSubscription? _handRaiseStreamListener;
+  StreamSubscription? _timerStreamListener;
+  StreamSubscription? _materialStreamListener;
+
+  // Legacy subscriptions to be phased out
   StreamSubscription? _unreadMessagesSubscription; // Instant messages subscription
   StreamSubscription? _firebaseParticipantSubscription; // Firebase participant sync
-  StreamSubscription? _materialUpdatesSubscription; // Material sync subscription
-  StreamSubscription? _sourceAddedSubscription; // Shared sources subscription
+  StreamSubscription? _materialUpdatesSubscription; // Material updates subscription
+  StreamSubscription? _sourceAddedSubscription; // Source added subscription
+
+  @override
+  bool get wantKeepAlive => true; // Keep widget alive to prevent recreation
 
   @override
   void initState() {
     super.initState();
-    
+
+    // Initialize disposal tracking system
+    initDisposalTracking(customId: 'debates_${widget.roomId}');
+
+    // Initialize weak reference management
+    initWeakReferences(customId: 'debates_${widget.roomId}');
+
+    // Initialize audio preloader service
+    _audioPreloader = getIt<AudioPreloaderService>();
+
     // Add lifecycle observer for automatic refresh on app resume
     WidgetsBinding.instance.addObserver(this);
     
@@ -179,19 +235,42 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     // Enable extreme performance mode for maximum possible performance
     ExtremePerformanceMode.instance.enable();
     
+    // Initialize participant diff manager
+    _diffManager.initializeRoom(widget.roomId);
+
     _initializeRoom();
     _loadGiftData();
     _initializeWebRTC();
-    
+    _initializeSpeakerQueueSync();
+
+    // Add LiveKit service listener to sync mute state changes from data messages
+    _liveKitService.addListener(_onLiveKitStateChanged);
+
+    // Configure audio for maximum volume
+    _configureAudio();
+
     // Start connection health monitoring to prevent user drops
     _startConnectionHealthMonitoring();
   }
-  
+
+  /// Handle LiveKit service state changes (especially mute state from data messages)
+  void _onLiveKitStateChanged() {
+    if (!mounted) return;
+
+    // Sync mute state from LiveKit service to local UI state
+    if (_isMuted != _liveKitService.isMuted) {
+      setState(() {
+        _isMuted = _liveKitService.isMuted;
+      });
+      AppLogger().debug('🔄 UI mute state synced from LiveKit: $_isMuted');
+    }
+  }
+
   Future<void> _initializeWebRTC() async {
     await _localRenderer.initialize();
     await _remoteRenderer.initialize();
     
-    // Set up LiveKit service callbacks
+    // Set up LiveKit service callbacks with weak references
     _webrtcService.onConnected = () {
       AppLogger().debug('✅ LiveKit connected to Debates & Discussions room');
       if (mounted) {
@@ -201,6 +280,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         _debugVideoState();
       }
     };
+    // Register weak reference for connected callback
+    registerWeakListener('livekit_connected', () => _webrtcService.onConnected = null);
     
     _webrtcService.onParticipantConnected = (participant) {
       AppLogger().debug('👤 LiveKit participant joined: ${participant.identity}');
@@ -210,6 +291,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         });
       }
     };
+    // Register weak reference for participant connected callback
+    registerWeakListener('livekit_participant_connected', () => _webrtcService.onParticipantConnected = null);
     
     _webrtcService.onParticipantDisconnected = (participant) {
       AppLogger().debug('👋 LiveKit participant left: ${participant.identity}');
@@ -297,6 +380,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         }
       }
     });
+    trackSubscription('source_added', _sourceAddedSubscription!);
     
     // Listen for material updates and only show popup for NEW slide uploads (pdf_upload), not slide navigation (slide_change)
     _materialUpdatesSubscription = _materialSyncService!.materialUpdates.listen((materialSync) {
@@ -311,7 +395,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         }
       }
     });
-    
+    trackSubscription('material_updates', _materialUpdatesSubscription!);
+
     AppLogger().debug('📊 Material listeners successfully set up');
   }
 
@@ -516,12 +601,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           // - Enough time has passed since last attempt
           if (_consecutiveUnhealthyChecks >= _unhealthyThreshold && timeSinceLastAttempt > _minTimeBetweenReconnections) {
             AppLogger().warning('⚠️ WebRTC disconnected for $_consecutiveUnhealthyChecks consecutive checks - attempting restoration');
-            // Reconnect to audio if user should be connected (only moderators/speakers)
-            if ((_isCurrentUserModerator || _isCurrentUserSpeaker) && !_isAudioConnected) {
-              AppLogger().debug('🔄 Health Monitor: Reconnecting audio for moderator/speaker');
+            // Reconnect to audio for all users
+            if (!_isAudioConnected) {
+              AppLogger().debug('🔄 Health Monitor: Reconnecting audio for all users');
               _connectToAudio();
-            } else if (!_isCurrentUserModerator && !_isCurrentUserSpeaker) {
-              AppLogger().debug('🔇 Health Monitor: Skipping audio reconnection for audience member (listen-only)');
             }
             _consecutiveUnhealthyChecks = 0; // Reset counter
           } else {
@@ -576,12 +659,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       // Step 2: Refresh participants
       await _loadParticipants();
       
-      // Step 3: Restore audio connection (only for moderators/speakers)
-      if ((_isCurrentUserModerator || _isCurrentUserSpeaker) && !_isAudioConnected) {
-        AppLogger().debug('🔄 Automatic Reconnect: Restoring audio for moderator/speaker');
+      // Step 3: Restore audio connection for all users
+      if (!_isAudioConnected) {
+        AppLogger().debug('🔄 Automatic Reconnect: Restoring audio for all users');
         await _connectToAudio();
-      } else if (!_isCurrentUserModerator && !_isCurrentUserSpeaker) {
-        AppLogger().debug('🔇 Automatic Reconnect: Audience member remains listen-only');
       }
       
       // Step 4: Verify speaker status
@@ -882,11 +963,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   Future<void> _initializeRoom() async {
     try {
       AppLogger().debug('🏠 Initializing Debates & Discussions room: ${widget.roomId}');
-      
+
       // Get current user
       final user = await _appwrite.getCurrentUser();
       if (user != null) {
-        final userProfile = await _appwrite.getUserProfile(user.$id);
+        final userProfile = await _batchProfileService.getUserProfile(user.$id);
         if (mounted && !_isDisposing) {
           setState(() {
             _currentUser = userProfile;
@@ -899,18 +980,27 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       await _loadRoomData();
       
       // Join the room as a participant
+      AppLogger().debug('Current user check - _currentUser: ${_currentUser?.name}');
       if (_currentUser != null) {
         await _joinRoom();
+      } else {
+        AppLogger().error('_currentUser is null, cannot join room');
       }
       
       // Clear any cached participant data to ensure fresh load
       invalidateNetworkCache(patternPrefix: 'participants_');
-      
+
+      // Preload participant profiles for optimal performance
+      await _preloadParticipantProfiles();
+
       // Load participants from database
       await _loadParticipants();
       
       // Set up real-time subscriptions
       _setupRealTimeUpdates();
+
+      // Play room joined audio feedback
+      _playAudioFeedback('room_joined');
       
       // Setup Firebase real-time participant sync (temporarily disabled)
       // _setupFirebaseParticipantSync();
@@ -1041,7 +1131,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       }
       
       AppLogger().debug('✅ Joined room ${widget.roomId} as $initialRole');
-      
+
+      // Start AI moderation for this room
+      await _aiModerationService.startRoomMonitoring(widget.roomId);
+      AppLogger().info('🛡️ AI moderation started for Debates & Discussions room: ${widget.roomId}');
+
       // Immediately refresh participants to ensure this user appears in all other users' screens
       Future.microtask(() async {
         if (mounted && !_isDisposing) {
@@ -1408,7 +1502,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         }
       }
     });
-    
+    trackTimer('participant_sync', _participantSyncTimer!);
+
     AppLogger().info('🚀 Started periodic participant synchronization (every 15s)');
   }
 
@@ -1432,16 +1527,39 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   @override
   void dispose() {
     _isDisposing = true;
-    
+
     // Remove lifecycle observer
     WidgetsBinding.instance.removeObserver(this);
-    
-    _participantsSubscription?.close();
-    _roomSubscription?.close();
+
+    // CRITICAL: Remove participant from room when leaving
+    if (_isJoined && _currentUser != null) {
+      AppLogger().info('🚪 User leaving room - removing from participants');
+      _appwrite.leaveDebateDiscussionRoom(
+        roomId: widget.roomId,
+        userId: _currentUser!.id,
+      ).catchError((e) {
+        AppLogger().error('Failed to leave room cleanly: $e');
+      });
+    }
+
+
+    // Clean up consolidated subscriptions
+    _realtimeManager.unsubscribeFromRoom(widget.roomId);
+    _participantStreamListener?.cancel();
+    _chatStreamListener?.cancel();
+    _roomStatusStreamListener?.cancel();
+    _handRaiseStreamListener?.cancel();
+    _timerStreamListener?.cancel();
+    _materialStreamListener?.cancel();
+
+    // Legacy subscriptions
     _unreadMessagesSubscription?.cancel();
     _firebaseParticipantSubscription?.cancel();
     _materialUpdatesSubscription?.cancel();
     _sourceAddedSubscription?.cancel();
+
+    // Speaker queue subscription
+    _speakerQueueSubscription?.close();
     
     // Clean up Firebase when leaving room (temporarily disabled)
     // _firebaseSync.clearRoom(widget.roomId);
@@ -1457,6 +1575,21 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     _reconnectionTimer?.cancel();
     _participantSyncTimer?.cancel();
     
+    // Stop AI moderation
+    _aiModerationService.stopRoomMonitoring(widget.roomId);
+
+    // Clean up diff manager
+    _diffManager.clearRoom(widget.roomId);
+
+    // Clean up granular state manager
+    _granularStateManager.dispose();
+
+    // Log batch profile service statistics before cleanup
+    _batchProfileService.logStatistics();
+
+    // Remove LiveKit service listener to prevent memory leaks
+    _liveKitService.removeListener(_onLiveKitStateChanged);
+
     // Clean up audio connection
     if (_liveKitService.isConnected) {
       _liveKitService.disconnect();
@@ -1476,14 +1609,30 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     // Disable extreme performance mode
     ExtremePerformanceMode.instance.disable();
     
-    // Don't await _leaveRoom() in dispose as it's synchronous
+    // Don't await room leaving in dispose as it's synchronous
     // Just call it without awaiting to start the process
-    _leaveRoom().catchError((error) {
+    // Clean up all tracked disposable resources
+    disposeTrackedResources();
+
+    // Clean up weak references
+    cleanupWeakReferences();
+
+    _performLeaveRoom().catchError((error) {
       AppLogger().error('Error during disposal: $error');
     });
     super.dispose();
   }
 
+  /// Configure audio for maximum volume and speaker output
+  Future<void> _configureAudio() async {
+    try {
+      // Configure loud speaker audio
+      await _audioVolumeService.configureLoudAudio();
+      AppLogger().info('🔊 Audio configured for maximum volume in Debates & Discussions');
+    } catch (e) {
+      AppLogger().error('Failed to configure audio: $e');
+    }
+  }
 
   Future<void> _connectToAudio() async {
     AppLogger().debug('🔥 CONNECT-AUDIO: _connectToAudio called - connecting: $_isAudioConnecting, connected: $_isAudioConnected');
@@ -1511,7 +1660,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         AppLogger().warning('🚨 ROLE OVERRIDE: Creator detected as audience - forcing moderator role for audio connection');
         _isCurrentUserModerator = true;
         if (mounted) {
-          setState(() {});
+          setState(() {
+            // Update UI after correcting moderator status
+          });
         }
         // Recompute role with corrected state
         userRole = _computeInitialRole();
@@ -1746,7 +1897,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         
         // Single setState for UI update
         if (mounted) {
-          setState(() {});
+          setState(() {
+            // Update UI after participant role change
+          });
         }
         
         // Preload avatar images for better scroll performance
@@ -1807,20 +1960,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         AppLogger().info('🎤 ROLE DEBUG: Current user in speaker panel: ${_speakerPanelists.any((s) => s.id == _currentUser!.id)}');
       }
       
-      // AUTO-CONNECT: Automatically connect to audio only for moderators and speakers
+      // AUTO-CONNECT: Automatically connect to audio for all users
       if (!_isAudioConnected && !_isAudioConnecting && _currentUser != null) {
-        // Only connect audio for users with speaking permissions
-        if (_isCurrentUserModerator || _isCurrentUserSpeaker) {
-          AppLogger().debug('🔥 AUTO-CONNECT: Initiating automatic audio connection for moderator/speaker');
-          AppLogger().debug('🔥 AUTO-CONNECT: User role - moderator: $_isCurrentUserModerator, speaker: $_isCurrentUserSpeaker');
-          _connectToAudio().then((_) {
-            AppLogger().debug('🔥 AUTO-CONNECT: Audio connection successful');
-          }).catchError((error) {
-            AppLogger().error('🔥 AUTO-CONNECT: Audio connection failed: $error');
-          });
-        } else {
-          AppLogger().debug('🔇 AUTO-CONNECT: Skipping audio connection for audience member (listen-only)');
-        }
+        // Connect audio for all users (moderators, speakers, and audience)
+        AppLogger().debug('🔥 AUTO-CONNECT: Initiating automatic audio connection for all users');
+        AppLogger().debug('🔥 AUTO-CONNECT: User role - moderator: $_isCurrentUserModerator, speaker: $_isCurrentUserSpeaker');
+        _connectToAudio().then((_) {
+          AppLogger().debug('🔥 AUTO-CONNECT: Audio connection successful');
+        }).catchError((error) {
+          AppLogger().error('🔥 AUTO-CONNECT: Audio connection failed: $error');
+        });
       }
       
       // Participant loading completed
@@ -1896,121 +2045,24 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   // Mock participants method removed - we now handle errors properly
   // instead of showing fake data that misleads users
 
-  void _setupRealTimeUpdates() {
+  void _setupRealTimeUpdates() async {
     try {
-      // APPWRITE OPTIMIZATION: Subscribe to room-specific events only for faster sync
-      _participantsSubscription = _appwrite.realtimeInstance.subscribe([
-        'databases.arena_db.collections.debate_discussion_participants.documents',
-        // Also subscribe to specific room to catch broader changes
-        'databases.arena_db.collections.debate_discussion_rooms.documents.${widget.roomId}'
-      ]);
+      AppLogger().info('📡 Setting up consolidated real-time subscriptions for room: ${widget.roomId}');
 
-      _participantsSubscription?.stream.listen(
+      // Use centralized subscription manager
+      _roomSubscription = await _realtimeManager.subscribeToRoom(
+        roomId: widget.roomId,
+        roomType: 'debate_discussion',
+      );
+
+      // Listen to participant updates stream with weak reference
+      _participantStreamListener = _roomSubscription!.participants.listen(
         (response) async {
           AppLogger().debug('Participant update events: ${response.events}');
           AppLogger().debug('Participant update payload: ${response.payload}');
-          
+
           if (mounted && !_isDisposing) {
-            // Check for specific participant role changes
-            bool isHandRaiseEvent = false;
-            bool isHandLowerEvent = false;
-            bool isSpeakerPromotionEvent = false;
-            bool needsParticipantReload = false;
-            
-            for (var event in response.events) {
-              // Check if this is an update, create, or delete event
-              if (event.contains('debate_discussion_participants.documents') && 
-                  (event.endsWith('.update') || event.endsWith('.create') || event.endsWith('.delete'))) {
-                // Check if it's for this room
-                if (response.payload['roomId'] == widget.roomId) {
-                  AppLogger().debug('🔄 PARTICIPANT EVENT: $event for room ${widget.roomId}');
-                  
-                  // Mark that we need to reload participants
-                  
-                  // For create events (new user joined)
-                  if (event.endsWith('.create')) {
-                    AppLogger().info('📥 NEW PARTICIPANT: User joined room ${widget.roomId}');
-                    needsParticipantReload = true;
-                  }
-                  
-                  // For delete events (user left)
-                  if (event.endsWith('.delete')) {
-                    AppLogger().info('📤 PARTICIPANT LEFT: User left room ${widget.roomId}');
-                    needsParticipantReload = true;
-                  }
-                  // For update events, handle role changes
-                  if (event.endsWith('.update')) {
-                    final newRole = response.payload['role'];
-                    final userId = response.payload['userId'];
-                    
-                    AppLogger().debug('🔄 ROLE UPDATE: User $userId role changed to: $newRole');
-                    
-                    if (newRole == 'pending') {
-                      AppLogger().info('Hand-raise detected: $userId requested to speak');
-                      isHandRaiseEvent = true;
-                    } else if (newRole == 'audience') {
-                      // Could be hand lowering or moderator denial - check if it was current user
-                      if (userId == _currentUser?.id && _hasRequestedSpeaker) {
-                        AppLogger().info('Hand-lower detected: $userId lowered their hand');
-                        isHandLowerEvent = true;
-                      }
-                    } else if ((newRole == 'speaker' || newRole == 'affirmative' || newRole == 'negative') && userId == _currentUser?.id) {
-                      // CRITICAL: Current user was promoted to speaker - need to reinitialize LiveKit connection
-                      AppLogger().info('🔄 SPEAKER PROMOTION: Current user promoted to speaker role - will reinitialize audio');
-                      isSpeakerPromotionEvent = true;
-                    }
-                  }
-                }
-              }
-            }
-            
-            // Single participant reload for all events (prevents duplicate loading)
-            if (needsParticipantReload || isHandRaiseEvent || isHandLowerEvent || isSpeakerPromotionEvent) {
-              AppLogger().info('🚀 CRITICAL UPDATE: Bypassing cache for immediate participant refresh');
-              
-              // For critical role changes, bypass cache completely for instant updates with multiple invalidations
-              Future.microtask(() async {
-                if (mounted && !_isDisposing) {
-                  // Aggressively clear all participant-related cache
-                  invalidateNetworkCache(patternPrefix: 'participants_');
-                  invalidateNetworkCache(patternPrefix: 'debate_discussion_participants');
-                  invalidateNetworkCache(patternPrefix: widget.roomId);
-                  await _loadParticipants();
-                  
-                  // Force a second reload after a brief delay to catch any missed updates
-                  Future.delayed(const Duration(milliseconds: 500), () async {
-                    if (mounted && !_isDisposing) {
-                      invalidateNetworkCache(patternPrefix: 'participants_');
-                      await _loadParticipants();
-                    }
-                  });
-                }
-              });
-            }
-            
-            // CRITICAL: Handle speaker promotion - reinitialize LiveKit connection with new role
-            if (isSpeakerPromotionEvent) {
-              AppLogger().info('🔄 SPEAKER PROMOTION: Executing immediate LiveKit role sync');
-              // Immediate audio reinitializtion for instant speaker seating
-              Future.microtask(() async {
-                if (mounted) {
-                  await _reinitializeAudioForSpeaker();
-                }
-              });
-            }
-            
-            // Show immediate notification for hand-raise events (only for moderators)
-            if (isHandRaiseEvent && _hasModeratorPowers) {
-              AppLogger().info('Showing hand-raise notification to moderator');
-              _showHandRaiseNotificationFromPayload(response.payload);
-            }
-            
-            // Update local state if current user lowered their hand
-            if (isHandLowerEvent) {
-              setState(() {
-                _hasRequestedSpeaker = false;
-              });
-            }
+            await _handleParticipantUpdate(response);
           }
         },
         onError: (error) {
@@ -2030,13 +2082,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           }
         },
       );
+      // Register weak reference for participant subscription
+      registerWeakSubscription('participant_updates', _participantStreamListener!);
+      // Track subscription for memory leak prevention
+      trackSubscription('participant_stream', _participantStreamListener!);
 
-      // Separate subscription for room status (like room ending)
-      _roomSubscription = Realtime(_appwrite.client).subscribe([
-        'databases.arena_db.collections.debate_discussion_rooms.documents.${widget.roomId}'
-      ]);
-
-      _roomSubscription?.stream.listen(
+      // Listen to room status updates
+      _roomStatusStreamListener = _roomSubscription!.roomStatus.listen(
         (response) {
           AppLogger().debug('Room update events: ${response.events}');
           _handleRoomUpdate(response);
@@ -2045,25 +2097,323 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           AppLogger().error('Room subscription error: $error');
         },
       );
+      // Track room status subscription
+      trackSubscription('room_status_stream', _roomStatusStreamListener!);
       
     } catch (e) {
       AppLogger().error('Error setting up real-time updates: $e');
     }
   }
 
-  void _reconnectParticipantsSubscription() {
+  /// Handle participant updates using diff-based approach
+  Future<void> _handleParticipantUpdate(dynamic response) async {
     try {
-      AppLogger().info('Reconnecting participants subscription...');
-      _participantsSubscription?.close();
-      
-      // Create new subscription after short delay
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted && !_isDisposing) {
-          _participantsSubscription = _appwrite.realtimeInstance.subscribe([
-            'databases.arena_db.collections.debate_discussion_participants.documents'
-          ]);
+      // Extract update information
+      String updateType = 'unknown';
+      if (response.events.any((e) => e.endsWith('.create'))) {
+        updateType = 'create';
+      } else if (response.events.any((e) => e.endsWith('.delete'))) {
+        updateType = 'delete';
+      } else if (response.events.any((e) => e.endsWith('.update'))) {
+        updateType = 'update';
+      }
 
-          _participantsSubscription?.stream.listen(
+      // Check if this update is for our room
+      if (response.payload['roomId'] != widget.roomId) {
+        return;
+      }
+
+      AppLogger().info('🔄 DIFF UPDATE: Processing $updateType event for room ${widget.roomId}');
+
+      // Get current participant state
+      final currentParticipants = <String, UserProfile>{};
+      for (final speaker in _speakerPanelists) {
+        currentParticipants[speaker.id] = speaker;
+      }
+      for (final audience in _audienceMembers) {
+        currentParticipants[audience.id] = audience;
+      }
+      for (final request in _speakerRequests) {
+        currentParticipants[request.id] = request;
+      }
+
+      // Calculate diff
+      final diff = _diffManager.calculateDiff(
+        roomId: widget.roomId,
+        currentParticipants: currentParticipants,
+        updatePayload: response.payload,
+        updateType: updateType,
+      );
+
+      if (diff.hasChanges) {
+        AppLogger().info('🔄 DIFF: ${diff.summary}');
+        await _applyParticipantDiff(diff);
+
+        // Apply granular state updates for affected participants
+        for (final userId in diff.addedIds) {
+          final role = diff.newRoles[userId] ?? 'audience';
+          _granularStateManager.updateParticipant(
+            roomId: widget.roomId,
+            userId: userId,
+            role: role,
+            type: ParticipantUpdateType.added,
+          );
+        }
+
+        for (final userId in diff.removedIds) {
+          _granularStateManager.updateParticipant(
+            roomId: widget.roomId,
+            userId: userId,
+            type: ParticipantUpdateType.removed,
+          );
+        }
+
+        for (final entry in diff.roleChanges.entries) {
+          _granularStateManager.updateParticipant(
+            roomId: widget.roomId,
+            userId: entry.key,
+            role: entry.value.newRole,
+            type: ParticipantUpdateType.roleChanged,
+          );
+        }
+      } else {
+        AppLogger().debug('🔄 DIFF: No relevant changes detected');
+      }
+
+    } catch (e) {
+      AppLogger().error('Error handling participant update: $e');
+      // Fallback to full reload on error
+      await _loadParticipants();
+    }
+  }
+
+
+
+  /// Play audio feedback using preloaded assets
+  void _playAudioFeedback(String eventType) {
+    try {
+      switch (eventType) {
+        case 'room_joined':
+          _audioPreloader.playRoomJoined();
+          break;
+        case 'speaker_joined':
+          _audioPreloader.playSpeakerJoined();
+          break;
+        case 'speaker_left':
+          _audioPreloader.playSpeakerLeft();
+          break;
+        case 'hand_raise':
+          _audioPreloader.playHandRaise();
+          break;
+        case 'message_received':
+          _audioPreloader.playMessageReceived();
+          break;
+        case 'button_click':
+          _audioPreloader.playButtonClick();
+          break;
+        case 'success':
+          _audioPreloader.playSuccess();
+          break;
+        case 'error':
+          _audioPreloader.playError();
+          break;
+        case 'timer_warning':
+          _audioPreloader.playTimerWarning();
+          break;
+        case 'timer_zero':
+          _audioPreloader.playTimerZero();
+          break;
+        default:
+          AppLogger().debug('🔊 Unknown audio event: $eventType');
+      }
+    } catch (e) {
+      AppLogger().error('Failed to play audio feedback: $e');
+    }
+  }
+
+  /// Apply participant diff to UI state
+  Future<void> _applyParticipantDiff(ParticipantDiff diff) async {
+    bool needsUIUpdate = false;
+    bool needsLiveKitUpdate = false;
+    bool isHandRaiseEvent = false;
+    bool isHandLowerEvent = false;
+
+    // Handle removals
+    for (final userId in diff.removedIds) {
+      _removeParticipantFromLists(userId);
+      needsUIUpdate = true;
+      AppLogger().info('📤 DIFF: Removed participant $userId');
+    }
+
+    // Handle additions (need to fetch user profiles)
+    for (final userId in diff.addedIds) {
+      final role = diff.newRoles[userId] ?? 'audience';
+      final userProfile = await _fetchUserProfile(userId);
+
+      if (userProfile != null) {
+        _addParticipantToList(userProfile, role);
+        needsUIUpdate = true;
+        AppLogger().info('📥 DIFF: Added participant $userId with role $role');
+      }
+    }
+
+    // Handle role changes
+    for (final entry in diff.roleChanges.entries) {
+      final userId = entry.key;
+      final roleChange = entry.value;
+
+      final userProfile = _findParticipantById(userId);
+      if (userProfile != null) {
+        _moveParticipantToRole(userProfile, roleChange.newRole);
+        needsUIUpdate = true;
+
+        // Check for special role changes
+        if (roleChange.newRole == 'pending') {
+          isHandRaiseEvent = true;
+        } else if (roleChange.newRole == 'audience' && roleChange.oldRole == 'pending') {
+          if (userId == _currentUser?.id && _hasRequestedSpeaker) {
+            isHandLowerEvent = true;
+          }
+        } else if (['speaker', 'affirmative', 'negative'].contains(roleChange.newRole) && userId == _currentUser?.id) {
+          needsLiveKitUpdate = true;
+        }
+
+        AppLogger().info('🔄 DIFF: Role change for $userId: ${roleChange.oldRole} -> ${roleChange.newRole}');
+      }
+    }
+
+    // Update UI if needed
+    if (needsUIUpdate && mounted && !_isDisposing) {
+      setState(() {
+        // UI will rebuild with updated participant lists
+      });
+    }
+
+    // Handle special events
+    if (isHandRaiseEvent && _hasModeratorPowers) {
+      _showHandRaiseNotificationFromPayload({'userId': diff.roleChanges.keys.first});
+    }
+
+    if (isHandLowerEvent) {
+      setState(() {
+        _hasRequestedSpeaker = false;
+      });
+    }
+
+    if (needsLiveKitUpdate) {
+      Future.microtask(() async {
+        if (mounted) {
+          await _reinitializeAudioForSpeaker();
+        }
+      });
+    }
+  }
+
+  /// Helper methods for participant management
+  void _removeParticipantFromLists(String userId) {
+    _speakerPanelists.removeWhere((p) => p.id == userId);
+    _audienceMembers.removeWhere((p) => p.id == userId);
+    _speakerRequests.removeWhere((p) => p.id == userId);
+    _participantRoles.remove(userId);
+  }
+
+  void _addParticipantToList(UserProfile user, String role) {
+    _participantRoles[user.id] = role;
+    switch (role) {
+      case 'moderator':
+      case 'speaker':
+      case 'affirmative':
+      case 'negative':
+        if (!_speakerPanelists.any((p) => p.id == user.id)) {
+          _speakerPanelists.add(user);
+        }
+        break;
+      case 'pending':
+        if (!_speakerRequests.any((p) => p.id == user.id)) {
+          _speakerRequests.add(user);
+        }
+        break;
+      case 'audience':
+      default:
+        if (!_audienceMembers.any((p) => p.id == user.id)) {
+          _audienceMembers.add(user);
+        }
+        break;
+    }
+  }
+
+  void _moveParticipantToRole(UserProfile user, String newRole) {
+    // Remove from all lists first
+    _removeParticipantFromLists(user.id);
+    // Add to appropriate list
+    _addParticipantToList(user, newRole);
+  }
+
+  UserProfile? _findParticipantById(String userId) {
+    for (final participant in [..._speakerPanelists, ..._audienceMembers, ..._speakerRequests]) {
+      if (participant.id == userId) {
+        return participant;
+      }
+    }
+    return null;
+  }
+
+  /// Fetch a single user profile (with batching and caching)
+  Future<UserProfile?> _fetchUserProfile(String userId) async {
+    try {
+      return await _batchProfileService.getUserProfile(userId);
+    } catch (e) {
+      AppLogger().error('Failed to fetch user profile for $userId: $e');
+      return null;
+    }
+  }
+
+  /// Preload all participant profiles for optimal performance
+  Future<void> _preloadParticipantProfiles() async {
+    try {
+      final participants = await _appwrite.getDebateDiscussionParticipants(widget.roomId);
+
+      // Extract all user IDs from participants
+      final userIds = participants
+          .where((p) => p['userId'] != null)
+          .map((p) => p['userId'] as String)
+          .toSet()
+          .toList();
+
+      if (userIds.isNotEmpty) {
+        AppLogger().info('📊 Preloading ${userIds.length} participant profiles for room ${widget.roomId}');
+        await _batchProfileService.preloadRoomProfiles(userIds);
+        AppLogger().debug('✅ Participant profiles preloaded successfully');
+      }
+    } catch (e) {
+      AppLogger().warning('Failed to preload participant profiles: $e');
+    }
+  }
+
+  void _reconnectParticipantsSubscription() async {
+    try {
+      AppLogger().info('Reconnecting consolidated room subscriptions...');
+
+      // Cancel existing listeners
+      _participantStreamListener?.cancel();
+      _chatStreamListener?.cancel();
+      _roomStatusStreamListener?.cancel();
+      _handRaiseStreamListener?.cancel();
+      _timerStreamListener?.cancel();
+      _materialStreamListener?.cancel();
+
+      // Recreate subscription after short delay
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      if (mounted && !_isDisposing) {
+        // Recreate consolidated subscription
+        _roomSubscription = await _realtimeManager.subscribeToRoom(
+          roomId: widget.roomId,
+          roomType: 'debate_discussion',
+        );
+
+        // Re-establish participant listener
+        _participantStreamListener = _roomSubscription!.participants.listen(
             (response) async {
               AppLogger().debug('Reconnected - Participant update events: ${response.events}');
               
@@ -2123,10 +2473,24 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
               }
             },
           );
-          
-          AppLogger().info('Participants subscription reconnected successfully');
-        }
-      });
+        // Track reconnected participant subscription
+        trackSubscription('participant_stream', _participantStreamListener!);
+
+        // Re-establish room status listener
+        _roomStatusStreamListener = _roomSubscription!.roomStatus.listen(
+          (response) {
+            AppLogger().debug('Reconnected - Room update events: ${response.events}');
+            _handleRoomUpdate(response);
+          },
+          onError: (error) {
+            AppLogger().error('Reconnected room subscription error: $error');
+          },
+        );
+        // Track reconnected room status subscription
+        trackSubscription('room_status_stream', _roomStatusStreamListener!);
+
+        AppLogger().info('All room subscriptions reconnected successfully');
+      }
     } catch (e) {
       AppLogger().error('Error reconnecting participants subscription: $e');
     }
@@ -2145,7 +2509,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       }
       
       AppLogger().info('Showing immediate hand-raise notification for: ${userProfile.name}');
-      
+
+      // Play hand raise audio feedback
+      _playAudioFeedback('hand_raise');
+
       if (mounted && !_isDisposing) {
         showDialog(
           context: context,
@@ -2987,8 +3354,179 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
 
 
+  /// Show warning dialog before leaving room for critical roles
+  Future<bool> _showLeaveRoomWarning() async {
+    AppLogger().debug('🚪 _showLeaveRoomWarning called - moderator: $_isCurrentUserModerator, speaker: $_isCurrentUserSpeaker');
+
+    // Determine user's current role and impact of leaving
+    String userRole = 'audience';
+    String warningMessage = 'Are you sure you want to leave the room?';
+    String impact = '';
+    bool isCriticalRole = false;
+
+    if (_isCurrentUserModerator) {
+      userRole = 'moderator';
+      isCriticalRole = true;
+      impact = 'The room will be closed for all participants.';
+      warningMessage = '⚠️ As the moderator, leaving will end the debate for everyone.';
+    } else if (_isCurrentUserSpeaker) {
+      // Check if user is in a speaking position
+      final userInSpeakingRole = _speakerPanelists.any((p) => p.id == _currentUser?.id);
+      if (userInSpeakingRole) {
+        userRole = 'speaker';
+        isCriticalRole = true;
+        impact = 'Your speaking slot will become available to others.';
+        warningMessage = '⚠️ You are currently in a speaking position.';
+      }
+    }
+
+    // For non-critical roles, just leave without warning
+    if (!isCriticalRole) {
+      AppLogger().debug('🚪 Non-critical role detected, leaving without warning');
+      await _performLeaveRoom();
+      return true;
+    }
+
+    AppLogger().debug('🚪 Critical role detected ($userRole), showing warning dialog');
+
+    // Show warning dialog for critical roles
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(
+                _isCurrentUserModerator ? Icons.gavel : Icons.record_voice_over,
+                color: _isCurrentUserModerator ? Colors.red : Colors.orange,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Leave as ${userRole.toUpperCase()}?',
+                style: TextStyle(
+                  color: _isCurrentUserModerator ? Colors.red : Colors.orange,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                warningMessage,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (impact.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, size: 20, color: Colors.grey),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          impact,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              // Show participant count for context
+              Builder(
+                builder: (context) {
+                  final totalParticipants = _audienceMembers.length + _speakerPanelists.length;
+                  if (totalParticipants > 0) {
+                    return Text(
+                      '👥 $totalParticipants participant${totalParticipants != 1 ? 's' : ''} currently in room',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Stay'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop(true);
+                await _performLeaveRoom();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _isCurrentUserModerator ? Colors.red : Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+              child: Text(_isCurrentUserModerator ? 'End Room' : 'Leave'),
+            ),
+          ],
+        );
+      },
+    ) ?? false;
+  }
+
+  /// Perform the actual room leaving process
+  Future<void> _performLeaveRoom() async {
+    try {
+      AppLogger().info('🚪 User leaving room - role: ${_isCurrentUserModerator ? 'moderator' : _isCurrentUserSpeaker ? 'speaker' : 'audience'}');
+
+      if (_isJoined && _currentUser != null) {
+        await _appwrite.leaveDebateDiscussionRoom(
+          roomId: widget.roomId,
+          userId: _currentUser!.id,
+        );
+      }
+    } catch (e) {
+      AppLogger().error('Failed to leave room cleanly: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    return PopScope(
+      canPop: false, // Prevent immediate pop to show warning first
+      onPopInvokedWithResult: (didPop, result) async {
+        AppLogger().debug('🚪 PopScope triggered - didPop: $didPop, joined: $_isJoined, disposing: $_isDisposing');
+        AppLogger().debug('🚪 User role - moderator: $_isCurrentUserModerator, speaker: $_isCurrentUserSpeaker');
+
+        if (!didPop && _isJoined && _currentUser != null && !_isDisposing) {
+          // Capture navigator before async operation
+          final navigator = Navigator.of(context);
+          // Show warning before leaving if user has critical role
+          final shouldLeave = await _showLeaveRoomWarning();
+          AppLogger().debug('🚪 Should leave: $shouldLeave');
+          if (shouldLeave && mounted) {
+            navigator.pop();
+          }
+        }
+      },
+      child: _buildMainContent(context),
+    );
+  }
+
+  Widget _buildMainContent(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Colors.black,
@@ -3051,6 +3589,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           const Spacer(),
           // Timer Widget
           AppwriteTimerWidget(
+            key: const ValueKey('debates_timer_widget'),
             roomId: widget.roomId,
             roomType: RoomType.debatesDiscussions,
             isModerator: _isCurrentUserModerator,
@@ -3060,10 +3599,14 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
             showConnectionStatus: false,
           ),
           SizedBox(width: isSmallScreen ? 8 : 16),
-          const ChallengeBell(iconColor: Colors.white),
+          const ChallengeBell(
+            key: ValueKey('debates_challenge_bell'),
+            iconColor: Colors.white,
+          ),
           SizedBox(width: isSmallScreen ? 8 : 16),
           // Compact participant count and audio status
           Row(
+            key: const ValueKey('debates_header_stats'),
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
@@ -3092,6 +3635,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
               ),
             ],
           ),
+          
           
           // Connection status indicator
           if (_isReconnecting) ...[
@@ -3126,9 +3670,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
               ),
             ),
           ],
-          if (_hasModeratorPowers) ...[ 
+          if (_hasModeratorPowers) ...[
             SizedBox(width: isSmallScreen ? 8 : 16),
             GestureDetector(
+                  key: const ValueKey('debates_moderator_tools'),
                   onTap: _showModeratorTools,
                   child: Stack(
                     children: [
@@ -3147,6 +3692,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                       // Show badge if there are pending speaker requests
                       if (_speakerRequests.isNotEmpty)
                         Positioned(
+                          key: ValueKey('moderator_badge_${_speakerRequests.length}'),
                           top: 0,
                           right: 0,
                           child: Container(
@@ -3177,6 +3723,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           if (_roomData?['debateStyle'] == 'Debate' && (_hasModeratorPowers || _isCurrentUserSpeaker)) ...[ 
             SizedBox(width: isSmallScreen ? 6 : 16),
             GestureDetector(
+              key: const ValueKey('debates_materials_button'),
               onTap: _showMaterialsSheet,
               child: Container(
                 padding: EdgeInsets.all(isSmallScreen ? 6 : 8),
@@ -3251,14 +3798,17 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
   Widget _buildVideoGrid() {
     return LayoutBuilder(
+      key: const ValueKey('debates_video_grid_layout'),
       builder: (context, constraints) {
         // Reserve space for controls and other UI elements
         
         return Column(
+          key: const ValueKey('debates_video_grid_column'),
           children: [
             // Speakers panel with integrated audience below moderator
             Expanded(
               child: SingleChildScrollView(
+                key: const ValueKey('debates_speaker_panel_scroll'),
                 child: _buildSpeakerPanel(),
               ),
             ),
@@ -3343,6 +3893,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         final user = _speakerRequests.firstWhere((u) => u.id == userId);
         _approveSpeakerRequest(user);
       },
+
+      // Speaker Queue Parameters (only for discussions mode, not debate/take)
+      speakerQueue: _roomData?['debateStyle'] == null || _roomData?['debateStyle'] == 'Discussion' ? _speakerQueue : null,
+      currentSpeaker: _roomData?['debateStyle'] == null || _roomData?['debateStyle'] == 'Discussion' ? _currentSpeaker : null,
+      queueEnabled: _roomData?['debateStyle'] == null || _roomData?['debateStyle'] == 'Discussion' ? _queueEnabled : false,
+      onJoinQueue: _roomData?['debateStyle'] == null || _roomData?['debateStyle'] == 'Discussion' ? _joinSpeakerQueue : null,
+      onLeaveQueue: _roomData?['debateStyle'] == null || _roomData?['debateStyle'] == 'Discussion' ? _leaveSpeakerQueue : null,
+      onNextSpeaker: _roomData?['debateStyle'] == null || _roomData?['debateStyle'] == 'Discussion' ? _nextSpeakerInQueue : null,
+      onRemoveFromQueue: _roomData?['debateStyle'] == null || _roomData?['debateStyle'] == 'Discussion' ? _removeSpeakerFromQueue : null,
+      onToggleQueue: _roomData?['debateStyle'] == null || _roomData?['debateStyle'] == 'Discussion' ? _toggleQueueMode : null,
     );
   }
 
@@ -3384,7 +3944,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         if (!_isCurrentUserModerator) {
           _isCurrentUserModerator = true;
           if (mounted) {
-            setState(() {});
+            setState(() {
+              // Update UI after setting current user as moderator
+            });
           }
         }
         return 'moderator';
@@ -3400,7 +3962,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         if (!_isCurrentUserSpeaker) {
           _isCurrentUserSpeaker = true;
           if (mounted) {
-            setState(() {});
+            setState(() {
+              // Update UI after setting current user as speaker
+            });
           }
         }
         return 'speaker';
@@ -3712,12 +4276,14 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
   Widget _buildControlsBar() {
     return Container(
+      key: const ValueKey('debates_controls_bar'),
       padding: const EdgeInsets.all(16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // Status text (similar to open discussion)
           Text(
+            key: ValueKey('debates_status_${_isCurrentUserModerator ? 'mod' : _isCurrentUserSpeaker ? 'speaker' : _hasRequestedSpeaker ? 'pending' : 'audience'}'),
             _isCurrentUserModerator
               ? '👑 You are the moderator'
               : _isCurrentUserSpeaker
@@ -3738,13 +4304,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           
           // Control buttons - responsive layout for narrow screens
           LayoutBuilder(
+            key: const ValueKey('debates_controls_layout'),
             builder: (context, constraints) {
               // If screen is too narrow, make it scrollable
               if (constraints.maxWidth < 500) {
                 return SingleChildScrollView(
+                  key: const ValueKey('debates_controls_scroll'),
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Row(
+                    key: const ValueKey('debates_controls_row_narrow'),
                     children: [
                       _buildControlButton(
                         icon: LucideIcons.messageCircle,
@@ -3773,12 +4342,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                         onTap: _shareRoomToSocial,
                       ),
                       const SizedBox(width: 8),
-                      if (_hasModeratorPowers) ...[
+                      // Audio clip button - only show for speakers and moderators
+                      if (_isCurrentUserModerator || _isCurrentUserSpeaker) ...[
                         _buildControlButton(
-                          icon: LucideIcons.radio,
-                          label: 'Go Live',
-                          color: Colors.red,
-                          onTap: _showStreamingOptions,
+                          icon: _isRecordingClip ? LucideIcons.square : LucideIcons.scissors,
+                          label: _isRecordingClip ? 'Stop Clip' : 'Clip Audio',
+                          color: _isRecordingClip ? Colors.red : Colors.purple,
+                          onTap: _toggleAudioClip,
                         ),
                         const SizedBox(width: 8),
                       ],
@@ -3886,12 +4456,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                       color: Colors.blue,
                       onTap: _shareRoomToSocial,
                     ),
-                    if (_hasModeratorPowers) 
+                    // Audio clip button - only show for speakers and moderators
+                    if (_isCurrentUserModerator || _isCurrentUserSpeaker)
                       _buildControlButton(
-                        icon: LucideIcons.radio,
-                        label: 'Go Live',
-                        color: Colors.red,
-                        onTap: _showStreamingOptions,
+                        icon: _isRecordingClip ? LucideIcons.square : LucideIcons.scissors,
+                        label: _isRecordingClip ? 'Stop Clip' : 'Clip Audio',
+                        color: _isRecordingClip ? Colors.red : Colors.purple,
+                        onTap: _toggleAudioClip,
                       ),
                     _buildGiftButton(),
                     _buildControlButton(
@@ -4141,36 +4712,18 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                     ),
                     _buildOptionTile(
                       icon: LucideIcons.settings,
-                      title: 'Test Audio Quality',
-                      onTap: () {
-                        Navigator.pop(context);
-                        _testNoiseCancellation();
-                      },
-                    ),
-                    _buildOptionTile(
-                      icon: LucideIcons.testTube,
-                      title: 'Test Data Message',
-                      onTap: () {
-                        Navigator.pop(context);
-                        _testDataMessage();
-                      },
-                    ),
-                    _buildOptionTile(
-                      icon: LucideIcons.users,
-                      title: 'Room Stats',
-                      onTap: () {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Room has ${_speakerPanelists.length} speakers and ${_audienceMembers.length} audience members')),
-                        );
-                      },
-                    ),
-                    _buildOptionTile(
-                      icon: LucideIcons.settings,
                       title: 'Room Settings',
                       onTap: () {
                         Navigator.pop(context);
                         _showRoomSettings();
+                      },
+                    ),
+                    _buildOptionTile(
+                      icon: _queueEnabled ? LucideIcons.pauseCircle : LucideIcons.playCircle,
+                      title: _queueEnabled ? 'Disable Speaker Queue' : 'Enable Speaker Queue',
+                      onTap: () {
+                        Navigator.pop(context);
+                        _toggleQueueMode();
                       },
                     ),
                                 _buildOptionTile(
@@ -4304,6 +4857,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                 ),
                 const SizedBox(height: 10),
                 ListView.builder(
+                  key: const ValueKey('speaker_panelists_list'),
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: _speakerPanelists.length,
@@ -4312,6 +4866,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                     final isModerator = speaker.id == _moderator?.id;
                     
                     return ListTile(
+                      key: ValueKey('speaker_${speaker.id}'),
                       leading: CircleAvatar(
                         backgroundColor: isModerator ? const Color(0xFF8B5CF6) : Colors.grey[600],
                         child: _buildAvatarText(speaker, 14),
@@ -4346,12 +4901,14 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                 const SizedBox(height: 10),
                 Expanded(
                   child: ListView.builder(
+                    key: const ValueKey('speaker_requests_list'),
                     controller: scrollController,
                     itemCount: _speakerRequests.length,
                     itemBuilder: (context, index) {
                       final user = _speakerRequests[index];
-                      
+
                       return ListTile(
+                        key: ValueKey('speaker_request_${user.id}'),
                         leading: CircleAvatar(
                           backgroundColor: Colors.orange,
                           child: _buildAvatarText(user, 14),
@@ -4444,6 +5001,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                 const SizedBox(height: 10),
                 Expanded(
                   child: ListView.builder(
+                    key: const ValueKey('audience_members_list'),
                     controller: scrollController,
                     itemCount: _audienceMembers.length,
                     itemBuilder: (context, index) {
@@ -4453,6 +5011,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                       final canAssign = !isDebateRoom || (!hasAffirmative || !hasNegative);
                       
                       return ListTile(
+                        key: ValueKey('audience_member_${member.id}'),
                         leading: CircleAvatar(
                           backgroundColor: const Color(0xFF8B5CF6),
                           child: _buildAvatarText(member, 14),
@@ -5039,11 +5598,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                 _shareRoomToSocial();
               },
             ),
-            // Add streaming option for moderators
+            // Add recruitment option for moderators
             if (_hasModeratorPowers)
               _buildOptionTile(
-                icon: LucideIcons.radio,
-                title: 'Go Live',
+                icon: LucideIcons.users,
+                title: 'Recruit Participants',
                 onTap: () {
                   Navigator.pop(context);
                   _showStreamingOptions();
@@ -5131,6 +5690,287 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     }
   }
 
+  // ==================== SPEAKER QUEUE MANAGEMENT ====================
+
+  /// Join the speaker queue (for speakers in the 8-panel)
+  Future<void> _joinSpeakerQueue() async {
+    if (!mounted || _currentUser == null) return;
+
+    final currentUserId = _currentUser!.id;
+    final isCurrentUserSpeaker = _speakerPanelists.any((s) => s.id == currentUserId);
+
+    // Only speakers in the panel can join the queue
+    if (!isCurrentUserSpeaker) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Only speakers in the panel can join the queue'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Check if already in queue
+    if (_speakerQueue.contains(currentUserId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⏳ You are already in the speaker queue'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Check if already speaking
+    if (_currentSpeaker == currentUserId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('🎤 You are already the current speaker'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+      return;
+    }
+
+    try {
+      // Add to Appwrite collection
+      final queuePosition = _speakerQueue.length + 1;
+      await _appwrite.addToSpeakerQueue(
+        roomId: widget.roomId,
+        userId: currentUserId,
+        userName: _currentUser!.name,
+        queuePosition: queuePosition,
+      );
+
+      // Local state will be updated by real-time subscription
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Added to queue (position $queuePosition)'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      AppLogger().info('User ${_currentUser!.name} joined speaker queue at position $queuePosition');
+    } catch (e) {
+      AppLogger().error('❌ Failed to join speaker queue: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Failed to join speaker queue'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Leave the speaker queue
+  Future<void> _leaveSpeakerQueue() async {
+    if (!mounted || _currentUser == null) return;
+
+    final currentUserId = _currentUser!.id;
+
+    if (!_speakerQueue.contains(currentUserId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ You are not in the speaker queue'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      // Remove from Appwrite collection
+      await _appwrite.removeFromSpeakerQueue(
+        roomId: widget.roomId,
+        userId: currentUserId,
+      );
+
+      // Local state will be updated by real-time subscription
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Removed from speaker queue'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      AppLogger().info('User ${_currentUser!.name} left speaker queue');
+    } catch (e) {
+      AppLogger().error('❌ Failed to leave speaker queue: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Failed to leave speaker queue'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Moderator: Advance to next speaker in queue
+  Future<void> _nextSpeakerInQueue() async {
+    if (!mounted || !_hasModeratorPowers) return;
+
+    if (_speakerQueue.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Speaker queue is empty'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final nextSpeakerId = _speakerQueue.first;
+
+    try {
+      // Update in Appwrite - set status to 'speaking'
+      await _appwrite.setCurrentSpeaker(
+        roomId: widget.roomId,
+        userId: nextSpeakerId,
+      );
+
+      // Find speaker name for notification
+      final nextSpeaker = _speakerPanelists.firstWhere(
+        (s) => s.id == nextSpeakerId,
+        orElse: () => UserProfile(
+          id: nextSpeakerId,
+          name: 'Unknown Speaker',
+          email: '',
+          avatar: '',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
+
+      // Local state will be updated by real-time subscription
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('🎤 ${nextSpeaker.name} is now speaking'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      AppLogger().info('Moderator advanced queue: ${nextSpeaker.name} is now speaking');
+    } catch (e) {
+      AppLogger().error('❌ Failed to advance speaker queue: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Failed to advance speaker queue'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Moderator: Remove speaker from queue
+  Future<void> _removeSpeakerFromQueue(String userId) async {
+    if (!mounted || !_hasModeratorPowers) return;
+
+    if (!_speakerQueue.contains(userId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Speaker not in queue'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      // Remove from Appwrite collection
+      await _appwrite.removeFromSpeakerQueue(
+        roomId: widget.roomId,
+        userId: userId,
+      );
+
+      // Find speaker name for notification
+      final speaker = _speakerPanelists.firstWhere(
+        (s) => s.id == userId,
+        orElse: () => UserProfile(
+          id: userId,
+          name: 'Unknown Speaker',
+          email: '',
+          avatar: '',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
+
+      // Local state will be updated by real-time subscription
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Removed ${speaker.name} from queue'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+
+      AppLogger().info('Moderator removed ${speaker.name} from speaker queue');
+    } catch (e) {
+      AppLogger().error('❌ Failed to remove speaker from queue: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Failed to remove speaker from queue'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Moderator: Clear current speaker
+  void _clearCurrentSpeaker() {
+    if (!mounted || !_hasModeratorPowers) return;
+
+    if (_currentSpeaker == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ No current speaker to clear'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final previousSpeaker = _currentSpeaker;
+    setState(() {
+      _currentSpeaker = null;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('✅ Cleared current speaker'),
+        backgroundColor: Colors.green,
+      ),
+    );
+
+    AppLogger().info('Moderator cleared current speaker: $previousSpeaker');
+  }
+
+  /// Toggle queue mode on/off
+  void _toggleQueueMode() {
+    if (!mounted || !_hasModeratorPowers) return;
+
+    setState(() {
+      _queueEnabled = !_queueEnabled;
+      if (!_queueEnabled) {
+        // Clear queue and current speaker when disabling
+        _speakerQueue.clear();
+        _currentSpeaker = null;
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _queueEnabled
+            ? '✅ Speaker queue enabled'
+            : '❌ Speaker queue disabled'
+        ),
+        backgroundColor: _queueEnabled ? Colors.green : Colors.orange,
+      ),
+    );
+
+    AppLogger().info('Moderator ${_queueEnabled ? "enabled" : "disabled"} speaker queue');
+  }
+
   void _showRoomDurationInfo() {
     final startTime = _roomData?['createdAt'];
     final duration = startTime != null ? 
@@ -5154,20 +5994,21 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     final moderatorName = _moderator?.name ?? 'Unknown';
     final participantCount = _speakerPanelists.length + _audienceMembers.length;
     
-    // Create shareable room join link
-    final roomJoinLink = 'https://arena.app/join/debates/${widget.roomId}';
-    
-    // Create shareable content optimized for social media
+    // Create shareable room info for beta testing
     final shareText = '''🎙️ Join our live debate discussion!
 
 Room: $roomName
 Moderator: $moderatorName
 Participants: $participantCount
 
-Join the conversation now:
-$roomJoinLink
+Room ID: ${widget.roomId}
 
-#ArenaDebate #LiveDebate #Discussion''';
+To join this debate:
+1. Download Arena from TestFlight (iOS) or APK (Android)
+2. Open Arena app
+3. Use Room ID: ${widget.roomId} to join
+
+#ArenaDebate #LiveDebate #Discussion #beta''';
 
     try {
       // Direct native share - this should show the grid of apps like in your image
@@ -5190,17 +6031,12 @@ $roomJoinLink
     }
   }
 
-  void _showStreamingOptions() {
-    // Show streaming destinations modal for live streaming (moderator-only)
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => StreamingDestinationsModal(
-        roomId: widget.roomId,
-        roomName: _roomData?['name'] ?? 'Debate Room',
-        isModerator: _isCurrentUserModerator,
-      ),
+  void _showStreamingOptions() async {
+    // Use participant recruitment service to grow debate audience
+    await ParticipantRecruitmentService().showRecruitmentOptions(
+      context, 
+      widget.roomId, 
+      _roomData?['name'] ?? 'Debate Room'
     );
   }
 
@@ -5273,6 +6109,91 @@ $roomJoinLink
     }
   }
 
+  /// Initialize real-time speaker queue synchronization via Appwrite
+  Future<void> _initializeSpeakerQueueSync() async {
+    if (!mounted) return;
+
+    try {
+      // Load existing queue from Appwrite
+      await _loadSpeakerQueueFromAppwrite();
+
+      // Subscribe to real-time updates
+      _speakerQueueSubscription = _appwrite.subscribeToSpeakerQueue(
+        roomId: widget.roomId,
+        onUpdate: _onSpeakerQueueUpdate,
+      );
+
+      AppLogger().info('🔄 Speaker queue real-time sync initialized for room ${widget.roomId}');
+    } catch (e) {
+      AppLogger().error('❌ Failed to initialize speaker queue sync: $e');
+    }
+  }
+
+  /// Load existing speaker queue from Appwrite
+  Future<void> _loadSpeakerQueueFromAppwrite() async {
+    try {
+      final queueItems = await _appwrite.getSpeakerQueue(widget.roomId);
+
+      if (mounted) {
+        setState(() {
+          _speakerQueue.clear();
+          for (final item in queueItems) {
+            _speakerQueue.add(item['userId']);
+          }
+        });
+      }
+
+      AppLogger().info('📋 Loaded ${_speakerQueue.length} items from speaker queue');
+    } catch (e) {
+      AppLogger().error('❌ Failed to load speaker queue: $e');
+    }
+  }
+
+  /// Handle real-time speaker queue updates
+  void _onSpeakerQueueUpdate(Map<String, dynamic> queueData) {
+    if (!mounted) return;
+
+    try {
+      final String roomId = queueData['roomId'];
+      if (roomId != widget.roomId) return;
+
+      // Handle reload event (triggered by delete operations)
+      if (queueData['type'] == 'reload') {
+        _loadSpeakerQueueFromAppwrite();
+        AppLogger().info('🔄 Reloading speaker queue due to delete event');
+        return;
+      }
+
+      final String userId = queueData['userId'];
+      final String status = queueData['status'];
+      final int queuePosition = queueData['queuePosition'];
+
+      if (status == 'queued') {
+        // Add user to queue if not already present
+        if (!_speakerQueue.contains(userId)) {
+          setState(() {
+            // Insert at correct position
+            if (queuePosition <= _speakerQueue.length) {
+              _speakerQueue.insert(queuePosition - 1, userId);
+            } else {
+              _speakerQueue.add(userId);
+            }
+          });
+          AppLogger().info('➕ Added $userId to speaker queue at position $queuePosition');
+        }
+      } else if (status == 'speaking') {
+        // Set as current speaker and remove from queue
+        setState(() {
+          _currentSpeaker = userId;
+          _speakerQueue.remove(userId);
+        });
+        AppLogger().info('🎤 User $userId is now speaking');
+      }
+    } catch (e) {
+      AppLogger().error('❌ Error handling speaker queue update: $e');
+    }
+  }
+
   // Gift modal methods - simplified to use working gift bottom sheet
   void _showGiftModal() {
     AppLogger().debug('🎁 DEBUG: Gift modal button pressed');
@@ -5342,23 +6263,6 @@ $roomJoinLink
     );
   }
 
-  Widget _buildGiftSelectionTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Money Gifting Section
-          _buildMoneyGiftingSection(),
-          
-          const SizedBox(height: 24),
-          
-          // Gift categories
-          ...GiftCategory.values.map((category) => _buildGiftCategorySection(category)),
-        ],
-      ),
-    );
-  }
 
   Widget _buildMoneyGiftingSection() {
     return Column(
@@ -5463,6 +6367,7 @@ $roomJoinLink
         
         // Gift grid
         GridView.builder(
+          key: const ValueKey('gift_grid'),
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -5603,69 +6508,6 @@ $roomJoinLink
     }
   }
 
-  Widget _buildRecipientSelectionTab(List<Map<String, dynamic>> eligibleRecipients) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: eligibleRecipients.length,
-      itemBuilder: (context, index) {
-        final recipient = eligibleRecipients[index];
-        final isSelected = _selectedRecipient?['userId'] == recipient['userId'];
-        
-        return GestureDetector(
-          onTap: () => _selectRecipient(recipient),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: isSelected ? Colors.blue.withValues(alpha: 0.1) : Colors.white,
-              border: Border.all(
-                color: isSelected ? Colors.blue : Colors.grey[300]!,
-                width: isSelected ? 2 : 1,
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Colors.grey[300],
-                  child: _buildAvatarTextFromMap(recipient, 16),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        recipient['name'],
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      Text(
-                        recipient['role'].toString().toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (isSelected)
-                  const Icon(
-                    Icons.check_circle,
-                    color: Colors.blue,
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   void _showMoneyInputModal() {
     final TextEditingController amountController = TextEditingController();
@@ -6103,9 +6945,157 @@ $roomJoinLink
         syncService: _materialSyncService!,
         appwriteService: _appwrite,
         currentUserId: _currentUser?.id ?? '',
+        roomId: widget.roomId,
         onDismiss: () {
           AppLogger().info('📊 Slide update popup dismissed');
         },
+      ),
+    );
+  }
+
+  /// Handle audio clip recording toggle
+  Future<void> _toggleAudioClip() async {
+    try {
+      if (!_isRecordingClip) {
+        // Start recording audio clip
+        AppLogger().info('🎙️ Starting audio clip recording');
+        
+        // Show dialog to get clip title
+        final clipTitle = await _showClipTitleDialog();
+        if (clipTitle == null || clipTitle.trim().isEmpty) {
+          return; // User cancelled or didn't enter a title
+        }
+        
+        final success = await _audioClipService.startAudioClip(
+          roomId: widget.roomId,
+          userId: _currentUser?.id ?? '',
+          clipTitle: clipTitle,
+        );
+        
+        if (success) {
+          if (mounted) {
+            setState(() {
+              _isRecordingClip = true;
+            });
+            
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('🎙️ Recording 30-second audio clip...'),
+                backgroundColor: Colors.purple,
+                duration: Duration(seconds: 2),
+              ),
+            );
+            
+            // Auto-stop after 30 seconds
+            Timer(const Duration(seconds: 30), () {
+              if (mounted && _isRecordingClip) {
+                setState(() {
+                  _isRecordingClip = false;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('✅ Audio clip saved!'),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            });
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('❌ Failed to start audio recording'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      } else {
+        // Stop recording
+        AppLogger().info('🛑 Stopping audio clip recording');
+        await _audioClipService.cancelRecording();
+        
+        if (mounted) {
+          setState(() {
+            _isRecordingClip = false;
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🛑 Audio clip recording stopped'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      AppLogger().error('Error toggling audio clip: $e');
+      if (mounted) {
+        setState(() {
+          _isRecordingClip = false;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Audio clip error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Show dialog to get clip title from user
+  Future<String?> _showClipTitleDialog() async {
+    final controller = TextEditingController();
+    
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(LucideIcons.mic, color: Colors.purple, size: 20),
+            SizedBox(width: 8),
+            Text('Audio Clip Title'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Give your 30-second audio clip a title:'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              maxLength: 50,
+              decoration: const InputDecoration(
+                hintText: 'e.g., "Great point about healthcare"',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final title = controller.text.trim();
+              Navigator.pop(context, title.isNotEmpty ? title : null);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.purple,
+            ),
+            child: const Text('Start Recording', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }

@@ -608,6 +608,16 @@ class PerformanceOptimizedSpeakersPanel extends StatefulWidget {
   final Function(String userId)? onSpeakerRequestApprove; // New parameter for approving speaker requests
   final String? debateStyle; // New parameter for debate style
   final bool isCurrentUserModerator; // New parameter to know if current user is moderator
+
+  // Speaker Queue Parameters
+  final List<String>? speakerQueue; // List of user IDs in queue
+  final String? currentSpeaker; // Current speaker user ID
+  final bool queueEnabled; // Whether queue mode is enabled
+  final VoidCallback? onJoinQueue; // Join queue callback
+  final VoidCallback? onLeaveQueue; // Leave queue callback
+  final VoidCallback? onNextSpeaker; // Next speaker callback
+  final Function(String userId)? onRemoveFromQueue; // Remove from queue callback
+  final VoidCallback? onToggleQueue; // Toggle queue mode callback
   
   const PerformanceOptimizedSpeakersPanel({
     super.key,
@@ -620,6 +630,16 @@ class PerformanceOptimizedSpeakersPanel extends StatefulWidget {
     this.onSpeakerRequestApprove,
     this.debateStyle,
     this.isCurrentUserModerator = false,
+
+    // Speaker Queue Parameters
+    this.speakerQueue,
+    this.currentSpeaker,
+    this.queueEnabled = false,
+    this.onJoinQueue,
+    this.onLeaveQueue,
+    this.onNextSpeaker,
+    this.onRemoveFromQueue,
+    this.onToggleQueue,
   });
 
   @override
@@ -985,7 +1005,252 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
               ),
             ),
           ],
-          
+
+          // Speaker Queue section (show when queue is enabled)
+          if (widget.queueEnabled) ...[
+            const SizedBox(height: 16),
+
+            Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: Colors.purple.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.queue,
+                        color: Colors.purple,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Speaker Queue',
+                        style: TextStyle(
+                          color: Colors.purple,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (widget.isCurrentUserModerator) ...[
+                        // Toggle queue button
+                        IconButton(
+                          onPressed: widget.onToggleQueue,
+                          icon: Icon(
+                            widget.queueEnabled ? Icons.pause_circle : Icons.play_circle,
+                            color: widget.queueEnabled ? Colors.orange : Colors.green,
+                            size: 18,
+                          ),
+                          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                          padding: EdgeInsets.zero,
+                        ),
+                      ],
+                    ],
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // Current speaker
+                  if (widget.currentSpeaker != null) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.mic, color: Colors.green, size: 14),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Speaking: ${_getSpeakerName(widget.currentSpeaker!)}',
+                            style: const TextStyle(
+                              color: Colors.green,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (widget.isCurrentUserModerator) ...[
+                            GestureDetector(
+                              onTap: () => widget.onRemoveFromQueue?.call(widget.currentSpeaker!),
+                              child: const Icon(
+                                Icons.stop_circle,
+                                color: Colors.red,
+                                size: 16,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+                  ],
+
+                  // Queue list
+                  if (widget.speakerQueue?.isNotEmpty == true) ...[
+                    const Text(
+                      'Waiting to speak:',
+                      style: TextStyle(
+                        color: Colors.purple,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+
+                    ...widget.speakerQueue!.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final userId = entry.value;
+                      final position = index + 1;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                color: Colors.purple,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '$position',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _getSpeakerName(userId),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            if (widget.isCurrentUserModerator) ...[
+                              // Next speaker button (only for first in queue)
+                              if (index == 0) ...[
+                                GestureDetector(
+                                  onTap: widget.onNextSpeaker,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      'Next',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+
+                              // Remove from queue
+                              GestureDetector(
+                                onTap: () => widget.onRemoveFromQueue?.call(userId),
+                                child: const Icon(
+                                  Icons.remove_circle,
+                                  color: Colors.red,
+                                  size: 16,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    }),
+                  ] else if (widget.speakerQueue?.isEmpty != false) ...[
+                    // Show empty queue message
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        '📋 Queue is empty - speakers can join to speak in order',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
+
+                  // Join/Leave queue buttons
+                  if (!widget.isCurrentUserModerator) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: widget.onJoinQueue,
+                            icon: const Icon(Icons.add_to_queue, size: 14),
+                            label: const Text(
+                              'Join Queue',
+                              style: TextStyle(fontSize: 11),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.purple,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: widget.onLeaveQueue,
+                            icon: const Icon(Icons.remove_from_queue, size: 14),
+                            label: const Text(
+                              'Leave Queue',
+                              style: TextStyle(fontSize: 11),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+
           // Audience section below moderator
           if (widget.audience != null && widget.audience!.isNotEmpty) ...[
             const SizedBox(height: 16),
@@ -1028,6 +1293,19 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
         ],
       ),
     );
+  }
+
+  /// Helper method to get speaker name from user ID
+  String _getSpeakerName(String userId) {
+    // Look for the speaker in the speakers list
+    for (final speaker in widget.speakers) {
+      if (speaker['userId'] == userId) {
+        return speaker['name'] ?? speaker['userName'] ?? 'Unknown';
+      }
+    }
+
+    // If not found, return a fallback
+    return 'Speaker';
   }
 }
 

@@ -4,6 +4,7 @@ import 'package:appwrite/enums.dart';
 import 'package:flutter/foundation.dart';
 import '../constants/appwrite.dart';
 import 'dart:convert';
+import 'dart:async';
 import '../models/user_profile.dart';
 import '../models/gift_transaction.dart';
 import '../core/logging/app_logger.dart';
@@ -127,6 +128,93 @@ class AppwriteService {
       } else {
         AppLogger().debug('   🔍 Unexpected error - investigating...');
       }
+    }
+  }
+
+  /// Change user role using server-authoritative backend function
+  Future<Map<String, dynamic>> changeUserRole({
+    required String roomName,
+    required String targetUserId,
+    required String newRole,
+  }) async {
+    try {
+      AppLogger().debug('🔄 SERVER ROLE CHANGE: Calling changeRole function');
+      AppLogger().debug('   Room: $roomName');
+      AppLogger().debug('   Target: $targetUserId');
+      AppLogger().debug('   New Role: $newRole');
+
+      final result = await functions.createExecution(
+        functionId: 'changeRole',
+        body: jsonEncode({
+          'roomName': roomName,
+          'targetUserId': targetUserId,
+          'newRole': newRole,
+        }),
+      );
+
+      final responseBody = result.responseBody;
+      final response = jsonDecode(responseBody) as Map<String, dynamic>;
+
+      AppLogger().debug('✅ SERVER ROLE CHANGE: Success - ${response['success']}');
+
+      return response;
+    } catch (e) {
+      AppLogger().debug('❌ SERVER ROLE CHANGE: Failed - $e');
+      rethrow;
+    }
+  }
+
+  /// Create LiveKit token using server-authoritative backend function
+  Future<Map<String, dynamic>> createLiveKitToken({
+    required String roomName,
+  }) async {
+    try {
+      AppLogger().debug('🎫 SERVER TOKEN: Requesting LiveKit token');
+      AppLogger().debug('   Room: $roomName');
+
+      final result = await functions.createExecution(
+        functionId: 'createLiveKitToken',
+        body: jsonEncode({
+          'roomName': roomName,
+        }),
+      );
+
+      final responseBody = result.responseBody;
+      final response = jsonDecode(responseBody) as Map<String, dynamic>;
+
+      AppLogger().debug('✅ SERVER TOKEN: Token created successfully');
+
+      return response;
+    } catch (e) {
+      AppLogger().debug('❌ SERVER TOKEN: Failed - $e');
+      rethrow;
+    }
+  }
+
+  /// Reconcile role consistency between Appwrite and LiveKit
+  Future<Map<String, dynamic>> reconcileRoom({
+    required String roomName,
+  }) async {
+    try {
+      AppLogger().debug('🔄 SERVER RECONCILE: Reconciling room roles');
+      AppLogger().debug('   Room: $roomName');
+
+      final result = await functions.createExecution(
+        functionId: 'reconcileRoom',
+        body: jsonEncode({
+          'roomName': roomName,
+        }),
+      );
+
+      final responseBody = result.responseBody;
+      final response = jsonDecode(responseBody) as Map<String, dynamic>;
+
+      AppLogger().debug('✅ SERVER RECONCILE: ${response['rolesReconciled']} roles fixed');
+
+      return response;
+    } catch (e) {
+      AppLogger().debug('❌ SERVER RECONCILE: Failed - $e');
+      rethrow;
     }
   }
 
@@ -302,6 +390,8 @@ class AppwriteService {
       );
       
       AppLogger().debug('🔐 ✅ signIn successful for: $email');
+
+
       return session;
     } catch (e) {
       AppLogger().debug('🔐 ❌ Error signing in: $e');
@@ -353,6 +443,8 @@ class AppwriteService {
       );
       
       AppLogger().debug('🔐 ✅ Google OAuth successful');
+
+
       return session;
     } catch (e) {
       AppLogger().debug('🔐 ❌ Error with Google OAuth: $e');
@@ -2613,44 +2705,125 @@ class AppwriteService {
 
   Future<void> closeArenaRoom(String roomId) async {
     try {
-      // Update arena room status to completed
-      await databases.updateDocument(
-        databaseId: 'arena_db',
-        collectionId: 'arena_rooms',
-        documentId: roomId,
-        data: {
-          'status': 'completed',
-          'endedAt': DateTime.now().toIso8601String(),
-        },
-      );
+      AppLogger().debug('🚨 Starting closeArenaRoom for $roomId');
 
-      // Set all participants as inactive (effectively removing them from the room)
-      final participants = await databases.listDocuments(
-        databaseId: 'arena_db',
-        collectionId: 'arena_participants',
-        queries: [
-          Query.equal('roomId', roomId),
-          Query.equal('isActive', true),
-        ],
-      );
-
-      // Update each participant to inactive
-      for (final participant in participants.documents) {
-        await databases.updateDocument(
+      // 1. First verify the room exists and check its current status
+      try {
+        final roomDoc = await databases.getDocument(
           databaseId: 'arena_db',
-          collectionId: 'arena_participants',
-          documentId: participant.$id,
-          data: {
-            'isActive': false,
-            'leftAt': DateTime.now().toIso8601String(),
-          },
+          collectionId: 'arena_rooms',
+          documentId: roomId,
         );
+
+        final currentStatus = roomDoc.data['status'];
+        if (currentStatus == 'completed' ||
+            currentStatus == 'abandoned' ||
+            currentStatus == 'closed') {
+          AppLogger().info('🚨 Arena room $roomId already has final status: $currentStatus');
+          return; // Room is already closed
+        }
+      } catch (e) {
+        if (e.toString().contains('document_not_found')) {
+          AppLogger().warning('🚨 Arena room $roomId not found - may already be deleted');
+          return; // Room doesn't exist, consider operation successful
+        }
+        // For other errors, continue with the close attempt
+        AppLogger().warning('⚠️ Could not verify room status, continuing with close: $e');
       }
 
-      AppLogger().info('Arena room $roomId closed successfully by moderator');
+      // 2. Update arena room status to completed (with retry logic)
+      bool roomStatusUpdated = false;
+      for (int attempt = 1; attempt <= 2; attempt++) {
+        try {
+          await databases.updateDocument(
+            databaseId: 'arena_db',
+            collectionId: 'arena_rooms',
+            documentId: roomId,
+            data: {
+              'status': 'completed',
+              'endedAt': DateTime.now().toIso8601String(),
+            },
+          );
+          roomStatusUpdated = true;
+          AppLogger().debug('✅ Room status updated on attempt $attempt');
+          break;
+        } catch (e) {
+          AppLogger().warning('⚠️ Room status update attempt $attempt failed: $e');
+          if (attempt == 2) {
+            // Last attempt failed
+            if (e.toString().contains('document_not_found')) {
+              AppLogger().info('🚨 Room disappeared during close operation');
+              return; // Room was deleted by someone else
+            }
+            throw e; // Rethrow for genuine failures
+          }
+          await Future.delayed(Duration(milliseconds: 300)); // Brief delay before retry
+        }
+      }
+
+      // 3. Set all participants as inactive (non-blocking approach)
+      try {
+        final participants = await databases.listDocuments(
+          databaseId: 'arena_db',
+          collectionId: 'arena_participants',
+          queries: [
+            Query.equal('roomId', roomId),
+            Query.equal('isActive', true),
+          ],
+        );
+
+        AppLogger().debug('🧑‍🤝‍🧑 Found ${participants.documents.length} active participants to deactivate');
+
+        // Update participants in parallel for better performance
+        final updateFutures = participants.documents.map((participant) async {
+          try {
+            await databases.updateDocument(
+              databaseId: 'arena_db',
+              collectionId: 'arena_participants',
+              documentId: participant.$id,
+              data: {
+                'isActive': false,
+                'leftAt': DateTime.now().toIso8601String(),
+              },
+            );
+          } catch (e) {
+            AppLogger().warning('⚠️ Failed to deactivate participant ${participant.$id}: $e');
+            // Don't fail the entire operation for individual participant failures
+          }
+        });
+
+        // Wait for all participant updates with timeout
+        try {
+          await Future.wait(updateFutures).timeout(Duration(seconds: 5));
+        } catch (e) {
+          if (e.toString().contains('TimeoutException')) {
+            AppLogger().warning('⚠️ Participant updates timed out, but room is closed');
+          } else {
+            AppLogger().warning('⚠️ Error updating participants: $e');
+          }
+        }
+
+        AppLogger().debug('✅ Participant deactivation completed');
+
+      } catch (e) {
+        AppLogger().warning('⚠️ Error deactivating participants (room is still closed): $e');
+        // Don't fail the operation - room status update is what matters most
+      }
+
+      AppLogger().info('✅ Arena room $roomId closed successfully by moderator');
     } catch (e) {
-      AppLogger().error('Error closing Arena room: $e');
-      rethrow;
+      AppLogger().error('❌ Error closing Arena room $roomId: $e');
+
+      // Add more context to the error for better debugging
+      if (e.toString().contains('network')) {
+        throw Exception('Network error while closing room: ${e.toString()}');
+      } else if (e.toString().contains('timeout')) {
+        throw Exception('Timeout while closing room: ${e.toString()}');
+      } else if (e.toString().contains('document_not_found')) {
+        throw Exception('Room not found: ${e.toString()}');
+      } else {
+        rethrow;
+      }
     }
   }
 
@@ -4967,6 +5140,166 @@ class AppwriteService {
       AppLogger().info('Cleaned up ${response.documents.length} expired ping requests');
     } catch (e) {
       AppLogger().error('Error cleaning up expired ping requests: $e');
+    }
+  }
+
+  // ==================== SPEAKER QUEUE METHODS ====================
+
+  /// Get speaker queue for a room
+  Future<List<Map<String, dynamic>>> getSpeakerQueue(String roomId) async {
+    try {
+      final response = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'speaker_queue',
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('status', 'queued'),
+          Query.orderAsc('queuePosition'),
+        ],
+      );
+
+      return response.documents.map((doc) => doc.data).toList();
+    } catch (e) {
+      AppLogger().error('Error getting speaker queue: $e');
+      return [];
+    }
+  }
+
+  /// Add user to speaker queue
+  Future<void> addToSpeakerQueue({
+    required String roomId,
+    required String userId,
+    required String userName,
+    required int queuePosition,
+  }) async {
+    try {
+      await databases.createDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'speaker_queue',
+        documentId: ID.unique(),
+        data: {
+          'roomId': roomId,
+          'userId': userId,
+          'userName': userName,
+          'queuePosition': queuePosition,
+          'status': 'queued',
+          'joinedAt': DateTime.now().toIso8601String(),
+        },
+      );
+
+      AppLogger().info('Added user $userId to speaker queue at position $queuePosition');
+    } catch (e) {
+      AppLogger().error('Error adding to speaker queue: $e');
+      throw e;
+    }
+  }
+
+  /// Remove user from speaker queue
+  Future<void> removeFromSpeakerQueue({
+    required String roomId,
+    required String userId,
+  }) async {
+    try {
+      // Find the document to delete
+      final response = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'speaker_queue',
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('userId', userId),
+        ],
+      );
+
+      if (response.documents.isNotEmpty) {
+        final docId = response.documents.first.$id;
+        await databases.deleteDocument(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: 'speaker_queue',
+          documentId: docId,
+        );
+        AppLogger().info('Removed user $userId from speaker queue');
+      }
+    } catch (e) {
+      AppLogger().error('Error removing from speaker queue: $e');
+      throw e;
+    }
+  }
+
+  /// Set current speaker (changes status to 'speaking' and removes from queue)
+  Future<void> setCurrentSpeaker({
+    required String roomId,
+    required String userId,
+  }) async {
+    try {
+      // Find the user in the queue and update their status
+      final response = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'speaker_queue',
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('userId', userId),
+        ],
+      );
+
+      if (response.documents.isNotEmpty) {
+        final docId = response.documents.first.$id;
+        await databases.updateDocument(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: 'speaker_queue',
+          documentId: docId,
+          data: {
+            'status': 'speaking',
+          },
+        );
+        AppLogger().info('Set user $userId as current speaker');
+      }
+    } catch (e) {
+      AppLogger().error('Error setting current speaker: $e');
+      throw e;
+    }
+  }
+
+  /// Subscribe to speaker queue real-time updates
+  RealtimeSubscription? subscribeToSpeakerQueue({
+    required String roomId,
+    required Function(Map<String, dynamic>) onUpdate,
+  }) {
+    try {
+      final subscription = realtime.subscribe([
+        'databases.${AppwriteConstants.databaseId}.collections.speaker_queue.documents'
+      ]);
+
+      subscription.stream.listen(
+        (response) {
+          if (response.events.isNotEmpty) {
+            final payload = response.payload;
+            final event = response.events.first;
+
+            // Handle different event types
+            if (event.contains('databases.arena_db.collections.speaker_queue.documents')) {
+              if (event.contains('.delete')) {
+                // Handle delete events - reload the entire queue since we don't have document data
+                onUpdate({'type': 'reload', 'roomId': roomId});
+              } else {
+                // Handle create/update events
+                final data = payload as Map<String, dynamic>;
+                if (data['roomId'] == roomId) {
+                  onUpdate(data);
+                }
+              }
+            }
+          }
+        },
+        onError: (error) {
+          AppLogger().error('Speaker queue subscription error: $error');
+        },
+      );
+
+      AppLogger().info('Subscribed to speaker queue updates for room $roomId');
+      return subscription;
+    } catch (e) {
+      AppLogger().error('Error subscribing to speaker queue: $e');
+      return null;
     }
   }
 } 
