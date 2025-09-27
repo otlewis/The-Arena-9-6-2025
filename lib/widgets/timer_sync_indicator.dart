@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/appwrite_offline_service.dart';
+import '../services/disposal_tracking_system.dart';
 
 /// Visual sync indicator showing connection status and pending actions
 /// 
@@ -26,7 +27,7 @@ class TimerSyncIndicator extends StatefulWidget {
 }
 
 class _TimerSyncIndicatorState extends State<TimerSyncIndicator>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, DisposalTrackingMixin {
   final AppwriteOfflineService _offlineService = AppwriteOfflineService();
   
   StreamSubscription<OfflineStatus>? _statusSubscription;
@@ -41,6 +42,10 @@ class _TimerSyncIndicatorState extends State<TimerSyncIndicator>
   @override
   void initState() {
     super.initState();
+
+    // Initialize disposal tracking system
+    initDisposalTracking(customId: 'timer_sync_indicator');
+
     _setupAnimations();
     _setupStatusStream();
   }
@@ -83,6 +88,8 @@ class _TimerSyncIndicatorState extends State<TimerSyncIndicator>
         _updateAnimations(status);
       }
     });
+    // Track offline status subscription
+    trackSubscription('status_stream', _statusSubscription!);
   }
 
   void _updateAnimations(OfflineStatus status) {
@@ -359,6 +366,8 @@ class _TimerSyncIndicatorState extends State<TimerSyncIndicator>
     _statusSubscription?.cancel();
     _pulseController.dispose();
     _rotateController.dispose();
+    // Clean up all tracked disposable resources
+    disposeTrackedResources();
     super.dispose();
   }
 }
@@ -371,7 +380,7 @@ class ConnectionStatusBadge extends StatefulWidget {
   State<ConnectionStatusBadge> createState() => _ConnectionStatusBadgeState();
 }
 
-class _ConnectionStatusBadgeState extends State<ConnectionStatusBadge> {
+class _ConnectionStatusBadgeState extends State<ConnectionStatusBadge> with DisposalTrackingMixin {
   final AppwriteOfflineService _offlineService = AppwriteOfflineService();
   StreamSubscription<bool>? _connectionSubscription;
   bool _isConnected = true;
@@ -379,6 +388,10 @@ class _ConnectionStatusBadgeState extends State<ConnectionStatusBadge> {
   @override
   void initState() {
     super.initState();
+
+    // Initialize disposal tracking system
+    initDisposalTracking(customId: 'connection_status_badge');
+
     _connectionSubscription = _offlineService.connectionStatus.listen((isConnected) {
       if (mounted) {
         setState(() {
@@ -386,6 +399,8 @@ class _ConnectionStatusBadgeState extends State<ConnectionStatusBadge> {
         });
       }
     });
+    // Track connection subscription
+    trackSubscription('connection_stream', _connectionSubscription!);
   }
 
   @override
@@ -426,6 +441,8 @@ class _ConnectionStatusBadgeState extends State<ConnectionStatusBadge> {
   @override
   void dispose() {
     _connectionSubscription?.cancel();
+    // Clean up all tracked disposable resources
+    disposeTrackedResources();
     super.dispose();
   }
 }

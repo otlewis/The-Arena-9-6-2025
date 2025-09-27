@@ -1,0 +1,35 @@
+[
+  {
+    "event_id": "winter_tournament_2025",
+    "title": "Winter Debate Tournament",
+    "description": "Compete against top debaters for prizes and recognition. Weekly matches with elimination rounds.",
+    "price_display": "$5 entry",
+    "cta_text": "Join Tournament",
+    "start_date": "2025-01-15T00:00:00.000Z",
+    "end_date": "2025-02-15T23:59:59.000Z",
+    "sort_order": 1,
+    "is_active": true
+  },
+  {
+    "event_id": "valentines_special_2025",
+    "title": "Valentine's Day Debate Night",
+    "description": "Special themed debates about love, relationships, and society. Fun prizes for participants!",
+    "price_display": "$3 ticket",
+    "cta_text": "Get Ticket",
+    "start_date": "2025-02-14T19:00:00.000Z",
+    "end_date": "2025-02-14T23:00:00.000Z",
+    "sort_order": 2,
+    "is_active": true
+  },
+  {
+    "event_id": "spring_championship_2025",
+    "title": "Spring Championship Series",
+    "description": "The ultimate debate championship! Monthly matches leading to the grand finale.",
+    "price_display": "$10 season pass",
+    "cta_text": "Enter Championship",
+    "start_date": "2025-03-01T00:00:00.000Z",
+    "end_date": "2025-05-31T23:59:59.000Z",
+    "sort_order": 3,
+    "is_active": false
+  }
+]

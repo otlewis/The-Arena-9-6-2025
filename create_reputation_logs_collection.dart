@@ -1,18 +1,46 @@
+// ⚠️ DEPRECATED SCRIPT - DO NOT USE ⚠️
+// This script uses old Appwrite SDK methods that are no longer available in v18.0.0
+// The methods setKey, createCollection, createStringAttribute, etc. have been removed
+// For working collection creation, use create_reputation_collection.dart which uses REST API
+// Or wait for TablesDB support to be added to the Flutter SDK
+
+/*
 import 'package:appwrite/appwrite.dart';
+import 'package:flutter/foundation.dart';
+
+// Simple console logger for scripts
+void logInfo(String message) {
+  if (kDebugMode || !kIsWeb) {
+    debugPrint('INFO: $message');
+  }
+}
+
+void logError(String message) {
+  if (kDebugMode || !kIsWeb) {
+    debugPrint('ERROR: $message');
+  }
+}
+
+void logSuccess(String message) {
+  if (kDebugMode || !kIsWeb) {
+    debugPrint('SUCCESS: $message');
+  }
+}
 
 void main() async {
   // Initialize Appwrite client
   final client = Client()
-    ..setEndpoint('https://cloud.appwrite.io/v1')
-    ..setProject('683a37a8003719978879')
-    ..setKey('standard_a2bb604b91b6e0ad49c4b8b3c0c59c83c9a7ee4ce4b2a784c9f05d9ad84c0fb5f3e8b05e8c4e8f79b3f5e8b05e8c4e8f79b3f5e8b05e8c4e8f79b3f5e8b05e8c4e8');
+    .setEndpoint('https://cloud.appwrite.io/v1')
+    .setProject('683a37a8003719978879')
+    .setKey('standard_a2bb604b91b6e0ad49c4b8b3c0c59c83c9a7ee4ce4b2a784c9f05d9ad84c0fb5f3e8b05e8c4e8f79b3f5e8b05e8c4e8f79b3f5e8b05e8c4e8f79b3f5e8b05e8c4e8');
 
   final databases = Databases(client);
   
   try {
-    print('Creating reputation_logs collection...');
+    logInfo('Creating reputation_logs collection...');
     
-    // Create the collection
+    // Note: Appwrite SDK methods are deprecated but TablesDB is not yet available
+    // This script will need updating when TablesDB support is added to Flutter SDK
     final collection = await databases.createCollection(
       databaseId: 'arena_db',
       collectionId: 'reputation_logs',
@@ -26,10 +54,10 @@ void main() async {
       documentSecurity: true,
     );
     
-    print('✅ Collection created: ${collection.name}');
+    logSuccess('Collection created: ${collection.name}');
     
     // Create attributes
-    print('Creating attributes...');
+    logInfo('Creating attributes...');
     
     // userId attribute
     await databases.createStringAttribute(
@@ -39,7 +67,7 @@ void main() async {
       size: 255,
       required: true,
     );
-    print('✅ Created userId attribute');
+    logSuccess('Created userId attribute');
     
     // Wait a moment for attribute to be ready
     await Future.delayed(Duration(seconds: 2));
@@ -51,7 +79,7 @@ void main() async {
       key: 'pointsChange',
       required: true,
     );
-    print('✅ Created pointsChange attribute');
+    logSuccess('Created pointsChange attribute');
     
     await Future.delayed(Duration(seconds: 2));
     
@@ -62,7 +90,7 @@ void main() async {
       key: 'newTotal',
       required: true,
     );
-    print('✅ Created newTotal attribute');
+    logSuccess('Created newTotal attribute');
     
     await Future.delayed(Duration(seconds: 2));
     
@@ -74,7 +102,7 @@ void main() async {
       size: 500,
       required: true,
     );
-    print('✅ Created reason attribute');
+    logSuccess('Created reason attribute');
     
     await Future.delayed(Duration(seconds: 2));
     
@@ -85,14 +113,14 @@ void main() async {
       key: 'timestamp',
       required: true,
     );
-    print('✅ Created timestamp attribute');
+    logSuccess('Created timestamp attribute');
     
     // Wait for all attributes to be ready before creating indexes
-    print('Waiting for attributes to be ready...');
+    logInfo('Waiting for attributes to be ready...');
     await Future.delayed(Duration(seconds: 10));
     
     // Create indexes
-    print('Creating indexes...');
+    logInfo('Creating indexes...');
     
     // Index for userId
     await databases.createIndex(
@@ -102,7 +130,7 @@ void main() async {
       type: 'key',
       attributes: ['userId'],
     );
-    print('✅ Created userId index');
+    logSuccess('Created userId index');
     
     await Future.delayed(Duration(seconds: 2));
     
@@ -114,7 +142,7 @@ void main() async {
       type: 'key',
       attributes: ['timestamp'],
     );
-    print('✅ Created timestamp index');
+    logSuccess('Created timestamp index');
     
     await Future.delayed(Duration(seconds: 2));
     
@@ -126,14 +154,22 @@ void main() async {
       type: 'key',
       attributes: ['userId', 'timestamp'],
     );
-    print('✅ Created userId_timestamp compound index');
+    logSuccess('Created userId_timestamp compound index');
     
-    print('\n🎉 reputation_logs collection created successfully!');
-    print('Collection ID: reputation_logs');
-    print('Attributes: userId, pointsChange, newTotal, reason, timestamp');
-    print('Indexes: userId, timestamp, userId+timestamp');
+    logSuccess('\nreputation_logs collection created successfully!');
+    logInfo('Collection ID: reputation_logs');
+    logInfo('Attributes: userId, pointsChange, newTotal, reason, timestamp');
+    logInfo('Indexes: userId, timestamp, userId+timestamp');
     
   } catch (e) {
-    print('❌ Error creating collection: $e');
+    logError('Error creating collection: $e');
   }
+}
+*/
+
+import 'dart:developer' as developer;
+
+void main() {
+  developer.log('⚠️ This deprecated script is disabled to prevent compilation errors.');
+  developer.log('Use the REST API or wait for TablesDB support in the Flutter SDK.');
 }

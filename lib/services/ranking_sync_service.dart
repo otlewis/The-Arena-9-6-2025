@@ -9,10 +9,10 @@ class RankingSyncService {
   RankingSyncService._internal();
   
   final AppwriteService _appwriteService = AppwriteService();
-  late final Functions _functions;
+  Functions? _functions;
   
   void initialize() {
-    _functions = Functions(_appwriteService.client);
+    _functions ??= Functions(_appwriteService.client);
   }
   
   /// Sync rankings for a specific user
@@ -20,7 +20,7 @@ class RankingSyncService {
     try {
       AppLogger().info('🎯 Syncing rankings for user: $userId');
       
-      final execution = await _functions.createExecution(
+      final execution = await _functions!.createExecution(
         functionId: 'ranking-sync',
         body: jsonEncode({
           'action': 'sync-user',
@@ -52,7 +52,7 @@ class RankingSyncService {
     try {
       AppLogger().info('🚀 Starting full ranking sync...');
       
-      final execution = await _functions.createExecution(
+      final execution = await _functions!.createExecution(
         functionId: 'ranking-sync',
         body: jsonEncode({
           'action': 'sync-all',
@@ -78,7 +78,7 @@ class RankingSyncService {
     try {
       AppLogger().info('🎯 Syncing rankings for ${userIds.length} users');
       
-      final execution = await _functions.createExecution(
+      final execution = await _functions!.createExecution(
         functionId: 'ranking-sync',
         body: jsonEncode({
           'action': 'sync-multiple',
@@ -107,7 +107,7 @@ class RankingSyncService {
     try {
       AppLogger().info('🔄 Recalculating global ranks...');
       
-      final execution = await _functions.createExecution(
+      final execution = await _functions!.createExecution(
         functionId: 'ranking-sync',
         body: jsonEncode({
           'action': 'recalculate-ranks',

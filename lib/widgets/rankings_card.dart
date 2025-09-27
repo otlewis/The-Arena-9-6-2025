@@ -128,7 +128,7 @@ class _RankingsCardState extends State<RankingsCard> {
         color: isDarkMode ? Colors.grey[800] : Colors.grey[50],
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: rankColor.withOpacity(0.3),
+          color: rankColor.withValues(alpha: 0.3),
           width: 1,
         ),
       ),

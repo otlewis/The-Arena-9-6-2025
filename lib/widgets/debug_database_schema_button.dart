@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:appwrite/appwrite.dart';
-import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
 
 /// Debug widget to update database schema for premium features
@@ -13,7 +11,6 @@ class DebugDatabaseSchemaButton extends StatefulWidget {
 }
 
 class _DebugDatabaseSchemaButtonState extends State<DebugDatabaseSchemaButton> {
-  bool _isUpdating = false;
   String _status = '';
 
   Future<void> _showManualSetupInstructions() async {

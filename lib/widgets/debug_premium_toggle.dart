@@ -252,7 +252,7 @@ class _DebugPremiumToggleState extends State<DebugPremiumToggle> {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.purple.withOpacity(0.1),
+        color: Colors.purple.withValues(alpha: 0.1),
         border: Border.all(color: Colors.purple),
         borderRadius: BorderRadius.circular(8),
       ),

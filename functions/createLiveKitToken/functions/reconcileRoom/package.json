@@ -1,0 +1,11 @@
+{
+  "name": "reconcile-room",
+  "version": "1.0.0",
+  "description": "Reconcile role consistency between Appwrite and LiveKit",
+  "main": "src/main.js",
+  "type": "module",
+  "dependencies": {
+    "livekit-server-sdk": "^2.6.0",
+    "node-appwrite": "^14.0.0"
+  }
+}

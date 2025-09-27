@@ -1,24 +1,22 @@
+import 'dart:developer' as developer;
 import 'dart:math';
 import '../services/appwrite_service.dart';
-import '../services/gamified_ranking_service.dart';
-import '../core/logging/app_logger.dart';
 
 /// Quick script to initialize rankings for existing users
 /// This will create sample rankings so you can see how the system looks
 void main() async {
   try {
-    print('🚀 Initializing rankings for existing users...\n');
+    developer.log('🚀 Initializing rankings for existing users...\n');
     
     final appwriteService = AppwriteService();
-    final rankingService = GamifiedRankingService();
     
     // Get current month key
     final now = DateTime.now();
     final monthKey = '${now.year}-${now.month.toString().padLeft(2, '0')}';
-    print('📅 Current month: $monthKey\n');
+    developer.log('📅 Current month: $monthKey\n');
     
     // Get all users from the database
-    print('📊 Fetching existing users...');
+    developer.log('📊 Fetching existing users...');
     final usersResponse = await appwriteService.databases.listDocuments(
       databaseId: 'arena_db',
       collectionId: 'users',
@@ -26,14 +24,14 @@ void main() async {
     );
     
     final users = usersResponse.documents;
-    print('✅ Found ${users.length} users\n');
+    developer.log('✅ Found ${users.length} users\n');
     
     if (users.isEmpty) {
-      print('⚠️  No users found in database. Create some user accounts first!');
+      developer.log('⚠️  No users found in database. Create some user accounts first!');
       return;
     }
     
-    print('🎯 Creating initial rankings with sample data...\n');
+    developer.log('🎯 Creating initial rankings with sample data...\n');
     
     final random = Random();
     int successCount = 0;
@@ -93,9 +91,9 @@ void main() async {
         );
         
         // Look for existing record for this user and month
-        final existingRecord = existingRankings.documents.firstWhere(
+        final existingRecord = existingRankings.documents.cast().firstWhere(
           (doc) => doc.data['userId'] == userId && doc.data['monthKey'] == monthKey,
-          orElse: () => null as dynamic,
+          orElse: () => null,
         );
         
         if (existingRecord != null) {
@@ -116,7 +114,7 @@ void main() async {
               'lastUpdated': DateTime.now().toIso8601String(),
             },
           );
-          print('📝 Updated: #$rankPosition - $userName ($tier tier, $monthlyPoints pts)');
+          developer.log('📝 Updated: #$rankPosition - $userName ($tier tier, $monthlyPoints pts)');
         } else {
           // Create new ranking record
           await appwriteService.databases.createDocument(
@@ -137,28 +135,28 @@ void main() async {
               'lastUpdated': DateTime.now().toIso8601String(),
             },
           );
-          print('✨ Created: #$rankPosition - $userName ($tier tier, $monthlyPoints pts)');
+          developer.log('✨ Created: #$rankPosition - $userName ($tier tier, $monthlyPoints pts)');
         }
         
         successCount++;
         
       } catch (e) {
-        print('❌ Error initializing ranking for $userName: $e');
+        developer.log('❌ Error initializing ranking for $userName: $e');
       }
     }
     
-    print('\n' + '═' * 50);
-    print('🎉 Rankings initialized successfully!');
-    print('📊 Created/Updated rankings for $successCount/${users.length} users');
-    print('\n💡 Tier Distribution:');
-    print('   💠 Diamond: Top performers (7500+ points)');
-    print('   💎 Platinum: Elite players (3500+ points)');
-    print('   🥇 Gold: Strong competitors (1500+ points)');
-    print('   🥈 Silver: Active players (500+ points)');
-    print('   🥉 Bronze: New players (0+ points)');
-    print('\n🎮 Open the Arena app and tap "Rankings" to see the leaderboard!');
+    developer.log('\n${'═' * 50}');
+    developer.log('🎉 Rankings initialized successfully!');
+    developer.log('📊 Created/Updated rankings for $successCount/${users.length} users');
+    developer.log('\n💡 Tier Distribution:');
+    developer.log('   💠 Diamond: Top performers (7500+ points)');
+    developer.log('   💎 Platinum: Elite players (3500+ points)');
+    developer.log('   🥇 Gold: Strong competitors (1500+ points)');
+    developer.log('   🥈 Silver: Active players (500+ points)');
+    developer.log('   🥉 Bronze: New players (0+ points)');
+    developer.log('\n🎮 Open the Arena app and tap "Rankings" to see the leaderboard!');
     
   } catch (e) {
-    print('💥 Error initializing rankings: $e');
+    developer.log('💥 Error initializing rankings: $e');
   }
 }

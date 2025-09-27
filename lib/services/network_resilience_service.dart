@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../core/logging/app_logger.dart';
+import 'device_capabilities_service.dart';
 
 /// Service for handling poor network conditions and connection reliability
 class NetworkResilienceService {
@@ -15,6 +16,7 @@ class NetworkResilienceService {
   // Network state
   bool _isOnline = true;
   NetworkQuality _networkQuality = NetworkQuality.good;
+  NetworkType _networkType = NetworkType.unknown;
   int _consecutiveFailures = 0;
   
   // Circuit breaker state
@@ -29,6 +31,7 @@ class NetworkResilienceService {
   
   bool get isOnline => _isOnline;
   NetworkQuality get networkQuality => _networkQuality;
+  NetworkType get networkType => _networkType;
   
   /// Initialize network monitoring
   Future<void> initialize() async {
@@ -52,12 +55,15 @@ class NetworkResilienceService {
     final hasConnection = results.any((result) => 
       result != ConnectivityResult.none);
     
+    // Update network type
+    _updateNetworkType(results);
+    
     if (hasConnection != _isOnline) {
       _isOnline = hasConnection;
       _connectionController.add(_isOnline);
       
       if (_isOnline) {
-        AppLogger().info('🌐 Connection restored');
+        AppLogger().info('🌐 Connection restored - Type: ${_networkType.name}');
         _resetCircuitBreakers();
         _checkNetworkQuality();
       } else {
@@ -67,6 +73,45 @@ class NetworkResilienceService {
       }
     }
   }
+  
+  /// Update network type based on connectivity results
+  void _updateNetworkType(List<ConnectivityResult> results) {
+    if (results.contains(ConnectivityResult.ethernet)) {
+      _networkType = NetworkType.ethernet;
+    } else if (results.contains(ConnectivityResult.wifi)) {
+      _networkType = NetworkType.wifi;
+    } else if (results.contains(ConnectivityResult.mobile)) {
+      // Try to determine cellular generation
+      _networkType = _determineCellularType();
+    } else {
+      _networkType = NetworkType.unknown;
+    }
+  }
+  
+  /// Determine cellular type (2G/3G/4G/5G) with better detection
+  NetworkType _determineCellularType() {
+    // Enhanced detection using latency and connection quality
+    try {
+      // Use latency-based detection for more accuracy
+      final latency = _lastMeasuredLatency;
+      
+      if (latency > 800 || _networkQuality == NetworkQuality.offline) {
+        return NetworkType.cellular2G; // EDGE/GPRS - very high latency
+      } else if (latency > 400 || _networkQuality == NetworkQuality.poor) {
+        return NetworkType.cellular3G; // 3G/HSPA - high latency
+      } else if (latency > 100 || _networkQuality == NetworkQuality.moderate) {
+        return NetworkType.cellular4G; // 4G/LTE - moderate latency
+      } else if (latency <= 100 && _networkQuality == NetworkQuality.good) {
+        return NetworkType.cellular5G; // 5G - low latency
+      } else {
+        return NetworkType.cellular4G; // Default to 4G
+      }
+    } catch (e) {
+      return NetworkType.cellular4G; // Default to 4G
+    }
+  }
+  
+  int _lastMeasuredLatency = 100; // Store last measured latency
   
   /// Check initial connection status
   Future<void> _checkInitialConnection() async {
@@ -99,6 +144,7 @@ class NetworkResilienceService {
       
       stopwatch.stop();
       final latency = stopwatch.elapsedMilliseconds;
+      _lastMeasuredLatency = latency; // Store for network type detection
       
       _updateNetworkQuality(latency);
       _consecutiveFailures = 0;

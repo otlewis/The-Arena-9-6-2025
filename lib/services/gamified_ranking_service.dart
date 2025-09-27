@@ -15,15 +15,15 @@ class GamifiedRankingService {
   final AppwriteService _appwriteService = AppwriteService();
 
   // Scoring Constants
-  static const int WIN_BASE_POINTS = 100;
-  static const int LOSS_PARTICIPATION_POINTS = 10;
-  static const int DAILY_LOGIN_XP = 5;
-  static const int ROOM_CREATION_XP = 15;
-  static const int GIFT_MIN_XP = 5;
-  static const int GIFT_MAX_XP = 20;
+  static const int winBasePoints = 100;
+  static const int lossParticipationPoints = 10;
+  static const int dailyLoginXp = 5;
+  static const int roomCreationXp = 15;
+  static const int giftMinXp = 5;
+  static const int giftMaxXp = 20;
 
   // Win Streak Multipliers
-  static const Map<int, double> WIN_STREAK_MULTIPLIERS = {
+  static const Map<int, double> winStreakMultipliers = {
     2: 1.0,   // No bonus for 2 wins
     3: 2.0,   // 2x bonus
     5: 3.0,   // 3x bonus
@@ -32,13 +32,13 @@ class GamifiedRankingService {
   };
 
   // Opponent Tier Bonuses
-  static const double HIGHER_TIER_BONUS = 0.5;  // +50%
-  static const double SAME_TIER_BONUS = 0.25;   // +25%
-  static const double PERFECT_SCORE_BONUS = 0.5; // +50%
+  static const double higherTierBonus = 0.5;  // +50%
+  static const double sameTierBonus = 0.25;   // +25%
+  static const double perfectScoreBonus = 0.5; // +50%
 
   /// Tier System Thresholds
   
-  static const Map<RankTier, int> TIER_THRESHOLDS = {
+  static const Map<RankTier, int> tierThresholds = {
     RankTier.bronze: 0,
     RankTier.silver: 500,
     RankTier.gold: 1500,
@@ -46,7 +46,7 @@ class GamifiedRankingService {
     RankTier.diamond: 7500,
   };
 
-  static const Map<RankTier, String> TIER_NAMES = {
+  static const Map<RankTier, String> tierNames = {
     RankTier.bronze: 'Bronze',
     RankTier.silver: 'Silver',
     RankTier.gold: 'Gold',
@@ -54,7 +54,7 @@ class GamifiedRankingService {
     RankTier.diamond: 'Diamond',
   };
 
-  static const Map<RankTier, String> TIER_EMOJIS = {
+  static const Map<RankTier, String> tierEmojis = {
     RankTier.bronze: '🥉',
     RankTier.silver: '🥈',
     RankTier.gold: '🥇',
@@ -70,7 +70,7 @@ class GamifiedRankingService {
     bool isWin = true,
   }) async {
     try {
-      int basePoints = isWin ? WIN_BASE_POINTS : LOSS_PARTICIPATION_POINTS;
+      int basePoints = isWin ? winBasePoints : lossParticipationPoints;
       
       if (!isWin) {
         // For losses, just give participation points
@@ -88,7 +88,7 @@ class GamifiedRankingService {
       double opponentBonus = await _getOpponentTierBonus(userId, opponentId);
       
       // Apply perfect score bonus
-      double scoreBonus = (judgeScore != null && judgeScore >= 90) ? PERFECT_SCORE_BONUS : 0.0;
+      double scoreBonus = (judgeScore != null && judgeScore >= 90) ? perfectScoreBonus : 0.0;
       
       // Calculate final points
       double totalMultiplier = streakMultiplier + opponentBonus + scoreBonus;
@@ -100,7 +100,7 @@ class GamifiedRankingService {
       
     } catch (e) {
       AppLogger().error('Failed to calculate win points: $e');
-      return isWin ? WIN_BASE_POINTS : LOSS_PARTICIPATION_POINTS;
+      return isWin ? winBasePoints : lossParticipationPoints;
     }
   }
 
@@ -262,7 +262,7 @@ class GamifiedRankingService {
           'avatar': profile?.avatar,
           'monthlyPoints': userData['monthlyPoints'] ?? 0,
           'tier': _getTierFromPoints(userData['monthlyPoints'] ?? 0).name,
-          'tierEmoji': TIER_EMOJIS[_getTierFromPoints(userData['monthlyPoints'] ?? 0)],
+          'tierEmoji': tierEmojis[_getTierFromPoints(userData['monthlyPoints'] ?? 0)],
           'wins': userData['monthlyWins'] ?? 0,
           'losses': userData['monthlyLosses'] ?? 0,
           'winStreak': userData['currentWinStreak'] ?? 0,
@@ -307,7 +307,7 @@ class GamifiedRankingService {
   // Private helper methods
 
   double _getStreakMultiplier(int streak) {
-    for (final entry in WIN_STREAK_MULTIPLIERS.entries.toList().reversed) {
+    for (final entry in winStreakMultipliers.entries.toList().reversed) {
       if (streak >= entry.key) {
         return entry.value;
       }
@@ -324,9 +324,9 @@ class GamifiedRankingService {
       final opponentTierIndex = RankTier.values.indexOf(opponentTier);
       
       if (opponentTierIndex > userTierIndex) {
-        return HIGHER_TIER_BONUS; // Opponent is higher tier
+        return higherTierBonus; // Opponent is higher tier
       } else if (opponentTierIndex == userTierIndex) {
-        return SAME_TIER_BONUS; // Same tier
+        return sameTierBonus; // Same tier
       }
       
       return 0.0; // Opponent is lower tier, no bonus
@@ -339,7 +339,7 @@ class GamifiedRankingService {
 
   RankTier _getTierFromPoints(int points) {
     for (final tier in RankTier.values.reversed) {
-      if (points >= TIER_THRESHOLDS[tier]!) {
+      if (points >= tierThresholds[tier]!) {
         return tier;
       }
     }
@@ -349,13 +349,13 @@ class GamifiedRankingService {
   int _getActivityXP(ActivityType activityType, int? customAmount) {
     switch (activityType) {
       case ActivityType.dailyLogin:
-        return DAILY_LOGIN_XP;
+        return dailyLoginXp;
       case ActivityType.roomCreation:
-        return ROOM_CREATION_XP;
+        return roomCreationXp;
       case ActivityType.giftSent:
-        return customAmount?.clamp(GIFT_MIN_XP, GIFT_MAX_XP) ?? GIFT_MIN_XP;
+        return customAmount?.clamp(giftMinXp, giftMaxXp) ?? giftMinXp;
       case ActivityType.giftReceived:
-        return customAmount?.clamp(GIFT_MIN_XP, GIFT_MAX_XP) ?? GIFT_MIN_XP;
+        return customAmount?.clamp(giftMinXp, giftMaxXp) ?? giftMinXp;
     }
   }
 
@@ -527,8 +527,8 @@ class GamifiedRankingService {
       }
       
       // Calculate points using the proper formula
-      final winPoints = monthlyWins * WIN_BASE_POINTS;
-      final lossPoints = monthlyLosses * LOSS_PARTICIPATION_POINTS;
+      final winPoints = monthlyWins * winBasePoints;
+      final lossPoints = monthlyLosses * lossParticipationPoints;
       final totalPoints = winPoints + lossPoints;
       
       // Determine tier from points

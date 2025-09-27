@@ -1,0 +1,35 @@
+[
+  {
+    "subscription_id": "teen_monthly",
+    "title": "Teen Plan (13–17)",
+    "price_display": "$4.99/mo",
+    "eligibility": "age_13_17",
+    "features": "Join debates, Ranked profile, Basic analytics, Parental controls",
+    "badge": "Requires parent OK",
+    "rc_product_id": "arena_teen_monthly",
+    "sort_order": 1,
+    "is_active": true
+  },
+  {
+    "subscription_id": "adult_monthly",
+    "title": "Adult Plan (18+)",
+    "price_display": "$9.99/mo",
+    "eligibility": "age_18_plus",
+    "features": "Join & host debates, Advanced analytics, Priority queue, Full moderation tools",
+    "badge": "Most popular",
+    "rc_product_id": "arena_adult_monthly",
+    "sort_order": 2,
+    "is_active": true
+  },
+  {
+    "subscription_id": "adult_yearly",
+    "title": "Adult Plan Yearly (18+)",
+    "price_display": "$99.99/year",
+    "eligibility": "age_18_plus",
+    "features": "Join & host debates, Advanced analytics, Priority queue, Full moderation tools, Save 17%",
+    "badge": "Best value",
+    "rc_product_id": "arena_adult_yearly",
+    "sort_order": 3,
+    "is_active": true
+  }
+]

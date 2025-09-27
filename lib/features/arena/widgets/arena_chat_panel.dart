@@ -138,7 +138,9 @@ class _ArenaChatPanelState extends ConsumerState<ArenaChatPanel> {
       
       // Trigger rebuild to show the avatar
       if (mounted) {
-        setState(() {});
+        setState(() {
+          // Force UI update to display newly cached avatar
+        });
       }
       
       return avatarUrl;

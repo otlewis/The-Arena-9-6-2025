@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../models/user_profile.dart';
 import '../models/instant_message.dart';
 import '../core/logging/app_logger.dart';
+import '../services/disposal_tracking_system.dart';
 
 /// Modern chat interface that looks like iPhone Messages
 class ModernChatInterface extends StatefulWidget {
@@ -26,7 +27,7 @@ class ModernChatInterface extends StatefulWidget {
 }
 
 class _ModernChatInterfaceState extends State<ModernChatInterface>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, DisposalTrackingMixin {
   // Placeholder messaging service (LiveKit chat integration pending)
   final _messagingService = _DisabledMessagingService();
   final TextEditingController _messageController = TextEditingController();
@@ -62,6 +63,10 @@ class _ModernChatInterfaceState extends State<ModernChatInterface>
   @override
   void initState() {
     super.initState();
+
+    // Initialize disposal tracking system
+    initDisposalTracking(customId: 'chat_${widget.currentUser.id}_${widget.otherUser.id}');
+
     _initializeAnimations();
     _initializeChat();
   }
@@ -205,6 +210,8 @@ class _ModernChatInterfaceState extends State<ModernChatInterface>
         }
       }
     });
+    // Track message stream subscription
+    trackSubscription('message_stream_$conversationId', _messageStreamSubscriptions[conversationId]!);
   }
   
   void _showNewMessageNotification(String senderId, String senderName, String messageContent) {
@@ -234,7 +241,7 @@ class _ModernChatInterfaceState extends State<ModernChatInterface>
     // Listen to conversations to set up message stream listeners and detect when conversations are read
     _conversationsSubscription = _messagingService.getConversationsStream().listen((conversations) {
       if (!mounted) return;
-      
+
       // Set up message listeners for new conversations
       for (final conversation in conversations) {
         if (conversation.id != _conversationId && !_messageStreamSubscriptions.containsKey(conversation.id)) {
@@ -262,6 +269,8 @@ class _ModernChatInterfaceState extends State<ModernChatInterface>
         _lastMessageTimes[conversation.id] = conversation.lastMessageTime;
       }
     });
+    // Track conversations subscription
+    trackSubscription('conversations_stream', _conversationsSubscription!);
   }
   
   void _dismissNotification() {
@@ -922,7 +931,10 @@ class _ModernChatInterfaceState extends State<ModernChatInterface>
       subscription.cancel();
     }
     _messageStreamSubscriptions.clear();
-    
+
+    // Clean up all tracked disposable resources
+    disposeTrackedResources();
+
     super.dispose();
   }
 }

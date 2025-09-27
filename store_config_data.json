@@ -1,0 +1,22 @@
+[
+  {
+    "config_key": "teen_plans_enabled",
+    "config_value": "true",
+    "is_active": true
+  },
+  {
+    "config_key": "coin_purchases_enabled",
+    "config_value": "true",
+    "is_active": true
+  },
+  {
+    "config_key": "events_enabled",
+    "config_value": "true",
+    "is_active": true
+  },
+  {
+    "config_key": "store_version",
+    "config_value": "1.0.0",
+    "is_active": true
+  }
+]

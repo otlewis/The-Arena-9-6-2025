@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
 import '../services/appwrite_service.dart';
-import '../services/gamified_ranking_service.dart';
-import '../core/logging/app_logger.dart';
 
 class InitializeRankingsScreen extends StatefulWidget {
   const InitializeRankingsScreen({super.key});

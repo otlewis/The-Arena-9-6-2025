@@ -2,20 +2,16 @@ import 'package:flutter/material.dart';
 // import 'dart:async'; // Removed - no longer needed
 import '../../../core/logging/app_logger.dart';
 import '../../../screens/arena_modals.dart';
-import '../../../widgets/enhanced_appwrite_timer_widget.dart';
 import '../../../widgets/challenge_bell.dart';
 import '../../../widgets/network_quality_indicator.dart';
-import '../../../models/timer_state.dart';
+import '../../../widgets/simple_timer.dart';
 // import '../../../services/livekit_service.dart'; // Removed unused import
 
 /// Arena App Bar - DO NOT MODIFY LAYOUT
 /// This is the exact app bar from the original arena with timer and moderator controls
 class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool isModerator;
-  final bool isTimerRunning;
-  final String formattedTime;
   final VoidCallback onShowModeratorControls;
-  final VoidCallback onShowTimerControls;
   final VoidCallback onExitArena;
   final VoidCallback onEmergencyCloseRoom;
   final String roomId;
@@ -24,10 +20,7 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
   const ArenaAppBar({
     super.key,
     required this.isModerator,
-    required this.isTimerRunning,
-    required this.formattedTime,
     required this.onShowModeratorControls,
-    required this.onShowTimerControls,
     required this.onExitArena,
     required this.onEmergencyCloseRoom,
     required this.roomId,
@@ -57,9 +50,6 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: LayoutBuilder(
         builder: (context, constraints) {
           
-          // Calculate available space for timer - more aggressive on small screens
-          final moderatorControlsWidth = isModerator ? (isSmallScreen ? 50 : 58) : 0;
-          final availableWidth = constraints.maxWidth - moderatorControlsWidth;
           
           return Row(
             children: [
@@ -102,52 +92,10 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ],
                 ),
               
-              // Appwrite Timer (synchronized across devices) with gear icon for moderators
-              Expanded(
-                child: Container(
-                  constraints: BoxConstraints(
-                    maxWidth: availableWidth * (isSmallScreen ? 1.0 : 0.9), // Use more space on small screens
-                  ),
-                  child: Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        EnhancedAppwriteTimerWidget(
-                          roomId: roomId,
-                          roomType: RoomType.arena,
-                          isModerator: isModerator,
-                          userId: userId,
-                          compact: true,
-                          showControls: isModerator,
-                          showConnectionStatus: true, // Show connection status in arena
-                          onTimerExpired: () {
-                            // Handle timer expiration for debate phases
-                          },
-                        ),
-                        // Timer control gear icon for moderators
-                        if (isModerator) ...[
-                          const SizedBox(width: 8),
-                          IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: BoxConstraints(
-                              minWidth: isSmallScreen ? 24 : 28,
-                              minHeight: isSmallScreen ? 24 : 28,
-                            ),
-                            onPressed: () {
-                              AppLogger().debug('⚙️ Timer gear icon tapped by moderator');
-                              onShowTimerControls();
-                            },
-                            icon: Icon(
-                              Icons.settings,
-                              color: Colors.white70,
-                              size: isSmallScreen ? 16 : 18,
-                            ),
-                            tooltip: 'Timer Controls',
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+              // Simple Timer in header center
+              const Expanded(
+                child: Center(
+                  child: SimpleTimer(),
                 ),
               ),
             ],

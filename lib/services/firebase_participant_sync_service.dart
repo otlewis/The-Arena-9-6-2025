@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:firebase_database/firebase_database.dart';
 import '../core/logging/app_logger.dart';
 import '../models/user_profile.dart';
+import 'disposal_tracking_system.dart';
 
 /// Firebase Realtime Database service for instant participant synchronization
 /// This service provides real-time participant sync that's more reliable than Appwrite
@@ -17,6 +18,7 @@ class FirebaseParticipantSyncService {
 
   late final FirebaseDatabase _database;
   final Map<String, StreamSubscription> _activeSubscriptions = {};
+  final DisposalTrackingSystem _disposalTracker = DisposalTrackingSystem();
   
   /// Initialize Firebase Realtime Database
   Future<void> initialize() async {

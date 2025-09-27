@@ -1,0 +1,11 @@
+{
+  "name": "change-role",
+  "version": "1.0.0",
+  "description": "Change user role with authority checks and audit trail",
+  "main": "src/main.js",
+  "type": "module",
+  "dependencies": {
+    "livekit-server-sdk": "^2.6.0",
+    "node-appwrite": "^14.0.0"
+  }
+}

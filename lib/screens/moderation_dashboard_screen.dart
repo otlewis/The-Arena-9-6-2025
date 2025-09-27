@@ -4,9 +4,11 @@ import '../services/content_moderation_service.dart';
 import '../services/appwrite_service.dart';
 import '../services/theme_service.dart';
 import '../services/user_role_service.dart';
+import '../services/realtime_ai_moderation_service.dart';
 import '../core/logging/app_logger.dart';
 import '../widgets/moderation_action_dialog.dart';
 import 'appeals_management_screen.dart';
+import '../features/arena/constants/arena_colors.dart';
 
 class ModerationDashboardScreen extends StatefulWidget {
   const ModerationDashboardScreen({super.key});
@@ -20,9 +22,11 @@ class _ModerationDashboardScreenState extends State<ModerationDashboardScreen> {
   final AppwriteService _appwrite = AppwriteService();
   final ThemeService _themeService = ThemeService();
   final UserRoleService _roleService = UserRoleService();
-  
+  final RealtimeAIModerationService _aiModerationService = RealtimeAIModerationService();
+
   List<Map<String, dynamic>> _reports = [];
   List<Map<String, dynamic>> _queueItems = [];
+  List<Map<String, dynamic>> _aiModerationLogs = [];
   bool _isLoading = true;
   bool _hasAccess = false;
 
@@ -46,6 +50,7 @@ class _ModerationDashboardScreenState extends State<ModerationDashboardScreen> {
 
       if (_hasAccess) {
         _loadModerationData();
+        _loadAIModerationLogs();
       } else {
         setState(() => _isLoading = false);
       }
@@ -97,6 +102,28 @@ class _ModerationDashboardScreenState extends State<ModerationDashboardScreen> {
     }
   }
 
+  Future<void> _loadAIModerationLogs() async {
+    try {
+      // Load AI moderation logs
+      final logsResponse = await _appwrite.databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'ai_moderation_logs',
+        queries: [
+          Query.orderDesc('timestamp'),
+          Query.limit(100),
+        ],
+      );
+
+      if (mounted) {
+        setState(() {
+          _aiModerationLogs = logsResponse.documents.map((doc) => doc.data).toList();
+        });
+      }
+    } catch (e) {
+      AppLogger().error('Failed to load AI moderation logs: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -127,7 +154,10 @@ class _ModerationDashboardScreenState extends State<ModerationDashboardScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadModerationData,
+            onPressed: () {
+              _loadModerationData();
+              _loadAIModerationLogs();
+            },
           ),
         ],
       ),
@@ -136,7 +166,7 @@ class _ModerationDashboardScreenState extends State<ModerationDashboardScreen> {
           : !_hasAccess
           ? _buildAccessDeniedScreen()
           : DefaultTabController(
-              length: 2,
+              length: 3,
               child: Column(
                 children: [
                   TabBar(
@@ -144,6 +174,7 @@ class _ModerationDashboardScreenState extends State<ModerationDashboardScreen> {
                     unselectedLabelColor: _themeService.isDarkMode ? Colors.white54 : Colors.grey,
                     indicatorColor: accentPurple,
                     tabs: [
+                      Tab(text: 'AI Logs (${_aiModerationLogs.length})'),
                       Tab(text: 'Reports (${_reports.length})'),
                       Tab(text: 'Queue (${_queueItems.length})'),
                     ],
@@ -151,6 +182,7 @@ class _ModerationDashboardScreenState extends State<ModerationDashboardScreen> {
                   Expanded(
                     child: TabBarView(
                       children: [
+                        _buildAIModerationTab(),
                         _buildReportsTab(),
                         _buildQueueTab(),
                       ],
@@ -237,6 +269,18 @@ class _ModerationDashboardScreenState extends State<ModerationDashboardScreen> {
     );
   }
 
+  Widget _buildAIModerationTab() {
+    if (_aiModerationLogs.isEmpty) {
+      return _buildEmptyState('No AI moderation logs found', Icons.smart_toy);
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _aiModerationLogs.length,
+      itemBuilder: (context, index) => _buildAIModerationCard(_aiModerationLogs[index]),
+    );
+  }
+
   Widget _buildReportsTab() {
     if (_reports.isEmpty) {
       return _buildEmptyState('No reports found', Icons.report_outlined);
@@ -309,6 +353,246 @@ class _ModerationDashboardScreenState extends State<ModerationDashboardScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildAIModerationCard(Map<String, dynamic> log) {
+    final severity = log['severity'] as String? ?? 'unknown';
+    final action = log['action'] as String? ?? 'none';
+    final userName = log['userName'] as String? ?? 'Unknown User';
+    final content = log['content'] as String? ?? 'No content';
+    final source = log['source'] as String? ?? 'unknown';
+    final timestamp = DateTime.tryParse(log['timestamp'] ?? '') ?? DateTime.now();
+    final scores = log['scores'] as Map<String, dynamic>? ?? {};
+
+    Color severityColor = Colors.grey;
+    IconData severityIcon = Icons.info;
+
+    switch (severity) {
+      case 'mild':
+        severityColor = Colors.yellow;
+        severityIcon = Icons.warning_amber;
+        break;
+      case 'moderate':
+        severityColor = Colors.orange;
+        severityIcon = Icons.warning;
+        break;
+      case 'severe':
+        severityColor = Colors.red;
+        severityIcon = Icons.dangerous;
+        break;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode
+            ? ArenaColors.cardDark
+            : const Color(0xFFF0F0F3),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: _themeService.isDarkMode
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.white.withValues(alpha: 0.8),
+            offset: const Offset(-6, -6),
+            blurRadius: 12,
+          ),
+          BoxShadow(
+            color: _themeService.isDarkMode
+                ? Colors.black.withValues(alpha: 0.5)
+                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+            offset: const Offset(6, 6),
+            blurRadius: 12,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(severityIcon, color: severityColor, size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        userName,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: _themeService.isDarkMode ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        'Detected ${_formatDate(timestamp)}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: _themeService.isDarkMode ? Colors.white70 : Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _buildSeverityChip(severity),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _themeService.isDarkMode
+                    ? const Color(0xFF2D2D2D)
+                    : const Color(0xFFE8E8E8),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                content,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: _themeService.isDarkMode ? Colors.white : Colors.black87,
+                ),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _buildBadge('${action.toUpperCase()}', _getActionColor(action)),
+                const SizedBox(width: 8),
+                _buildBadge(source.toUpperCase(), ArenaColors.primary),
+                const Spacer(),
+                Text(
+                  'Room: ${log['roomId']?.substring(0, 8) ?? 'Unknown'}...',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[500],
+                  ),
+                ),
+              ],
+            ),
+            if (scores.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _buildScoreIndicators(scores),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSeverityChip(String severity) {
+    Color color;
+    switch (severity) {
+      case 'mild':
+        color = Colors.yellow;
+        break;
+      case 'moderate':
+        color = Colors.orange;
+        break;
+      case 'severe':
+        color = Colors.red;
+        break;
+      default:
+        color = Colors.grey;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color, width: 1),
+      ),
+      child: Text(
+        severity.toUpperCase(),
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBadge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScoreIndicators(Map<String, dynamic> scores) {
+    return Column(
+      children: scores.entries.take(3).map((entry) { // Show top 3 scores
+        final score = (entry.value as num).toDouble();
+        final scorePercent = (score * 100).toInt();
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 80,
+                child: Text(
+                  entry.key,
+                  style: TextStyle(
+                    color: _themeService.isDarkMode ? Colors.white70 : Colors.grey[600],
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: LinearProgressIndicator(
+                  value: score,
+                  backgroundColor: Colors.grey.withValues(alpha: 0.3),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    score > 0.7 ? Colors.red : score > 0.5 ? Colors.orange : Colors.green,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '$scorePercent%',
+                style: TextStyle(
+                  color: _themeService.isDarkMode ? Colors.white : Colors.black87,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Color _getActionColor(String action) {
+    switch (action.toLowerCase()) {
+      case 'warning':
+        return Colors.yellow;
+      case 'mute':
+        return Colors.orange;
+      case 'ban':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
   }
 
   Widget _buildReportCard(Map<String, dynamic> report) {

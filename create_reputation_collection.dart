@@ -1,8 +1,28 @@
 import 'dart:io';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
+
+// Simple console logger for scripts
+void logInfo(String message) {
+  if (kDebugMode || !kIsWeb) {
+    debugPrint('INFO: $message');
+  }
+}
+
+void logError(String message) {
+  if (kDebugMode || !kIsWeb) {
+    debugPrint('ERROR: $message');
+  }
+}
+
+void logSuccess(String message) {
+  if (kDebugMode || !kIsWeb) {
+    debugPrint('SUCCESS: $message');
+  }
+}
 
 void main() async {
-  print('Creating reputation_logs collection via Appwrite REST API...');
+  logInfo('Creating reputation_logs collection via Appwrite REST API...');
   
   const endpoint = 'https://cloud.appwrite.io/v1';
   const projectId = '683a37a8003719978879';
@@ -13,7 +33,7 @@ void main() async {
   
   try {
     // Create collection
-    print('Creating collection...');
+    logInfo('Creating collection...');
     var request = await httpClient.postUrl(Uri.parse('$endpoint/databases/$databaseId/collections'));
     request.headers.set('X-Appwrite-Project', projectId);
     request.headers.set('X-Appwrite-Key', apiKey);
@@ -36,9 +56,9 @@ void main() async {
     var responseBody = await response.transform(utf8.decoder).join();
     
     if (response.statusCode == 201) {
-      print('✅ Collection created successfully');
+      logSuccess('Collection created successfully');
     } else {
-      print('❌ Failed to create collection: $responseBody');
+      logError('Failed to create collection: $responseBody');
       return;
     }
     
@@ -55,7 +75,7 @@ void main() async {
     ];
     
     for (var attr in attributes) {
-      print('Creating ${attr['key']} attribute...');
+      logInfo('Creating ${attr['key']} attribute...');
       
       var attrRequest = await httpClient.postUrl(
         Uri.parse('$endpoint/databases/$databaseId/collections/reputation_logs/attributes/${attr['type']}'
@@ -71,16 +91,16 @@ void main() async {
       var attrResponseBody = await attrResponse.transform(utf8.decoder).join();
       
       if (attrResponse.statusCode == 202) {
-        print('✅ Created ${attr['key']} attribute');
+        logSuccess('Created ${attr['key']} attribute');
       } else {
-        print('❌ Failed to create ${attr['key']} attribute: $attrResponseBody');
+        logError('Failed to create ${attr['key']} attribute: $attrResponseBody');
       }
       
       await Future.delayed(Duration(seconds: 2));
     }
     
     // Wait for attributes to be ready
-    print('Waiting for attributes to be ready...');
+    logInfo('Waiting for attributes to be ready...');
     await Future.delayed(Duration(seconds: 10));
     
     // Create indexes
@@ -91,7 +111,7 @@ void main() async {
     ];
     
     for (var index in indexes) {
-      print('Creating ${index['key']} index...');
+      logInfo('Creating ${index['key']} index...');
       
       var indexRequest = await httpClient.postUrl(
         Uri.parse('$endpoint/databases/$databaseId/collections/reputation_logs/indexes')
@@ -107,21 +127,21 @@ void main() async {
       var indexResponseBody = await indexResponse.transform(utf8.decoder).join();
       
       if (indexResponse.statusCode == 202) {
-        print('✅ Created ${index['key']} index');
+        logSuccess('Created ${index['key']} index');
       } else {
-        print('❌ Failed to create ${index['key']} index: $indexResponseBody');
+        logError('Failed to create ${index['key']} index: $indexResponseBody');
       }
       
       await Future.delayed(Duration(seconds: 2));
     }
     
-    print('\n🎉 reputation_logs collection created successfully!');
-    print('Collection ID: reputation_logs');
-    print('Attributes: userId, pointsChange, newTotal, reason, timestamp');
-    print('Indexes: userId, timestamp, userId+timestamp');
+    logSuccess('\nreputation_logs collection created successfully!');
+    logInfo('Collection ID: reputation_logs');
+    logInfo('Attributes: userId, pointsChange, newTotal, reason, timestamp');
+    logInfo('Indexes: userId, timestamp, userId+timestamp');
     
   } catch (e) {
-    print('❌ Error: $e');
+    logError('Error: $e');
   } finally {
     httpClient.close();
   }

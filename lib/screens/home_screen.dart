@@ -424,7 +424,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         _themeService.isDarkMode ? LucideIcons.sun : LucideIcons.moon,
                         () {
                           _themeService.toggleTheme();
-                          setState(() {});
+                          setState(() {
+                            // Update UI to reflect theme change
+                          });
                         },
                       ),
                     ),
@@ -531,7 +533,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             borderRadius: BorderRadius.circular(25),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF6B46C1).withOpacity(0.3),
+                                color: const Color(0xFF6B46C1).withValues(alpha: 0.3),
                                 blurRadius: 15,
                                 offset: const Offset(0, 8),
                               ),

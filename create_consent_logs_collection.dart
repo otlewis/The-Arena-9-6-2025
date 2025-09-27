@@ -1,6 +1,14 @@
-import 'package:appwrite/appwrite.dart';
+// DISABLED: This script uses deprecated Appwrite SDK methods not available in v18.0.0
+// Use REST API version or wait for TablesDB support in Flutter SDK
+
+import 'dart:developer' as developer;
 
 void main() async {
+  developer.log('This script is disabled due to Appwrite SDK v18.0.0 deprecations.');
+  developer.log('The methods createCollection, createStringAttribute, etc. are no longer available.');
+  return;
+
+  /*
   // Initialize Appwrite client
   final client = Client()
       .setEndpoint('https://cloud.appwrite.io/v1')
@@ -125,4 +133,5 @@ void main() async {
   } catch (e) {
     print('❌ Error setting up consent_logs collection: $e');
   }
+  */
 }

@@ -26,11 +26,8 @@ class _SimpleGiftBottomSheetState extends State<SimpleGiftBottomSheet> {
   final AppwriteService _appwriteService = AppwriteService();
 
   Gift? _selectedGift;
-  bool _isSending = false;
   final TextEditingController _messageController = TextEditingController();
 
-  // Use all available gifts from GiftConstants
-  List<Gift> get _gifts => GiftConstants.allGifts;
 
   @override
   void dispose() {
@@ -41,9 +38,6 @@ class _SimpleGiftBottomSheetState extends State<SimpleGiftBottomSheet> {
   Future<void> _sendGift() async {
     if (_selectedGift == null) return;
 
-    setState(() {
-      _isSending = true;
-    });
 
     try {
       // Get current user
@@ -86,11 +80,7 @@ class _SimpleGiftBottomSheetState extends State<SimpleGiftBottomSheet> {
       AppLogger().error('Failed to send gift: $e');
       _showError('Failed to send gift: $e');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSending = false;
-        });
-      }
+      // Gift sending completed
     }
   }
 
@@ -383,18 +373,6 @@ class _SimpleGiftBottomSheetState extends State<SimpleGiftBottomSheet> {
     );
   }
 
-  Color _getTierColor(GiftTier tier) {
-    switch (tier) {
-      case GiftTier.basic:
-        return Colors.green;
-      case GiftTier.standard:
-        return Colors.blue;
-      case GiftTier.premium:
-        return Colors.purple;
-      case GiftTier.legendary:
-        return Colors.orange;
-    }
-  }
 }
 
 /// Show the simple gift bottom sheet

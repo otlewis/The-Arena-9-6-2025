@@ -2,6 +2,8 @@ import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import '../services/appwrite_service.dart';
 import '../services/theme_service.dart';
+import '../services/challenge_messaging_service.dart';
+import '../services/feature_flag_service.dart';
 import '../models/user_profile.dart';
 import '../widgets/user_avatar.dart';
 import '../widgets/challenge_bell.dart';
@@ -24,6 +26,7 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
   List<UserProfile> _allUsers = [];
   List<UserProfile> _filteredUsers = [];
   bool _isLoading = true;
+  bool _currentUserIsPremium = false;
   String? _currentUserId;
 
   // Colors
@@ -35,6 +38,7 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
   void initState() {
     super.initState();
     _loadCurrentUser();
+    _checkCurrentUserPremiumStatus();
     _loadUsers();
   }
 
@@ -48,6 +52,40 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
     final user = await _appwrite.getCurrentUser();
     if (user != null) {
       _currentUserId = user.$id;
+    }
+  }
+
+  Future<void> _checkCurrentUserPremiumStatus() async {
+    try {
+      // BETA TESTING: Force all users to be premium during beta
+      setState(() {
+        _currentUserIsPremium = true;
+      });
+      AppLogger().info('🧪 BETA MODE: All users have premium access for challenges');
+
+      /* TODO: Restore feature flag logic when beta testing is complete
+      // Check if beta testing mode is enabled
+      final isBetaTesting = await FeatureFlagService().isBetaTestingMode();
+
+      if (isBetaTesting) {
+        // In beta testing mode, all users are premium
+        setState(() {
+          _currentUserIsPremium = true;
+        });
+        AppLogger().info('🧪 Beta testing mode enabled - all users have premium access');
+      } else {
+        // Normal premium checking
+        final currentUser = await _appwrite.getCurrentUser();
+        if (currentUser != null) {
+          final userProfile = await _appwrite.getUserProfile(currentUser.$id);
+          setState(() {
+            _currentUserIsPremium = userProfile?.isPremium ?? false;
+          });
+        }
+      }
+      */
+    } catch (e) {
+      AppLogger().debug('Error checking current user premium status: $e');
     }
   }
 
@@ -491,6 +529,25 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                         ],
                       ),
                     ),
+                    PopupMenuItem<String>(
+                      value: 'challenge',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.gavel,
+                            color: _currentUserIsPremium ? scarletRed : Colors.grey,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _currentUserIsPremium ? 'Challenge' : 'Challenge (Premium)',
+                            style: TextStyle(
+                              color: _currentUserIsPremium ? null : Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     const PopupMenuItem<String>(
                       value: 'report',
                       child: Row(
@@ -542,6 +599,13 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
       case 'view':
         _navigateToUserProfile(user);
         break;
+      case 'challenge':
+        if (_currentUserIsPremium) {
+          await _showChallengeDialog(user);
+        } else {
+          _showPremiumPaywall();
+        }
+        break;
       case 'report':
         await _showReportDialog(user);
         break;
@@ -575,5 +639,221 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
       // User was successfully blocked, refresh the user list to remove them
       await _loadUsers();
     }
+  }
+
+  Future<void> _showChallengeDialog(UserProfile user) async {
+    final topicController = TextEditingController();
+    final descriptionController = TextEditingController();
+    String selectedPosition = 'affirmative';
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Challenge ${user.displayName}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Topic input
+                TextField(
+                  controller: topicController,
+                  decoration: const InputDecoration(
+                    labelText: 'Debate Topic *',
+                    hintText: 'What should you debate about?',
+                  ),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 16),
+
+                // Description input
+                TextField(
+                  controller: descriptionController,
+                  decoration: const InputDecoration(
+                    labelText: 'Description (Optional)',
+                    hintText: 'Add context or rules...',
+                  ),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 16),
+
+                // Position selection
+                const Text('Your Position:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => selectedPosition = 'affirmative'),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: selectedPosition == 'affirmative' ? Colors.green : Colors.grey,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                selectedPosition == 'affirmative' ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                color: Colors.green,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text('For'),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => selectedPosition = 'negative'),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: selectedPosition == 'negative' ? Colors.red : Colors.grey,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                selectedPosition == 'negative' ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                color: Colors.red,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text('Against'),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              onPressed: topicController.text.isEmpty
+                  ? null
+                  : () => _sendChallenge(
+                        user,
+                        topicController.text,
+                        descriptionController.text,
+                        selectedPosition,
+                      ),
+              icon: const Icon(Icons.send),
+              label: const Text('Send Challenge'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendChallenge(UserProfile user, String topic, String description, String position) async {
+    try {
+      await ChallengeMessagingService().sendChallenge(
+        challengedUserId: user.id,
+        topic: topic,
+        description: description,
+        position: position,
+      );
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('⚡ Challenge sent to ${user.displayName}!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sending challenge: $e')),
+        );
+      }
+    }
+  }
+
+  void _showPremiumPaywall() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.diamond, color: Color(0xFF6B46C1)),
+            SizedBox(width: 8),
+            Text('Premium Feature'),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Instant Debate Challenges are available for Premium subscribers.',
+              style: TextStyle(fontSize: 16),
+            ),
+            SizedBox(height: 16),
+            Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 20),
+                SizedBox(width: 8),
+                Expanded(child: Text('Unlimited challenges')),
+              ],
+            ),
+            SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 20),
+                SizedBox(width: 8),
+                Expanded(child: Text('Priority arena access')),
+              ],
+            ),
+            SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 20),
+                SizedBox(width: 8),
+                Expanded(child: Text('Advanced features')),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Maybe Later'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.pushNamed(context, '/premium_store');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6B46C1),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Upgrade Now'),
+          ),
+        ],
+      ),
+    );
   }
 }

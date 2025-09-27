@@ -12,6 +12,7 @@ class SlideUpdatePopup extends StatelessWidget {
   final LiveKitMaterialSyncService syncService;
   final AppwriteService appwriteService;
   final String currentUserId;
+  final String? roomId;
   static final _logger = AppLogger();
 
   const SlideUpdatePopup({
@@ -20,6 +21,7 @@ class SlideUpdatePopup extends StatelessWidget {
     required this.syncService,
     required this.appwriteService,
     required this.currentUserId,
+    this.roomId,
     this.onDismiss,
   });
 
@@ -37,6 +39,9 @@ class SlideUpdatePopup extends StatelessWidget {
           slideData: slideData,
           syncService: syncService,
           appwriteService: appwriteService,
+          roomId: roomId ?? 'default',
+          userId: currentUserId,
+          roomType: 'arena',
           isPresenter: slideData.uploadedBy == currentUserId,
         ),
       ),

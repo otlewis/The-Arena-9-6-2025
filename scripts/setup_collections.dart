@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 /// Standalone script to create Appwrite collections for payment system
 /// 
@@ -22,13 +22,13 @@ class SetupCollections {
         };
 
   Future<void> run() async {
-    print('🚀 Setting up Arena payment collections...\n');
+    developer.log('🚀 Setting up Arena payment collections...\n');
     
     if (apiKey == 'YOUR_API_KEY_HERE') {
-      print('❌ ERROR: Please update the API key in this script first!');
-      print('  1. Go to Appwrite Console > Settings > API Keys');
-      print('  2. Create a key with Database write permissions');
-      print('  3. Update the apiKey constant in this file');
+      developer.log('❌ ERROR: Please update the API key in this script first!');
+      developer.log('  1. Go to Appwrite Console > Settings > API Keys');
+      developer.log('  2. Create a key with Database write permissions');
+      developer.log('  3. Update the apiKey constant in this file');
       return;
     }
 
@@ -51,20 +51,20 @@ class SetupCollections {
       // 6. Insert initial feature flags
       await insertInitialFeatureFlags();
       
-      print('\n✅ All collections created successfully!');
-      print('\n📝 Next steps:');
-      print('  1. Configure RevenueCat webhook URL: ${endpoint.replaceAll('/v1', '')}/webhooks/revenuecat');
-      print('  2. Update RevenueCat API keys in lib/services/revenue_cat_service.dart');
-      print('  3. Test sandbox purchases with TestFlight');
+      developer.log('\n✅ All collections created successfully!');
+      developer.log('\n📝 Next steps:');
+      developer.log('  1. Configure RevenueCat webhook URL: ${endpoint.replaceAll('/v1', '')}/webhooks/revenuecat');
+      developer.log('  2. Update RevenueCat API keys in lib/services/revenue_cat_service.dart');
+      developer.log('  3. Test sandbox purchases with TestFlight');
       
     } catch (e) {
-      print('❌ Error: $e');
+      developer.log('❌ Error: $e');
     }
   }
 
   Future<void> createFeatureFlagsCollection() async {
     try {
-      print('📌 Creating feature_flags collection...');
+      developer.log('📌 Creating feature_flags collection...');
       
       // Create collection
       final createResponse = await http.post(
@@ -79,9 +79,9 @@ class SetupCollections {
 
       if (createResponse.statusCode == 201 || createResponse.statusCode == 409) {
         if (createResponse.statusCode == 409) {
-          print('  ⚠️  Collection already exists, adding attributes...');
+          developer.log('  ⚠️  Collection already exists, adding attributes...');
         } else {
-          print('  ✓ Collection created');
+          developer.log('  ✓ Collection created');
         }
 
         // Add attributes
@@ -90,18 +90,18 @@ class SetupCollections {
         await createAttribute('feature_flags', 'string', 'description', size: 500, required: false);
         await createAttribute('feature_flags', 'datetime', 'updatedAt', required: false);
         
-        print('  ✓ feature_flags collection ready');
+        developer.log('  ✓ feature_flags collection ready');
       } else {
-        print('  ❌ Failed: ${createResponse.body}');
+        developer.log('  ❌ Failed: ${createResponse.body}');
       }
     } catch (e) {
-      print('  ❌ Error: $e');
+      developer.log('  ❌ Error: $e');
     }
   }
 
   Future<void> createWebhookEventsCollection() async {
     try {
-      print('📌 Creating webhook_events collection...');
+      developer.log('📌 Creating webhook_events collection...');
       
       final createResponse = await http.post(
         Uri.parse('$endpoint/databases/$databaseId/collections'),
@@ -115,9 +115,9 @@ class SetupCollections {
 
       if (createResponse.statusCode == 201 || createResponse.statusCode == 409) {
         if (createResponse.statusCode == 409) {
-          print('  ⚠️  Collection already exists, adding attributes...');
+          developer.log('  ⚠️  Collection already exists, adding attributes...');
         } else {
-          print('  ✓ Collection created');
+          developer.log('  ✓ Collection created');
         }
 
         await createAttribute('webhook_events', 'string', 'eventType', size: 100, required: true);
@@ -126,18 +126,18 @@ class SetupCollections {
         await createAttribute('webhook_events', 'datetime', 'processedAt', required: true);
         await createAttribute('webhook_events', 'string', 'source', size: 50, required: true, defaultValue: 'revenuecat');
         
-        print('  ✓ webhook_events collection ready');
+        developer.log('  ✓ webhook_events collection ready');
       } else {
-        print('  ❌ Failed: ${createResponse.body}');
+        developer.log('  ❌ Failed: ${createResponse.body}');
       }
     } catch (e) {
-      print('  ❌ Error: $e');
+      developer.log('  ❌ Error: $e');
     }
   }
 
   Future<void> createSubscriptionRecordsCollection() async {
     try {
-      print('📌 Creating subscription_records collection...');
+      developer.log('📌 Creating subscription_records collection...');
       
       final createResponse = await http.post(
         Uri.parse('$endpoint/databases/$databaseId/collections'),
@@ -151,9 +151,9 @@ class SetupCollections {
 
       if (createResponse.statusCode == 201 || createResponse.statusCode == 409) {
         if (createResponse.statusCode == 409) {
-          print('  ⚠️  Collection already exists, adding attributes...');
+          developer.log('  ⚠️  Collection already exists, adding attributes...');
         } else {
-          print('  ✓ Collection created');
+          developer.log('  ✓ Collection created');
         }
 
         await createAttribute('subscription_records', 'string', 'userId', size: 255, required: true);
@@ -164,18 +164,18 @@ class SetupCollections {
         await createAttribute('subscription_records', 'boolean', 'isTestSubscription', required: true, defaultValue: false);
         await createAttribute('subscription_records', 'datetime', 'createdAt', required: true);
         
-        print('  ✓ subscription_records collection ready');
+        developer.log('  ✓ subscription_records collection ready');
       } else {
-        print('  ❌ Failed: ${createResponse.body}');
+        developer.log('  ❌ Failed: ${createResponse.body}');
       }
     } catch (e) {
-      print('  ❌ Error: $e');
+      developer.log('  ❌ Error: $e');
     }
   }
 
   Future<void> createUserAliasesCollection() async {
     try {
-      print('📌 Creating user_aliases collection...');
+      developer.log('📌 Creating user_aliases collection...');
       
       final createResponse = await http.post(
         Uri.parse('$endpoint/databases/$databaseId/collections'),
@@ -189,27 +189,27 @@ class SetupCollections {
 
       if (createResponse.statusCode == 201 || createResponse.statusCode == 409) {
         if (createResponse.statusCode == 409) {
-          print('  ⚠️  Collection already exists, adding attributes...');
+          developer.log('  ⚠️  Collection already exists, adding attributes...');
         } else {
-          print('  ✓ Collection created');
+          developer.log('  ✓ Collection created');
         }
 
         await createAttribute('user_aliases', 'string', 'originalUserId', size: 255, required: true);
         await createAttribute('user_aliases', 'string', 'newUserId', size: 255, required: true);
         await createAttribute('user_aliases', 'datetime', 'createdAt', required: true);
         
-        print('  ✓ user_aliases collection ready');
+        developer.log('  ✓ user_aliases collection ready');
       } else {
-        print('  ❌ Failed: ${createResponse.body}');
+        developer.log('  ❌ Failed: ${createResponse.body}');
       }
     } catch (e) {
-      print('  ❌ Error: $e');
+      developer.log('  ❌ Error: $e');
     }
   }
 
   Future<void> updateUsersCollection() async {
     try {
-      print('📌 Updating users collection with premium fields...');
+      developer.log('📌 Updating users collection with premium fields...');
       
       // Add premium-related attributes
       await createAttribute('users', 'boolean', 'isPremium', required: false, defaultValue: false);
@@ -218,9 +218,9 @@ class SetupCollections {
       await createAttribute('users', 'boolean', 'isTestSubscription', required: false, defaultValue: false);
       await createAttribute('users', 'datetime', 'lastWebhookUpdate', required: false);
       
-      print('  ✓ users collection updated');
+      developer.log('  ✓ users collection updated');
     } catch (e) {
-      print('  ❌ Error updating users: $e');
+      developer.log('  ❌ Error updating users: $e');
     }
   }
 
@@ -261,23 +261,23 @@ class SetupCollections {
       );
 
       if (response.statusCode == 201 || response.statusCode == 202) {
-        print('    ✓ Added $key attribute');
+        developer.log('    ✓ Added $key attribute');
       } else if (response.statusCode == 409) {
-        print('    ⚠️  $key attribute already exists');
+        developer.log('    ⚠️  $key attribute already exists');
       } else {
         final error = jsonDecode(response.body);
         if (!error['message'].contains('already exists')) {
-          print('    ❌ Failed to add $key: ${error['message']}');
+          developer.log('    ❌ Failed to add $key: ${error['message']}');
         }
       }
     } catch (e) {
-      print('    ❌ Error adding attribute $key: $e');
+      developer.log('    ❌ Error adding attribute $key: $e');
     }
   }
 
   Future<void> insertInitialFeatureFlags() async {
     try {
-      print('\n📌 Inserting initial feature flags...');
+      developer.log('\n📌 Inserting initial feature flags...');
       
       final flags = [
         {
@@ -323,15 +323,15 @@ class SetupCollections {
         );
 
         if (response.statusCode == 201) {
-          print('  ✓ Created flag: ${flag['name']} = ${flag['enabled']}');
+          developer.log('  ✓ Created flag: ${flag['name']} = ${flag['enabled']}');
         } else if (response.statusCode == 409) {
-          print('  ⚠️  Flag ${flag['name']} already exists');
+          developer.log('  ⚠️  Flag ${flag['name']} already exists');
         } else {
-          print('  ❌ Failed to create ${flag['name']}: ${response.body}');
+          developer.log('  ❌ Failed to create ${flag['name']}: ${response.body}');
         }
       }
     } catch (e) {
-      print('  ❌ Error inserting flags: $e');
+      developer.log('  ❌ Error inserting flags: $e');
     }
   }
 }

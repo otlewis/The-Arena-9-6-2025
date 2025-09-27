@@ -104,6 +104,12 @@ Designated super moderators have additional privileges to maintain order and may
 
 Some features may require a paid subscription.
 
+#### 6.1.1 Teen Plan
+
+For users aged 13-17, a Teen Plan is available at $4.99 per month. This plan requires parental consent and includes age-appropriate features and enhanced safety controls.
+
+#### 6.1.2 General Terms
+
 Subscription terms and pricing are subject to change.
 
 Cancellations take effect at the end of the current billing period.

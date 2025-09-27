@@ -1,9 +1,43 @@
+// ⚠️ SERVER-SIDE SCRIPT - NOT FOR FLUTTER APP ⚠️
+// This is a server-side webhook handler that should be deployed separately
+// It requires server-side dependencies that are not available in Flutter
+
+import 'dart:developer' as developer;
+
+/*
 import 'dart:convert';
 import 'dart:io';
-import 'package:shelf/shelf.dart';
+import 'dart:developer' as developer;
+import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
 import 'package:appwrite/appwrite.dart';
+import 'package:flutter/foundation.dart';
+
+// Simple console logger for server scripts
+void logInfo(String message) {
+  if (kDebugMode || !kIsWeb) {
+    debugPrint('INFO: $message');
+  }
+}
+
+void logError(String message) {
+  if (kDebugMode || !kIsWeb) {
+    debugPrint('ERROR: $message');
+  }
+}
+
+void logSuccess(String message) {
+  if (kDebugMode || !kIsWeb) {
+    debugPrint('SUCCESS: $message');
+  }
+}
+
+void logWarning(String message) {
+  if (kDebugMode || !kIsWeb) {
+    debugPrint('WARNING: $message');
+  }
+}
 
 /// RevenueCat Webhook Handler Server
 /// Deploy this to your server to handle RevenueCat webhook events
@@ -37,30 +71,30 @@ class WebhookServer {
     final router = Router();
     
     // Health check endpoint
-    router.get('/health', (Request request) {
-      return Response.ok(jsonEncode({'status': 'healthy', 'service': 'arena-webhook-handler'}));
+    router.get('/health', (shelf.Request request) {
+      return shelf.Response.ok(jsonEncode({'status': 'healthy', 'service': 'arena-webhook-handler'}));
     });
     
     // RevenueCat webhook endpoint
     router.post('/webhooks/revenuecat', handleRevenueCatWebhook);
     
     // Test endpoint (remove in production)
-    router.get('/test', (Request request) {
-      return Response.ok('Webhook handler is running!');
+    router.get('/test', (shelf.Request request) {
+      return shelf.Response.ok('Webhook handler is running!');
     });
     
     return router;
   }
 
   /// Handle RevenueCat webhook
-  Future<Response> handleRevenueCatWebhook(Request request) async {
+  Future<shelf.Response> handleRevenueCatWebhook(shelf.Request request) async {
     try {
       // Verify webhook secret if configured
       if (webhookSecret != null) {
         final authHeader = request.headers['authorization'];
         if (authHeader != 'Bearer $webhookSecret') {
-          print('❌ Webhook authentication failed');
-          return Response.unauthorized('Invalid authorization');
+          logError('Webhook authentication failed');
+          return shelf.Response.unauthorized('Invalid authorization');
         }
       }
 
@@ -68,22 +102,22 @@ class WebhookServer {
       final body = await request.readAsString();
       final payload = jsonDecode(body) as Map<String, dynamic>;
       
-      print('📨 Received webhook: ${payload['event_type']}');
+      logInfo('Received webhook: ${payload['event_type']}');
       
       // Process the webhook
       final success = await processWebhook(payload);
       
       if (success) {
-        return Response.ok(jsonEncode({'status': 'success'}));
+        return shelf.Response.ok(jsonEncode({'status': 'success'}));
       } else {
-        return Response.internalServerError(
+        return shelf.Response.internalServerError(
           body: jsonEncode({'status': 'error', 'message': 'Failed to process webhook'}),
         );
       }
       
     } catch (e) {
-      print('❌ Webhook handler error: $e');
-      return Response.internalServerError(
+      logError('Webhook handler error: $e');
+      return shelf.Response.internalServerError(
         body: jsonEncode({'status': 'error', 'message': e.toString()}),
       );
     }
@@ -102,7 +136,7 @@ class WebhookServer {
       final environment = event['environment'] as String?; // 'SANDBOX' or 'PRODUCTION'
       
       if (appUserId == null) {
-        print('⚠️ Webhook missing app_user_id');
+        logWarning('Webhook missing app_user_id');
         return false;
       }
 
@@ -129,12 +163,12 @@ class WebhookServer {
           return await handleSubscriberAlias(event);
           
         default:
-          print('ℹ️ Unhandled webhook event type: $eventType');
+          logInfo('Unhandled webhook event type: $eventType');
           return true; // Don't fail for unknown events
       }
       
     } catch (e) {
-      print('❌ Failed to process webhook: $e');
+      logError('Failed to process webhook: $e');
       return false;
     }
   }
@@ -142,6 +176,7 @@ class WebhookServer {
   /// Store webhook event for audit trail
   Future<void> storeWebhookEvent(String eventType, Map<String, dynamic> payload, String userId) async {
     try {
+      // Note: createDocument is deprecated but TablesDB is not yet available in Flutter SDK
       await databases.createDocument(
         databaseId: databaseId,
         collectionId: 'webhook_events',
@@ -154,9 +189,9 @@ class WebhookServer {
           'source': 'revenuecat',
         },
       );
-      print('  ✓ Webhook event stored');
+      logSuccess('Webhook event stored');
     } catch (e) {
-      print('  ⚠️ Failed to store webhook event: $e');
+      logWarning('Failed to store webhook event: $e');
     }
   }
 
@@ -183,6 +218,7 @@ class WebhookServer {
       final expiryDate = eventTime.add(subscriptionDuration);
       
       // Update user profile
+      // Note: updateDocument is deprecated but TablesDB is not yet available in Flutter SDK
       await databases.updateDocument(
         databaseId: databaseId,
         collectionId: 'users',
@@ -197,6 +233,7 @@ class WebhookServer {
       );
 
       // Store subscription record
+      // Note: createDocument is deprecated but TablesDB is not yet available in Flutter SDK
       await databases.createDocument(
         databaseId: databaseId,
         collectionId: 'subscription_records',
@@ -212,11 +249,11 @@ class WebhookServer {
         },
       );
       
-      print('  ✅ Subscription activated for user $userId');
+      logSuccess('Subscription activated for user $userId');
       return true;
       
     } catch (e) {
-      print('  ❌ Failed to handle subscription activation: $e');
+      logError('Failed to handle subscription activation: $e');
       return false;
     }
   }
@@ -229,6 +266,7 @@ class WebhookServer {
           : DateTime.now();
       
       // Store cancellation record (don't revoke premium immediately)
+      // Note: createDocument is deprecated but TablesDB is not yet available in Flutter SDK
       await databases.createDocument(
         databaseId: databaseId,
         collectionId: 'subscription_records',
@@ -241,11 +279,11 @@ class WebhookServer {
         },
       );
       
-      print('  📋 Subscription cancelled for user $userId');
+      logInfo('Subscription cancelled for user $userId');
       return true;
       
     } catch (e) {
-      print('  ❌ Failed to handle cancellation: $e');
+      logError('Failed to handle cancellation: $e');
       return false;
     }
   }
@@ -254,6 +292,7 @@ class WebhookServer {
   Future<bool> handleSubscriptionExpiration(String userId, int? eventTimeMs) async {
     try {
       // Revoke premium status
+      // Note: updateDocument is deprecated but TablesDB is not yet available in Flutter SDK
       await databases.updateDocument(
         databaseId: databaseId,
         collectionId: 'users',
@@ -266,11 +305,11 @@ class WebhookServer {
         },
       );
       
-      print('  ⏰ Subscription expired for user $userId');
+      logInfo('Subscription expired for user $userId');
       return true;
       
     } catch (e) {
-      print('  ❌ Failed to handle expiration: $e');
+      logError('Failed to handle expiration: $e');
       return false;
     }
   }
@@ -283,6 +322,7 @@ class WebhookServer {
           : DateTime.now();
       
       // Store billing issue record
+      // Note: createDocument is deprecated but TablesDB is not yet available in Flutter SDK
       await databases.createDocument(
         databaseId: databaseId,
         collectionId: 'subscription_records',
@@ -295,11 +335,11 @@ class WebhookServer {
         },
       );
       
-      print('  💳 Billing issue for user $userId');
+      logWarning('Billing issue for user $userId');
       return true;
       
     } catch (e) {
-      print('  ❌ Failed to handle billing issue: $e');
+      logError('Failed to handle billing issue: $e');
       return false;
     }
   }
@@ -314,6 +354,7 @@ class WebhookServer {
         return false;
       }
 
+      // Note: createDocument is deprecated but TablesDB is not yet available in Flutter SDK
       await databases.createDocument(
         databaseId: databaseId,
         collectionId: 'user_aliases',
@@ -325,11 +366,11 @@ class WebhookServer {
         },
       );
       
-      print('  🔄 Subscriber alias: $originalAppUserId -> $newAppUserId');
+      logInfo('Subscriber alias: $originalAppUserId -> $newAppUserId');
       return true;
       
     } catch (e) {
-      print('  ❌ Failed to handle alias: $e');
+      logError('Failed to handle alias: $e');
       return false;
     }
   }
@@ -345,13 +386,20 @@ void main() async {
   
   final httpServer = await shelf_io.serve(handler, '0.0.0.0', port);
   
-  print('🚀 Arena Webhook Handler running on port ${httpServer.port}');
-  print('📝 Endpoints:');
-  print('  - Health Check: http://localhost:${httpServer.port}/health');
-  print('  - RevenueCat Webhook: http://localhost:${httpServer.port}/webhooks/revenuecat');
-  print('  - Test Endpoint: http://localhost:${httpServer.port}/test');
-  print('\n⚙️  Environment:');
-  print('  - APPWRITE_ENDPOINT: ${Platform.environment['APPWRITE_ENDPOINT'] ?? 'Not set'}');
-  print('  - APPWRITE_PROJECT_ID: ${Platform.environment['APPWRITE_PROJECT_ID'] ?? 'Not set'}');
-  print('  - WEBHOOK_SECRET: ${Platform.environment['WEBHOOK_SECRET'] != null ? 'Set' : 'Not set'}');
+  logInfo('Arena Webhook Handler running on port ${httpServer.port}');
+  logInfo('Endpoints:');
+  logInfo('  - Health Check: http://localhost:${httpServer.port}/health');
+  logInfo('  - RevenueCat Webhook: http://localhost:${httpServer.port}/webhooks/revenuecat');
+  logInfo('  - Test Endpoint: http://localhost:${httpServer.port}/test');
+  logInfo('\nEnvironment:');
+  logInfo('  - APPWRITE_ENDPOINT: ${Platform.environment['APPWRITE_ENDPOINT'] ?? 'Not set'}');
+  logInfo('  - APPWRITE_PROJECT_ID: ${Platform.environment['APPWRITE_PROJECT_ID'] ?? 'Not set'}');
+  logInfo('  - WEBHOOK_SECRET: ${Platform.environment['WEBHOOK_SECRET'] != null ? 'Set' : 'Not set'}');
+}
+*/
+
+void main() {
+  developer.log('⚠️ This is a server-side webhook handler.');
+  developer.log('Deploy this file separately on your server, not as part of the Flutter app.');
+  developer.log('It requires server-side dependencies like shelf and shelf_router.');
 }

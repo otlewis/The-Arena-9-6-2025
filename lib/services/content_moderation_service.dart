@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:appwrite/appwrite.dart';
 import '../core/logging/app_logger.dart';
@@ -17,7 +18,11 @@ class ContentModerationService {
   // Database configuration
   static const String _databaseId = 'arena_db';
   
-  // Google Perspective API configuration
+  // OpenAI Moderation API configuration (free tier available)
+  static const String _openaiModerationUrl = 'https://api.openai.com/v1/moderations';
+  static const String _openaiApiKey = String.fromEnvironment('OPENAI_API_KEY', defaultValue: ''); // Set via environment variable
+
+  // Google Perspective API configuration (fallback)
   static const String _perspectiveApiUrl = 'https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze';
   static const String _perspectiveApiKey = 'YOUR_PERSPECTIVE_API_KEY'; // Replace with actual key
 
@@ -80,6 +85,79 @@ class ContentModerationService {
   /// Analyze message content using Google Perspective API
   Future<Map<String, double>> analyzeContent(String content) async {
     try {
+      // Try OpenAI Moderation API first
+      if (_openaiApiKey != 'YOUR_OPENAI_API_KEY') {
+        return await _analyzeWithOpenAI(content);
+      }
+
+      // Fallback to Google Perspective if OpenAI not configured
+      if (_perspectiveApiKey != 'YOUR_PERSPECTIVE_API_KEY') {
+        return await _analyzeWithPerspective(content);
+      }
+
+      // Use mock analysis if no APIs configured
+      _logger.warning('🤖 No AI API keys configured - using mock moderation for testing');
+      return _mockContentAnalysis(content);
+    } catch (e) {
+      _logger.error('Content analysis failed: $e');
+      return _mockContentAnalysis(content); // Fallback to mock
+    }
+  }
+
+  /// Analyze content using OpenAI Moderation API
+  Future<Map<String, double>> _analyzeWithOpenAI(String content) async {
+    try {
+      _logger.info('🤖 Using OpenAI Moderation API for content analysis');
+
+      final requestBody = {
+        'input': content,
+      };
+
+      final response = await http.post(
+        Uri.parse(_openaiModerationUrl),
+        headers: {
+          'Authorization': 'Bearer $_openaiApiKey',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(requestBody),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final results = data['results'][0];
+
+        // Map OpenAI categories to our scoring system
+        final scores = <String, double>{
+          'toxicity': _getBoolScore(results['categories']['hate']) * 0.8 +
+                     _getBoolScore(results['categories']['harassment']) * 0.9,
+          'threat': _getBoolScore(results['categories']['violence']) * 0.9 +
+                   _getBoolScore(results['categories']['violence/graphic']) * 0.7,
+          'insult': _getBoolScore(results['categories']['harassment']) * 0.8,
+          'profanity': _getBoolScore(results['categories']['hate']) * 0.5,
+          'identity_attack': _getBoolScore(results['categories']['hate']) * 0.9,
+          'self_harm': _getBoolScore(results['categories']['self-harm']) * 1.0,
+        };
+
+        // Ensure scores don't exceed 1.0
+        scores.updateAll((key, value) => value > 1.0 ? 1.0 : value);
+
+        _logger.info('🤖 OpenAI analysis: $scores');
+        return scores;
+      } else {
+        _logger.error('OpenAI API error: ${response.statusCode} - ${response.body}');
+        return _mockContentAnalysis(content); // Fallback to mock
+      }
+    } catch (e) {
+      _logger.error('OpenAI analysis failed: $e');
+      return _mockContentAnalysis(content); // Fallback to mock
+    }
+  }
+
+  /// Analyze content using Google Perspective API (fallback)
+  Future<Map<String, double>> _analyzeWithPerspective(String content) async {
+    try {
+      _logger.info('🤖 Using Google Perspective API for content analysis');
+
       final requestBody = {
         'requestedAttributes': {
           'TOXICITY': {},
@@ -102,23 +180,90 @@ class ContentModerationService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final scores = <String, double>{};
-        
+
         final attributeScores = data['attributeScores'] as Map<String, dynamic>;
         for (final entry in attributeScores.entries) {
           final score = entry.value['summaryScore']['value'] as double;
           scores[entry.key.toLowerCase()] = score;
         }
 
-        _logger.debug('🤖 Content analysis: $scores');
+        _logger.info('🤖 Perspective analysis: $scores');
         return scores;
       } else {
         _logger.error('Perspective API error: ${response.statusCode}');
-        return {};
+        return _mockContentAnalysis(content); // Fallback to mock
       }
     } catch (e) {
-      _logger.error('Content analysis failed: $e');
-      return {};
+      _logger.error('Perspective analysis failed: $e');
+      return _mockContentAnalysis(content); // Fallback to mock
     }
+  }
+
+  /// Convert OpenAI boolean results to scores
+  double _getBoolScore(dynamic value) {
+    if (value is bool) return value ? 1.0 : 0.0;
+    if (value is num) return value.toDouble();
+    return 0.0;
+  }
+
+  /// Mock content analysis for testing when API key is not configured
+  Map<String, double> _mockContentAnalysis(String content) {
+    final contentLower = content.toLowerCase();
+
+    // Simple hostile word detection for testing
+    final hostileWords = [
+      'hate', 'stupid', 'idiot', 'moron', 'damn', 'hell', 'shut up',
+      'you suck', 'loser', 'pathetic', 'worthless', 'garbage', 'trash',
+      'kill yourself', 'die', 'terrorist', 'nazi', 'fascist', 'fuck', 'shit'
+    ];
+
+    double toxicityScore = 0.0;
+    double threatScore = 0.0;
+    double insultScore = 0.0;
+    double profanityScore = 0.0;
+    double identityAttackScore = 0.0;
+
+    // Check for hostile content
+    for (final word in hostileWords) {
+      if (contentLower.contains(word)) {
+        if (word.contains('kill') || word.contains('die') || word.contains('terrorist')) {
+          threatScore = 0.95; // Very high threat
+          toxicityScore = 0.9;
+          identityAttackScore = 0.8;
+        } else if (word.contains('nazi') || word.contains('fascist')) {
+          identityAttackScore = 0.9; // High identity attack
+          toxicityScore = 0.85;
+        } else if (word.contains('hate')) {
+          toxicityScore = 0.8; // High toxicity
+          insultScore = 0.7;
+        } else if (word.contains('stupid') || word.contains('idiot') || word.contains('moron') || word.contains('loser') || word.contains('pathetic')) {
+          insultScore = 0.8; // High insult
+          toxicityScore = 0.7;
+        } else if (word.contains('fuck') || word.contains('shit')) {
+          profanityScore = 0.85; // High profanity
+          toxicityScore = 0.6;
+        } else if (word.contains('damn') || word.contains('hell')) {
+          profanityScore = 0.6; // Moderate profanity
+          toxicityScore = 0.5;
+        } else {
+          toxicityScore = 0.4; // Default mild toxicity
+          insultScore = 0.3;
+        }
+        break; // Stop after first match to avoid overscoring
+      }
+    }
+
+    final scores = {
+      'toxicity': toxicityScore,
+      'threat': threatScore,
+      'insult': insultScore,
+      'profanity': profanityScore,
+      'identity_attack': identityAttackScore,
+    };
+
+    _logger.info('🤖 Mock AI Analysis: "${content.substring(0, content.length > 30 ? 30 : content.length)}..." -> $scores');
+
+    return scores;
   }
 
   /// Take moderation action against a user

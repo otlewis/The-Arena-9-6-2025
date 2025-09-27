@@ -12,6 +12,7 @@ import '../widgets/gift_bell.dart';
 import '../services/revenue_cat_service.dart';
 import 'package:get_it/get_it.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 class ProfileScreen extends StatefulWidget {
   final VoidCallback? onLogout;
   
@@ -394,7 +395,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.orange.withOpacity(0.4),
+                          color: Colors.orange.withValues(alpha: 0.4),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),
@@ -434,7 +435,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.orange.withOpacity(0.3),
+                        color: Colors.orange.withValues(alpha: 0.3),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
@@ -1194,6 +1195,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Help & support coming soon!')),
               );
+            },
+          ),
+          const SizedBox(height: 8),
+          _buildNeumorphicListTile(
+            icon: Icons.family_restroom,
+            title: 'Parent Guide',
+            onTap: () async {
+              final url = Uri.parse('https://dialecticlabs.com/parents/parent-guide.html');
+              if (await canLaunchUrl(url)) {
+                await launchUrl(url, mode: LaunchMode.externalApplication);
+              } else {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Could not open Parent Guide')),
+                  );
+                }
+              }
             },
           ),
           // Admin/Dev option for database optimization

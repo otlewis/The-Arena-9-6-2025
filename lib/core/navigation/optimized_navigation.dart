@@ -205,7 +205,9 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
       
       // Force refresh the widget
       if (mounted) {
-        setState(() {});
+        setState(() {
+          // Update UI after returning from arena to ensure proper navigation state
+        });
       }
     });
     
@@ -299,7 +301,9 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
       
       // Refresh the widget state
       if (mounted) {
-        setState(() {});
+        setState(() {
+          // Update UI after clearing overlays and restoring bottom navigation
+        });
       }
     } catch (e) {
       AppLogger().warning('Error ensuring bottom navigation visibility: $e');

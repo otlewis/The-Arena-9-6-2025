@@ -15,6 +15,7 @@ import 'services/theme_service.dart';
 import 'services/language_service.dart';
 import 'services/accessibility_service.dart';
 import 'services/sound_service.dart';
+import 'services/enhanced_audio_service.dart';
 import 'widgets/challenge_modal.dart';
 import 'widgets/arena_role_notification_modal.dart';
 import 'features/navigation/providers/navigation_provider.dart';
@@ -46,6 +47,7 @@ import 'services/speaking_detection_service.dart';
 import 'services/persistent_audio_service.dart';
 import 'services/audio_initialization_service.dart';
 import 'services/room_audio_adapter.dart';
+import 'services/audio_preloader_service.dart';
 import 'widgets/network_quality_indicator.dart';
 import 'package:mcp_toolkit/mcp_toolkit.dart';
 import 'services/firebase_participant_sync_service.dart';
@@ -75,6 +77,8 @@ void setupServiceLocator() {
   });
   
   getIt.registerLazySingleton<SoundService>(() => SoundService());
+  getIt.registerLazySingleton<AudioPreloaderService>(() => AudioPreloaderService());
+  getIt.registerLazySingleton<EnhancedAudioService>(() => EnhancedAudioService());
   
   // Register notification services
   getIt.registerLazySingleton<NotificationService>(() => NotificationService());
@@ -188,6 +192,14 @@ void main() async {
     getIt<CodeSplittingService>();
     getIt<WidgetRebuildOptimizer>();
     logger.info('🚀 Advanced performance optimizations initialized');
+
+    // Initialize audio preloader service
+    try {
+      await AudioPreloaderService().initialize();
+      logger.info('🔊 Audio assets preloaded successfully');
+    } catch (e) {
+      logger.error('Failed to preload audio assets: $e');
+    }
     
     // Initialize Super Moderator service
     try {
@@ -254,6 +266,9 @@ void main() async {
       await LanguageService().initialize();
       await AccessibilityService().initialize();
       await getIt<SoundService>().initialize();
+
+      // Initialize enhanced audio service with all improvements
+      await getIt<EnhancedAudioService>().initialize();
       
       // Initialize notification preferences (load user settings)
       await getIt<NotificationPreferencesService>().loadPreferences();
@@ -767,7 +782,9 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
       
       // Refresh the widget state to ensure bottom navigation is visible
       if (mounted) {
-        setState(() {});
+        setState(() {
+          // Update UI after clearing overlays and restoring bottom navigation
+        });
       }
     } catch (e) {
       AppLogger().warning('Error ensuring bottom navigation visibility: $e');

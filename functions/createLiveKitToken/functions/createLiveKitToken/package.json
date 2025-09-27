@@ -1,0 +1,11 @@
+{
+  "name": "create-livekit-token",
+  "version": "1.0.0",
+  "description": "Create LiveKit access token with role-based permissions",
+  "main": "src/main.js",
+  "type": "module",
+  "dependencies": {
+    "livekit-server-sdk": "^2.6.0",
+    "node-appwrite": "^14.0.0"
+  }
+}

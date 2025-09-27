@@ -40,6 +40,13 @@ class FeatureFlagService {
     return await _getFlag('sandbox_enabled', defaultValue: true);
   }
 
+  /// Check if beta testing mode is enabled (all users are premium)
+  Future<bool> isBetaTestingMode() async {
+    final result = await _getFlag('beta_testing_mode', defaultValue: true);
+    AppLogger().info('🧪 Beta testing mode flag check: $result');
+    return result;
+  }
+
   /// Generic method to get any feature flag
   Future<bool> _getFlag(String flagName, {bool defaultValue = false}) async {
     try {

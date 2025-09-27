@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 /// Fix script to add missing attributes and insert feature flags
 class FixCollections {
@@ -19,7 +19,7 @@ class FixCollections {
         };
 
   Future<void> run() async {
-    print('🔧 Fixing Arena collections...\n');
+    developer.log('🔧 Fixing Arena collections...\n');
 
     // Fix missing attributes
     await fixFeatureFlagsAttributes();
@@ -27,31 +27,31 @@ class FixCollections {
     await fixSubscriptionRecordsAttributes();
     
     // Wait for attributes to be ready
-    print('\n⏳ Waiting for attributes to be ready...');
+    developer.log('\n⏳ Waiting for attributes to be ready...');
     await Future.delayed(Duration(seconds: 5));
     
     // Insert feature flags
     await insertFeatureFlags();
     
-    print('\n✅ Collections fixed!');
+    developer.log('\n✅ Collections fixed!');
   }
 
   Future<void> fixFeatureFlagsAttributes() async {
-    print('📌 Fixing feature_flags collection...');
+    developer.log('📌 Fixing feature_flags collection...');
     
     // Add enabled attribute without default for required
     await createAttribute('feature_flags', 'boolean', 'enabled', required: false, defaultValue: false);
   }
 
   Future<void> fixWebhookEventsAttributes() async {
-    print('📌 Fixing webhook_events collection...');
+    developer.log('📌 Fixing webhook_events collection...');
     
     // Add source attribute without default for required
     await createAttribute('webhook_events', 'string', 'source', size: 50, required: false, defaultValue: 'revenuecat');
   }
 
   Future<void> fixSubscriptionRecordsAttributes() async {
-    print('📌 Fixing subscription_records collection...');
+    developer.log('📌 Fixing subscription_records collection...');
     
     // Add isTestSubscription attribute without default for required
     await createAttribute('subscription_records', 'boolean', 'isTestSubscription', required: false, defaultValue: false);
@@ -95,20 +95,20 @@ class FixCollections {
       );
 
       if (response.statusCode == 201 || response.statusCode == 202) {
-        print('  ✓ Added $key attribute');
+        developer.log('  ✓ Added $key attribute');
       } else if (response.statusCode == 409) {
-        print('  ⚠️  $key attribute already exists');
+        developer.log('  ⚠️  $key attribute already exists');
       } else {
         final error = jsonDecode(response.body);
-        print('  ❌ Failed to add $key: ${error['message']}');
+        developer.log('  ❌ Failed to add $key: ${error['message']}');
       }
     } catch (e) {
-      print('  ❌ Error adding attribute $key: $e');
+      developer.log('  ❌ Error adding attribute $key: $e');
     }
   }
 
   Future<void> insertFeatureFlags() async {
-    print('\n📌 Inserting feature flags...');
+    developer.log('\n📌 Inserting feature flags...');
     
     final flags = [
       {
@@ -155,13 +155,13 @@ class FixCollections {
         );
 
         if (response.statusCode == 201) {
-          print('  ✓ Created flag: ${flag['name']} = ${flag['enabled']}');
+          developer.log('  ✓ Created flag: ${flag['name']} = ${flag['enabled']}');
         } else {
           final error = jsonDecode(response.body);
-          print('  ❌ Failed to create ${flag['name']}: ${error['message']}');
+          developer.log('  ❌ Failed to create ${flag['name']}: ${error['message']}');
         }
       } catch (e) {
-        print('  ❌ Error creating flag ${flag['name']}: $e');
+        developer.log('  ❌ Error creating flag ${flag['name']}: $e');
       }
     }
   }

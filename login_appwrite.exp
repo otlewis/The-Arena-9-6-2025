@@ -1,0 +1,24 @@
+#!/usr/bin/expect -f
+
+# Appwrite CLI Login Script
+set timeout 30
+
+spawn appwrite login
+
+# Handle the initial menu
+expect "? What you like to do?" {
+    send "1\r"
+}
+
+# Enter email
+expect "? Enter your email" {
+    send "lewis7169@gmail.com\r"
+}
+
+# Wait for password prompt
+expect "? Enter your password" {
+    puts "\n\n🔐 Please enter your Appwrite password:"
+    interact
+}
+
+puts "✅ Login complete!"

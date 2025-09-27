@@ -1,4 +1,3 @@
-import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
 
 /// Legacy Reputation Service - DEPRECATED
@@ -13,11 +12,10 @@ class ReputationService {
   factory ReputationService() => _instance;
   ReputationService._internal();
 
-  final AppwriteService _appwriteService = AppwriteService();
 
   /// Award reputation points for winning a debate - DEPRECATED
   /// Use ModeratorReputationService for reputation adjustments
-  @deprecated
+  @Deprecated('Use ModeratorReputationService instead')
   Future<bool> awardDebateWin(String userId, {String? opponentId, int? judgeScore}) async {
     AppLogger().warning('⚠️ ReputationService.awardDebateWin is deprecated - use ModeratorReputationService');
     return true; // No-op for backward compatibility
@@ -25,7 +23,7 @@ class ReputationService {
 
   /// Deduct reputation points for losing a debate - DEPRECATED
   /// Use ModeratorReputationService for reputation adjustments
-  @deprecated
+  @Deprecated('Use ModeratorReputationService instead')
   Future<bool> awardDebateLoss(String userId, {String? opponentId, int? judgeScore}) async {
     AppLogger().warning('⚠️ ReputationService.awardDebateLoss is deprecated - use ModeratorReputationService');
     return true; // No-op for backward compatibility
@@ -33,7 +31,7 @@ class ReputationService {
 
   /// Award reputation for participating in a debate - DEPRECATED
   /// Use ModeratorReputationService for reputation adjustments
-  @deprecated
+  @Deprecated('Use ModeratorReputationService instead')
   Future<bool> awardDebateParticipation(String userId) async {
     AppLogger().warning('⚠️ ReputationService.awardDebateParticipation is deprecated - use ModeratorReputationService');
     return true; // No-op for backward compatibility
@@ -41,7 +39,7 @@ class ReputationService {
 
   /// Award reputation for creating a room/debate - DEPRECATED
   /// Use ModeratorReputationService for reputation adjustments
-  @deprecated
+  @Deprecated('Use ModeratorReputationService instead')
   Future<bool> awardRoomCreation(String userId) async {
     AppLogger().warning('⚠️ ReputationService.awardRoomCreation is deprecated - use ModeratorReputationService');
     return true; // No-op for backward compatibility
@@ -49,7 +47,7 @@ class ReputationService {
 
   /// Award reputation for receiving gifts - DEPRECATED
   /// Use ModeratorReputationService for reputation adjustments
-  @deprecated
+  @Deprecated('Use ModeratorReputationService instead')
   Future<bool> awardGiftReceived(String userId, int giftValue) async {
     AppLogger().warning('⚠️ ReputationService.awardGiftReceived is deprecated - use ModeratorReputationService');
     return true; // No-op for backward compatibility
@@ -57,7 +55,7 @@ class ReputationService {
 
   /// Award reputation for sending gifts - DEPRECATED
   /// Use ModeratorReputationService for reputation adjustments
-  @deprecated
+  @Deprecated('Use ModeratorReputationService instead')
   Future<bool> awardGiftSent(String userId, int giftValue) async {
     AppLogger().warning('⚠️ ReputationService.awardGiftSent is deprecated - use ModeratorReputationService');
     return true; // No-op for backward compatibility
@@ -65,7 +63,7 @@ class ReputationService {
 
   /// Award reputation for good judge performance - DEPRECATED
   /// Use ModeratorReputationService for reputation adjustments
-  @deprecated
+  @Deprecated('Use ModeratorReputationService instead')
   Future<bool> awardJudgePerformance(String userId, double rating) async {
     AppLogger().warning('⚠️ ReputationService.awardJudgePerformance is deprecated - use ModeratorReputationService');
     return true; // No-op for backward compatibility
@@ -73,7 +71,7 @@ class ReputationService {
 
   /// Award reputation for good moderator performance - DEPRECATED
   /// Use ModeratorReputationService for reputation adjustments
-  @deprecated
+  @Deprecated('Use ModeratorReputationService instead')
   Future<bool> awardModeratorPerformance(String userId, double rating) async {
     AppLogger().warning('⚠️ ReputationService.awardModeratorPerformance is deprecated - use ModeratorReputationService');
     return true; // No-op for backward compatibility
@@ -81,7 +79,7 @@ class ReputationService {
 
   /// Penalize reputation for bad behavior - DEPRECATED
   /// Use ModeratorReputationService for reputation adjustments
-  @deprecated
+  @Deprecated('Use ModeratorReputationService instead')
   Future<bool> penalizeBadBehavior(String userId, String reason) async {
     AppLogger().warning('⚠️ ReputationService.penalizeBadBehavior is deprecated - use ModeratorReputationService');
     return true; // No-op for backward compatibility
@@ -89,7 +87,7 @@ class ReputationService {
 
   /// Award daily login bonus - DEPRECATED
   /// Use ModeratorReputationService for reputation adjustments
-  @deprecated
+  @Deprecated('Use ModeratorReputationService instead')
   Future<bool> awardDailyLogin(String userId) async {
     AppLogger().warning('⚠️ ReputationService.awardDailyLogin is deprecated - use ModeratorReputationService');
     return true; // No-op for backward compatibility
@@ -97,7 +95,7 @@ class ReputationService {
 
   /// Get user's reputation rank - DEPRECATED
   /// Reputation is now percentage-based, use ModeratorReputationService
-  @deprecated
+  @Deprecated('Use ModeratorReputationService instead')
   Future<int> getUserRank(String userId) async {
     AppLogger().warning('⚠️ ReputationService.getUserRank is deprecated');
     return 0; // No-op for backward compatibility
@@ -106,7 +104,7 @@ class ReputationService {
 
   /// Get reputation leaderboard - DEPRECATED
   /// Reputation is now percentage-based, use ModeratorReputationService
-  @deprecated
+  @Deprecated('Use ModeratorReputationService instead')
   Future<List<Map<String, dynamic>>> getLeaderboard({int limit = 100}) async {
     AppLogger().warning('⚠️ ReputationService.getLeaderboard is deprecated');
     return []; // No-op for backward compatibility

@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'dart:io';
 import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
@@ -115,7 +116,7 @@ class ReputationMigrationService {
 
   /// Print migration instructions for manual execution
   static void printMigrationInstructions() {
-    print('''
+    developer.log('''
 🔧 REPUTATION SYSTEM MIGRATION INSTRUCTIONS
 
 The Arena app has been updated to use a percentage-based reputation system.
@@ -171,30 +172,30 @@ void main(List<String> arguments) async {
     ReputationMigrationService.printMigrationInstructions();
     
     // Check if migration is needed
-    print('\n📊 Checking migration status...');
+    developer.log('\n📊 Checking migration status...');
     final needsMigration = await ReputationMigrationService.isMigrationNeeded();
     
     if (!needsMigration) {
-      print('✅ Migration appears to be already completed!');
+      developer.log('✅ Migration appears to be already completed!');
       exit(0);
     }
     
-    print('⚠️  Migration is needed. Please follow the manual instructions above.');
+    developer.log('⚠️  Migration is needed. Please follow the manual instructions above.');
     
     // If moderator user IDs are provided as arguments, create initial moderators
     if (arguments.isNotEmpty) {
-      print('\n👑 Creating initial moderators for provided user IDs...');
+      developer.log('\n👑 Creating initial moderators for provided user IDs...');
       final success = await ReputationMigrationService.createInitialModerators(arguments);
       if (success) {
-        print('✅ Initial moderators created successfully!');
+        developer.log('✅ Initial moderators created successfully!');
       } else {
-        print('❌ Failed to create some moderators. Check logs for details.');
+        developer.log('❌ Failed to create some moderators. Check logs for details.');
       }
     } else {
-      print('\n💡 To create initial moderators, run: dart migrate_reputation_to_percentage.dart [userId1] [userId2] ...');
+      developer.log('\n💡 To create initial moderators, run: dart migrate_reputation_to_percentage.dart [userId1] [userId2] ...');
     }
     
-    print('\n🎉 Migration setup complete! Please complete the manual steps in Appwrite Console.');
+    developer.log('\n🎉 Migration setup complete! Please complete the manual steps in Appwrite Console.');
     
   } catch (e) {
     AppLogger().error('💥 Migration script error: $e');

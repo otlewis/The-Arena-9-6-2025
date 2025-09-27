@@ -3,8 +3,6 @@ import 'package:purchases_flutter/purchases_flutter.dart';
 import '../services/revenue_cat_service.dart';
 import '../services/feature_flag_service.dart';
 import '../core/logging/app_logger.dart';
-import '../widgets/user_avatar.dart';
-import '../services/appwrite_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class PaywallScreen extends StatefulWidget {
@@ -26,7 +24,6 @@ class PaywallScreen extends StatefulWidget {
 class _PaywallScreenState extends State<PaywallScreen> {
   final RevenueCatService _revenueCatService = RevenueCatService();
   final FeatureFlagService _featureFlagService = FeatureFlagService();
-  final AppwriteService _appwriteService = AppwriteService();
   
   List<StoreProduct> _products = [];
   bool _isLoading = true;
@@ -347,9 +344,9 @@ class _PaywallScreenState extends State<PaywallScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.withOpacity(0.3)),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
               ),
               child: Text(
                 _errorMessage,
@@ -412,7 +409,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: accentPurple.withOpacity(0.2)),
+        side: BorderSide(color: accentPurple.withValues(alpha: 0.2)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -424,7 +421,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: accentPurple.withOpacity(0.1),
+                    color: accentPurple.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(feature['icon'] as IconData, color: accentPurple),
@@ -487,7 +484,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
               side: BorderSide(
-                color: isPopular ? Colors.amber : accentPurple.withOpacity(0.2),
+                color: isPopular ? Colors.amber : accentPurple.withValues(alpha: 0.2),
                 width: isPopular ? 2 : 1,
               ),
             ),

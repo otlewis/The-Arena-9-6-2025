@@ -30,7 +30,7 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace "com.thearenadtd.app"
-    compileSdkVersion flutter.compileSdkVersion
+    compileSdkVersion 36
     ndkVersion "27.0.12077973"
 
     compileOptions {
@@ -58,7 +58,7 @@ android {
     defaultConfig {
         applicationId "com.thearenadtd.app"
         minSdkVersion 26
-        targetSdkVersion flutter.targetSdkVersion
+        targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
     }

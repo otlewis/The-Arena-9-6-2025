@@ -79,6 +79,7 @@ class NotificationService {
 
       // Try to load from notifications collection (if it exists)
       try {
+        // Note: listDocuments is deprecated but TablesDB is not yet available in Flutter SDK
         final response = await _appwriteService.databases.listDocuments(
           databaseId: AppwriteConstants.databaseId,
           collectionId: 'notifications',

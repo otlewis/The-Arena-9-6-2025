@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import '../models/user_profile.dart';
 import '../core/logging/app_logger.dart';
 import '../services/challenge_messaging_service.dart';
+import '../services/feature_flag_service.dart';
+import '../services/appwrite_service.dart';
 
 /// Modal that displays user profile information when clicking on users in rooms
 class UserProfileModal extends StatefulWidget {
@@ -36,12 +38,14 @@ class _UserProfileModalState extends State<UserProfileModal>
   // final InstantMessagingService _imService = InstantMessagingService();
   
   bool _isCurrentUser = false;
+  bool _currentUserIsPremium = false;
 
   @override
   void initState() {
     super.initState();
     _initializeAnimations();
     _checkIfCurrentUser();
+    _checkCurrentUserPremiumStatus();
   }
 
   void _initializeAnimations() {
@@ -72,6 +76,41 @@ class _UserProfileModalState extends State<UserProfileModal>
 
   void _checkIfCurrentUser() {
     _isCurrentUser = widget.currentUser?.id == widget.userProfile.id;
+  }
+
+  Future<void> _checkCurrentUserPremiumStatus() async {
+    try {
+      // BETA TESTING: Force all users to be premium during beta
+      setState(() {
+        _currentUserIsPremium = true;
+      });
+      AppLogger().info('🧪 BETA MODE: All users have premium access for challenges');
+
+      /* TODO: Restore feature flag logic when beta testing is complete
+      // Check if beta testing mode is enabled
+      final isBetaTesting = await FeatureFlagService().isBetaTestingMode();
+
+      if (isBetaTesting) {
+        // In beta testing mode, all users are premium
+        setState(() {
+          _currentUserIsPremium = true;
+        });
+        AppLogger().info('🧪 Beta testing mode enabled - all users have premium access');
+      } else {
+        // Normal premium checking
+        final appwriteService = AppwriteService();
+        final currentUser = await appwriteService.getCurrentUser();
+        if (currentUser != null) {
+          final userProfile = await appwriteService.getUserProfile(currentUser.$id);
+          setState(() {
+            _currentUserIsPremium = userProfile?.isPremium ?? false;
+          });
+        }
+      }
+      */
+    } catch (e) {
+      AppLogger().error('Error checking current user premium status: $e');
+    }
   }
 
   /// Check if user role restricts them from being challenged (optimized)
@@ -470,6 +509,8 @@ class _UserProfileModalState extends State<UserProfileModal>
                     AppLogger().info('⚡ Challenge button tapped for ${widget.userProfile.name}');
                     if (isRestricted) {
                       _showChallengeRestriction();
+                    } else if (!_currentUserIsPremium) {
+                      _showPremiumPaywall();
                     } else {
                       _sendChallenge();
                     }
@@ -477,17 +518,23 @@ class _UserProfileModalState extends State<UserProfileModal>
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
-                      color: isRestricted ? Colors.grey : const Color(0xFFFF2400),
+                      color: isRestricted
+                          ? Colors.grey
+                          : (_currentUserIsPremium ? const Color(0xFFFF2400) : Colors.grey.shade400),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.flash_on, color: Colors.white, size: 18),
-                        SizedBox(width: 8),
+                        Icon(
+                          _currentUserIsPremium ? Icons.flash_on : Icons.lock,
+                          color: Colors.white,
+                          size: 18
+                        ),
+                        const SizedBox(width: 8),
                         Text(
-                          'Challenge',
-                          style: TextStyle(
+                          _currentUserIsPremium ? 'Challenge' : 'Premium',
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
@@ -760,9 +807,75 @@ class _UserProfileModalState extends State<UserProfileModal>
     }
   }
 
+  void _showPremiumPaywall() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.diamond, color: Color(0xFF6B46C1)),
+            SizedBox(width: 8),
+            Text('Premium Feature'),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Instant Debate Challenges are available for Premium subscribers.',
+              style: TextStyle(fontSize: 16),
+            ),
+            SizedBox(height: 16),
+            Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 20),
+                SizedBox(width: 8),
+                Expanded(child: Text('Unlimited challenges')),
+              ],
+            ),
+            SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 20),
+                SizedBox(width: 8),
+                Expanded(child: Text('Priority arena access')),
+              ],
+            ),
+            SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 20),
+                SizedBox(width: 8),
+                Expanded(child: Text('Advanced features')),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Maybe Later'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.pushNamed(context, '/premium_store');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6B46C1),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Upgrade Now'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _viewOwnProfile() {
     _closeModal();
-    
+
     // TODO: Navigate to full profile screen
     AppLogger().info('Viewing own profile');
   }

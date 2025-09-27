@@ -3,13 +3,16 @@ import '../core/logging/app_logger.dart';
 /// Centralized LiveKit Configuration Service for Arena
 /// This service provides environment-aware LiveKit server configuration
 /// and eliminates hardcoded server URLs throughout the application
+///
+/// Current setup: Self-hosted LiveKit on Google Cloud Services (GCS)
+/// Alternative: LiveKit Cloud (wss://your-project.livekit.cloud) for managed hosting
 class LiveKitConfigService {
   static LiveKitConfigService? _instance;
   static LiveKitConfigService get instance => _instance ??= LiveKitConfigService._();
   
   LiveKitConfigService._();
 
-  // Production LiveKit server configuration (Google Cloud Platform server)
+  // Production LiveKit server configuration (Self-hosted on Google Cloud Services)
   static const String _productionServerUrl = 'ws://34.171.185.205:7879';
   static const String _productionApiKey = 'APIwzQr7qFmXHcy';
   static const String _productionSecretKey = '2gVhXTdGbSJ4bPSpomxfaHjCA8PBdmJ4N7h89dZAJT9';

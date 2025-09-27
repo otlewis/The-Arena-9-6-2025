@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '../widgets/user_avatar.dart';
 import '../widgets/premium_badge.dart';
-import '../widgets/gift_send_bottom_sheet.dart';
 import '../widgets/simple_gift_bottom_sheet.dart';
 import '../models/user_profile.dart';
+import '../utils/name_display_utils.dart';
 
 // Color constants used in participant displays
 class ArenaParticipantColors {
@@ -74,6 +74,7 @@ class ArenaParticipantWidgets {
         SizedBox(
           height: 140, // Fixed height like Debates & Discussions
           child: GridView.builder(
+            key: const ValueKey('compact_audience_grid'),
             padding: const EdgeInsets.symmetric(horizontal: 4),
             physics: const BouncingScrollPhysics(), // Enable scrolling
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -86,6 +87,7 @@ class ArenaParticipantWidgets {
             itemBuilder: (context, index) {
               final audienceMember = audience[index];
               return Column(
+                key: ValueKey('compact_audience_${audienceMember.id}'),
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   UserAvatar(
@@ -95,18 +97,16 @@ class ArenaParticipantWidgets {
                     onTap: onUserTap != null ? () => onUserTap(audienceMember) : null,
                   ),
                   const SizedBox(height: 3),
-                  Text(
+                  NameDisplayUtils.buildStackedNameText(
                     audienceMember.name.length > 7 
                         ? '${audienceMember.name.substring(0, 7)}...'
                         : audienceMember.name,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 8,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    fontSize: 8,
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w500,
                     textAlign: TextAlign.center,
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    isSmall: true, // Keep compact for audience grid
                   ),
                 ],
               );
@@ -240,9 +240,9 @@ class ArenaParticipantWidgets {
             
             // Participant content
             if (participant != null)
-              buildParticipantTile(participant, isSmall: true)
+              buildParticipantTile(participant, isSmall: false, allowOverflow: true)
             else
-              buildEmptyPosition('Waiting...', isSmall: true),
+              buildEmptyPosition('Waiting...', isSmall: false),
           ],
         ),
       ),
@@ -305,6 +305,7 @@ class ArenaParticipantWidgets {
           SizedBox(
             height: gridHeight,
             child: GridView.builder(
+              key: const ValueKey('audience_overlay_grid'),
               scrollDirection: Axis.vertical,
               physics: const BouncingScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -317,6 +318,7 @@ class ArenaParticipantWidgets {
               itemBuilder: (context, index) {
                 final audienceMember = audience[index];
                 return Column(
+                  key: ValueKey('overlay_audience_${audienceMember.id}'),
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     UserAvatar(
@@ -325,18 +327,16 @@ class ArenaParticipantWidgets {
                       radius: 20,
                     ),
                     const SizedBox(height: 2),
-                    Text(
+                    NameDisplayUtils.buildStackedNameText(
                       audienceMember.name.length > 6
                           ? '${audienceMember.name.substring(0, 6)}...'
                           : audienceMember.name,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 8,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      fontSize: 8,
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w500,
                       textAlign: TextAlign.center,
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      isSmall: true, // Keep compact for audience grid
                     ),
                   ],
                 );
@@ -351,7 +351,7 @@ class ArenaParticipantWidgets {
   // Build individual participant tile
   static Widget buildParticipantTile(
     UserProfile participant, 
-    {bool isMain = false, bool isSmall = false, bool isWinner = false}
+    {bool isMain = false, bool isSmall = false, bool isWinner = false, bool allowOverflow = false}
   ) {
     final avatarRadius = isMain ? 40.0 : (isSmall ? 20.0 : 30.0);
     final nameSize = isMain ? 14.0 : (isSmall ? 10.0 : 12.0);
@@ -391,6 +391,7 @@ class ArenaParticipantWidgets {
         // Participant name with premium badge
         Column(
           children: [
+            // Always show full name without truncation for all participants
             Text(
               participant.name,
               style: TextStyle(
@@ -399,8 +400,8 @@ class ArenaParticipantWidgets {
                 fontWeight: FontWeight.w600,
               ),
               textAlign: TextAlign.center,
-              maxLines: isSmall ? 1 : 2,
-              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
+              overflow: TextOverflow.visible,
             ),
             if (participant.isPremium && !isSmall) ...[
               const SizedBox(height: 2),
@@ -483,13 +484,13 @@ class ArenaParticipantWidgets {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(
+                      child: NameDisplayUtils.buildStackedNameText(
                         user.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        fontSize: 16,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        textAlign: TextAlign.left,
+                        maxLines: 2,
                       ),
                     ),
                     if (user.isPremium) PremiumBadge(user: user, size: 14),
@@ -541,12 +542,13 @@ class ArenaParticipantWidgets {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
+                NameDisplayUtils.buildStackedNameText(
                   participant.name,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  fontSize: 18,
+                  color: Colors.black,
+                  fontWeight: FontWeight.bold,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
                 ),
                 if (participant.isPremium) ...[
                   const SizedBox(width: 8),

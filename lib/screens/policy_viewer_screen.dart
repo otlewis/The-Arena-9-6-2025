@@ -29,6 +29,10 @@ class _PolicyViewerScreenState extends State<PolicyViewerScreen> {
       String content;
       if (widget.policyType == 'Terms of Service') {
         content = await rootBundle.loadString('TERMS_OF_SERVICE.md');
+      } else if (widget.policyType == 'Privacy Policy') {
+        content = await rootBundle.loadString('PRIVACY_POLICY.md');
+      } else if (widget.policyType == 'Parental Consent Policy') {
+        content = await rootBundle.loadString('PARENTAL_CONSENT_POLICY.md');
       } else {
         content = await rootBundle.loadString('PRIVACY_POLICY.md');
       }
@@ -50,17 +54,15 @@ class _PolicyViewerScreenState extends State<PolicyViewerScreen> {
 By using The Arena DTD, you agree to these terms.
 
 ## 2. Age Requirement
-You must be 18 years or older to use this app.
+You must be 13 years or older to use this app.
 
 ## 3. User Conduct
 - Be respectful in debates
 - No harassment or hate speech
 - Follow moderator instructions
 
-For full terms, visit: http://50.21.187.76/terms.html
-
 Contact: thearenadtd@gmail.com''';
-        } else {
+        } else if (widget.policyType == 'Privacy Policy') {
           _policyContent = '''# Privacy Policy
 **The Arena DTD**
 
@@ -81,7 +83,38 @@ Contact: thearenadtd@gmail.com''';
 - Delete your account
 - Export your data
 
-For full policy, visit: http://50.21.187.76/privacy.html
+Contact: thearenadtd@gmail.com''';
+        } else if (widget.policyType == 'Parental Consent Policy') {
+          _policyContent = '''# Parental Consent Policy
+**The Arena DTD**
+
+*Last Updated: September 2025*
+
+## Purpose
+This policy explains how we handle accounts for users aged 13-17.
+
+## Age Requirements
+- Under 13: Not allowed
+- 13-17: Requires parental consent and supervision
+
+## What We Collect for Teens
+- Account information
+- Debate participation
+- Optional parent email
+- No targeted advertising
+
+## Parental Rights
+- Review teen's account
+- Request account deletion
+- Withdraw consent anytime
+
+## Contact
+Email: thearenadtd@gmail.com''';
+        } else {
+          _policyContent = '''# Privacy Policy
+**The Arena DTD**
+
+*Last Updated: September 2025*
 
 Contact: thearenadtd@gmail.com''';
         }
@@ -119,7 +152,7 @@ Contact: thearenadtd@gmail.com''';
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -172,7 +205,7 @@ Contact: thearenadtd@gmail.com''';
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, -4),
             ),

@@ -1,8 +1,18 @@
+// ⚠️ DEPRECATED SCRIPT - DO NOT USE ⚠️
+// This script uses old Appwrite SDK methods that are no longer available in v18.0.0
+// The methods createCollection, createStringAttribute, etc. have been removed
+// Use REST API approach or wait for TablesDB support to be added to the Flutter SDK
+
+/*
 import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
 import 'package:appwrite/appwrite.dart';
+// This script uses old Appwrite SDK methods that are no longer available in v18.0.0
+// The methods createCollection, createStringAttribute, etc. have been removed
+// Use REST API approach or wait for TablesDB support to be added to the Flutter SDK
 
 /// Creates the reputation_logs collection using the existing AppwriteService
+/// @deprecated Use REST API approach or wait for TablesDB support
 class ReputationLogsCollectionSetup {
   static final AppwriteService _appwrite = AppwriteService();
 
@@ -119,5 +129,13 @@ class ReputationLogsCollectionSetup {
         AppLogger().error('❌ Failed to create ${index['key']} index: $e');
       }
     }
+  }
+}
+*/
+
+/// Placeholder for deprecated script
+class ReputationLogsCollectionSetup {
+  static Future<void> createCollection() async {
+    throw Exception('⚠️ This script is deprecated and disabled. Use REST API or wait for TablesDB support.');
   }
 }

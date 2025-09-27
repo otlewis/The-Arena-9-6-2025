@@ -8,6 +8,7 @@ import '../widgets/block_user_dialog.dart';
 import '../widgets/report_user_icon.dart';
 import '../services/gift_service.dart';
 import '../features/user/providers/user_profile_provider.dart';
+import '../core/logging/app_logger.dart';
 
 class UserProfileScreen extends ConsumerStatefulWidget {
   final String userId;
@@ -88,11 +89,19 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   }
 
   void _showChallengeRestrictedMessage() {
+    // BETA TESTING: This method should never be called during beta testing
+    // since all users are forced to be premium, but adding fallback just in case
+    AppLogger().warning('🧪 BETA: Challenge restriction message called - this should not happen during beta testing');
+
     final currentUserState = ref.read(userProfileProvider('current'));
+
+    // BETA TESTING: Force premium status
+    final isCurrentUserPremium = true; // Force premium for beta testing
+
+    /* TODO: Restore original premium logic when beta testing is complete
     final isCurrentUserPremium = currentUserState.userProfile?.isPremium == true;
-    final profileState = ref.read(userProfileProvider(widget.userId));
-    final targetUserName = profileState.userProfile?.name ?? 'User';
-    
+    */
+
     String message;
     if (!isCurrentUserPremium) {
       message = 'Premium subscription required to send challenges';
@@ -491,16 +500,25 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     
     // Get current user's premium status for challenge gating
     final currentUserState = ref.watch(userProfileProvider('current'));
+
+    // BETA TESTING: Force all users to be premium during beta
+    final isCurrentUserPremium = true; // Force premium for beta testing
+    final isTargetUserPremium = true; // Force premium for beta testing
+    final canChallenge = isCurrentUserPremium && isTargetUserPremium;
+
+    /* TODO: Restore original premium logic when beta testing is complete
     final isCurrentUserPremium = currentUserState.userProfile?.isPremium == true;
     final isTargetUserPremium = userProfile.isPremium == true;
     final canChallenge = isCurrentUserPremium && isTargetUserPremium;
+    */
     
     // Debug logging for premium status
-    print('🔍 Challenge Debug:');
-    print('  Current user premium: $isCurrentUserPremium (${currentUserState.userProfile?.isPremium})');
-    print('  Target user premium: $isTargetUserPremium (${userProfile.isPremium})');
-    print('  Target user name: ${userProfile.name}');
-    print('  Can challenge: $canChallenge');
+    AppLogger().info('🧪 BETA MODE: Challenge enabled for all users in user_profile_screen');
+    AppLogger().debug('🔍 Challenge Debug:');
+    AppLogger().debug('  Current user premium: $isCurrentUserPremium (FORCED FOR BETA - actual: ${currentUserState.userProfile?.isPremium})');
+    AppLogger().debug('  Target user premium: $isTargetUserPremium (FORCED FOR BETA - actual: ${userProfile.isPremium})');
+    AppLogger().debug('  Target user name: ${userProfile.name}');
+    AppLogger().debug('  Can challenge: $canChallenge');
     
     return Column(
       children: [

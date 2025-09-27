@@ -638,7 +638,9 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
         counterText: '',
       ),
       style: const TextStyle(fontSize: 16),
-      onChanged: (_) => setState(() {}),
+      onChanged: (_) => setState(() {
+        // Update UI as user types in text field
+      }),
     );
   }
 

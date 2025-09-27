@@ -148,9 +148,18 @@ We do not knowingly collect personal information from children under 13. If we l
 
 Teen users aged 13–17 may use the App with parental or guardian consent. We collect only the information necessary to operate the App (such as username, email, and participation data).
 
+### 12.1 Teen Plan Features and Privacy
+
+For teen users, we offer a specialized Teen Plan at $4.99 per month that includes:
+- Age-appropriate content controls and enhanced safety features
+- Additional privacy protections for teen users
+- Parental oversight and control features
+
+All teen plan subscriptions require explicit parental consent before activation. Payment information for teen accounts is processed separately and securely through third-party payment providers with additional verification steps.
+
 We do not use teen account data for targeted advertising.
 
-Parents and guardians may contact us at thearenadtd@gmail.com to review or request deletion of their teen's account or data.
+Parents and guardians may contact us at thearenadtd@gmail.com to review or request deletion of their teen's account or data, or to manage teen plan subscriptions.
 
 ## 13. Changes to This Policy
 

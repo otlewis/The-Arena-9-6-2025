@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:developer' as developer;
 import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
 
@@ -29,7 +30,7 @@ class GamifiedRankingMigration {
 
   /// Print manual collection creation instructions
   static Future<void> _printCollectionInstructions() async {
-    print('''
+    developer.log('''
 🔧 GAMIFIED RANKING SYSTEM - COLLECTION SETUP
 
 Please create these collections manually in Appwrite Console:
@@ -101,7 +102,7 @@ Please create these collections manually in Appwrite Console:
    → Achievement Checker Function
 
 After completing these steps, run this migration again to initialize user data.
-''');
+''', name: 'GamifiedRankingMigration');
   }
 
   /// Initialize monthly rankings for all existing users
@@ -172,75 +173,6 @@ After completing these steps, run this migration again to initialize user data.
     }
   }
 
-  /// Initialize achievement templates for all users
-  static Future<void> _initializeAchievementTemplates() async {
-    try {
-      AppLogger().info('🏆 Initializing achievement templates for users...');
-      
-      // Get all users
-      final usersResponse = await _appwriteService.databases.listDocuments(
-        databaseId: 'arena_db',
-        collectionId: 'users',
-        queries: [],
-      );
-      
-      // Achievement templates from the Achievement model
-      final achievementTemplates = [
-        {
-          'achievementId': 'first_win',
-          'title': 'First Victory',
-          'description': 'Win your first debate',
-          'category': 'combat',
-          'rarity': 'common',
-          'iconAsset': 'assets/icons/first_win.png',
-          'xpReward': 50,
-        },
-        // Add more templates as needed
-      ];
-      
-      int createdCount = 0;
-      
-      for (final userDoc in usersResponse.documents) {
-        final userId = userDoc.data['\$id'] ?? userDoc.data['id'];
-        if (userId == null) continue;
-        
-        for (final template in achievementTemplates) {
-          try {
-            await _appwriteService.databases.createDocument(
-              databaseId: 'arena_db',
-              collectionId: 'achievements',
-              documentId: 'unique()',
-              data: {
-                'userId': userId,
-                'achievementId': template['achievementId'],
-                'title': template['title'],
-                'description': template['description'],
-                'category': template['category'],
-                'rarity': template['rarity'],
-                'iconAsset': template['iconAsset'],
-                'xpReward': template['xpReward'],
-                'isUnlocked': false,
-                'metadata': '{}',
-                'createdAt': DateTime.now().toIso8601String(),
-              },
-            );
-            
-            createdCount++;
-          } catch (e) {
-            // Skip if achievement already exists for user
-            if (!e.toString().contains('Document with the requested ID already exists')) {
-              AppLogger().warning('⚠️ Failed to create achievement ${template['achievementId']} for user $userId: $e');
-            }
-          }
-        }
-      }
-      
-      AppLogger().info('🎖️ Created $createdCount achievement templates');
-      
-    } catch (e) {
-      AppLogger().error('Failed to initialize achievement templates: $e');
-    }
-  }
 
   /// Get current month key (YYYY-MM format)
   static String _getCurrentMonthKey() {
@@ -266,7 +198,7 @@ After completing these steps, run this migration again to initialize user data.
 /// Command-line interface for running migration
 void main(List<String> arguments) async {
   try {
-    print('🚀 Gamified Ranking System Migration Tool');
+    developer.log('🚀 Gamified Ranking System Migration Tool', name: 'GamifiedRankingMigration');
     
     if (arguments.contains('--instructions')) {
       await GamifiedRankingMigration._printCollectionInstructions();
@@ -282,15 +214,15 @@ void main(List<String> arguments) async {
     final success = await GamifiedRankingMigration.runMigration();
     
     if (success) {
-      print('🎉 Migration completed successfully!');
+      developer.log('🎉 Migration completed successfully!', name: 'GamifiedRankingMigration');
       exit(0);
     } else {
-      print('💥 Migration failed. Check logs for details.');
+      developer.log('💥 Migration failed. Check logs for details.', name: 'GamifiedRankingMigration');
       exit(1);
     }
     
   } catch (e) {
-    print('💥 Migration error: $e');
+    developer.log('💥 Migration error: $e', name: 'GamifiedRankingMigration');
     exit(1);
   }
 }

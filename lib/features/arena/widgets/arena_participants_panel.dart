@@ -132,7 +132,8 @@ class ArenaParticipantsPanel extends ConsumerWidget {
                 role: 'Judge ${entry.key + 1}',
                 color: Colors.orange,
                 state: state,
-                isCompact: true,
+                isCompact: false,
+                allowOverflow: true,
               );
             }).toList(),
           ),
@@ -177,13 +178,14 @@ class ArenaParticipantsPanel extends ConsumerWidget {
                       width: 60,
                       child: Text(
                         participant.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10,
+                          color: Colors.black,
                           fontWeight: FontWeight.w400,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.visible,
                       ),
                     ),
                   ],
@@ -202,6 +204,7 @@ class ArenaParticipantsPanel extends ConsumerWidget {
     required Color color,
     required ArenaState state,
     bool isCompact = false,
+    bool allowOverflow = false,
   }) {
     if (participant == null) {
       return Container(
@@ -292,10 +295,12 @@ class ArenaParticipantsPanel extends ConsumerWidget {
             participant.name,
             style: TextStyle(
               fontSize: isCompact ? 8 : 10,
+              color: Colors.black,
               fontWeight: FontWeight.w400,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.visible,
           ),
           if (!isCompact) ...[
             const SizedBox(height: 4),

@@ -1,0 +1,37 @@
+[
+  {
+    "coin_package_id": "coins_100",
+    "amount": 100,
+    "price_display": "$0.99",
+    "rc_product_id": "arena_coins_100",
+    "sort_order": 1,
+    "is_active": true
+  },
+  {
+    "coin_package_id": "coins_600",
+    "amount": 600,
+    "price_display": "$4.99",
+    "badge": "Most Popular",
+    "rc_product_id": "arena_coins_600",
+    "sort_order": 2,
+    "is_active": true
+  },
+  {
+    "coin_package_id": "coins_2000",
+    "amount": 2000,
+    "price_display": "$14.99",
+    "badge": "Best Value",
+    "rc_product_id": "arena_coins_2000",
+    "sort_order": 3,
+    "is_active": true
+  },
+  {
+    "coin_package_id": "coins_5000",
+    "amount": 5000,
+    "price_display": "$34.99",
+    "badge": "Premium",
+    "rc_product_id": "arena_coins_5000",
+    "sort_order": 4,
+    "is_active": true
+  }
+]

@@ -4,19 +4,14 @@ import 'package:appwrite/appwrite.dart';
 import '../services/appwrite_service.dart';
 import '../services/challenge_messaging_service.dart';
 import '../services/sound_service.dart';
-import '../widgets/user_avatar.dart';
 import '../models/user_profile.dart';
 import '../models/message.dart';
 import '../models/judge_scorecard.dart';
 import '../widgets/user_profile_bottom_sheet.dart';
 import '../widgets/mattermost_chat_widget.dart';
-import '../widgets/timer_control_bottom_sheet.dart';
 import '../models/discussion_chat_message.dart';
-import '../models/timer_state.dart';
 import '../screens/email_compose_screen.dart';
-import '../services/appwrite_timer_service.dart';
 import 'dart:async';
-import 'dart:io' show Platform;
 import '../main.dart' show ArenaApp, getIt;
 import '../core/logging/app_logger.dart';
 import '../services/livekit_service.dart';
@@ -27,6 +22,10 @@ import '../services/noise_cancellation_service.dart';
 import '../services/speaking_detection_service.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:audio_session/audio_session.dart' as audio_session;
+import '../services/audio_volume_service.dart';
+import '../services/realtime_ai_moderation_service.dart';
+import '../services/room_realtime_manager.dart';
+import '../services/participant_diff_manager.dart';
 import 'arena_modals.dart';
 import '../features/arena/dialogs/moderator_control_modal.dart' as moderator_controls;
 import '../features/arena/widgets/arena_app_bar.dart';
@@ -40,6 +39,262 @@ import '../services/pinned_link_service.dart';
 import '../widgets/shared_link_popup.dart';
 import '../widgets/slide_update_popup.dart';
 import '../models/debate_source.dart';
+import '../services/disposal_tracking_system.dart';
+
+// Static helper methods for avatar system - accessible by all classes
+Widget buildAvatarText(UserProfile participant, double fontSize) {
+  String letter;
+  if (participant.name.isEmpty) {
+    letter = participant.email.isNotEmpty ? participant.email.substring(0, 1).toUpperCase() : 'U';
+  } else {
+    letter = participant.name.substring(0, 1).toUpperCase();
+  }
+  return Center(
+    child: Text(
+      letter,
+      style: TextStyle(
+        color: Colors.white,
+        fontSize: fontSize,
+        fontWeight: FontWeight.bold,
+      ),
+      textAlign: TextAlign.center,
+    ),
+  );
+}
+
+Widget buildAvatarTextFromMap(Map<String, dynamic> participantData, double fontSize) {
+  String name = participantData['name'] ?? '';
+  String email = participantData['email'] ?? '';
+  
+  String letter;
+  if (name.isEmpty) {
+    letter = email.isNotEmpty ? email.substring(0, 1).toUpperCase() : 'U';
+  } else {
+    letter = name.substring(0, 1).toUpperCase();
+  }
+  return Center(
+    child: Text(
+      letter,
+      style: TextStyle(
+        color: Colors.white,
+        fontSize: fontSize,
+        fontWeight: FontWeight.bold,
+      ),
+      textAlign: TextAlign.center,
+    ),
+  );
+}
+
+// Helper method to get avatar background color based on role
+Color getAvatarColorForRole(String role) {
+  switch (role) {
+    case 'affirmative':
+    case 'affirmative2':
+      return Colors.green;
+    case 'negative':
+    case 'negative2':
+      return Colors.red;
+    case 'moderator':
+      return const Color(0xFF8B5CF6); // accentPurple
+    case 'judge1':
+    case 'judge2':
+    case 'judge3':
+      return Colors.amber;
+    default:
+      return const Color(0xFF8B5CF6); // Default to accentPurple for audience
+  }
+}
+
+// Helper method to get gradient colors for avatar backgrounds based on role
+List<Color> getAvatarGradientForRole(String role) {
+  switch (role) {
+    case 'affirmative':
+    case 'affirmative2':
+      return [
+        const Color(0xFF065F46), // Dark green
+        const Color(0xFF10B981), // Bright green
+      ];
+    case 'negative':
+    case 'negative2':
+      return [
+        const Color(0xFF991B1B), // Dark red
+        const Color(0xFFEF4444), // Bright red
+      ];
+    case 'moderator':
+      return [
+        const Color(0xFF5B21B6), // Dark purple 
+        const Color(0xFF8B5CF6), // Bright purple (accentPurple)
+      ];
+    case 'judge1':
+    case 'judge2':
+    case 'judge3':
+      return [
+        const Color(0xFFB45309), // Dark amber
+        const Color(0xFFFBBF24), // Bright amber
+      ];
+    default:
+      return [
+        const Color(0xFF5B21B6), // Dark purple (existing default)
+        const Color(0xFF8B5CF6), // Bright purple (existing default)
+      ];
+  }
+}
+
+// Helper method to get lighter gradient colors for slot backgrounds
+List<Color> getSlotGradientForRole(String role, {bool isWinner = false}) {
+  if (isWinner) {
+    return [
+      Colors.amber.withValues(alpha: 0.2),
+      Colors.amber.withValues(alpha: 0.1),
+    ];
+  }
+  
+  switch (role) {
+    case 'affirmative':
+    case 'affirmative2':
+      return [
+        Colors.green.withValues(alpha: 0.2),
+        Colors.green.withValues(alpha: 0.1),
+      ];
+    case 'negative':
+    case 'negative2':
+      return [
+        Colors.red.withValues(alpha: 0.2),
+        Colors.red.withValues(alpha: 0.1),
+      ];
+    case 'moderator':
+      return [
+        const Color(0xFF8B5CF6).withValues(alpha: 0.2), // accentPurple
+        const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+      ];
+    case 'judge1':
+    case 'judge2':
+    case 'judge3':
+      return [
+        Colors.amber.withValues(alpha: 0.2),
+        Colors.amber.withValues(alpha: 0.1),
+      ];
+    default:
+      return [
+        const Color(0xFF8B5CF6).withValues(alpha: 0.2), // Default purple
+        const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+      ];
+  }
+}
+
+Widget buildStackedNameDisplayForVideoTile(String name) {
+  if (name.isEmpty || name == 'Unknown') {
+    return Text(
+      'Unknown',
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        shadows: [
+          Shadow(
+            offset: Offset(0, 1),
+            blurRadius: 2,
+            color: Colors.black54,
+          ),
+        ],
+      ),
+      textAlign: TextAlign.center,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+  
+  final parts = name.split(' ');
+  
+  // Single name - just show it
+  if (parts.length == 1) {
+    return Text(
+      parts[0].length > 10 ? '${parts[0].substring(0, 10)}...' : parts[0],
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        shadows: [
+          Shadow(
+            offset: Offset(0, 1),
+            blurRadius: 2,
+            color: Colors.black54,
+          ),
+        ],
+      ),
+      textAlign: TextAlign.center,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+  
+  // Multiple names - stack first and last name
+  if (parts.length >= 2) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          parts[0].length > 8 ? '${parts[0].substring(0, 8)}...' : parts[0],
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            height: 1.1,
+            shadows: [
+              Shadow(
+                offset: Offset(0, 1),
+                blurRadius: 2,
+                color: Colors.black54,
+              ),
+            ],
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        Text(
+          parts.last.length > 8 ? '${parts.last.substring(0, 8)}...' : parts.last,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            height: 1.1,
+            shadows: [
+              Shadow(
+                offset: Offset(0, 1),
+                blurRadius: 2,
+                color: Colors.black54,
+              ),
+            ],
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+  
+  // Fallback
+  return Text(
+    name.length > 10 ? '${name.substring(0, 10)}...' : name,
+    style: const TextStyle(
+      color: Colors.white,
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      shadows: [
+        Shadow(
+          offset: Offset(0, 1),
+          blurRadius: 2,
+          color: Colors.black54,
+        ),
+      ],
+    ),
+    textAlign: TextAlign.center,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+  );
+}
 
 // Legacy Debate Phase Enum - kept for backwards compatibility
 enum DebatePhase {
@@ -115,7 +370,7 @@ class ArenaScreen extends StatefulWidget {
   State<ArenaScreen> createState() => _ArenaScreenState();
 }
 
-class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin {
+class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin, AutomaticKeepAliveClientMixin, DisposalTrackingMixin {
   final AppwriteService _appwrite = AppwriteService();
   late final SoundService _soundService;
   late final SpeakingDetectionService _speakingService;
@@ -128,7 +383,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   int _teamSize = 1; // 1 for 1v1, 2 for 2v2
   String? _winner; // Track the debate winner
   bool _judgingComplete = false;
-  bool _judgingEnabled = false; // Track if judges can submit votes
+  bool _judgingEnabled = true; // Voting is now always open for judges until closed by moderator
   bool _hasCurrentUserSubmittedVote = false;
   bool _resultsModalShown = false; // Track if results modal has been shown
   bool _roomClosingModalShown = false; // Track if room closing modal has been shown
@@ -137,9 +392,21 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Timer? _roomStatusChecker; // Periodic room status checker
   Timer? _roomCompletionTimer; // Timer for room completion after closure
   Timer? _muteStateSyncTimer; // Periodic mute state sync to prevent stuck states
-  StreamSubscription? _realtimeSubscription; // Track realtime subscription
+  // Consolidated real-time subscription manager
+  final RoomRealtimeManager _realtimeManager = RoomRealtimeManager();
+  RoomSubscription? _roomSubscription;
+
+  // Separate subscription stream listeners
+  StreamSubscription? _participantStreamListener;
+  StreamSubscription? _roomStatusStreamListener;
+  StreamSubscription? _judgmentStreamListener;
+  StreamSubscription? _timerStreamListener;
+
+  // Legacy subscriptions
   StreamSubscription? _unreadMessagesSubscription; // Instant messages subscription
   StreamSubscription? _sharedLinkSubscription; // Shared link notifications
+  StreamSubscription? _sourceAddedSubscription; // Material source additions
+  StreamSubscription? _materialUpdatesSubscription; // Material updates
   int _roomStatusCheckerIterations = 0; // Track iterations to prevent infinite loops
   int _reconnectAttempts = 0; // Track reconnection attempts
   static const int _maxReconnectAttempts = 5; // Maximum reconnection attempts
@@ -173,6 +440,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   bool _isWebRTCConnected = false;
   bool _isMuted = false;
   bool _showMaterialsBottomSheet = false;
+
+  // ANDROID CRASH PROTECTION: Rate limiting for mute/unmute operations
+  DateTime? _lastMuteToggleTime;
+  static const Duration _muteToggleCooldown = Duration(milliseconds: 500);
   
   // Connection stability monitoring
   Timer? _connectionHealthTimer;
@@ -215,8 +486,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   };
   
   final List<UserProfile> _audience = [];
-  
-  
+
+  // Diff-based participant management
+  final ParticipantDiffManager _diffManager = ParticipantDiffManager();
+
   // Two-stage invitation system state
   bool _bothDebatersPresent = false;
   final bool _invitationModalShown = false;
@@ -238,9 +511,18 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   static const Color deepPurple = Color(0xFF6B46C1);
 
   @override
+  bool get wantKeepAlive => true; // Keep widget alive to prevent recreation
+
+  @override
   void initState() {
     super.initState();
-    
+
+    // Initialize disposal tracking system
+    initDisposalTracking(customId: 'arena_${widget.roomId}');
+
+    // Initialize diff manager for participant updates
+    _diffManager.initializeRoom(widget.roomId);
+
     // Initialize services
     _soundService = getIt<SoundService>();
     _speakingService = getIt<SpeakingDetectionService>();
@@ -253,7 +535,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _speakingService.addListener(_onSpeakingStateChanged);
     
     // Enable iOS-specific optimizations
-    _isIOSOptimizationEnabled = !kIsWeb && (Platform.isIOS || defaultTargetPlatform == TargetPlatform.iOS);
+    _isIOSOptimizationEnabled = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
     if (_isIOSOptimizationEnabled) {
       AppLogger().debug('🍎 iOS detected - enabling performance optimizations');
     }
@@ -267,7 +549,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _initializeArena();
     
     // ANDROID FIX: Apply performance optimizations for Android
-    if (Platform.isAndroid) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       _optimizeAndroidPerformance();
     }
     
@@ -290,7 +572,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       }
       
       // Pre-configure audio permissions in parallel
-      if (!kIsWeb && Platform.isIOS) {
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
         AppLogger().debug('🚀 INSTANT: Pre-configuring iOS audio session...');
         final session = await audio_session.AudioSession.instance;
         await session.configure(audio_session.AudioSessionConfiguration(
@@ -447,18 +729,33 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     } else {
       AppLogger().debug('🛑 DISPOSE: Mute sync timer was already null');
     }
+
+    AppLogger().debug('🛑 DISPOSE: Removing LiveKit service listener...');
+    _liveKitService.removeListener(_onLiveKitStateChanged);
+
+    AppLogger().debug('🛑 DISPOSE: Clearing speaking detection callback...');
+    _liveKitService.onSpeakingChanged = null;
     
     // Stop connection health monitoring
     _stopConnectionHealthMonitoring();
     _reconnectionTimer?.cancel();
     
-    AppLogger().debug('🛑 DISPOSE: Cancelling realtime subscription...');
-    _realtimeSubscription?.cancel();
-    _realtimeSubscription = null;
-    
+    AppLogger().debug('🛑 DISPOSE: Cleaning up consolidated subscriptions...');
+    _realtimeManager.unsubscribeFromRoom(widget.roomId);
+    _participantStreamListener?.cancel();
+    _roomStatusStreamListener?.cancel();
+    _judgmentStreamListener?.cancel();
+    _timerStreamListener?.cancel();
+
     AppLogger().debug('🛑 DISPOSE: Cancelling instant messaging subscription...');
     _unreadMessagesSubscription?.cancel();
     _unreadMessagesSubscription = null;
+
+    AppLogger().debug('🛑 DISPOSE: Cancelling material sync subscriptions...');
+    _sourceAddedSubscription?.cancel();
+    _sourceAddedSubscription = null;
+    _materialUpdatesSubscription?.cancel();
+    _materialUpdatesSubscription = null;
     
     AppLogger().debug('🛑 DISPOSE: Cleaning up chat service...');
     // Chat service disposal removed - now handled by floating chat button
@@ -478,10 +775,14 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _speakingService.removeListener(_onSpeakingStateChanged);
     
     _timerController.dispose(); // Dispose local timer controller
-    
+
+    AppLogger().debug('🛑 DISPOSE: Cleaning up tracked resources...');
+    // Clean up all tracked disposable resources
+    disposeTrackedResources();
+
     // Restart notification service to ensure user can receive new invites
     // Note: NotificationService singleton continues running - no restart needed
-    
+
     super.dispose();
   }
 
@@ -494,48 +795,26 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
-  /// Get user role for speaking indicator by userId
-  String? _getUserRoleById(String? userId) {
-    if (userId == null) return null;
-    
-    // Check if it's the current user
-    if (userId == _currentUserId) {
-      return _userRole;
-    }
-    
-    // Check participants for their roles using the _participants map
-    for (final entry in _participants.entries) {
-      final role = entry.key;
-      final participant = entry.value;
-      if (participant?.id == userId) {
-        return role;
-      }
-    }
-    
-    return 'audience';
-  }
 
-  void _setupRealtimeSubscription() {
+  void _setupRealtimeSubscription() async {
     // Add user ID validation before setting up subscription
     if (_currentUserId == null) {
       AppLogger().error('Cannot start real-time listening: no current user ID');
       return;
     }
-    
+
     try {
-      // Cancel any existing subscription first
-      _realtimeSubscription?.cancel();
-      
-      AppLogger().info('Setting up real-time subscription for user: $_currentUserId (attempt ${_reconnectAttempts + 1}/$_maxReconnectAttempts)');
-      
-      // Subscribe to arena participants changes AND room updates
-      final subscription = _appwrite.realtimeInstance.subscribe([
-        'databases.arena_db.collections.arena_participants.documents',
-        'databases.arena_db.collections.arena_rooms.documents'
-      ]);
-      
-      _realtimeSubscription = subscription.stream.listen(
-        (response) {
+      AppLogger().info('📡 Setting up consolidated real-time subscription for arena room: ${widget.roomId}');
+
+      // Use centralized subscription manager
+      _roomSubscription = await _realtimeManager.subscribeToRoom(
+        roomId: widget.roomId,
+        roomType: 'arena',
+      );
+
+      // Listen to participant updates stream
+      _participantStreamListener = _roomSubscription!.participants.listen(
+        (response) async {
           try {
             // Reset reconnect attempts on successful message
             if (_reconnectAttempts > 0) {
@@ -579,35 +858,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             final isParticipantUpdate = response.events.any((event) => event.contains('arena_participants'));
             final isRoomUpdate = response.events.any((event) => event.contains('arena_rooms'));
             
-            if (isParticipantUpdate && payload.containsKey('roomId') && 
+            if (isParticipantUpdate && payload.containsKey('roomId') &&
                 payload['roomId'] == widget.roomId) {
-            AppLogger().debug('🔄 Refreshing participants for our arena room');
-              
-              // CRITICAL: Check for role changes that require audio reinitialization
-              bool isRoleChangeEvent = false;
-              if (payload.containsKey('userId') && payload.containsKey('role') && _currentUser?.id != null) {
-                final userId = payload['userId'];
-                final newRole = payload['role'];
-                
-                if (userId == _currentUser!.id && newRole != null && newRole != _userRole) {
-                  AppLogger().info('🔄 ROLE CHANGE: Current user role changed from $_userRole to $newRole');
-                  isRoleChangeEvent = true;
-                }
-              }
-              
-              if (mounted && !_hasNavigated) { // Check navigation state
-                _loadParticipants();
-                
-                // CRITICAL: Handle role change - reinitialize LiveKit connection with new role
-                if (isRoleChangeEvent) {
-                  AppLogger().info('🔄 ROLE CHANGE: Executing LiveKit role sync for current user');
-                  // Wait a moment for participant data to be loaded, then reinitialize
-                  Future.delayed(const Duration(milliseconds: 200), () async {
-                    if (mounted) {
-                      await _reinitializeAudioForRoleChange();
-                    }
-                  });
-                }
+              if (mounted && !_hasNavigated) {
+                await _handleArenaParticipantUpdate(response);
               }
             }
             
@@ -618,9 +872,18 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               
               AppLogger().debug('🔍 Room update received - PayloadId: $payloadId, RoomId: $roomId, TargetRoomId: ${widget.roomId}');
               
+              // Log the judging state in the payload
+              if (payload.containsKey('judgingEnabled')) {
+                AppLogger().info('🎯 REALTIME: judgingEnabled field in payload: ${payload['judgingEnabled']}');
+              }
+              
               if (payloadId == widget.roomId || roomId == widget.roomId ||
                   payloadId == 'arena_${widget.challengeId}' || roomId == 'arena_${widget.challengeId}') {
-                AppLogger().debug('🔄 Refreshing room data for winner/status updates');
+                AppLogger().info('🔄 REALTIME: Room update is for OUR room - refreshing data');
+                AppLogger().info('  - Current _judgingEnabled: $_judgingEnabled');
+                if (payload.containsKey('judgingEnabled')) {
+                  AppLogger().info('  - New judgingEnabled from payload: ${payload['judgingEnabled']}');
+                }
                 
                 // CRITICAL: Only process if we haven't started navigation
                 if (mounted && !_hasNavigated) {
@@ -672,9 +935,92 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           }
         },
       );
-      
-      AppLogger().info('Real-time arena subscription established successfully for room: ${widget.roomId}');
-      AppLogger().info('User: $_currentUserId is now listening for real-time updates');
+      // Track participant stream subscription
+      trackSubscription('participant_stream', _participantStreamListener!);
+
+      // Listen to room status updates
+      _roomStatusStreamListener = _roomSubscription!.roomStatus.listen(
+        (response) {
+          AppLogger().info('Room status update: ${response.events}');
+          // Handle room updates (closure, status changes, etc.)
+          if (response.payload.containsKey('roomId') && response.payload['roomId'] == widget.roomId) {
+            final roomData = response.payload;
+            if (roomData['status'] == 'ended' || roomData['status'] == 'closed') {
+              AppLogger().info('🔴 Room ended/closed detected via realtime');
+              if (mounted && !_hasNavigated) {
+                _forceNavigationHomeSync();
+              }
+            }
+          }
+        },
+        onError: (error) {
+          AppLogger().error('Room status subscription error: $error');
+        },
+      );
+      // Track room status subscription
+      trackSubscription('room_status_stream', _roomStatusStreamListener!);
+
+      // Listen to judgment updates for voting
+      _judgmentStreamListener = _roomSubscription!.materials.listen(
+        (response) {
+          // Check if this is a judgment event
+          if (response.events.any((e) => e.contains('arena_judgments'))) {
+            AppLogger().info('Judgment update received');
+
+            // Check if this is a new judge vote (create event)
+            final isCreateEvent = response.events.any((e) => e.contains('.create'));
+            if (isCreateEvent && _userRole == 'moderator' && mounted) {
+              // Extract judge information from the payload
+              try {
+                final payload = response.payload;
+                final judgeId = payload['judgeId'];
+
+                // Determine which judge voted based on their role
+                String judgeLabel = 'A judge';
+                if (judgeId != null) {
+                  // Find the judge's role by checking participants
+                  _participants.forEach((role, user) {
+                    if (user?.id == judgeId) {
+                      switch (role) {
+                        case 'judge1':
+                          judgeLabel = 'Judge 1';
+                          break;
+                        case 'judge2':
+                          judgeLabel = 'Judge 2';
+                          break;
+                        case 'judge3':
+                          judgeLabel = 'Judge 3';
+                          break;
+                      }
+                    }
+                  });
+                }
+
+                // Count how many judges have voted
+                _checkJudgeVoteProgress().then((voteCount) {
+                  // Show persistent notification for moderator
+                  _showJudgeVoteNotification(judgeLabel, voteCount);
+                });
+              } catch (e) {
+                AppLogger().error('Error processing judge vote notification: $e');
+              }
+            }
+
+            // Refresh judgments when new votes come in
+            if (mounted && !_hasNavigated) {
+              // Force UI refresh to show updated voting status
+              setState(() {
+                // This will trigger a rebuild and update voting display
+              });
+            }
+          }
+        },
+      );
+      // Track judgment stream subscription
+      trackSubscription('judgment_stream', _judgmentStreamListener!);
+
+      AppLogger().info('✅ Consolidated arena subscription established for room: ${widget.roomId}');
+      AppLogger().info('User: $_currentUserId listening on all arena channels');
     } catch (e) {
       AppLogger().error('Error setting up real-time subscription: $e');
       // Continue without real-time - the periodic checker will handle updates
@@ -686,7 +1032,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _connectionHealthTimer?.cancel();
     
     // ANDROID FIX: More frequent monitoring for Android to catch performance issues early
-    final monitoringInterval = Platform.isAndroid 
+    final monitoringInterval = (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) 
         ? const Duration(seconds: 15)  // More frequent for Android
         : const Duration(seconds: 30); // Standard for iOS
     
@@ -749,7 +1095,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       }
       
       // ANDROID FIX: Force audio cleanup when WebRTC disconnection is detected
-      if (!isWebRTCConnected && Platform.isAndroid) {
+      if (!isWebRTCConnected && !kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
         AppLogger().debug('🔧 ANDROID: WebRTC disconnected - performing immediate audio cleanup');
         try {
           await _liveKitService.disableAudio();
@@ -772,8 +1118,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             : 60;
         
         // ANDROID FIX: Balanced reconnection approach - not too aggressive to prevent cycling
-        final threshold = Platform.isAndroid ? 2 : _unhealthyThreshold; // Allow 2 checks before reconnecting on Android
-        final minTime = Platform.isAndroid ? 15 : _minTimeBetweenReconnections; // Longer wait to prevent cycling
+        final threshold = (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) ? 2 : _unhealthyThreshold; // Allow 2 checks before reconnecting on Android
+        final minTime = (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) ? 15 : _minTimeBetweenReconnections; // Longer wait to prevent cycling
         
         // Only attempt reconnection if:
         // - We've had enough consecutive unhealthy checks
@@ -825,7 +1171,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       AppLogger().debug('✅ Arena WebRTC connection restored successfully');
       
       // ANDROID FIX: Pause health monitoring briefly to let connection stabilize
-      if (Platform.isAndroid) {
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
         AppLogger().debug('🔧 ANDROID: Pausing health monitoring for connection stabilization...');
         _stopConnectionHealthMonitoring();
         
@@ -950,12 +1296,25 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             });
           }
         };
-        
+
         _liveKitService.onParticipantDisconnected = (participant) {
           AppLogger().debug('👋 Participant left Arena: ${participant.identity}');
           if (mounted) {
             setState(() {
               // Update UI for participant leaving
+            });
+          }
+        };
+
+        // Add listener for LiveKit service changes (including mute state changes)
+        _liveKitService.addListener(_onLiveKitStateChanged);
+
+        // Set up speaking detection callback to trigger UI updates
+        _liveKitService.onSpeakingChanged = (String userId, bool isSpeaking) {
+          AppLogger().debug('🗣️ Speaking state changed for $userId: $isSpeaking');
+          if (mounted && !_isExiting) {
+            setState(() {
+              // Trigger UI rebuild when speaking state changes
             });
           }
         };
@@ -973,6 +1332,17 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   // _connectWithRetry method removed - unused
+
+  /// Callback for LiveKit service state changes (including mute state changes)
+  void _onLiveKitStateChanged() {
+    if (mounted) {
+      setState(() {
+        // Sync local mute state with LiveKit service
+        _isMuted = _liveKitService.isMuted;
+        AppLogger().debug('🔄 LiveKit state changed - UI refreshed, muted: $_isMuted');
+      });
+    }
+  }
 
   /// Connect to WebRTC server for Arena audio using LiveKit - OPTIMIZED FOR SPEED
   Future<void> _connectToWebRTC() async {
@@ -1103,7 +1473,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
       try {
         // ANDROID FIX: Optimize connection parameters for better performance
-        final connectionTimeout = Platform.isAndroid 
+        final connectionTimeout = (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) 
             ? const Duration(seconds: 15)  // Shorter timeout for Android to prevent performance issues
             : const Duration(seconds: 20); // Standard timeout for iOS
         
@@ -1125,7 +1495,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         AppLogger().info('✅ ARENA: Connected via LiveKitService successfully');
         
         // ANDROID FIX: Add stabilization period to prevent immediate disconnection
-        if (Platform.isAndroid) {
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
           AppLogger().debug('🔧 ANDROID: Connection stabilization period starting...');
           await Future.delayed(const Duration(milliseconds: 1000)); // 1 second stabilization
           AppLogger().debug('🔧 ANDROID: Connection stabilization completed');
@@ -1168,9 +1538,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               }
             }
           });
+          // Track shared link subscription
+          trackSubscription('shared_link_stream', _sharedLinkSubscription!);
           
           // ALSO listen for source additions from LiveKit MaterialSyncService (LiveKit-based)
-          _materialSyncService!.sourceAdded.listen((source) {
+          _sourceAddedSubscription = _materialSyncService!.sourceAdded.listen((source) {
             if (mounted && !_isExiting) {
               // Only show popup if current user is not the one who shared the link
               if (source.sharedBy != currentUserId) {
@@ -1181,14 +1553,16 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               }
             }
           });
+          // Track source added subscription
+          trackSubscription('source_added_stream', _sourceAddedSubscription!);
           
           // Listen for material updates and only show popup for NEW slide uploads (pdf_upload), not slide navigation (slide_change)
-          _materialSyncService!.materialUpdates.listen((materialSync) {
+          _materialUpdatesSubscription = _materialSyncService!.materialUpdates.listen((materialSync) {
             if (mounted && !_isExiting) {
               // Only show popup for pdf_upload events (new slides shared), not slide_change events (slide navigation)
               if (materialSync.type == 'pdf_upload' && materialSync.userId != currentUserId) {
                 AppLogger().info('📊 Showing NEW slides popup from MaterialSyncService: ${materialSync.slideFileId}');
-                
+
                 // Create SlideData from the material sync event
                 final slideData = SlideData(
                   fileId: materialSync.slideFileId ?? '',
@@ -1200,13 +1574,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   uploadedByName: materialSync.userName,
                   uploadedAt: DateTime.now(),
                 );
-                
+
                 _showSlideUpdatePopup(slideData);
               } else if (materialSync.type == 'pdf_upload') {
                 AppLogger().info('📊 Not showing popup for own slide upload: ${materialSync.slideFileId}');
               }
             }
           });
+          // Track material updates subscription
+          trackSubscription('material_updates_stream', _materialUpdatesSubscription!);
           
           AppLogger().debug('📊 Material sync service initialized for role: $webrtcRole');
         }
@@ -1250,7 +1626,20 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       AppLogger().info('✅ LiveKit connection established successfully');
       AppLogger().info('🎥 Connection status: $_isWebRTCConnected');
       AppLogger().info('🎤 Audio ready for role: $webrtcRole (started muted)');
-      
+
+      // Configure loud audio output for better audibility
+      final audioVolumeService = AudioVolumeService();
+      await audioVolumeService.configureLoudAudio();
+      if (_liveKitService.room != null) {
+        audioVolumeService.configureLiveKitAudio(_liveKitService.room!);
+      }
+      AppLogger().info('🔊 Audio volume boosted for speaker output');
+
+      // Start AI moderation for hostile speech detection
+      final aiModeration = RealtimeAIModerationService();
+      await aiModeration.startRoomMonitoring(widget.roomId);
+      AppLogger().info('🛡️ AI moderation started for room');
+
       // Configure audio session with enhanced noise cancellation for Arena
       try {
         final session = await audio_session.AudioSession.instance;
@@ -1372,61 +1761,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
-  /// Reinitialize audio connection when user's role changes - OPTIMIZED
-  Future<void> _reinitializeAudioForRoleChange() async {
-    try {
-      AppLogger().debug('🚀 INSTANT: Fast role change audio reinit...');
-      
-      // Disconnect existing audio service if connected
-      if (_isWebRTCConnected) {
-        AppLogger().debug('🚀 INSTANT: Quick disconnect...');
-        await _liveKitService.disconnect();
-        if (mounted) {
-          setState(() {
-            _isWebRTCConnected = false;
-            _isMuted = true;
-          });
-        }
-        
-        // Minimal wait for disconnection
-        await Future.delayed(const Duration(milliseconds: 50));
-      }
-      
-      // Reconnect with new role immediately
-      AppLogger().debug('🚀 INSTANT: Fast reconnect with role: $_userRole');
-      await _connectToWebRTC();
-      
-      // Minimal wait for connection
-      await Future.delayed(const Duration(milliseconds: 100));
-      
-      // Auto-connect audio if user should have microphone access
-      if (_shouldUserPublishMedia()) {
-        AppLogger().debug('🚀 INSTANT: Auto-connecting audio for $_userRole');
-        await _autoConnectAudio();
-      }
-      
-      AppLogger().info('✅ Successfully reinitialized audio for role change to $_userRole');
-      
-    } catch (e) {
-      AppLogger().error('❌ Failed to reinitialize audio for role change: $e');
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('⚠️ Audio reconnection failed: ${e.toString()}'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-    }
-  }
 
   /// Determine if current user should publish media (video/audio)
   bool _shouldUserPublishMedia() {
     // Moderator, debaters and judges publish audio
-    // Audience members are view-only
+    // Audience members are view-only (listen-only)
     return _userRole == 'moderator' ||
-           _userRole == 'affirmative' || 
+           _userRole == 'affirmative' ||
            _userRole == 'negative' ||
            _userRole == 'affirmative2' ||
            _userRole == 'negative2' ||
@@ -1434,97 +1775,123 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   /// Toggle local microphone with enhanced error handling
-  Future<void> _toggleAudio() async {
-    AppLogger().debug('🎤 Toggle audio called - current state: ${_isMuted ? 'muted' : 'unmuted'}');
-    AppLogger().debug('🎤 User role: $_userRole, Can publish: ${_shouldUserPublishMedia()}');
-    
-    // Check if user has permission to use mic
-    if (!_shouldUserPublishMedia()) {
-      AppLogger().error('❌ User role $_userRole does not have microphone permissions');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('⚠️ Your role does not have microphone access'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-    
-    // Ensure WebRTC is connected first - INSTANT
-    if (!_isWebRTCConnected) {
-      AppLogger().debug('🚀 INSTANT: Fast WebRTC connection for audio toggle...');
-      await _connectToWebRTC();
+  Future<void> _toggleMute() async {
+    try {
+      AppLogger().debug('🎤 TOGGLE MUTE: Starting mute toggle');
+
+      // ANDROID CRASH PROTECTION: Check if widget is disposed
+      if (!mounted) {
+        AppLogger().warning('⚠️ TOGGLE MUTE: Widget not mounted - aborting safely');
+        return;
+      }
+
+      // ANDROID CRASH PROTECTION: Check for null dependencies
+      if (_liveKitService == null) {
+        AppLogger().warning('⚠️ TOGGLE MUTE: LiveKit service is null - aborting safely');
+        return;
+      }
+
+      // ANDROID CRASH PROTECTION: Rate limiting to prevent rapid toggle crashes
+      final now = DateTime.now();
+      if (_lastMuteToggleTime != null && now.difference(_lastMuteToggleTime!) < _muteToggleCooldown) {
+        AppLogger().warning('⚠️ TOGGLE MUTE: Rate limited - ignoring rapid toggle');
+        return;
+      }
+      _lastMuteToggleTime = now;
+
+      // CRITICAL: Check if user role is loaded yet
+      if (_userRole == null) {
+        AppLogger().debug('🔇 Mute Toggle: User role not loaded yet, please wait...');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⏳ Loading your role... Please wait'),
+              backgroundColor: Colors.blue,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
       
-      // Minimal wait for connection
-      await Future.delayed(const Duration(milliseconds: 100));
+      // Only allow audio toggle for judges, moderators, and debaters  
+      if (!_shouldUserPublishMedia()) {
+        AppLogger().debug('🔇 Mute Toggle: Role $_userRole does not have microphone access');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Your role does not have microphone access'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
       
-      // If still not connected, try once more quickly
+      // Connect to audio first if not connected
       if (!_isWebRTCConnected) {
-        AppLogger().debug('🚀 INSTANT: Quick retry...');
-        await Future.delayed(const Duration(milliseconds: 100));
-        if (!_isWebRTCConnected) {
-          AppLogger().error('❌ Cannot toggle audio - WebRTC connection failed');
+        await _connectToWebRTC();
+        return;
+      }
+      
+      // ANDROID CRASH PROTECTION: Wrap audio operations
+      try {
+        // Double-check mount state before audio operations
+        if (!mounted) {
+          AppLogger().warning('⚠️ TOGGLE MUTE: Widget unmounted during operation');
           return;
         }
-      }
-    }
-    
-    // CRITICAL iOS FIX: Force sync role with LiveKit before audio operations
-    if (_userRole != null && (_userRole!.startsWith('judge') || _userRole == 'moderator' || _userRole!.contains('affirmative') || _userRole!.contains('negative'))) {
-      AppLogger().debug('🔄 iOS AUDIO FIX: Force syncing role before audio toggle');
-      // Role updates handled automatically by LiveKitService
-    }
-    
-    try {
-      // Track user intention for mute state protection
-      final willBeMuted = !_isMuted; // After toggle, mute state will be opposite
-      AppLogger().debug('🔒 USER INTENTION: User ${willBeMuted ? 'intentionally muting' : 'intentionally unmuting'} themselves');
-      
-      // ENHANCED AUDIO HANDLING: Use special logic for judges and moderators
-      if (_userRole?.startsWith('judge') == true || _userRole == 'moderator') {
-        AppLogger().debug('🎭 ENHANCED AUDIO: Using enhanced toggle logic for $_userRole...');
-        
+
+        // Toggle mute state using LiveKit service
         if (_isMuted) {
-          // Unmuting judge/moderator - use enhanced setup
-          await _handleEnhancedAudioSetup();
-          if (mounted) {
-            setState(() {
-              _isMuted = false;
-            });
-          }
-          AppLogger().info('🎭 ENHANCED AUDIO: Successfully unmuted $_userRole via enhanced setup');
+          AppLogger().debug('🎤 TOGGLE MUTE: Calling enableAudio()');
+          await _liveKitService.enableAudio();
         } else {
-          // Muting judge/moderator - use standard method
-          await _liveKitService.toggleMute();
-          final newMuteState = _liveKitService.isMuted;
-          if (mounted) {
-            setState(() {
-              _isMuted = newMuteState;
-            });
-          }
-          AppLogger().info('🎭 ENHANCED AUDIO: Successfully muted $_userRole via standard method');
+          AppLogger().debug('🔇 TOGGLE MUTE: Calling disableAudio()');
+          await _liveKitService.disableAudio();
         }
-      } else {
-        // Standard toggle for non-judges
-        await _liveKitService.toggleMute();
-        final newMuteState = _liveKitService.isMuted;
-        
+
+        // ANDROID CRASH PROTECTION: Only update UI if still mounted
         if (mounted) {
           setState(() {
-            _isMuted = newMuteState;
+            _isMuted = _liveKitService.isMuted;
           });
         }
-        
-        AppLogger().info('🎤 Audio toggled to: ${newMuteState ? 'MUTED' : 'UNMUTED'} via LiveKit');
+
+        AppLogger().debug('✅ TOGGLE MUTE: Audio operation completed - ${_isMuted ? 'muted' : 'unmuted'}');
+
+      } catch (audioError) {
+        AppLogger().error('❌ TOGGLE MUTE: Audio operation failed: $audioError');
+        // Don't rethrow here - handle in the outer catch block
+        throw audioError;
       }
-      
     } catch (e) {
-      AppLogger().error('❌ Failed to toggle audio: $e');
+      AppLogger().error('❌ Error toggling mute: $e');
       
-      // ROBUST AUDIO SYSTEM: Check if this is a permission error - if so, try to reconnect with correct role
-      if (e.toString().contains('permission') || e.toString().contains('publish audio') || e.toString().contains('does not have permission')) {
-        AppLogger().warning('🚨 PERMISSION ERROR in Arena: Attempting to reconnect with correct role');
-        
+      // Check if this is a permission error - if so, try to reconnect with correct role
+      if (e.toString().contains('permission') || e.toString().contains('publish audio') || e.toString().contains('audience')) {
+        AppLogger().warning('🚨 PERMISSION ERROR: Attempting to refresh role and reconnect');
+
+        // CRITICAL: Force refresh role from database to ensure we have the latest
+        await _loadParticipants();
+        AppLogger().info('🔄 Role refreshed from database: $_userRole');
+
+        // Check if role actually allows publishing after refresh
+        if (!_shouldUserPublishMedia()) {
+          AppLogger().error('❌ After refresh, role $_userRole still does not allow publishing');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Your current role ($_userRole) does not have microphone access'),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+          return;
+        }
+
         // Force disconnect and reconnect with updated permissions
         try {
           if (_isWebRTCConnected) {
@@ -1533,26 +1900,25 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               _isWebRTCConnected = false;
             });
           }
-          
+
           // Brief delay to ensure cleanup
           await Future.delayed(const Duration(milliseconds: 500));
-          
+
           // Reconnect with corrected role
           await _connectToWebRTC();
           
-          // Try to unmute again after successful reconnection if we were trying to unmute
-          if (_isWebRTCConnected && _isMuted && _shouldUserPublishMedia()) {
+          // Try to unmute again after successful reconnection
+          if (_isWebRTCConnected && _isMuted) {
             await _liveKitService.enableAudio();
             if (mounted) {
               setState(() {
                 _isMuted = _liveKitService.isMuted;
               });
             }
-            AppLogger().info('✅ Arena audio enabled after permission error recovery');
           }
           
         } catch (reconnectError) {
-          AppLogger().error('❌ Arena reconnection failed: $reconnectError');
+          AppLogger().error('❌ Reconnection failed: $reconnectError');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -1564,280 +1930,38 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           }
         }
       }
-      // Check for Android memory-related errors  
-      else if (e.toString().toLowerCase().contains('memory') || 
-          e.toString().toLowerCase().contains('pthread') ||
-          e.toString().toLowerCase().contains('native crash') ||
-          e.toString().toLowerCase().contains('android microphone')) {
-        AppLogger().debug('🧹 ANDROID FIX: Memory error detected in Arena audio toggle');
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('⚠️ Memory issue detected. Close other apps and try again.'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 5),
-            ),
-          );
-        }
-        
-        // Try emergency unmute if we were trying to unmute
-        if (_isMuted) {
-          AppLogger().debug('🚨 Attempting emergency unmute after memory error...');
-          await _forceUnmute();
-        }
-      }
-      else {
-        // Other errors - try emergency unmute if we were trying to unmute
-        if (_isMuted) {
-          AppLogger().debug('🚨 Attempting emergency unmute after generic error...');
-          await _forceUnmute();
-        }
+      
+      // Sync local state with service state on error
+      if (mounted) {
+        setState(() {
+          _isMuted = _liveKitService.isMuted;
+        });
       }
     }
   }
   
-  /// Disconnect from WebRTC (for reconnection strategies)
-  Future<void> _disconnectFromWebRTC() async {
-    try {
-      AppLogger().debug('🔌 Disconnecting from WebRTC...');
-      
-      // ANDROID FIX: Force audio cleanup before disconnection
-      if (Platform.isAndroid) {
-        try {
-          AppLogger().debug('🔧 ANDROID: Cleaning up audio before disconnect...');
-          await _liveKitService.disableAudio();
-          await Future.delayed(const Duration(milliseconds: 100)); // Brief cleanup pause
-        } catch (e) {
-          AppLogger().warning('⚠️ ANDROID: Pre-disconnect audio cleanup failed: $e');
-        }
-      }
-      
-      await _liveKitService.disconnect();
-      
-      // ANDROID FIX: Additional post-disconnect cleanup
-      if (Platform.isAndroid) {
-        await Future.delayed(const Duration(milliseconds: 150)); // Extra cleanup time for Android
-        AppLogger().debug('🔧 ANDROID: Post-disconnect cleanup completed');
-      }
-      
-      if (mounted) {
-        setState(() {
-          _isWebRTCConnected = false;
-        });
-      }
-      
-      AppLogger().info('✅ Disconnected from WebRTC');
-    } catch (e) {
-      AppLogger().error('❌ Failed to disconnect from WebRTC: $e');
-    }
-  }
 
-  /// Enhanced audio setup for judges and moderators - 10/10 reliability
-  Future<void> _handleEnhancedAudioSetup() async {
-    try {
-      AppLogger().debug('🎭 ENHANCED AUDIO: Starting enhanced audio setup for $_userRole...');
-      
-      // Step 1: Force role synchronization with LiveKit
-      AppLogger().debug('🎭 Step 1: Force syncing $_userRole role with LiveKit...');
-      // Role updates handled automatically by LiveKitService
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      // Step 2: Ensure WebRTC connection is stable - INSTANT
-      AppLogger().debug('🚀 INSTANT: Quick WebRTC check for $_userRole...');
-      if (!_isWebRTCConnected) {
-        AppLogger().debug('🚀 INSTANT: Fast reconnect...');
-        await _connectToWebRTC();
-        await Future.delayed(const Duration(milliseconds: 200));
-      }
-      
-      // Step 3: Try multiple audio enable strategies
-      AppLogger().debug('🎭 Step 3: Attempting audio enable strategies for $_userRole...');
-      
-      // Strategy 1: Direct enable
-      try {
-        AppLogger().debug('🎭 Strategy 1: Direct audio enable...');
-        await _liveKitService.enableAudio();
-        AppLogger().info('🎭 Strategy 1 SUCCESS: Direct audio enable worked for $_userRole');
-        return;
-      } catch (e) {
-        AppLogger().debug('🎭 Strategy 1 failed: $e');
-      }
-      
-      // Strategy 2: Force setup judge audio (if method exists)
-      try {
-        AppLogger().debug('⚖️ Strategy 2: Force setup judge audio...');
-        // Judge audio setup handled by standard LiveKitService methods
-        AppLogger().info('⚖️ Strategy 2 SUCCESS: Force setup judge audio worked');
-        return;
-      } catch (e) {
-        AppLogger().debug('⚖️ Strategy 2 failed: $e');
-      }
-      
-      // Strategy 3: Fast reconnect and retry - INSTANT
-      try {
-        AppLogger().debug('🚀 INSTANT: Strategy 3 - Fast reconnect...');
-        await _disconnectFromWebRTC();
-        await Future.delayed(const Duration(milliseconds: 50));
-        await _connectToWebRTC();
-        await Future.delayed(const Duration(milliseconds: 200));
-        
-        // Force role update after reconnection
-        // Role updates handled automatically by LiveKitService
-        await Future.delayed(const Duration(milliseconds: 100));
-        
-        await _liveKitService.enableAudio();
-        AppLogger().info('⚖️ Strategy 3 SUCCESS: Reconnection and retry worked');
-        return;
-      } catch (e) {
-        AppLogger().debug('⚖️ Strategy 3 failed: $e');
-      }
-      
-      // Strategy 4: Emergency fallback - try to create new audio track
-      try {
-        AppLogger().debug('⚖️ Strategy 4: Emergency fallback - creating new audio track...');
-        // Role updates handled automatically by LiveKitService
-        await Future.delayed(const Duration(milliseconds: 500));
-        
-        // Try to enable with fresh connection
-        await _liveKitService.enableAudio();
-        AppLogger().info('⚖️ Strategy 4 SUCCESS: Emergency fallback worked');
-        return;
-      } catch (e) {
-        AppLogger().debug('⚖️ Strategy 4 failed: $e');
-      }
-      
-      // If all strategies fail, throw comprehensive error
-      throw Exception('All judge audio enable strategies failed');
-      
-    } catch (e) {
-      AppLogger().error('❌ JUDGE AUDIO 10/10: Enhanced setup failed: $e');
-      rethrow;
-    }
-  }
 
-  /// Force unmute functionality for stuck microphones
-  Future<void> _forceUnmute() async {
-    try {
-      AppLogger().debug('🚨 FORCE UNMUTE: Attempting to force enable microphone');
-      AppLogger().debug('🚨 User role: $_userRole, Can publish: ${_shouldUserPublishMedia()}');
-      
-      // Check if user has permission
-      if (!_shouldUserPublishMedia()) {
-        AppLogger().error('❌ User role $_userRole does not have microphone permissions');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('⚠️ Your role does not have microphone access'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-        return;
-      }
-      
-      // Ensure WebRTC is connected - INSTANT
-      if (!_isWebRTCConnected) {
-        AppLogger().debug('🚀 INSTANT: Emergency fast connect...');
-        await _connectToWebRTC();
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-      
-      // CRITICAL iOS FIX: Force sync role with LiveKit before emergency audio operations
-      if (_userRole != null) {
-        AppLogger().debug('🔄 EMERGENCY iOS FIX: Force syncing role $_userRole before emergency unmute');
-        // Role updates handled automatically by LiveKitService
-      }
-      
-      // ENHANCED AUDIO HANDLING - Enhanced setup for judges and moderators
-      if (_userRole?.startsWith('judge') == true || _userRole == 'moderator') {
-        AppLogger().debug('🎭 ENHANCED AUDIO: Using enhanced audio setup for $_userRole...');
-        await _handleEnhancedAudioSetup();
-      } else {
-        // Try direct enable for other roles
-        await _liveKitService.enableAudio();
-      }
-      
-      // Update state
-      if (mounted) {
-        setState(() {
-          _isMuted = false;
-        });
-      }
-      
-      AppLogger().info('✅ FORCE UNMUTE: Successfully enabled audio for $_userRole');
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Microphone force enabled'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      
-    } catch (e) {
-      AppLogger().error('❌ FORCE UNMUTE: Failed to force enable audio: $e');
-      
-      // ROBUST AUDIO SYSTEM: Check for permission errors and try reconnection
-      if (e.toString().contains('permission') || e.toString().contains('publish audio') || e.toString().contains('does not have permission')) {
-        AppLogger().warning('🚨 FORCE UNMUTE PERMISSION ERROR: Attempting reconnection with correct role');
-        
-        try {
-          // Force disconnect and reconnect
-          if (_isWebRTCConnected) {
-            await _liveKitService.disconnect();
-            setState(() {
-              _isWebRTCConnected = false;
-            });
-          }
-          
-          await Future.delayed(const Duration(milliseconds: 500));
-          await _connectToWebRTC();
-          
-          // Try force unmute again after reconnection
-          if (_isWebRTCConnected && _shouldUserPublishMedia()) {
-            await _liveKitService.enableAudio();
-            if (mounted) {
-              setState(() {
-                _isMuted = false;
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('✅ Audio enabled after permission recovery'),
-                  backgroundColor: Colors.green,
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            }
-            return; // Success - exit early
-          }
-        } catch (recoveryError) {
-          AppLogger().error('❌ Permission error recovery failed: $recoveryError');
-        }
-      }
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Failed to enable microphone: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 
   // Video toggle removed - Arena is audio-only
   
   /// Standardized microphone button matching Open Discussion style
   Widget _buildEnhancedMicButton() {
+    // Show loading state if role is not loaded yet
+    if (_userRole == null) {
+      return _buildControlButton(
+        icon: Icons.hourglass_empty,
+        label: 'Loading...',
+        color: Colors.grey,
+        onPressed: _toggleMute,
+      );
+    }
+    
     return _buildControlButton(
       icon: _isMuted ? Icons.mic_off : Icons.mic,
       label: _isMuted ? 'Unmute' : 'Mute',
       color: _isMuted ? Colors.red : Colors.green,
-      onPressed: _toggleAudio,
+      onPressed: _toggleMute,
     );
   }
   
@@ -1875,7 +1999,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       try {
         AppLogger().debug('🔧 ANDROID: Post-disconnect cleanup...');
         // Force clear any remaining audio state
-        if (Platform.isAndroid) {
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
           await Future.delayed(const Duration(milliseconds: 200)); // Extra cleanup time for Android
         }
       } catch (e) {
@@ -1984,16 +2108,51 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         }
         
         // Extract winner and judging status from room data
-        _winner = roomData['winner'];
-        _judgingComplete = roomData['judgingComplete'] ?? false;
-        _judgingEnabled = roomData['judgingEnabled'] ?? false;
-        _teamSize = roomData['teamSize'] ?? 1; // Default to 1v1 if not specified
+        final newWinner = roomData['winner'];
+        final newJudgingComplete = roomData['judgingComplete'] ?? false;
+        final newJudgingEnabled = roomData['judgingEnabled'] ?? true;
+        final newTeamSize = roomData['teamSize'] ?? 1; // Default to 1v1 if not specified
         
-        // Don't auto-show results here - only show when moderator manually closes voting
-        // or when user clicks "View Results" button
+        // Update state with setState to trigger UI rebuild
+        if (mounted) {
+          // Log if judging state changed
+          if (_judgingEnabled != newJudgingEnabled) {
+            AppLogger().info('🎯 JUDGING STATE CHANGED: $_judgingEnabled -> $newJudgingEnabled (realtime update)');
+          }
+          
+          // Check if judging just completed (winner was determined)
+          final judgingJustCompleted = !_judgingComplete && newJudgingComplete && newWinner != null;
+
+          // Reset results modal flag when judging state changes
+          if (_judgingEnabled != newJudgingEnabled && newJudgingEnabled) {
+            AppLogger().info('🔄 JUDGING RESTARTED: Resetting results modal flag');
+            _resultsModalShown = false;
+          }
+
+          setState(() {
+            _winner = newWinner;
+            _judgingComplete = newJudgingComplete;
+            _judgingEnabled = newJudgingEnabled;
+            _teamSize = newTeamSize;
+          });
+
+          // Show results modal to ALL users when voting is closed and winner is determined
+          if (judgingJustCompleted) {
+            AppLogger().info('🏆 REALTIME: Voting just completed with winner: $newWinner - showing results modal to all users (Role: $_userRole, Modal shown: $_resultsModalShown)');
+
+            // Force show modal for all users regardless of flag to ensure it shows
+            Future.delayed(const Duration(milliseconds: 500), () {
+              if (mounted) {
+                AppLogger().info('🏆 SHOWING RESULTS MODAL for user role: $_userRole');
+                _showResultsModal();
+              }
+            });
+          }
+        }
         
         // Check if current user has already submitted judgment
         if (_currentUserId != null) {
+          AppLogger().debug('🔍 VOTE CHECK: Checking votes for user $_currentUserId in room ${widget.roomId}');
           final existingJudgments = await _appwrite.databases.listDocuments(
             databaseId: 'arena_db',
             collectionId: 'arena_judgments',
@@ -2004,10 +2163,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           );
           
           _hasCurrentUserSubmittedVote = existingJudgments.documents.isNotEmpty;
+          AppLogger().debug('🔍 VOTE STATUS: Found ${existingJudgments.documents.length} existing votes for user $_currentUserId');
           AppLogger().debug('🔍 VOTE STATUS: Current user has submitted vote: $_hasCurrentUserSubmittedVote');
         }
         
         AppLogger().debug('🏆 Arena room loaded - Winner: $_winner, Judging Complete: $_judgingComplete, Judging Enabled: $_judgingEnabled');
+        AppLogger().debug('🎯 ROLE DEBUG: Current user role: $_userRole, _isJudge: $_isJudge, _isModerator: $_isModerator');
       }
       
       // Ensure current user has a role in the Arena
@@ -2144,7 +2305,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               _audience.add(_currentUser!);
               AppLogger().info('✅ Added current user to audience as fallback');
               if (mounted) {
-                setState(() {});
+                setState(() {
+                  // Update UI after adding current user to audience
+                });
               }
             }
           } catch (e) {
@@ -2154,7 +2317,17 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           AppLogger().debug('✅ Current user found - in participants: $currentUserInParticipants, in audience: $currentUserInAudience');
         }
       }
-      
+
+      // Show results modal if judging is already complete when user joins
+      if (_judgingComplete && _winner != null && !_resultsModalShown) {
+        AppLogger().info('🏆 ROOM LOAD: Judging already complete with winner: $_winner - showing results modal for late joiner');
+        Future.delayed(const Duration(milliseconds: 1000), () {
+          if (mounted && !_resultsModalShown) {
+            _showResultsModal();
+          }
+        });
+      }
+
     } catch (e) {
       AppLogger().error('Error loading room data: $e');
     }
@@ -2233,33 +2406,79 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       );
       
       if (currentUserParticipant.isNotEmpty) {
-        _userRole = currentUserParticipant['role'];
-        AppLogger().debug('👤 Current user role: $_userRole');
-        
-        // Special logging for judges
-        if (_userRole?.startsWith('judge') == true) {
+        final newRole = currentUserParticipant['role'];
+        final oldRole = _userRole;
+        _userRole = newRole;
+
+        AppLogger().info('🔄 ROLE SYNC: Current user role updated from $oldRole to $_userRole');
+        AppLogger().info('👤 Current user ID: $_currentUserId');
+        AppLogger().info('🎭 Role data: $currentUserParticipant');
+
+        // Additional logging for debaters and judges
+        if (['affirmative', 'negative', 'affirmative2', 'negative2'].contains(_userRole)) {
+          AppLogger().info('🎯 USER IS A DEBATER: $_userRole');
+          AppLogger().info('🎯 Can publish media: ${_shouldUserPublishMedia()}');
+          AppLogger().info('🎯 WebRTC connected: $_isWebRTCConnected');
+        } else if (_userRole?.startsWith('judge') == true) {
           AppLogger().info('⚖️ USER IS A JUDGE: $_userRole');
           AppLogger().info('⚖️ Can publish media: ${_shouldUserPublishMedia()}');
           AppLogger().info('⚖️ WebRTC connected: $_isWebRTCConnected');
-          
+
           // If judge and not connected, reconnect with proper permissions
           if (!_isWebRTCConnected) {
             AppLogger().info('⚖️ Judge needs WebRTC connection - connecting...');
             await _connectToWebRTC();
           }
         }
+
+        // Force UI update when role changes
+        if (oldRole != newRole && mounted) {
+          setState(() {
+            // Force rebuild with new role
+          });
+          AppLogger().info('🔄 FORCED UI UPDATE: Role changed from $oldRole to $newRole');
+        }
+
+        // ADDITIONAL VERIFICATION: Check if user is in participant slots with different role
+        await _validateRoleConsistency();
       } else {
-        AppLogger().warning('Current user not found in participants list');
+        AppLogger().warning('❌ CRITICAL: Current user not found in participants list');
+        AppLogger().warning('❌ Current user ID: $_currentUserId');
+        AppLogger().warning('❌ Available participants: ${participants.map((p) => '${p["userId"]}:${p["role"]}').join(", ")}');
+
+        // Try to find user in participant slots
+        String? slotRole;
+        _participants.forEach((role, user) {
+          if (user?.id == _currentUserId) {
+            slotRole = role;
+          }
+        });
+
+        if (slotRole != null) {
+          AppLogger().warning('🚨 USER FOUND IN SLOT: User $_currentUserId found in $slotRole slot but not in participant list');
+          AppLogger().info('🔄 CORRECTING ROLE: Setting role to $slotRole based on slot position');
+          _userRole = slotRole;
+          if (mounted) {
+            setState(() {
+              // Update UI with corrected role
+            });
+          }
+        }
       }
       
       // Check if both debaters are now present and trigger invitation modal
       await _checkForBothDebatersAndTriggerInvitations();
-      
+
       if (mounted) {
-        setState(() {});
+        setState(() {
+          // Update UI after loading arena participants
+        });
       }
       AppLogger().info('Arena participants loaded successfully');
-      
+
+      // Validate role consistency after loading participants
+      await _validateRoleConsistency();
+
       // Only connect to WebRTC if not already connected
       // This prevents reconnection when new participants join
       if (_userRole != null && !_isWebRTCConnected) {
@@ -2490,8 +2709,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     
     // Check if both debaters are now present and trigger invitation modal
     _checkForBothDebatersAndTriggerInvitations();
-    
-    if (mounted) setState(() {});
+
+    if (mounted) setState(() {
+      // Update UI after participant role change
+    });
   }
   
   // iOS caching helper methods
@@ -2656,34 +2877,31 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   void _toggleJudging() async {
     if (!_isModerator) return;
     
-    final newJudgingState = !_judgingEnabled;
+    // Voting is now always open, moderator can only close it to determine winner
+    if (_judgingComplete) {
+      AppLogger().info('🎯 MODERATOR: Voting already closed and results determined');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('📊 Voting has already been closed and results determined.'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+      return;
+    }
+    
+    AppLogger().info('🎯 MODERATOR CLOSING VOTING:');
+    AppLogger().info('  - Room ID: ${widget.roomId}');
     
     try {
-      // If closing judging, check if we should determine winner and show results
-      if (!newJudgingState && _judgingEnabled) {
-        // Moderator is closing voting - determine winner
-        await _determineWinnerAndShowResults();
-      }
-      
-      // Update in database for real-time sync
-      await _appwrite.updateArenaJudgingEnabled(widget.roomId, newJudgingState);
-      
-      setState(() {
-        _judgingEnabled = newJudgingState;
-      });
-      
-      AppLogger().info('Judging ${_judgingEnabled ? 'enabled' : 'disabled'} by moderator');
+      // Moderator is closing voting - determine winner and show results
+      await _determineWinnerAndShowResults();
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _judgingEnabled 
-                  ? '⚖️ Judging is now OPEN - Judges can submit votes'
-                  : '⚖️ Judging is now CLOSED - Calculating results...'
-            ),
-            backgroundColor: _judgingEnabled ? Colors.green : Colors.orange,
-            duration: const Duration(seconds: 3),
+          const SnackBar(
+            content: Text('⚖️ Voting CLOSED - Results determined and displayed!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
           ),
         );
       }
@@ -2693,6 +2911,43 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ Error updating judging state: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Mute all participants in the arena (moderator only)
+  Future<void> _muteAllParticipants() async {
+    if (!_isModerator) {
+      AppLogger().warning('🔇 Non-moderator attempted to mute all participants');
+      return;
+    }
+
+    try {
+      AppLogger().info('🔇 MODERATOR: Initiating mute all participants');
+
+      // Use LiveKit service to mute all participants
+      await _liveKitService.muteAllParticipants();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🔇 All participants have been muted'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+
+      AppLogger().info('✅ MODERATOR: Successfully initiated mute all');
+    } catch (e) {
+      AppLogger().error('❌ Error muting all participants: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error muting participants: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -2873,6 +3128,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         onSpeakerChange: _forceSpeakerChange,
         onToggleSpeaking: _toggleSpeakingEnabled,
         onToggleJudging: _toggleJudging,
+        onMuteAll: _muteAllParticipants,
         currentSpeaker: _currentSpeaker,
         speakingEnabled: _speakingEnabled,
         judgingEnabled: _judgingEnabled,
@@ -2887,20 +3143,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     );
   }
 
-  void _showTimerControls() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => TimerControlBottomSheet(
-        roomId: widget.roomId,
-        roomType: RoomType.arena,
-        userId: _currentUserId ?? 'unknown',
-        activeTimer: null, // Will be fetched by the bottom sheet
-        timerService: AppwriteTimerService(),
-      ),
-    );
-  }
 
   void _showUserProfile(UserProfile userProfile, String? userRole) {
     showModalBottomSheet(
@@ -2942,6 +3184,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     );
   }
 
+
   void _showSharedLinkPopup(DebateSource sharedLink) {
     if (!mounted || _isExiting) return;
     
@@ -2968,6 +3211,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         syncService: _materialSyncService!,
         appwriteService: _appwrite,
         currentUserId: _currentUserId ?? '',
+        roomId: widget.roomId,
         onDismiss: () {
           AppLogger().info('📊 Slide update popup dismissed');
         },
@@ -2977,18 +3221,16 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     return Scaffold(
         backgroundColor: Colors.black,
         appBar: ArenaAppBar(
           isModerator: _isModerator,
-          isTimerRunning: false, // This will be managed by AppwriteTimerWidget
-          formattedTime: '00:00', // This will be managed by AppwriteTimerWidget
           onShowModeratorControls: _showModeratorControlModal,
-          onShowTimerControls: _showTimerControls,
           onExitArena: _exitArena,
           onEmergencyCloseRoom: _emergencyCloseRoom,
           roomId: widget.roomId,
-          userId: _currentUserId ?? 'unknown',
+          userId: _currentUserId ?? '',
         ),
         body: Stack(
           children: [
@@ -3016,6 +3258,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   },
                 ),
               ),
+            
           ],
         ),
     );
@@ -3114,7 +3357,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         _roomStatusChecker = null;
         AppLogger().debug('🛑 Exit timer cancelled and nulled');
       }
-      _realtimeSubscription?.cancel();
+      // Cancel consolidated subscriptions
+      _realtimeManager.unsubscribeFromRoom(widget.roomId);
+      _participantStreamListener?.cancel();
+      _roomStatusStreamListener?.cancel();
+      _judgmentStreamListener?.cancel();
+      _timerStreamListener?.cancel();
       _timerController.stop();
       _stopTimer();
       AppLogger().info('All timers and subscriptions cancelled');
@@ -3126,35 +3374,105 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Future<void> _closeRoomDueToModeratorExit() async {
     try {
       AppLogger().debug('🔒 Closing room due to moderator exit...');
-      
-      // 1. Update room status to abandoned (only using existing schema fields)
-      await _appwrite.databases.updateDocument(
-        databaseId: 'arena_db',
-        collectionId: 'arena_rooms',
-        documentId: widget.roomId,
-        data: {
-          'status': 'abandoned',
-        },
+
+      // Use resilient close with timeout
+      await _closeRoomResiliently(widget.roomId, abandoned: true).timeout(
+        Duration(seconds: 8),
       );
-      
-      // 2. Remove all participants
-      final participants = await _appwrite.getArenaParticipants(widget.roomId);
-      for (final participant in participants) {
-        try {
-          await _appwrite.databases.deleteDocument(
-            databaseId: 'arena_db',
-            collectionId: 'arena_participants',
-            documentId: participant['id'],
-          );
-        } catch (e) {
-          AppLogger().warning('Error removing participant ${participant['id']}', e);
-        }
-      }
-      
-      AppLogger().info('Room closed and all participants removed');
-      
+
+      AppLogger().info('✅ Room closed due to moderator exit');
+
     } catch (e) {
-      AppLogger().error('Error closing room: $e');
+      AppLogger().error('⚠️ Error closing room on moderator exit: $e');
+      // Don't block exit even if close fails - the room status check will clean it up
+    }
+  }
+
+  /// Resilient room close method that handles various edge cases
+  Future<void> _closeRoomResiliently(String roomId, {bool abandoned = false}) async {
+    try {
+      // 1. First check if room exists and needs closing
+      try {
+        final roomDoc = await _appwrite.databases.getDocument(
+          databaseId: 'arena_db',
+          collectionId: 'arena_rooms',
+          documentId: roomId,
+        );
+
+        final currentStatus = roomDoc.data['status'];
+        if (currentStatus == 'completed' ||
+            currentStatus == 'abandoned' ||
+            currentStatus == 'closed') {
+          AppLogger().info('🚨 Room already has final status: $currentStatus');
+          return; // Already closed
+        }
+      } catch (e) {
+        if (e.toString().contains('document_not_found')) {
+          AppLogger().info('🚨 Room document not found - assuming already cleaned up');
+          return;
+        }
+        // Continue with close attempt for other errors
+      }
+
+      // 2. Update room status
+      try {
+        await _appwrite.databases.updateDocument(
+          databaseId: 'arena_db',
+          collectionId: 'arena_rooms',
+          documentId: roomId,
+          data: {
+            'status': abandoned ? 'abandoned' : 'completed',
+            'endedAt': DateTime.now().toIso8601String(),
+          },
+        );
+        AppLogger().debug('✅ Room status updated to ${abandoned ? 'abandoned' : 'completed'}');
+      } catch (e) {
+        AppLogger().warning('⚠️ Failed to update room status: $e');
+        // Continue with participant cleanup even if status update fails
+      }
+
+      // 3. Handle participants (set inactive instead of deleting for data integrity)
+      try {
+        final participants = await _appwrite.databases.listDocuments(
+          databaseId: 'arena_db',
+          collectionId: 'arena_participants',
+          queries: [
+            Query.equal('roomId', roomId),
+            Query.equal('isActive', true),
+          ],
+        );
+
+        // Update participants in parallel for faster processing
+        final updateFutures = participants.documents.map((participant) async {
+          try {
+            await _appwrite.databases.updateDocument(
+              databaseId: 'arena_db',
+              collectionId: 'arena_participants',
+              documentId: participant.$id,
+              data: {
+                'isActive': false,
+                'leftAt': DateTime.now().toIso8601String(),
+              },
+            );
+          } catch (e) {
+            AppLogger().warning('⚠️ Failed to update participant ${participant.$id}: $e');
+            // Don't fail the entire operation for one participant
+          }
+        });
+
+        await Future.wait(updateFutures);
+        AppLogger().debug('✅ Updated ${participants.documents.length} participants');
+
+      } catch (e) {
+        AppLogger().warning('⚠️ Error updating participants: $e');
+        // Don't fail the operation - room status update is more important
+      }
+
+      AppLogger().info('✅ Room closed resiliently');
+
+    } catch (e) {
+      AppLogger().error('❌ Resilient room close failed: $e');
+      rethrow;
     }
   }
 
@@ -3201,10 +3519,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         // More aggressive sizing for iOS to ensure audience is visible
         final isSmallScreen = availableHeight < 600;
         
-        // Adjust heights based on available space - balanced for comfort and visibility
+        // Adjust heights based on available space - increased for larger avatars
         final judgeHeight = isIOS
-            ? (isSmallScreen ? 90.0 : 115.0) // Reduced judge size for small screens
-            : (isSmallScreen ? 100.0 : 130.0); // Reduced judge size for small screens
+            ? (isSmallScreen ? 110.0 : 135.0) // Increased judge size for larger avatars
+            : (isSmallScreen ? 120.0 : 150.0); // Increased judge size for larger avatars
         // Different heights for 1v1 vs 2v2 modes
         final debaterHeight1v1 = isIOS
             ? (isSmallScreen ? 120.0 : 140.0) // Good size for 1v1
@@ -3214,30 +3532,37 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             ? (isSmallScreen ? 180.0 : 220.0) // Reduced for small screens to prevent overflow
             : (isSmallScreen ? 190.0 : 250.0); // Reduced for small screens to prevent overflow
         final moderatorHeight = isIOS
-            ? (isSmallScreen ? 75.0 : 95.0) // Reduced moderator size for small screens
-            : (isSmallScreen ? 85.0 : 110.0); // Reduced moderator size for small screens
+            ? (isSmallScreen ? 95.0 : 115.0) // Increased moderator size for larger avatars
+            : (isSmallScreen ? 105.0 : 130.0); // Increased moderator size for larger avatars
         
         // Calculate total debate section height dynamically - use appropriate debater height
         final debaterHeight = _teamSize == 1 ? debaterHeight1v1 : debaterHeight2v2;
-        final sectionSpacing = _teamSize == 1 ? 10 : 8; // Balanced spacing for 2v2
+        final sectionSpacing = _teamSize == 1 ? 8 : 6; // Reduced spacing for 2v2
         final calculatedDebateSectionHeight = 4 + // top padding
-            30 + // title height
+            28 + // title height (reduced)
             4 + // margin after title
             debaterHeight + // debaters (1v1 or 2v2 height)
             sectionSpacing + // spacing
             moderatorHeight + // moderator 
             sectionSpacing + // spacing
             judgeHeight + // judges
-            4 + // bottom spacing
+            2 + // bottom spacing (reduced)
             4; // bottom padding
         
-        // Safety constraint: ensure debate section never exceeds 85% of available height
-        final maxDebateSectionHeight = (availableHeight * 0.85).floor().toDouble();
+        // Safety constraint: ensure debate section never exceeds 65% of available height
+        final maxDebateSectionHeight = (availableHeight * 0.65).floor().toDouble();
         final debateSectionHeight = calculatedDebateSectionHeight < maxDebateSectionHeight 
             ? calculatedDebateSectionHeight 
             : maxDebateSectionHeight;
         
-        AppLogger().debug('🎭 ARENA LAYOUT: Debate section height: $debateSectionHeight');
+        // Ensure audience section has minimum height by adjusting debate section if needed
+        final minAudienceHeight = isIOS ? 150.0 : 80.0; // Even larger minimum for iOS devices
+        final maxAllowedDebateHeight = availableHeight - minAudienceHeight - (isIOS ? 40 : 20); // Even more margin for iOS
+        final finalDebateSectionHeight = debateSectionHeight > maxAllowedDebateHeight 
+            ? maxAllowedDebateHeight 
+            : debateSectionHeight;
+        
+        AppLogger().debug('🎭 ARENA LAYOUT: Final debate section height: $finalDebateSectionHeight');
         
         return Stack(
           children: [
@@ -3245,8 +3570,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             Positioned.fill(
               child: Container(
                 margin: EdgeInsets.only(
-                  top: debateSectionHeight,
-                  bottom: 40, // Minimal bottom margin to maximize audience visibility
+                  top: finalDebateSectionHeight,
+                  bottom: 8, // Further reduced bottom margin to prevent overflow
                 ),
                 child: _buildAudienceScrollSection(),
               ),
@@ -3323,7 +3648,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Expanded(child: _buildDebaterPosition('affirmative', 'Affirmative')),
-                                const SizedBox(width: 20),
+                                const SizedBox(width: 1),
                                 Expanded(child: _buildDebaterPosition('negative', 'Negative')),
                               ],
                             )
@@ -3337,7 +3662,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                   flex: 4,
                                   child: _buildTeamPosition('affirmative', 'Affirmative Team'),
                                 ),
-                                const SizedBox(width: 16), // Space between teams
+                                const SizedBox(width: 1), // Space between teams
                                 // Negative Team (2 slots) - more constrained
                                 Expanded(
                                   flex: 4,
@@ -3349,7 +3674,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                             ),
                       ),
                       
-                      SizedBox(height: _teamSize == 1 ? 10 : 6), // Less spacing for 2v2
+                      SizedBox(height: _teamSize == 1 ? 2 : 2), // Less spacing for 2v2
                       
                       // Middle Row - Moderator (responsive height)
                       SizedBox(
@@ -3363,7 +3688,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                         ),
                       ),
                       
-                      SizedBox(height: _teamSize == 1 ? 10 : 6), // Less spacing for 2v2
+                      SizedBox(height: _teamSize == 1 ? 2 : 2), // Less spacing for 2v2
                       
                       // Bottom Row - Judges (responsive height)
                       SizedBox(
@@ -3371,15 +3696,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                         child: Row(
                           children: [
                             Expanded(child: _buildJudgePosition('judge1', 'Judge 1')),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 1),
                             Expanded(child: _buildJudgePosition('judge2', 'Judge 2')),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 1),
                             Expanded(child: _buildJudgePosition('judge3', 'Judge 3')),
                           ],
                         ),
                       ),
                       
-                      const SizedBox(height: 4), // Further reduced spacing
+                      const SizedBox(height: 2), // Further reduced spacing
                     ],
                   ),
                 ],
@@ -3401,6 +3726,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Add top padding to push content down within the container
+            SizedBox(height: defaultTargetPlatform == TargetPlatform.iOS ? 25 : 15),
+            
             // Visual separator line
             Container(
               height: 2,
@@ -3480,42 +3808,57 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: GridView.builder(
+                key: const ValueKey('arena_audience_grid'),
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 4,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 1,
+                  mainAxisSpacing: 1,
                   childAspectRatio: 1.0, // Better aspect ratio for circular avatars
                 ),
                 itemCount: _audience.length,
                 itemBuilder: (context, index) {
                   final audience = _audience[index];
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      UserAvatar(
-                        avatarUrl: audience.avatar,
-                        initials: audience.name.isNotEmpty ? audience.name[0] : '?',
-                        radius: 28, // Reduced to fit within constraints
-                        onTap: () => _showUserProfile(audience, 'audience'),
-                      ),
-                      const SizedBox(height: 2), // Reduced spacing
-                      Text(
-                        audience.name.length > 8
-                            ? '${audience.name.substring(0, 8)}...'
-                            : audience.name,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 9, // Slightly smaller font
-                          fontWeight: FontWeight.w500,
+                  return GestureDetector(
+                    key: ValueKey('arena_audience_${audience.id}'),
+                    onTap: () => _showUserProfile(audience, 'audience'),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Simple CircleAvatar
+                        CircleAvatar(
+                          radius: 24.0,
+                          backgroundColor: getAvatarColorForRole('audience'),
+                          backgroundImage: audience.avatar != null && audience.avatar!.isNotEmpty
+                              ? NetworkImage(audience.avatar!)
+                              : null,
+                          child: audience.avatar == null || audience.avatar!.isEmpty
+                              ? Text(
+                                  audience.name.isNotEmpty ? audience.name[0].toUpperCase() : 'A',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                )
+                              : null,
                         ),
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  );
+                        const SizedBox(height: 4),
+                        // Simple name text
+                        Text(
+                          audience.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                  ));
                 },
               ),
             ),
@@ -3536,7 +3879,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     
     return Container(
       decoration: BoxDecoration(
-        color: finalIsWinner ? Colors.amber.withValues(alpha: 0.1) : (isAffirmative ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1)),
         border: Border.all(color: finalIsWinner ? Colors.amber : (isAffirmative ? Colors.green : Colors.red), width: 2),
         borderRadius: BorderRadius.circular(12),
       ),
@@ -3548,7 +3890,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             decoration: BoxDecoration(
               color: finalIsWinner 
                   ? Colors.amber
-                  : (isAffirmative ? Colors.green : Colors.red),
+                  : getAvatarColorForRole(role),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(10),
                 topRight: Radius.circular(10),
@@ -3621,8 +3963,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     
     return Container(
       decoration: BoxDecoration(
-        color: isPurple ? accentPurple.withValues(alpha: 0.1) : Colors.amber.withValues(alpha: 0.1),
-        border: Border.all(color: isPurple ? accentPurple : Colors.amber, width: 2),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -3631,7 +3971,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 6),
             decoration: BoxDecoration(
-              color: isPurple ? accentPurple : Colors.amber,
+              color: getAvatarColorForRole(role),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(10),
                 topRight: Radius.circular(10),
@@ -3648,89 +3988,45 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             ),
           ),
           Expanded(
-            child: judge != null
-                ? _buildJudgeTile(judge, role, isSmall: true)
-                : _buildEmptyPositionWithPing(role, title, isSmall: true),
-          ),
-        ],
-      ),
-    );
-  }
-
-
-  Widget _buildEmptyPositionWithPing(String role, String title, {bool isSmall = false}) {
-    final isModeratorRole = role == 'moderator';
-    final roleType = isModeratorRole ? 'moderator' : 'judge';
-    
-    // Determine if ping button should be shown
-    bool showPingButton = false;
-    if (isModeratorRole) {
-      // Only debaters can ping moderator when no moderator is present
-      showPingButton = _isDebater && _participants['moderator'] == null;
-    } else {
-      // Only moderators can ping judges
-      showPingButton = _userRole == 'moderator';
-    }
-    
-    return Padding(
-      padding: const EdgeInsets.all(4),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            'Waiting...',
-            style: TextStyle(
-              color: Colors.white54,
-              fontSize: isSmall ? 8 : 9,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          if (showPingButton) ...[
-            const SizedBox(height: 4),
-            SizedBox(
-              width: double.infinity,
-              height: 20,
-              child: ElevatedButton(
-                onPressed: () {
-                  if (roleType == 'moderator') {
-                    // Use the proper moderator request system
-                    _requestModerator();
-                  } else {
-                    // Use the proper judge request system
-                    _requestJudge();
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isModeratorRole ? accentPurple : Colors.amber,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  textStyle: const TextStyle(fontSize: 8),
-                  minimumSize: const Size(0, 20),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: judge == null ? const Color(0xFF2A2A2A) : null, // Dark background for all empty slots
+                gradient: judge != null ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: getAvatarGradientForRole(role),
+                ) : null, // Gradient only for filled slots
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(10),
+                  bottomRight: Radius.circular(10),
                 ),
-                child: const Text('Ping'),
               ),
+              child: judge != null
+                  ? _buildJudgeTile(judge, role, isSmall: true)
+                  : Center(
+                      child: Icon(
+                        Icons.gavel,
+                        color: const Color(0xFF8B5CF6), // Purple color for all empty slots
+                        size: 24,
+                      ),
+                    ),
             ),
-          ],
+          ),
         ],
       ),
     );
   }
+
+
 
   Widget _buildEmptyPosition(String text, {bool isSmall = false}) {
     return Padding(
       padding: const EdgeInsets.all(8), // Increased to match other tiles for consistency
       child: Center(
-        child: Text(
-          text,
-          style: TextStyle(
-            color: Colors.white54,
-            fontSize: isSmall ? 9 : 10, // Reduced sizes
-            fontStyle: FontStyle.italic,
-          ),
-          textAlign: TextAlign.center,
+        child: Icon(
+          Icons.gavel,
+          color: const Color(0xFF8B5CF6), // Purple color
+          size: isSmall ? 28 : 36,
         ),
       ),
     );
@@ -3738,52 +4034,25 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   /// Build audio-only tile for debater with microphone status
   Widget _buildDebaterTile(UserProfile participant, String role, {bool isSmall = false, bool isWinner = false}) {
-    final nameSize = isSmall ? 9.0 : 10.0;
-    
+
     // Find the peer ID for this user to get their audio/video stream
     final peerId = _userToPeerMapping[participant.id];
     final stream = peerId != null ? _remoteStreams[peerId] : null;
-    
-    AppLogger().debug('🎥 Building tile for ${participant.name}: peerId=$peerId, stream=${stream != null}, userMapping=$_userToPeerMapping');
-    
-    // Check if we have audio stream
-    final hasAudio = stream != null && 
-                     stream.getAudioTracks().isNotEmpty &&
-                     stream.getAudioTracks().any((track) => track.enabled);
-    
-    // For local user, check local audio
+
+    AppLogger().debug('🎥 Building debater tile for ${participant.name}: peerId=$peerId, stream=${stream != null}, userMapping=$_userToPeerMapping');
+
+    // Check if this is the local user
     final isLocalUser = participant.id == _currentUserId;
-    final localHasAudio = isLocalUser && 
-                         _localStream != null && 
-                         _localStream!.getAudioTracks().isNotEmpty &&
-                         _localStream!.getAudioTracks().any((track) => track.enabled);
+
+    // Use actual LiveKit speaker detection for real-time speaking indicators
+    final isSpeaking = _liveKitService.isUserSpeaking(participant.id);
     
-    // Determine if user is speaking (for now, just show if they have audio capability)
-    final isSpeaking = isLocalUser ? localHasAudio && !_isMuted : hasAudio;
-    
-    return Padding(
-      padding: const EdgeInsets.all(8), // Increased from 4 to 8 for more room
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Stack(
         children: [
-          // Audio participant container
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isWinner ? Colors.amber : (isSpeaking ? Colors.green : Colors.white30),
-                  width: isWinner ? 2 : (isSpeaking ? 2 : 1),
-                ),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(7),
-                child: Stack(
-                  children: [
-                    // Video feed or avatar background
-                    _buildDebaterVideoFeed(participant, role, stream, isLocalUser, isSmall),
+          // Video feed or avatar background fills entire area
+          _buildDebaterVideoFeed(participant, role, stream, isLocalUser, isSmall),
                     
                     // Audio/Video status indicators and controls
                     _buildDebaterControls(participant, role, isLocalUser, isSpeaking, isSmall),
@@ -3864,76 +4133,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                           ),
                         ),
                       ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 2),
-          // Name label (with profile tap for non-local users)
-          GestureDetector(
-            onTap: !isLocalUser ? () {
-              showModalBottomSheet(
-                context: context,
-                backgroundColor: Colors.transparent,
-                isScrollControlled: true,
-                builder: (context) => UserProfileBottomSheet(
-                  user: participant,
-                  onFollow: () {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Following ${participant.name}'),
-                          backgroundColor: const Color(0xFF10B981),
-                        ),
-                      );
-                    }
-                  },
-                  onChallenge: () {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Challenge sent to ${participant.name}'),
-                          backgroundColor: const Color(0xFFDC2626),
-                        ),
-                      );
-                    }
-                  },
-                  onEmail: () {
-                    if (mounted && _currentUser != null) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => EmailComposeScreen(
-                            currentUserId: _currentUser!.id,
-                            currentUsername: _currentUser!.name,
-                            recipient: participant,
-                          ),
-                        ),
-                      );
-                    }
-                  },
-                ),
-              );
-            } : null,
-            child: Text(
-              participant.name,
-              style: TextStyle(
-                color: isWinner ? Colors.amber : Colors.white,
-                fontWeight: isWinner ? FontWeight.bold : FontWeight.w600,
-                fontSize: nameSize,
-                shadows: isWinner ? [
-                  Shadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 2,
-                  ),
-                ] : null,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
         ],
       ),
     );
@@ -3990,20 +4189,110 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     } else {
       // Show avatar fallback - make it fill the slot properly
       // For 1v1 mode, use smaller avatars; for 2v2 mode, use larger avatars
-      final is1v1Mode = _teamSize == 1;
-      final participantUserId = participant.id;
-      final isSpeaking = _speakingService.isUserSpeaking(participantUserId);
-      const isMuted = false; // TODO: Get actual mute state from LiveKit
       
-      return Center(
-        child: UserAvatarStatus(
-          avatarUrl: participant.avatar,
-          initials: participant.name.isNotEmpty ? participant.name[0] : '?',
-          radius: is1v1Mode ? (isSmall ? 16.0 : 24.0) : (isSmall ? 20.0 : 35.0), // Smaller for 1v1, larger for 2v2
-          isSpeaking: isSpeaking,
-          isMuted: isMuted,
-          userRole: _getUserRoleById(participantUserId),
-          isOnline: true,
+      return Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: getAvatarGradientForRole(role),
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Normal-sized circular avatar
+              Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    width: 3,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(35),
+                  child: participant.avatar != null && participant.avatar!.isNotEmpty
+                      ? Image.network(
+                          participant.avatar!,
+                          width: 70,
+                          height: 70,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                            width: 70,
+                            height: 70,
+                            decoration: BoxDecoration(
+                              color: getAvatarColorForRole(role).withValues(alpha: 0.3),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                participant.name.isNotEmpty ? participant.name[0].toUpperCase() : 'U',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                      : Container(
+                          width: 70,
+                          height: 70,
+                          decoration: BoxDecoration(
+                            color: getAvatarColorForRole(role).withValues(alpha: 0.3),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              participant.name.isNotEmpty ? participant.name[0].toUpperCase() : 'U',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
+              ),
+              
+              const SizedBox(height: 8),
+              
+              // User name
+              Text(
+                participant.name.length > 12 
+                    ? '${participant.name.substring(0, 12)}...' 
+                    : participant.name,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  shadows: [
+                    Shadow(
+                      offset: Offset(0, 1),
+                      blurRadius: 2,
+                      color: Colors.black54,
+                    ),
+                  ],
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -4011,6 +4300,29 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   
   /// Build controls and indicators for debater
   Widget _buildDebaterControls(UserProfile participant, String role, bool isLocalUser, bool isSpeaking, bool isSmall) {
+    // Check actual LiveKit mute state for accurate UI display
+    bool isActuallyMuted = false;
+
+    if (isLocalUser) {
+      // For local user, use the local mute state
+      isActuallyMuted = _isMuted;
+    } else {
+      // For remote participants, check LiveKit participant mute state
+      if (_liveKitService.room != null) {
+        try {
+          final liveKitParticipant = _liveKitService.room!.remoteParticipants.values
+              .firstWhere(
+                (p) => p.identity == participant.id,
+                orElse: () => throw StateError('Participant not found'),
+              );
+          isActuallyMuted = liveKitParticipant.isMuted;
+        } catch (e) {
+          // Participant not found in LiveKit, assume not muted
+          isActuallyMuted = false;
+        }
+      }
+    }
+
     return Stack(
       children: [
         // Top-right: Audio status indicators
@@ -4020,8 +4332,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Audio status indicator
-              if (isLocalUser && _isMuted)
+              // Audio status indicator - now uses actual LiveKit mute state
+              if (isActuallyMuted)
                 Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
@@ -4034,7 +4346,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                     size: 8,
                   ),
                 )
-              else if (isSpeaking)
+              else if (isSpeaking && !isActuallyMuted)
                 Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
@@ -4119,25 +4431,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   /// Build audio-only tile for judge with microphone status
   Widget _buildJudgeTile(UserProfile participant, String role, {bool isSmall = false}) {
     final nameSize = isSmall ? 9.0 : 10.0;
-    
-    // Find the peer ID for this user to get their audio stream
-    final peerId = _userToPeerMapping[participant.id];
-    final stream = peerId != null ? _remoteStreams[peerId] : null;
-    
-    // Check if we have audio stream
-    final hasAudio = stream != null && 
-                     stream.getAudioTracks().isNotEmpty &&
-                     stream.getAudioTracks().any((track) => track.enabled);
-    
-    // For local user, check local audio
+
+    // Check if this is the local user
     final isLocalUser = participant.id == _currentUserId;
-    final localHasAudio = isLocalUser && 
-                         _localStream != null && 
-                         _localStream!.getAudioTracks().isNotEmpty &&
-                         _localStream!.getAudioTracks().any((track) => track.enabled);
-    
-    // Determine if user is speaking (for now, just show if they have audio capability)
-    final isSpeaking = isLocalUser ? localHasAudio && !_isMuted : hasAudio;
+
+    // Use actual LiveKit speaker detection for real-time speaking indicators
+    final isSpeaking = _liveKitService.isUserSpeaking(participant.id);
     
     return GestureDetector(
       onTap: () {
@@ -4185,7 +4484,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         );
       },
       child: Padding(
-        padding: const EdgeInsets.all(8), // Increased from 4 to 8 to match debater tiles
+        padding: EdgeInsets.all(isSmall ? 4 : 8), // Responsive padding based on size
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -4194,10 +4493,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               child: Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: Colors.black,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isSpeaking ? Colors.green : Colors.amber.withValues(alpha: 0.5), 
+                    color: isSpeaking ? Colors.green : getAvatarColorForRole(role).withValues(alpha: 0.7), 
                     width: isSpeaking ? 2 : 1
                   ),
                 ),
@@ -4205,13 +4503,105 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   borderRadius: BorderRadius.circular(7),
                   child: Stack(
                     children: [
-                      // Always show avatar for audio-only mode - make it fill the slot properly
-                      // For 1v1 mode, use smaller avatars; for 2v2 mode, use larger avatars
-                      Center(
-                        child: UserAvatar(
-                          avatarUrl: participant.avatar,
-                          initials: participant.name.isNotEmpty ? participant.name[0] : '?',
-                          radius: _teamSize == 1 ? (isSmall ? 16.0 : 24.0) : (isSmall ? 20.0 : 35.0), // Smaller for 1v1, larger for 2v2
+                      // Video tile style with gradient background (like Debates & Discussions)
+                      Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Responsive circular avatar based on container size
+                              Container(
+                                width: isSmall ? 55 : 70,
+                                height: isSmall ? 55 : 70,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.9),
+                                    width: 3,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.3),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(isSmall ? 27.5 : 35),
+                                  child: participant.avatar != null && participant.avatar!.isNotEmpty
+                                      ? Image.network(
+                                          participant.avatar!,
+                                          width: isSmall ? 55 : 70,
+                                          height: isSmall ? 55 : 70,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) =>
+                                              Container(
+                                            width: 70,
+                                            height: 70,
+                                            decoration: BoxDecoration(
+                                              color: getAvatarColorForRole(role).withValues(alpha: 0.3),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Center(
+                                              child: Text(
+                                                participant.name.isNotEmpty ? participant.name[0].toUpperCase() : 'J',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: isSmall ? 18 : 24,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                      : Container(
+                                          width: isSmall ? 55 : 70,
+                                          height: isSmall ? 55 : 70,
+                                          decoration: BoxDecoration(
+                                            color: getAvatarColorForRole(role).withValues(alpha: 0.3),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              participant.name.isNotEmpty ? participant.name[0].toUpperCase() : 'J',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: isSmall ? 18 : 24,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              
+                              SizedBox(height: isSmall ? 4 : 8),
+                              
+                              // User name
+                              Text(
+                                participant.name.length > (isSmall ? 8 : 12)
+                                    ? '${participant.name.substring(0, isSmall ? 8 : 12)}...' 
+                                    : participant.name,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: isSmall ? nameSize : 14,
+                                  fontWeight: FontWeight.w600,
+                                  shadows: [
+                                    Shadow(
+                                      offset: Offset(0, 1),
+                                      blurRadius: 2,
+                                      color: Colors.black54,
+                                    ),
+                                  ],
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       
@@ -4219,37 +4609,64 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                       Positioned(
                         top: 4,
                         right: 4,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Audio status indicator
-                            if (isLocalUser && _isMuted)
-                              Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: BoxDecoration(
-                                  color: Colors.red,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Icon(
-                                  Icons.mic_off,
-                                  color: Colors.white,
-                                  size: 8,
-                                ),
-                              )
-                            else if (isSpeaking)
-                              Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: BoxDecoration(
-                                  color: Colors.green,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Icon(
-                                  Icons.mic,
-                                  color: Colors.white,
-                                  size: 8,
-                                ),
-                              ),
-                          ],
+                        child: Builder(
+                          builder: (context) {
+                            // Check actual LiveKit mute state for accurate UI display
+                            bool isActuallyMuted = false;
+
+                            if (isLocalUser) {
+                              // For local user, use the local mute state
+                              isActuallyMuted = _isMuted;
+                            } else {
+                              // For remote participants, check LiveKit participant mute state
+                              if (_liveKitService.room != null) {
+                                try {
+                                  final liveKitParticipant = _liveKitService.room!.remoteParticipants.values
+                                      .firstWhere(
+                                        (p) => p.identity == participant.id,
+                                        orElse: () => throw StateError('Participant not found'),
+                                      );
+                                  isActuallyMuted = liveKitParticipant.isMuted;
+                                } catch (e) {
+                                  // Participant not found in LiveKit, assume not muted
+                                  isActuallyMuted = false;
+                                }
+                              }
+                            }
+
+                            return Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Audio status indicator - now uses actual LiveKit mute state
+                                if (isActuallyMuted)
+                                  Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Icon(
+                                      Icons.mic_off,
+                                      color: Colors.white,
+                                      size: 8,
+                                    ),
+                                  )
+                                else if (isSpeaking && !isActuallyMuted)
+                                  Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Icon(
+                                      Icons.mic,
+                                      color: Colors.white,
+                                      size: 8,
+                                    ),
+                                  ),
+                              ],
+                            );
+                          },
                         ),
                       ),
 
@@ -4310,19 +4727,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 ),
               ),
             ),
-            const SizedBox(height: 2),
-            // Name label
-            Text(
-              participant.name,
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: nameSize,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
           ],
         ),
       ),
@@ -4332,6 +4736,19 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Widget _buildControlPanel() {
     // Always show control panel - at minimum for gifting
     // Specific controls will be filtered based on role
+    
+    // Debug logging for judge button state
+    if (_isJudge || _isModerator) {
+      AppLogger().info('🎯 CONTROL PANEL BUILD:');
+      AppLogger().info('  - User Role: $_userRole');
+      AppLogger().info('  - Is Judge: $_isJudge');
+      AppLogger().info('  - Is Moderator: $_isModerator');
+      AppLogger().info('  - Judging Enabled: $_judgingEnabled');
+      AppLogger().info('  - Judging Complete: $_judgingComplete');
+      AppLogger().info('  - Has Submitted Vote: $_hasCurrentUserSubmittedVote');
+      AppLogger().info('  - Should Show Judge Button: ${(_isJudge || _isModerator) && !_judgingComplete}');
+      AppLogger().info('  - Button Color Should Be: ${_hasCurrentUserSubmittedVote ? "Green" : (_judgingEnabled ? "Yellow" : "Gray")}');
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -4349,6 +4766,52 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           child: Row(
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
+              // Debug logging for mic button visibility
+              Builder(builder: (context) {
+                final shouldShowMic = _shouldUserPublishMedia();
+                final isDebater = _isDebater;
+                AppLogger().info('🎤 MIC VISIBILITY CHECK:');
+                AppLogger().info('  - User Role: $_userRole');
+                AppLogger().info('  - Is Debater: $isDebater');
+                AppLogger().info('  - Should Publish Media: $shouldShowMic');
+                AppLogger().info('  - WebRTC Connected: $_isWebRTCConnected');
+                AppLogger().info('  - Is Muted: $_isMuted');
+                if (_userRole == null) {
+                  AppLogger().warning('  ⚠️ User role is NULL - mic button will not show');
+                }
+                return const SizedBox.shrink();
+              }),
+
+              // PRIORITY 1: Microphone button FIRST for debaters (most critical control)
+              // Enhanced Microphone toggle (always visible for eligible users)
+              // ALSO show if user is in a speaking slot even if role is mismatched
+              Builder(builder: (context) {
+                // Check if user should have mic based on role
+                final shouldHaveMic = _shouldUserPublishMedia();
+
+                // Also check if user is in a speaking slot position
+                bool isInSpeakingSlot = false;
+                _participants.forEach((slotRole, user) {
+                  if (user?.id == _currentUserId &&
+                      ['moderator', 'affirmative', 'negative', 'affirmative2', 'negative2',
+                       'judge1', 'judge2', 'judge3'].contains(slotRole)) {
+                    isInSpeakingSlot = true;
+                    if (!shouldHaveMic) {
+                      AppLogger().warning('🚨 ROLE MISMATCH: User in slot $slotRole but role is $_userRole');
+                    }
+                  }
+                });
+
+                // Show mic button if either condition is true
+                if (shouldHaveMic || isInSpeakingSlot) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: _buildEnhancedMicButton(),
+                  );
+                }
+                return const SizedBox.shrink();
+              }),
+
               // View Results button (when judging is complete)
               if (_judgingComplete && _winner != null)
                 Padding(
@@ -4360,25 +4823,53 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                     color: Colors.amber,
                   ),
                 ),
-              
+
               // Judge Panel (only for moderators and judges)
               if ((_isJudge || _isModerator) && !_judgingComplete)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: _buildControlButton(
-                    icon: _hasCurrentUserSubmittedVote 
-                        ? Icons.check_circle 
-                        : (_judgingEnabled ? Icons.gavel : Icons.gavel_outlined),
-                    label: _hasCurrentUserSubmittedVote 
-                        ? 'Vote Submitted' 
-                        : (_judgingEnabled ? 'Judge' : 'Vote Closed'),
-                    onPressed: _hasCurrentUserSubmittedVote 
-                        ? null 
-                        : (_judgingEnabled ? _showJudgingPanel : null),
-                    color: _hasCurrentUserSubmittedVote 
-                        ? Colors.green 
-                        : (_judgingEnabled ? Colors.amber : Colors.grey),
-                    isEnabled: !_hasCurrentUserSubmittedVote && _judgingEnabled,
+                  child: GestureDetector(
+                    onLongPress: () {
+                      // BACKUP ACCESS: Long press to force open voting panel for judges
+                      if (_isJudge && !_hasCurrentUserSubmittedVote) {
+                        AppLogger().info('🚨 BACKUP ACCESS: Judge force-opening voting panel via long press');
+                        showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Open Voting Panel?'),
+                            content: const Text('The voting status appears closed. Do you want to open the voting panel anyway?\n\nThis is a backup option if the automatic sync is not working.'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Cancel'),
+                              ),
+                              ElevatedButton(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _showJudgingPanel();
+                                },
+                                child: const Text('Open Panel'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                    },
+                    child: _buildControlButton(
+                      icon: _hasCurrentUserSubmittedVote 
+                          ? Icons.check_circle 
+                          : (_judgingComplete ? Icons.poll : Icons.gavel),
+                      label: _hasCurrentUserSubmittedVote 
+                          ? 'Vote Submitted' 
+                          : (_judgingComplete ? 'View Results' : 'Judge'),
+                      onPressed: _hasCurrentUserSubmittedVote 
+                          ? null 
+                          : (_judgingComplete ? _showResultsModal : _showJudgingPanel),
+                      color: _hasCurrentUserSubmittedVote 
+                          ? Colors.green 
+                          : (_judgingComplete ? Colors.blue : Colors.amber),
+                      isEnabled: !_hasCurrentUserSubmittedVote || _judgingComplete,
+                    ),
                   ),
                 ),
               
@@ -4417,12 +4908,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   ),
                 ),
 
-              // Enhanced Microphone toggle (always visible for eligible users with emergency options)
-              if (_shouldUserPublishMedia())
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: _buildEnhancedMicButton(),
-                ),
 
               // Request Moderator button (only for debaters when no moderator present)
               if (_isDebater && _participants['moderator'] == null && !_judgingComplete)
@@ -4597,22 +5082,27 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     );
   }
 
+
   void _showJudgingPanel() {
     AppLogger().info('🎯 JUDGE PANEL: _showJudgingPanel called');
     AppLogger().info('🎯 JUDGE PANEL: _judgingEnabled = $_judgingEnabled');
     AppLogger().info('🎯 JUDGE PANEL: _hasCurrentUserSubmittedVote = $_hasCurrentUserSubmittedVote');
     AppLogger().info('🎯 JUDGE PANEL: _isJudge = $_isJudge');
     AppLogger().info('🎯 JUDGE PANEL: _isModerator = $_isModerator');
+    AppLogger().info('🎯 JUDGE PANEL: _userRole = $_userRole');
+    AppLogger().info('🎯 JUDGE PANEL: _currentUserId = $_currentUserId');
     
-    // Additional validation
-    if (!_judgingEnabled) {
-      AppLogger().warning('🎯 JUDGE PANEL: Judging not enabled');
+    // Voting is now always open for judges until results are final
+    if (_judgingComplete) {
+      AppLogger().warning('🎯 JUDGE PANEL: Judging already complete - showing results');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('❌ Voting is not open yet. The moderator must enable judging first.'),
-          backgroundColor: Colors.red,
+          content: Text('📊 Voting has been closed and results are final.'),
+          backgroundColor: Colors.blue,
         ),
       );
+      // Show results instead of voting panel
+      _showResultsModal();
       return;
     }
     
@@ -4884,257 +5374,436 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   void _showRoleManager() {
-    final currentModerator = _participants['moderator'];
-    final isDebater = _userRole == 'affirmative' || _userRole == 'negative';
     final isModerator = _userRole == 'moderator';
+    final isRoomCreator = _roomData != null && _currentUser?.id != null && _roomData!['createdBy'] == _currentUser!.id;
+    final hasModeratorPrivileges = isModerator || isRoomCreator;
     
-    AppLogger().debug('🎭 ROLES: User role: $_userRole, isDebater: $isDebater, isModerator: $isModerator');
-    AppLogger().debug('🎭 ROLES: Current moderator: ${currentModerator?.name}');
+    AppLogger().debug('🎭 ROLES: User role: $_userRole, isModerator: $isModerator');
+    AppLogger().debug('🎭 ROLES: Current user ID: ${_currentUser?.id}');
+    AppLogger().debug('🎭 ROLES: Room creator ID: ${_roomData?['createdBy']}');
+    AppLogger().debug('🎭 ROLES: Is room creator: $isRoomCreator');
+    AppLogger().debug('🎭 ROLES: Has moderator privileges: $hasModeratorPrivileges');
     
-    if (currentModerator == null && isDebater) {
-      // No moderator assigned and user is a debater - show moderator selection from audience
-      AppLogger().debug('🎭 ROLES: Showing moderator selection for debater');
-      _showModeratorSelectionFromAudience();
-    } else if (currentModerator != null && isModerator) {
-      // Moderator is assigned and user is the moderator - show judge selection
-      AppLogger().debug('🎭 ROLES: Showing judge selection for moderator');
-      _showRoleSelection();
+    // Always show comprehensive role management for users with moderator privileges
+    if (hasModeratorPrivileges) {
+      AppLogger().debug('🎭 ROLES: Showing comprehensive role management');
+      _showComprehensiveRoleManagement();
     } else {
-      // Default: show read-only participant view
       AppLogger().debug('🎭 ROLES: Showing read-only participant view');
       _showParticipantView();
     }
   }
 
-  /// Show moderator selection modal for debaters to choose from audience
-  void _showModeratorSelectionFromAudience() {
-    AppLogger().debug('🎭 MODERATOR SELECTION: _audience.length = ${_audience.length}');
-    AppLogger().debug('🎭 MODERATOR SELECTION: _audience members:');
-    for (var member in _audience) {
-      AppLogger().debug('🎭   - ${member.name} (${member.email})');
+  /// Show comprehensive role management for moderators - includes all participants
+  void _showComprehensiveRoleManagement() {
+    // Collect ALL participants from both slots and audience
+    List<Map<String, dynamic>> allParticipants = [];
+    
+    // Add participants from slots
+    _participants.forEach((role, participant) {
+      if (participant != null) {
+        allParticipants.add({
+          'userId': participant.id,
+          'name': participant.name,
+          'avatar': participant.avatar,
+          'currentRole': role,
+          'userProfile': participant,
+        });
+      }
+    });
+    
+    // Add audience members
+    for (final audienceMember in _audience) {
+      allParticipants.add({
+        'userId': audienceMember.id,
+        'name': audienceMember.name,
+        'avatar': audienceMember.avatar,
+        'currentRole': 'audience',
+        'userProfile': audienceMember,
+      });
     }
     
-    if (_audience.isEmpty) {
-      AppLogger().debug('🎭 MODERATOR SELECTION: No audience members available');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No audience members available to select as moderator'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
+    // Method is now properly inside the class, no need for local wrapper
+    
+    AppLogger().debug('🎭 COMPREHENSIVE ROLES: Found ${allParticipants.length} total participants');
     
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) => Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
-        ),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.purple.shade50,
+              Colors.white,
+            ],
+          ),
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(25),
+            topRight: Radius.circular(25),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              spreadRadius: 0,
+              blurRadius: 20,
+              offset: const Offset(0, -5),
+            ),
+          ],
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
+            // Header with gradient
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.purple.shade600, Colors.purple.shade700],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(25),
+                  topRight: Radius.circular(25),
+                ),
+              ),
               child: Row(
                 children: [
-                  const Icon(Icons.gavel, color: accentPurple),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Select Moderator from Audience',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.admin_panel_settings, 
+                      color: Colors.white,
+                      size: 24,
                     ),
                   ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
+                  const SizedBox(width: 16),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Role Management',
+                          style: TextStyle(
+                            fontSize: 20, 
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Assign participants to debate positions',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close, color: Colors.white),
+                    ),
                   ),
                 ],
               ),
             ),
             
-            // Audience list
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _audience.length,
-                itemBuilder: (context, index) {
-                  final audienceMember = _audience[index];
-                  return ListTile(
-                    leading: UserAvatar(
-                      avatarUrl: audienceMember.avatar,
-                      initials: audienceMember.name.isNotEmpty ? audienceMember.name[0].toUpperCase() : '?',
-                      radius: 20,
+            // Participants list
+            Expanded(
+              child: allParticipants.isEmpty 
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.people_outline, size: 64, color: Colors.grey),
+                        SizedBox(height: 16),
+                        Text(
+                          'No participants yet',
+                          style: TextStyle(fontSize: 16, color: Colors.grey),
+                        ),
+                      ],
                     ),
-                    title: Text(audienceMember.name),
-                    subtitle: Text(
-                      audienceMember.isAvailableAsModerator 
-                          ? 'Available as moderator' 
-                          : 'Audience member',
-                      style: TextStyle(
-                        color: audienceMember.isAvailableAsModerator ? Colors.green : Colors.grey,
-                      ),
-                    ),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: () => _assignModeratorFromAudience(audienceMember),
-                  );
-                },
-              ),
+                  )
+                : Container(
+                    padding: const EdgeInsets.all(20),
+                    child: ListView.builder(
+                      key: const ValueKey('arena_all_participants_list'),
+                      itemCount: allParticipants.length,
+                      itemBuilder: (context, index) {
+                        final participant = allParticipants[index];
+                        final currentRole = participant['currentRole'] as String;
+                        final isCurrentUser = participant['userId'] == _currentUserId;
+                        final isCurrentlyModerator = currentRole == 'moderator';
+                        final canChangeRole = !(isCurrentUser && isCurrentlyModerator);
+                        
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.white,
+                                Colors.grey.shade50,
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.08),
+                                spreadRadius: 0,
+                                blurRadius: 10,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                            border: Border.all(
+                              color: isCurrentlyModerator 
+                                ? Colors.purple.shade300 
+                                : Colors.grey.shade200,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Row(
+                              children: [
+                                // Enhanced Avatar with role indicator
+                                Stack(
+                                  children: [
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: getAvatarColorForRole(currentRole).withValues(alpha: 0.3),
+                                            spreadRadius: 0,
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: CircleAvatar(
+                                        radius: 30,
+                                        backgroundColor: getAvatarColorForRole(currentRole),
+                                        backgroundImage: participant['avatar'] != null && participant['avatar'].isNotEmpty
+                                            ? NetworkImage(participant['avatar'])
+                                            : null,
+                                        child: participant['avatar'] == null || participant['avatar'].isEmpty
+                                            ? Text(
+                                                participant['name'].isNotEmpty 
+                                                    ? participant['name'][0].toUpperCase() 
+                                                    : 'U',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 18,
+                                                ),
+                                              )
+                                            : null,
+                                      ),
+                                    ),
+                                    // Role indicator badge
+                                    if (isCurrentlyModerator)
+                                      Positioned(
+                                        bottom: 0,
+                                        right: 0,
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.purple.shade600,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(color: Colors.white, width: 2),
+                                          ),
+                                          child: const Icon(
+                                            Icons.admin_panel_settings,
+                                            color: Colors.white,
+                                            size: 12,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(width: 20),
+                                
+                                // Enhanced name and role info
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              participant['name'],
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 18,
+                                                color: Colors.grey.shade800,
+                                              ),
+                                            ),
+                                          ),
+                                          if (isCurrentUser)
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: Colors.blue.shade100,
+                                                borderRadius: BorderRadius.circular(12),
+                                                border: Border.all(color: Colors.blue.shade300),
+                                              ),
+                                              child: Text(
+                                                'YOU',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.blue.shade700,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: getAvatarColorForRole(currentRole).withValues(alpha: 0.2),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: getAvatarColorForRole(currentRole).withValues(alpha: 0.5),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'Current: ${_formatRoleName(currentRole)}',
+                                          style: TextStyle(
+                                            color: getAvatarColorForRole(currentRole),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              
+                                const SizedBox(width: 16),
+                              
+                                // Enhanced Role Selector
+                                if (!canChangeRole)
+                                  // Locked indicator for moderators trying to change their own role
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.purple.shade100,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: Colors.purple.shade300),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.lock,
+                                          color: Colors.purple.shade600,
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'LOCKED',
+                                          style: TextStyle(
+                                            color: Colors.purple.shade700,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                else
+                                  // Enhanced dropdown for changeable roles
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [Colors.blue.shade50, Colors.blue.shade100],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: Colors.blue.shade300),
+                                    ),
+                                    child: DropdownButton<String>(
+                                      value: currentRole,
+                                      onChanged: (newRole) {
+                                        if (newRole != null && newRole != currentRole) {
+                                          _assignRole(participant['userId'], newRole);
+                                        }
+                                      },
+                                      underline: const SizedBox.shrink(),
+                                      icon: Icon(Icons.arrow_drop_down, color: Colors.blue.shade700),
+                                      dropdownColor: Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      items: [
+                                        'affirmative',
+                                        'negative',
+                                        'affirmative2',
+                                        'negative2',
+                                        'moderator',
+                                        'judge1',
+                                        'judge2',
+                                        'judge3',
+                                        'audience'
+                                      ].map((role) {
+                                        return DropdownMenuItem<String>(
+                                          value: role,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            decoration: BoxDecoration(
+                                              color: role == currentRole 
+                                                ? getAvatarColorForRole(role).withValues(alpha: 0.1)
+                                                : Colors.transparent,
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              _formatRoleName(role),
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: getAvatarColorForRole(role),
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
             ),
-            
-            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
-  
-  /// Assign selected audience member as moderator
-  Future<void> _assignModeratorFromAudience(UserProfile selectedUser) async {
-    try {
-      Navigator.pop(context); // Close modal
-      
-      AppLogger().debug('🎭 ASSIGN: Assigning ${selectedUser.name} as moderator');
-      
-      // Update user's role in the database
-      await _appwrite.assignArenaRole(
-        roomId: widget.roomId,
-        userId: selectedUser.id,
-        role: 'moderator',
-      );
-      
-      // Refresh participants to update UI
-      await _loadParticipants();
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ ${selectedUser.name} is now the moderator!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-      
-    } catch (e) {
-      AppLogger().error('Error assigning moderator: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error assigning moderator: $e')),
-        );
-      }
-    }
-  }
-  
-  /// Show judge selection modal for moderator
-  void _showRoleSelection() {
-    AppLogger().debug('🎭 ROLE SELECTION DEBUG:');
-    AppLogger().debug('🎭 Total _audience.length = ${_audience.length}');
-    AppLogger().debug('🎭 _audience members:');
-    for (var member in _audience) {
-      AppLogger().debug('🎭   - ${member.name} (${member.email}) [ID: ${member.id}]');
-    }
-    AppLogger().debug('🎭 Total _participants: ${_participants.length}');
-    _participants.forEach((role, participant) {
-      if (participant != null) {
-        AppLogger().debug('🎭   - $role: ${participant.name} (${participant.email})');
-      }
-    });
-    
-    if (_audience.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No audience members available for role assignment'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-    
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => RoleSelectionModal(
-        audience: _audience,
-        onRoleAssigned: (UserProfile user, String role) => _assignRoleToUser(user, role),
-        availableJudgeSlots: _getAvailableJudgeSlots(),
-        teamSize: _teamSize,
-        hasAffirmativeDebater: _hasRoleAssigned('affirmative'),
-        hasNegativeDebater: _hasRoleAssigned('negative'),
-        hasAffirmative2Debater: _hasRoleAssigned('affirmative2'),
-        hasNegative2Debater: _hasRoleAssigned('negative2'),
-        hasJudge1: _hasRoleAssigned('judge1'),
-        hasJudge2: _hasRoleAssigned('judge2'),
-        hasJudge3: _hasRoleAssigned('judge3'),
-      ),
-    );
-  }
 
-  /// Check if a role is already assigned
-  bool _hasRoleAssigned(String role) {
-    return _participants.values.any((participant) => 
-      participant != null && _getUserRole(participant) == role);
-  }
-  
-  /// Get user role from participant data (helper method)
-  String _getUserRole(UserProfile user) {
-    // Check if this user has a specific role assigned in the arena
-    for (final entry in _participants.entries) {
-      if (entry.value?.id == user.id) {
-        return entry.key; // The key is the role (affirmative, negative, judge1, etc.)
-      }
-    }
-    return 'audience'; // Default to audience if no specific role found
-  }
-
-  /// Assign a role to a user (unified method for all roles)
-  Future<void> _assignRoleToUser(UserProfile user, String role) async {
-    try {
-      await _appwrite.assignArenaRole(
-        roomId: widget.roomId,
-        userId: user.id,
-        role: role,
-      );
-      
-      // Refresh participants
-      await _loadParticipants();
-      
-      // Show success message
-      if (mounted) {
-        final roleDisplayName = role == 'affirmative' ? 'Affirmative Debater' :
-                               role == 'affirmative2' ? 'Affirmative 2' :
-                               role == 'negative' ? 'Negative Debater' :
-                               role == 'negative2' ? 'Negative 2' :
-                               role.startsWith('judge') ? 'Judge' :
-                               role.replaceAll('_', ' ');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ ${user.name} assigned as $roleDisplayName'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pop(context); // Close the modal
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Failed to assign role: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-  
   /// Get number of available judge slots
   int _getAvailableJudgeSlots() {
     int filledSlots = 0;
@@ -5240,9 +5909,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   
-  /// Check if current user is a debater
+  /// Check if current user is a debater (includes 2v2 roles)
   bool get _isDebater {
-    return _userRole == 'affirmative' || _userRole == 'negative';
+    return _userRole == 'affirmative' ||
+           _userRole == 'negative' ||
+           _userRole == 'affirmative2' ||
+           _userRole == 'negative2';
   }
 
   
@@ -5254,7 +5926,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       isScrollControlled: true,
       builder: (context) => Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
         ),
         decoration: const BoxDecoration(
           color: Colors.white,
@@ -5336,10 +6008,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         },
         child: Row(
           children: [
-            UserAvatar(
-              avatarUrl: user.avatar,
-              initials: user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+            CircleAvatar(
               radius: 16,
+              backgroundColor: role.isNotEmpty ? getAvatarColorForRole(role) : getAvatarColorForRole('audience'),
+              backgroundImage: user.avatar != null && user.avatar!.isNotEmpty
+                  ? NetworkImage(user.avatar!)
+                  : null,
+              child: user.avatar == null || user.avatar!.isEmpty
+                  ? buildAvatarText(user, 12)
+                  : null,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -5365,8 +6042,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   void _showResultsModal() async {
-    if (_resultsModalShown) return;
-    
+    AppLogger().info('🏆 _showResultsModal called - Modal already shown: $_resultsModalShown, User role: $_userRole');
+
+    if (_resultsModalShown) {
+      AppLogger().warning('🏆 Results modal already shown, skipping...');
+      return;
+    }
+
     _resultsModalShown = true;
     
     // Get detailed voting results
@@ -5440,8 +6122,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             _roomStatusChecker = null;
             AppLogger().debug('🛑 MODAL FORCE: Timer cancelled and nulled');
           }
-          _realtimeSubscription?.cancel();
-          _realtimeSubscription = null;
+          // Cancel consolidated subscriptions
+      _realtimeManager.unsubscribeFromRoom(widget.roomId);
+      _participantStreamListener?.cancel();
+      _roomStatusStreamListener?.cancel();
+      _judgmentStreamListener?.cancel();
+      _timerStreamListener?.cancel();
           
           try {
             Navigator.of(context).pushAndRemoveUntil(
@@ -5529,9 +6215,19 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         
         if (roomData != null) {
           final roomStatus = roomData['status'];
+          
+          // Update judging state from room data
+          final newJudgingEnabled = roomData['judgingEnabled'] ?? true;
+          if (_judgingEnabled != newJudgingEnabled && mounted) {
+            AppLogger().info('🎯 STATUS CHECKER: Judging state changed from $_judgingEnabled to $newJudgingEnabled');
+            setState(() {
+              _judgingEnabled = newJudgingEnabled;
+            });
+          }
+          
           // Only log status every 5 iterations to reduce spam
           if (_roomStatusCheckerIterations % 5 == 0) {
-            AppLogger().debug('🔍 Status check #$_roomStatusCheckerIterations: $roomStatus (every ${interval}ms)');
+            AppLogger().debug('🔍 Status check #$_roomStatusCheckerIterations: $roomStatus, judgingEnabled: $_judgingEnabled (every ${interval}ms)');
           }
           
           // If room is closing and we haven't shown the modal yet
@@ -5599,8 +6295,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
     
     AppLogger().debug('🛑 Cancelling realtime subscription...');
-    _realtimeSubscription?.cancel();
-    _realtimeSubscription = null;
+    // Cancel consolidated subscriptions
+    _realtimeManager.unsubscribeFromRoom(widget.roomId);
+    _participantStreamListener?.cancel();
+    _roomStatusStreamListener?.cancel();
+    _judgmentStreamListener?.cancel();
+    _timerStreamListener?.cancel();
     
     // Verify timer status before proceeding
     _verifyTimerStopped();
@@ -5738,14 +6438,19 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   void _executeEmergencyClose() async {
+    bool roomClosedSuccessfully = false;
+
     try {
       AppLogger().info('🚨 Emergency room close initiated by moderator');
-      
-      // Use AppwriteService closeArenaRoom method for consistency
-      await _appwrite.closeArenaRoom(widget.roomId);
-      
+
+      // Set up a timeout for the entire operation
+      await _closeRoomWithRetries(widget.roomId).timeout(
+        Duration(seconds: 10),
+      );
+      roomClosedSuccessfully = true;
+
       AppLogger().info('🚨 Emergency room close completed successfully');
-      
+
       // Show countdown modal to all users before navigating home
       if (mounted) {
         ArenaModals.showRoomClosingModal(
@@ -5756,40 +6461,111 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           },
         );
       }
-      
+
     } catch (e) {
       AppLogger().error('🚨 Emergency room close failed: $e');
-      
-      // Handle specific Appwrite errors more gracefully
+
+      // Handle specific errors more intelligently
       String errorMessage = 'Failed to close room';
-      if (e.toString().contains('document_already_exists')) {
-        errorMessage = 'Room is already being closed by another moderator';
-        AppLogger().info('🚨 Room close conflict detected - navigating home anyway');
-        // Still navigate home since the room is being closed
-        _forceExitArena();
-        return;
+      bool shouldForceExit = false;
+
+      if (e.toString().contains('TimeoutException')) {
+        errorMessage = 'Room close timed out - room may still be closing';
+        shouldForceExit = true;
+        AppLogger().info('🚨 Room close timeout - forcing exit as room is likely closing');
+      } else if (e.toString().contains('document_already_exists') ||
+                 e.toString().contains('already closed') ||
+                 e.toString().contains('completed')) {
+        errorMessage = 'Room is already being closed';
+        shouldForceExit = true;
+        AppLogger().info('🚨 Room already closed/closing - forcing exit');
       } else if (e.toString().contains('document_not_found')) {
-        errorMessage = 'Room has already been closed';
-        AppLogger().info('🚨 Room already closed - navigating home');
+        errorMessage = 'Room no longer exists';
+        shouldForceExit = true;
+        AppLogger().info('🚨 Room not found - forcing exit');
+      } else if (e.toString().contains('network') ||
+                 e.toString().contains('connection') ||
+                 e.toString().contains('timeout')) {
+        errorMessage = 'Network error - room may still be closing';
+        shouldForceExit = true;
+        AppLogger().info('🚨 Network error during room close - forcing exit');
+      }
+
+      if (shouldForceExit) {
+        // These are recoverable errors where we should still exit
         _forceExitArena();
         return;
       }
-      
+
+      // For truly unknown errors, show error but still try to exit
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ $errorMessage'),
-            backgroundColor: Colors.red,
+            content: Text('❌ $errorMessage. Attempting to exit anyway.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
           ),
         );
-        
-        // For unknown errors, still try to navigate home after a delay
+
+        // Force exit after showing error
         Future.delayed(const Duration(seconds: 2), () {
           if (mounted) {
-            AppLogger().info('🚨 Forcing navigation home after error');
+            AppLogger().info('🚨 Forcing navigation home after error with delay');
             _forceExitArena();
           }
         });
+      }
+    }
+  }
+
+  /// Resilient room close method with retries and better error handling
+  Future<void> _closeRoomWithRetries(String roomId) async {
+    int retryCount = 0;
+    const maxRetries = 3;
+
+    while (retryCount < maxRetries) {
+      try {
+        AppLogger().debug('🔄 Attempting room close (attempt ${retryCount + 1}/$maxRetries)');
+
+        // First, check if room is already closed
+        try {
+          final roomDoc = await _appwrite.databases.getDocument(
+            databaseId: 'arena_db',
+            collectionId: 'arena_rooms',
+            documentId: roomId,
+          );
+
+          if (roomDoc.data['status'] == 'completed' ||
+              roomDoc.data['status'] == 'abandoned' ||
+              roomDoc.data['status'] == 'closed') {
+            AppLogger().info('🚨 Room already closed with status: ${roomDoc.data['status']}');
+            return; // Room is already closed, no need to continue
+          }
+        } catch (e) {
+          if (e.toString().contains('document_not_found')) {
+            AppLogger().info('🚨 Room document not found - assuming already closed');
+            return; // Room doesn't exist, consider it closed
+          }
+          // Other errors, continue with close attempt
+        }
+
+        // Try the close operation
+        await _appwrite.closeArenaRoom(roomId);
+        AppLogger().info('✅ Room closed successfully on attempt ${retryCount + 1}');
+        return; // Success, exit retry loop
+
+      } catch (e) {
+        retryCount++;
+        AppLogger().warning('⚠️ Room close attempt $retryCount failed: $e');
+
+        // If this was the last retry, rethrow the error
+        if (retryCount >= maxRetries) {
+          AppLogger().error('❌ All $maxRetries room close attempts failed');
+          rethrow;
+        }
+
+        // Wait before retrying (exponential backoff)
+        await Future.delayed(Duration(milliseconds: 500 * retryCount));
       }
     }
   }
@@ -5801,6 +6577,427 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         MaterialPageRoute(builder: (_) => const ArenaApp()),
         (route) => false,
       );
+    }
+  }
+
+  Future<void> _assignRole(String userId, String newRole) async {
+    if (!_isModerator) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Only moderators can assign roles'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      await _appwrite.assignArenaRole(
+        roomId: widget.roomId,
+        userId: userId,
+        role: newRole,
+      );
+      
+      // Refresh participants list
+      await _loadParticipants();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Role assigned successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      AppLogger().error('Error assigning role: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error assigning role: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  String _formatRoleName(String role) {
+    switch (role) {
+      case 'affirmative':
+        return 'Affirmative';
+      case 'affirmative2':
+        return 'Affirmative 2';
+      case 'negative':
+        return 'Negative';
+      case 'negative2':
+        return 'Negative 2';
+      case 'moderator':
+        return 'Moderator';
+      case 'judge1':
+        return 'Judge 1';
+      case 'judge2':
+        return 'Judge 2';
+      case 'judge3':
+        return 'Judge 3';
+      case 'audience':
+        return 'Audience';
+      default:
+        return role.toUpperCase();
+    }
+  }
+
+  /// Handle arena participant updates using optimized approach
+  Future<void> _handleArenaParticipantUpdate(RealtimeMessage response) async {
+    try {
+      final payload = response.payload;
+      final updateType = _determineUpdateType(response.events);
+
+      AppLogger().debug('🔄 Processing arena participant update: $updateType');
+
+      // Arena uses role-based slots, so we handle updates differently
+      if (updateType == 'delete') {
+        await _handleArenaParticipantRemoval(payload);
+      } else if (updateType == 'create') {
+        await _handleArenaParticipantAddition(payload);
+      } else if (updateType == 'update') {
+        await _handleArenaParticipantRoleChange(payload);
+      }
+
+      AppLogger().info('✅ Arena participant update processed');
+
+      // Validate role consistency after any participant update
+      await _validateRoleConsistency();
+    } catch (e) {
+      AppLogger().error('Error handling arena participant update: $e');
+      // Fallback to full refresh on error
+      await _loadParticipants();
+    }
+  }
+
+  /// Handle participant removal in arena
+  Future<void> _handleArenaParticipantRemoval(Map<String, dynamic> payload) async {
+    final userId = payload['userId'] as String?;
+    if (userId == null) return;
+
+    AppLogger().info('🚪 Arena participant removed: $userId');
+
+    if (mounted) {
+      setState(() {
+        // Check all role slots and remove the user
+        _participants.forEach((role, user) {
+          if (user?.id == userId) {
+            _participants[role] = null;
+            AppLogger().info('🎭 Removed $userId from role: $role');
+
+            // CRITICAL FIX: Clear current user's role if they are being removed
+            if (userId == _currentUserId) {
+              _userRole = 'audience'; // Default to audience when removed from role
+              AppLogger().info('🔄 SELF ROLE CLEAR: Reset own role to audience after removal');
+            }
+          }
+        });
+
+        // Remove from audience
+        _audience.removeWhere((user) => user.id == userId);
+      });
+
+      // Show notification for critical roles
+      final leavingRole = _findUserRole(userId);
+      if (leavingRole != null && ['affirmative', 'negative', 'moderator'].contains(leavingRole)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('⚠️ $leavingRole has left the debate'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Handle participant addition in arena
+  Future<void> _handleArenaParticipantAddition(Map<String, dynamic> payload) async {
+    final userId = payload['userId'] as String?;
+    final role = payload['role'] as String?;
+
+    if (userId == null) return;
+
+    AppLogger().info('👋 Arena participant added: $userId (role: $role)');
+
+    try {
+      // Fetch user profile
+      final userProfile = await _fetchUserProfile(userId);
+      if (userProfile == null) return;
+
+      if (mounted) {
+        setState(() {
+          if (role != null && _participants.containsKey(role)) {
+            // Assign to specific role slot
+            _participants[role] = userProfile;
+            AppLogger().info('🎭 Assigned $userId to role: $role');
+
+            // CRITICAL FIX: Update current user's role if this addition is for them
+            if (userId == _currentUserId) {
+              _userRole = role;
+              AppLogger().info('🔄 SELF ROLE SET: Set own role to $_userRole');
+            }
+          } else {
+            // Add to audience
+            if (!_audience.any((user) => user.id == userId)) {
+              _audience.add(userProfile);
+              AppLogger().info('👥 Added $userId to audience');
+
+              // Update current user's role to audience if needed
+              if (userId == _currentUserId && _userRole != 'audience') {
+                _userRole = 'audience';
+                AppLogger().info('🔄 SELF ROLE SET: Set own role to audience');
+              }
+            }
+          }
+        });
+      }
+    } catch (e) {
+      AppLogger().error('Error handling participant addition: $e');
+    }
+  }
+
+  /// Handle participant role change in arena
+  Future<void> _handleArenaParticipantRoleChange(Map<String, dynamic> payload) async {
+    final userId = payload['userId'] as String?;
+    final newRole = payload['role'] as String?;
+
+    if (userId == null || newRole == null) return;
+
+    AppLogger().info('🎭 Arena role change: $userId -> $newRole');
+
+    try {
+      // Find and remove user from current position
+      UserProfile? userProfile;
+
+      // Check role slots
+      _participants.forEach((role, user) {
+        if (user?.id == userId) {
+          userProfile = user;
+          _participants[role] = null;
+        }
+      });
+
+      // Check audience
+      final audienceIndex = _audience.indexWhere((user) => user.id == userId);
+      if (audienceIndex >= 0) {
+        userProfile = _audience[audienceIndex];
+        _audience.removeAt(audienceIndex);
+      }
+
+      // If user not found, fetch profile
+      userProfile ??= await _fetchUserProfile(userId);
+      if (userProfile == null) return;
+
+      if (mounted) {
+        setState(() {
+          if (_participants.containsKey(newRole)) {
+            // Assign to specific role slot
+            _participants[newRole] = userProfile;
+            AppLogger().info('🎭 Updated $userId to role: $newRole');
+          } else {
+            // Add to audience (role might be 'audience' or unknown)
+            if (!_audience.any((user) => user.id == userId)) {
+              _audience.add(userProfile!);
+              AppLogger().info('👥 Moved $userId to audience');
+            }
+          }
+
+          // CRITICAL FIX: Update current user's role if this change is for them
+          if (userId == _currentUserId) {
+            final oldRole = _userRole;
+            _userRole = newRole;
+            AppLogger().info('🔄 SELF ROLE UPDATE: Updated own role from $oldRole to $_userRole');
+
+            // If role changed to/from a speaking role, reconnect WebRTC with proper permissions
+            final wasPublishingRole = ['moderator', 'affirmative', 'negative', 'affirmative2', 'negative2', 'judge1', 'judge2', 'judge3']
+                .contains(oldRole);
+            final isPublishingRole = _shouldUserPublishMedia();
+
+            if (wasPublishingRole != isPublishingRole) {
+              AppLogger().info('🎤 Role change affects media permissions - reconnecting WebRTC');
+              _connectToWebRTC();
+            }
+          }
+        });
+      }
+    } catch (e) {
+      AppLogger().error('Error handling role change: $e');
+    }
+  }
+
+  /// Find the current role of a user
+  String? _findUserRole(String userId) {
+    for (final entry in _participants.entries) {
+      if (entry.value?.id == userId) {
+        return entry.key;
+      }
+    }
+    return null;
+  }
+
+  /// Check how many judges have submitted their votes
+  Future<Map<String, int>> _checkJudgeVoteProgress() async {
+    try {
+      // Query the arena_judgments collection for this room
+      final judgments = await _appwrite.databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'arena_judgments',
+        queries: [
+          Query.equal('roomId', widget.roomId),
+        ],
+      );
+
+      int totalJudges = 0;
+      if (_participants['judge1'] != null) totalJudges++;
+      if (_participants['judge2'] != null) totalJudges++;
+      if (_participants['judge3'] != null) totalJudges++;
+
+      return {
+        'voted': judgments.documents.length,
+        'total': totalJudges,
+      };
+    } catch (e) {
+      AppLogger().error('Error checking judge vote progress: $e');
+      return {'voted': 0, 'total': 0};
+    }
+  }
+
+  /// Show persistent notification for judge vote
+  void _showJudgeVoteNotification(String judgeLabel, Map<String, int> voteCount) {
+    if (!mounted) return;
+
+    final votedCount = voteCount['voted'] ?? 0;
+    final totalCount = voteCount['total'] ?? 0;
+
+    // Create the message with vote progress
+    String message = '🗳️ $judgeLabel has submitted their vote';
+    if (totalCount > 0) {
+      message += '\n📊 Progress: $votedCount/$totalCount judges have voted';
+
+      if (votedCount == totalCount) {
+        message += '\n✅ All judges have voted!';
+      }
+    }
+
+    // Show persistent snackbar with dismiss action
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              message,
+              style: const TextStyle(fontSize: 14),
+            ),
+            if (votedCount == totalCount)
+              const SizedBox(height: 4),
+            if (votedCount == totalCount)
+              const Text(
+                'You can now proceed to announce results',
+                style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+              ),
+          ],
+        ),
+        backgroundColor: votedCount == totalCount ? Colors.green : Colors.blue.shade700,
+        duration: const Duration(days: 365), // Essentially infinite until dismissed
+        action: SnackBarAction(
+          label: 'DISMISS',
+          textColor: Colors.white,
+          onPressed: () {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          },
+        ),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+
+    // Play a notification sound if all judges have voted
+    if (votedCount == totalCount) {
+      try {
+        // You can add a sound effect here if desired
+        AppLogger().info('🔔 All judges have completed voting!');
+      } catch (e) {
+        AppLogger().debug('Could not play notification sound: $e');
+      }
+    }
+  }
+
+  /// Determine update type from realtime events
+  String _determineUpdateType(List<String> events) {
+    for (final event in events) {
+      if (event.contains('.create')) return 'create';
+      if (event.contains('.delete')) return 'delete';
+      if (event.contains('.update')) return 'update';
+    }
+    return 'update'; // Default fallback
+  }
+
+
+  /// Fetch user profile for diff manager
+  Future<UserProfile?> _fetchUserProfile(String userId) async {
+    try {
+      return await _appwrite.getUserProfile(userId);
+    } catch (e) {
+      AppLogger().error('Error fetching user profile for diff: $e');
+      return null;
+    }
+  }
+
+  /// Validate that user's role matches their position in participant slots
+  Future<void> _validateRoleConsistency() async {
+    try {
+      if (_currentUserId == null || _userRole == null) return;
+
+      // Check what role the user has in the participant slots
+      String? slotRole;
+      _participants.forEach((role, user) {
+        if (user?.id == _currentUserId) {
+          slotRole = role;
+        }
+      });
+
+      // If user is in a slot but their _userRole doesn't match, fix it
+      if (slotRole != null && slotRole != _userRole) {
+        AppLogger().warning('🚨 ROLE INCONSISTENCY DETECTED:');
+        AppLogger().warning('   Local role: $_userRole');
+        AppLogger().warning('   Slot role: $slotRole');
+        AppLogger().info('🔄 FIXING: Updating local role to match slot position');
+
+        _userRole = slotRole;
+
+        if (mounted) {
+          setState(() {
+            // UI will rebuild with corrected role
+          });
+        }
+
+        AppLogger().info('✅ ROLE FIXED: Local role now $_userRole');
+      }
+
+      // Also check if user thinks they're audience but they're in a speaking slot
+      if (_userRole == 'audience' && slotRole != null) {
+        AppLogger().warning('🚨 CRITICAL: User thinks they are audience but they are in $slotRole slot');
+        _userRole = slotRole;
+        if (mounted) {
+          setState(() {
+            // UI will rebuild with corrected role
+          });
+        }
+        AppLogger().info('✅ AUDIENCE OVERRIDE: Corrected role from audience to $slotRole');
+      }
+    } catch (e) {
+      AppLogger().error('❌ Error validating role consistency: $e');
     }
   }
 
@@ -5866,49 +7063,6 @@ class _RoleManagerPanelState extends State<RoleManagerPanel> {
     }
   }
 
-  Future<void> _assignRole(String userId, String newRole) async {
-    if (!_isModerator) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('❌ Only moderators can assign roles'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    try {
-      await _appwrite.assignArenaRole(
-        roomId: widget.roomId,
-        userId: userId,
-        role: newRole,
-      );
-      
-      // Refresh participants list
-      await _loadParticipants();
-      widget.onRoleAssigned();
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Role assigned successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      AppLogger().error('Error assigning role: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Error assigning role: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
   void _viewProfile(UserProfile profile) {
     showDialog(
       context: context,
@@ -5966,10 +7120,15 @@ class _RoleManagerPanelState extends State<RoleManagerPanel> {
                 child: Column(
                   children: [
                     // Avatar
-                    UserAvatar(
-                      avatarUrl: profile.avatar,
-                      initials: profile.name.isNotEmpty ? profile.name[0] : '?',
+                    CircleAvatar(
                       radius: 50,
+                      backgroundColor: const Color(0xFF8B5CF6),
+                      backgroundImage: profile.avatar != null && profile.avatar!.isNotEmpty
+                          ? NetworkImage(profile.avatar!)
+                          : null,
+                      child: profile.avatar == null || profile.avatar!.isEmpty
+                          ? buildAvatarText(profile, 36)
+                          : null,
                     ),
                     const SizedBox(height: 16),
                     
@@ -6025,7 +7184,7 @@ class _RoleManagerPanelState extends State<RoleManagerPanel> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.8,
+      height: MediaQuery.of(context).size.height * 0.7,
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.only(
@@ -6122,11 +7281,12 @@ class _RoleManagerPanelState extends State<RoleManagerPanel> {
                     children: [
                       CircleAvatar(
                         radius: 25,
-                        backgroundImage: profile.avatar != null 
+                        backgroundColor: const Color(0xFF8B5CF6),
+                        backgroundImage: profile.avatar != null && profile.avatar!.isNotEmpty
                             ? NetworkImage(profile.avatar!)
                             : null,
-                        child: profile.avatar == null 
-                            ? Text(profile.name.isNotEmpty ? profile.name[0] : '?')
+                        child: profile.avatar == null || profile.avatar!.isEmpty
+                            ? buildAvatarText(profile, 18)
                             : null,
                       ),
                       const SizedBox(width: 16),
@@ -6177,6 +7337,21 @@ class _RoleManagerPanelState extends State<RoleManagerPanel> {
                       value: currentRole,
                       onChanged: (newRole) {
                         if (newRole != null && newRole != currentRole) {
+                          // Prevent moderators from changing their own role away from moderator
+                          final isCurrentUser = participant['userId'] == widget.currentUserId;
+                          final isCurrentlyModerator = currentRole == 'moderator';
+                          final tryingToChangeFromModerator = isCurrentUser && isCurrentlyModerator && newRole != 'moderator';
+                          
+                          if (tryingToChangeFromModerator) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('⚠️ Moderators cannot change their own role'),
+                                backgroundColor: Colors.orange,
+                              ),
+                            );
+                            return;
+                          }
+                          
                           _assignRole(participant['userId'], newRole);
                         }
                       },
@@ -6266,6 +7441,37 @@ class _RoleManagerPanelState extends State<RoleManagerPanel> {
         return Colors.black;
     }
   }
+
+  Future<void> _assignRole(String userId, String newRole) async {
+    try {
+      final appwrite = AppwriteService();
+      await appwrite.assignArenaRole(
+        roomId: widget.roomId,
+        userId: userId,
+        role: newRole,
+      );
+      
+      widget.onRoleAssigned();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Role assigned successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error assigning role: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 }
 
 // Moderator Control Modal Widget
@@ -6306,7 +7512,7 @@ class ModeratorControlModal extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.all(16),
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.8,
+        maxHeight: MediaQuery.of(context).size.height * 0.7,
       ),
       decoration: BoxDecoration(
         color: Colors.grey[900],
@@ -6844,7 +8050,7 @@ class ResultsModal extends StatelessWidget {
                 ),
                 const SizedBox(height: 12), // Reduced from 16
                 _buildVoteRow('Affirmative', affirmativeVotes, isAffirmativeWinner, Colors.green),
-                const SizedBox(height: 6), // Reduced from 8
+                const SizedBox(height: 3), // Reduced from 8
                 _buildVoteRow('Negative', negativeVotes, !isAffirmativeWinner, const Color(0xFFFF2400)),
               ],
             ),
@@ -6873,7 +8079,7 @@ class ResultsModal extends StatelessWidget {
                       color: deepPurple,
                     ),
                   ),
-                  const SizedBox(height: 6), // Reduced from 8
+                  const SizedBox(height: 3), // Reduced from 8
                   ...judgments.map((judgment) {
                     final index = judgments.indexOf(judgment);
                     final judgeWinner = judgment.data['winner'];
@@ -7042,10 +8248,15 @@ class ResultsModal extends StatelessWidget {
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.amber, width: 2),
               ),
-              child: UserAvatar(
-                avatarUrl: winningDebater1.avatar,
-                initials: winningDebater1.name.isNotEmpty ? winningDebater1.name[0] : '?',
+              child: CircleAvatar(
                 radius: 24,
+                backgroundColor: getAvatarColorForRole(winner == 'affirmative' ? 'affirmative' : 'negative'),
+                backgroundImage: winningDebater1.avatar != null && winningDebater1.avatar!.isNotEmpty
+                    ? NetworkImage(winningDebater1.avatar!)
+                    : null,
+                child: winningDebater1.avatar == null || winningDebater1.avatar!.isEmpty
+                    ? buildAvatarText(winningDebater1, 18)
+                    : null,
               ),
             ),
             const SizedBox(width: 12),
@@ -7124,10 +8335,15 @@ class ResultsModal extends StatelessWidget {
               shape: BoxShape.circle,
               border: Border.all(color: Colors.amber, width: 2),
             ),
-            child: UserAvatar(
-              avatarUrl: debater.avatar,
-              initials: debater.name.isNotEmpty ? debater.name[0] : '?',
+            child: CircleAvatar(
               radius: 20,
+              backgroundColor: getAvatarColorForRole(winner == 'affirmative' ? 'affirmative' : 'negative'),
+              backgroundImage: debater.avatar != null && debater.avatar!.isNotEmpty
+                  ? NetworkImage(debater.avatar!)
+                  : null,
+              child: debater.avatar == null || debater.avatar!.isEmpty
+                  ? buildAvatarText(debater, 14)
+                  : null,
             ),
           ),
           const SizedBox(height: 4),
@@ -7639,14 +8855,8 @@ class _JudgeSelectionModalState extends State<JudgeSelectionModal> {
                           ),
                           child: ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: Colors.amber,
-                              child: Text(
-                                (judge['name'] ?? 'J')[0].toUpperCase(),
-                                style: const TextStyle(
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                              backgroundColor: getAvatarColorForRole('judge1'),
+                              child: buildAvatarTextFromMap(judge, 14),
                             ),
                             title: Text(
                               judge['name'] ?? 'Unknown Judge',
@@ -7760,7 +8970,9 @@ class _RoleSelectionModalState extends State<RoleSelectionModal>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
-      setState(() {});
+      setState(() {
+        // Update UI when switching tabs
+      });
     });
   }
 
@@ -7774,7 +8986,7 @@ class _RoleSelectionModalState extends State<RoleSelectionModal>
   Widget build(BuildContext context) {
     return Container(
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.8,
+        maxHeight: MediaQuery.of(context).size.height * 0.7,
       ),
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -7993,11 +9205,13 @@ class _RoleSelectionModalState extends State<RoleSelectionModal>
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
                           leading: CircleAvatar(
-                            backgroundColor: Colors.grey.shade300,
-                            child: Text(
-                              member.name.isNotEmpty ? member.name[0].toUpperCase() : '?',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
+                            backgroundColor: getAvatarColorForRole('audience'),
+                            backgroundImage: member.avatar != null && member.avatar!.isNotEmpty
+                                ? NetworkImage(member.avatar!)
+                                : null,
+                            child: member.avatar == null || member.avatar!.isEmpty
+                                ? buildAvatarText(member, 14)
+                                : null,
                           ),
                           title: Text(member.name),
                           subtitle: const Text('Audience member'),
@@ -8130,14 +9344,13 @@ class _RoleSelectionModalState extends State<RoleSelectionModal>
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
                           leading: CircleAvatar(
-                            backgroundColor: Colors.amber.shade300,
-                            child: Text(
-                              member.name.isNotEmpty ? member.name[0].toUpperCase() : '?',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black,
-                              ),
-                            ),
+                            backgroundColor: getAvatarColorForRole('audience'),
+                            backgroundImage: member.avatar != null && member.avatar!.isNotEmpty
+                                ? NetworkImage(member.avatar!)
+                                : null,
+                            child: member.avatar == null || member.avatar!.isEmpty
+                                ? buildAvatarText(member, 14)
+                                : null,
                           ),
                           title: Text(member.name),
                           subtitle: Text(
@@ -8437,6 +9650,7 @@ class _ArenaChatBottomSheetState extends State<ArenaChatBottomSheet> {
                               ),
                             )
                           : ListView.builder(
+                              key: const ValueKey('arena_chat_messages_list'),
                               controller: _scrollController,
                               itemCount: _messages.length,
                               itemBuilder: (context, index) {
@@ -8485,6 +9699,7 @@ class _ArenaChatBottomSheetState extends State<ArenaChatBottomSheet> {
                           ),
                           const SizedBox(width: 8),
                           FloatingActionButton.small(
+                            key: const ValueKey('arena_send_message_fab'),
                             heroTag: "arena_send_message",
                             onPressed: _sendMessage,
                             backgroundColor: Colors.blue,
@@ -8509,6 +9724,7 @@ class _ArenaChatBottomSheetState extends State<ArenaChatBottomSheet> {
     final isCurrentUser = message.senderId == widget.currentUserId;
 
     return Container(
+      key: ValueKey('chat_message_${message.id}'),
       margin: const EdgeInsets.only(bottom: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -8617,7 +9833,7 @@ class _ArenaChatBottomSheetState extends State<ArenaChatBottomSheet> {
   String _formatMessageTime(DateTime timestamp) {
     final now = DateTime.now();
     final difference = now.difference(timestamp);
-    
+
     if (difference.inMinutes < 1) {
       return 'now';
     } else if (difference.inHours < 1) {
@@ -8628,5 +9844,6 @@ class _ArenaChatBottomSheetState extends State<ArenaChatBottomSheet> {
       return '${timestamp.day}/${timestamp.month}';
     }
   }
+
 
 }

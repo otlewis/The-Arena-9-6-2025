@@ -3,10 +3,10 @@ import 'package:flutter/services.dart';
 import '../models/user_profile.dart';
 import '../services/challenge_messaging_service.dart';
 import '../services/appwrite_service.dart';
+import '../services/feature_flag_service.dart';
 import '../core/logging/app_logger.dart';
 import '../widgets/report_user_dialog.dart';
 import '../widgets/premium_badge.dart';
-import '../widgets/gift_send_bottom_sheet.dart';
 import '../widgets/simple_gift_bottom_sheet.dart';
 
 /// Beautiful user profile bottom sheet modal
@@ -35,6 +35,7 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
   late AnimationController _animationController;
   late Animation<double> _slideAnimation;
   bool _isFollowing = false; // TODO: Get actual follow status
+  bool _currentUserIsPremium = false;
 
   @override
   void initState() {
@@ -50,8 +51,44 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
       parent: _animationController,
       curve: Curves.easeInOut,
     ));
-    
+
     _animationController.forward();
+    _checkCurrentUserPremiumStatus();
+  }
+
+  Future<void> _checkCurrentUserPremiumStatus() async {
+    try {
+      // BETA TESTING: Force all users to be premium during beta
+      setState(() {
+        _currentUserIsPremium = true;
+      });
+      AppLogger().info('🧪 BETA MODE: All users have premium access for challenges');
+
+      /* TODO: Restore feature flag logic when beta testing is complete
+      // Check if beta testing mode is enabled
+      final isBetaTesting = await FeatureFlagService().isBetaTestingMode();
+
+      if (isBetaTesting) {
+        // In beta testing mode, all users are premium
+        setState(() {
+          _currentUserIsPremium = true;
+        });
+        AppLogger().info('🧪 Beta testing mode enabled - all users have premium access');
+      } else {
+        // Normal premium checking
+        final appwriteService = AppwriteService();
+        final currentUser = await appwriteService.getCurrentUser();
+        if (currentUser != null) {
+          final userProfile = await appwriteService.getUserProfile(currentUser.$id);
+          setState(() {
+            _currentUserIsPremium = userProfile?.isPremium ?? false;
+          });
+        }
+      }
+      */
+    } catch (e) {
+      AppLogger().error('Error checking current user premium status: $e');
+    }
   }
 
   @override
@@ -375,35 +412,44 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                           Expanded(
                             child: GestureDetector(
                               onTap: () {
-                                // Show challenge dialog directly without closing the sheet
                                 HapticFeedback.lightImpact();
-                                _showChallengeDialog();
+                                if (_currentUserIsPremium) {
+                                  // Show challenge dialog for premium users
+                                  _showChallengeDialog();
+                                } else {
+                                  // Show premium paywall for non-premium users
+                                  _showPremiumPaywall();
+                                }
                               },
                               child: Container(
                                 padding: const EdgeInsets.symmetric(vertical: 14),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFDC2626),
+                                  color: _currentUserIsPremium
+                                      ? const Color(0xFFDC2626)
+                                      : Colors.grey.shade400,
                                   borderRadius: BorderRadius.circular(12),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: const Color(0xFFDC2626).withValues(alpha: 0.3),
+                                      color: (_currentUserIsPremium
+                                          ? const Color(0xFFDC2626)
+                                          : Colors.grey.shade400).withValues(alpha: 0.3),
                                       blurRadius: 8,
                                       offset: const Offset(0, 2),
                                     ),
                                   ],
                                 ),
-                                child: const Row(
+                                child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Icon(
-                                      Icons.gavel,
+                                      _currentUserIsPremium ? Icons.gavel : Icons.lock,
                                       color: Colors.white,
                                       size: 18,
                                     ),
-                                    SizedBox(width: 8),
+                                    const SizedBox(width: 8),
                                     Text(
-                                      'Challenge',
-                                      style: TextStyle(
+                                      _currentUserIsPremium ? 'Challenge' : 'Premium',
+                                      style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
@@ -693,6 +739,59 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Show premium paywall for non-premium users
+  void _showPremiumPaywall() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.diamond, color: Color(0xFF6B46C1)),
+            SizedBox(width: 8),
+            Text('Premium Feature'),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Challenge users to debates with Premium!',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            SizedBox(height: 12),
+            Text('Premium members get:'),
+            SizedBox(height: 8),
+            Text('• Unlimited debate challenges'),
+            Text('• Premium badge'),
+            Text('• Priority support'),
+            Text('• 1,000 bonus coins'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Maybe Later'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Navigate to premium/paywall screen
+              Navigator.pushNamed(context, '/paywall');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6B46C1),
+            ),
+            child: const Text(
+              'Get Premium',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
       ),
     );
   }

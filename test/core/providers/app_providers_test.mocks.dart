@@ -365,6 +365,21 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
       ) as _i6.Future<void>);
 
   @override
+  _i6.Future<_i3.Session> signInWithGoogle() => (super.noSuchMethod(
+        Invocation.method(
+          #signInWithGoogle,
+          [],
+        ),
+        returnValue: _i6.Future<_i3.Session>.value(_FakeSession_7(
+          this,
+          Invocation.method(
+            #signInWithGoogle,
+            [],
+          ),
+        )),
+      ) as _i6.Future<_i3.Session>);
+
+  @override
   _i6.Future<_i3.User?> getCurrentUser() => (super.noSuchMethod(
         Invocation.method(
           #getCurrentUser,
@@ -388,6 +403,7 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
     String? facebookHandle,
     String? instagramHandle,
     List<String>? interests,
+    Map<String, dynamic>? metadata,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -407,6 +423,7 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
             #facebookHandle: facebookHandle,
             #instagramHandle: instagramHandle,
             #interests: interests,
+            #metadata: metadata,
           },
         ),
         returnValue: _i6.Future<void>.value(),
@@ -443,7 +460,6 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
     int? coinBalance,
     int? totalGiftsSent,
     int? totalGiftsReceived,
-    int? reputation,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -468,7 +484,6 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
             #coinBalance: coinBalance,
             #totalGiftsSent: totalGiftsSent,
             #totalGiftsReceived: totalGiftsReceived,
-            #reputation: reputation,
           },
         ),
         returnValue: _i6.Future<void>.value(),

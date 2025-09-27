@@ -3,6 +3,7 @@ import 'package:appwrite/models.dart';
 import 'package:arena/services/appwrite_service.dart';
 import 'package:arena/services/email_templates.dart';
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 class ConsentLoggingService {
   static const String collectionId = 'consent_logs';
@@ -40,9 +41,9 @@ class ConsentLoggingService {
         },
       );
       
-      print('Consent event logged: $action for user $userId');
+      developer.log('Consent event logged: $action for user $userId', name: 'ConsentLoggingService');
     } catch (e) {
-      print('Failed to log consent event: $e');
+      developer.log('Failed to log consent event: $e', name: 'ConsentLoggingService', level: 1000);
       // Don't throw - logging failures shouldn't break app flow
     }
   }
@@ -62,7 +63,7 @@ class ConsentLoggingService {
       
       return response.documents;
     } catch (e) {
-      print('Failed to get consent history: $e');
+      developer.log('Failed to get consent history: $e', name: 'ConsentLoggingService', level: 1000);
       return [];
     }
   }
@@ -109,9 +110,9 @@ class ConsentLoggingService {
         },
       );
       
-      print('Teen account suspended for user: $userId');
+      developer.log('Teen account suspended for user: $userId', name: 'ConsentLoggingService');
     } catch (e) {
-      print('Failed to suspend teen account: $e');
+      developer.log('Failed to suspend teen account: $e', name: 'ConsentLoggingService', level: 1000);
       throw e; // Account suspension failures should be thrown
     }
   }
@@ -159,9 +160,9 @@ class ConsentLoggingService {
         },
       );
       
-      print('Teen account reactivated for user: $userId');
+      developer.log('Teen account reactivated for user: $userId', name: 'ConsentLoggingService');
     } catch (e) {
-      print('Failed to reactivate teen account: $e');
+      developer.log('Failed to reactivate teen account: $e', name: 'ConsentLoggingService', level: 1000);
       throw e;
     }
   }
@@ -228,13 +229,13 @@ class ConsentLoggingService {
             },
           );
 
-          print('Flagged teen account ${user.$id} for re-consent');
+          developer.log('Flagged teen account ${user.$id} for re-consent', name: 'ConsentLoggingService');
         }
       }
 
-      print('Policy update re-consent flagging completed');
+      developer.log('Policy update re-consent flagging completed', name: 'ConsentLoggingService');
     } catch (e) {
-      print('Failed to flag accounts for re-consent: $e');
+      developer.log('Failed to flag accounts for re-consent: $e', name: 'ConsentLoggingService', level: 1000);
       throw e;
     }
   }
@@ -253,7 +254,7 @@ class ConsentLoggingService {
       final metadata = Map<String, dynamic>.from(user.data);
       return metadata['requiresReconsent'] == true;
     } catch (e) {
-      print('Failed to check re-consent status: $e');
+      developer.log('Failed to check re-consent status: $e', name: 'ConsentLoggingService', level: 1000);
       return false;
     }
   }
@@ -321,7 +322,7 @@ class ConsentLoggingService {
           break;
           
         default:
-          print('Unknown notification type: $notificationType');
+          developer.log('Unknown notification type: $notificationType', name: 'ConsentLoggingService', level: 1000);
           return;
       }
       
@@ -334,7 +335,7 @@ class ConsentLoggingService {
       );
       
       if (emailSent) {
-        print('✅ Parental notification sent: $notificationType to $parentEmail');
+        developer.log('✅ Parental notification sent: $notificationType to $parentEmail', name: 'ConsentLoggingService');
         
         // Log the notification in our audit trail
         final notificationData = {
@@ -348,13 +349,13 @@ class ConsentLoggingService {
         };
         
         // Could store in notifications audit collection
-        print('📊 Notification logged: $notificationData');
+        developer.log('📊 Notification logged: $notificationData', name: 'ConsentLoggingService');
       } else {
-        print('❌ Failed to send parental notification to $parentEmail');
+        developer.log('❌ Failed to send parental notification to $parentEmail', name: 'ConsentLoggingService', level: 1000);
       }
       
     } catch (e) {
-      print('Failed to send parental notification: $e');
+      developer.log('Failed to send parental notification: $e', name: 'ConsentLoggingService', level: 1000);
       // Don't throw - notification failures shouldn't break app flow
       
       // Could implement retry logic here:

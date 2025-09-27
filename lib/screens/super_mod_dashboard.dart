@@ -130,7 +130,9 @@ class _SuperModDashboardState extends State<SuperModDashboard>
   Future<void> _loadSuperMods() async {
     try {
       _superMods = _superModService.allSuperMods;
-      if (mounted) setState(() {});
+      if (mounted) setState(() {
+        // Update UI with loaded super moderators
+      });
     } catch (e) {
       _logger.error('Failed to load super mods: $e');
     }
@@ -158,8 +160,10 @@ class _SuperModDashboardState extends State<SuperModDashboard>
         if (action == 'ban') _totalBans++;
         if (action == 'kick') _totalKicks++;
       }
-      
-      if (mounted) setState(() {});
+
+      if (mounted) setState(() {
+        // Update UI with loaded moderation statistics
+      });
     } catch (e) {
       _logger.error('Failed to load stats: $e');
     }

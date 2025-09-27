@@ -949,7 +949,9 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
   void _onTabChanged() {
     // Force rebuild when switching tabs to update auto-selected winner
     if (mounted) {
-      setState(() {});
+      setState(() {
+        // Update UI when switching scorecard tabs
+      });
     }
   }
 

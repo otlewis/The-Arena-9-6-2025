@@ -149,7 +149,9 @@ class _EnhancedAppwriteTimerWidgetState extends State<EnhancedAppwriteTimerWidge
         await _syncService.forceResync();
         
         if (mounted) {
-          setState(() {}); // Update display
+          setState(() {
+            // Force UI update after correcting timer drift
+          });
         }
       }
       

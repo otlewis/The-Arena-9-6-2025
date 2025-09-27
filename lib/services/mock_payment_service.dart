@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
 import '../core/logging/app_logger.dart';
 import 'appwrite_service.dart';
 import 'coin_service.dart';
@@ -261,33 +260,6 @@ class MockPaymentService {
     return buffer.toString();
   }
   
-  /// Validate card number using Luhn algorithm
-  bool _validateCardNumber(String cardNumber) {
-    final cleaned = cardNumber.replaceAll(RegExp(r'[^0-9]'), '');
-    
-    if (cleaned.length < 13 || cleaned.length > 19) {
-      return false;
-    }
-    
-    int sum = 0;
-    bool alternate = false;
-    
-    for (int i = cleaned.length - 1; i >= 0; i--) {
-      int digit = int.parse(cleaned[i]);
-      
-      if (alternate) {
-        digit *= 2;
-        if (digit > 9) {
-          digit -= 9;
-        }
-      }
-      
-      sum += digit;
-      alternate = !alternate;
-    }
-    
-    return sum % 10 == 0;
-  }
   
   /// Get card type from number
   CardType getCardType(String cardNumber) {

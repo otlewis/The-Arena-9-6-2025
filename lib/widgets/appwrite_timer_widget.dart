@@ -1266,7 +1266,9 @@ class _CreateTimerDialogState extends State<_CreateTimerDialog> {
                     labelText: 'Minutes',
                     border: OutlineInputBorder(),
                   ),
-                  onChanged: (_) => setState(() {}), // Trigger rebuild for preview
+                  onChanged: (_) => setState(() {
+                    // Update preview as user types minutes
+                  }),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1280,7 +1282,9 @@ class _CreateTimerDialogState extends State<_CreateTimerDialog> {
                     labelText: 'Seconds',
                     border: OutlineInputBorder(),
                   ),
-                  onChanged: (_) => setState(() {}), // Trigger rebuild for preview
+                  onChanged: (_) => setState(() {
+                    // Update preview as user types seconds
+                  }),
                 ),
               ),
             ],

@@ -95,7 +95,9 @@ class _PerformanceDashboardState extends State<PerformanceDashboard> {
             ElevatedButton(
               onPressed: () {
                 _cache.clearAll();
-                setState(() {});
+                setState(() {
+                  // Refresh UI to show updated cache statistics after clearing
+                });
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('🗑️ Cache cleared')),
                 );

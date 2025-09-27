@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../core/logging/app_logger.dart';
+import '../services/live_streaming_service.dart';
 
 class StreamingDestinationsModal extends StatefulWidget {
   final String roomId;
@@ -20,8 +21,31 @@ class StreamingDestinationsModal extends StatefulWidget {
 }
 
 class _StreamingDestinationsModalState extends State<StreamingDestinationsModal> {
-  // Selected platforms
+  // Services
+  final LiveStreamingService _streamingService = LiveStreamingService();
+  
+  // Selected platforms and stream keys
   final Set<String> _selectedPlatforms = {};
+  final Map<String, TextEditingController> _streamKeyControllers = {};
+  bool _isStartingStream = false;
+  
+  @override
+  void initState() {
+    super.initState();
+    // Initialize controllers for each platform
+    for (final platform in ['facebook', 'youtube', 'instagram', 'x', 'twitch', 'tiktok']) {
+      _streamKeyControllers[platform] = TextEditingController();
+    }
+  }
+  
+  @override
+  void dispose() {
+    // Dispose all controllers
+    for (final controller in _streamKeyControllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
   
   // Platform configurations
   final Map<String, Map<String, dynamic>> _platforms = {
@@ -52,6 +76,20 @@ class _StreamingDestinationsModalState extends State<StreamingDestinationsModal>
       'color': const Color(0xFF000000),
       'instructions': 'Go to X → Media Studio → Producer → Copy your stream key',
       'streamUrl': 'rtmps://production.pscp.tv:443/x/',
+    },
+    'twitch': {
+      'name': 'Twitch',
+      'icon': LucideIcons.twitch,
+      'color': const Color(0xFF9146FF),
+      'instructions': 'Go to Twitch → Creator Dashboard → Settings → Stream → Copy Primary Stream key',
+      'streamUrl': 'rtmp://live.twitch.tv/app/',
+    },
+    'tiktok': {
+      'name': 'TikTok Live',
+      'icon': LucideIcons.video,
+      'color': const Color(0xFF000000),
+      'instructions': 'Go to TikTok → Live Studio → Copy your stream key',
+      'streamUrl': 'rtmps://push.ttlivecdn.com/live/',
     },
   };
 
@@ -166,7 +204,7 @@ class _StreamingDestinationsModalState extends State<StreamingDestinationsModal>
     );
   }
 
-  void _startStreaming() {
+  void _startStreaming() async {
     if (_selectedPlatforms.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -177,19 +215,89 @@ class _StreamingDestinationsModalState extends State<StreamingDestinationsModal>
       return;
     }
 
+    // Validate stream keys
+    final streamKeys = <String, String>{};
+    for (final platform in _selectedPlatforms) {
+      final key = _streamKeyControllers[platform]?.text ?? '';
+      if (key.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Please enter stream key for ${_platforms[platform]!['name']}'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+      streamKeys[platform] = key;
+    }
+
+    setState(() {
+      _isStartingStream = true;
+    });
+
     AppLogger().info('Starting stream to platforms: ${_selectedPlatforms.join(', ')}');
     
-    // TODO: Implement actual streaming logic here
-    // This would integrate with LiveKit Egress API or your streaming service
-    
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Ready to stream to ${_selectedPlatforms.length} platform(s)'),
-        backgroundColor: const Color(0xFF8B5CF6),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    try {
+      // Start streaming to selected platforms
+      final results = await _streamingService.startMultiPlatformStream(
+        roomId: widget.roomId,
+        roomName: widget.roomName,
+        streamKeys: streamKeys,
+      );
+      
+      // Check results
+      final successPlatforms = results.entries
+          .where((e) => e.value == true)
+          .map((e) => _platforms[e.key]!['name'])
+          .toList();
+      
+      final failedPlatforms = results.entries
+          .where((e) => e.value == false)
+          .map((e) => _platforms[e.key]!['name'])
+          .toList();
+      
+      setState(() {
+        _isStartingStream = false;
+      });
+      
+      if (mounted) {
+        Navigator.pop(context, results);
+      }
+      
+      if (successPlatforms.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🔴 LIVE on ${successPlatforms.join(', ')}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+      
+      if (failedPlatforms.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to stream to: ${failedPlatforms.join(', ')}'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      AppLogger().error('Error starting stream: $e');
+      setState(() {
+        _isStartingStream = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to start streaming. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -226,15 +334,24 @@ class _StreamingDestinationsModalState extends State<StreamingDestinationsModal>
     }
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.9,
+      ),
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           // Header
           Row(
             children: [
@@ -422,6 +539,79 @@ class _StreamingDestinationsModalState extends State<StreamingDestinationsModal>
             ],
           ),
           
+          // Stream Key Inputs for Selected Platforms
+          if (_selectedPlatforms.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            const Text(
+              'Enter Stream Keys',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            ..._selectedPlatforms.map((platform) {
+              final config = _platforms[platform]!;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: TextField(
+                  controller: _streamKeyControllers[platform],
+                  obscureText: true,
+                  textInputAction: TextInputAction.done,
+                  onTap: () {
+                    // Capture context before async operation to avoid BuildContext async gap
+                    final currentContext = context;
+                    
+                    // Small delay to ensure keyboard is up before scrolling
+                    Future.delayed(const Duration(milliseconds: 300), () {
+                      if (mounted) {
+                        Scrollable.ensureVisible(
+                          currentContext,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        );
+                      }
+                    });
+                  },
+                  decoration: InputDecoration(
+                    labelText: '${config['name']} Stream Key',
+                    hintText: 'Enter your stream key',
+                    prefixIcon: Icon(
+                      config['icon'] as IconData,
+                      color: config['color'] as Color,
+                      size: 20,
+                    ),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.help_outline, size: 20),
+                      onPressed: () => _showPlatformInstructions(platform),
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: config['color'] as Color,
+                        width: 2,
+                      ),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ],
+          
           const SizedBox(height: 20),
           
           // Action Buttons
@@ -443,12 +633,25 @@ class _StreamingDestinationsModalState extends State<StreamingDestinationsModal>
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: _selectedPlatforms.isNotEmpty ? _startStreaming : null,
-                  icon: const Icon(LucideIcons.radio),
+                  onPressed: _selectedPlatforms.isNotEmpty && !_isStartingStream 
+                      ? _startStreaming 
+                      : null,
+                  icon: _isStartingStream 
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Icon(LucideIcons.radio),
                   label: Text(
-                    _selectedPlatforms.isEmpty 
-                        ? 'Select Platform' 
-                        : 'Go Live (${_selectedPlatforms.length})',
+                    _isStartingStream 
+                        ? 'Starting Stream...'
+                        : _selectedPlatforms.isEmpty 
+                            ? 'Select Platform' 
+                            : 'Go Live (${_selectedPlatforms.length})',
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF8B5CF6),
@@ -464,8 +667,9 @@ class _StreamingDestinationsModalState extends State<StreamingDestinationsModal>
           ),
           
           // Bottom padding for safe area
-          SizedBox(height: MediaQuery.of(context).padding.bottom + 20),
+          const SizedBox(height: 20),
         ],
+        ),
       ),
     );
   }

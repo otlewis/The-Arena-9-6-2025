@@ -137,12 +137,12 @@ class _RankingsScreenState extends State<RankingsScreen> {
       decoration: BoxDecoration(
         color: isDarkMode 
             ? (isTopThree ? const Color(0xFF2D2D2D) : const Color(0xFF252525))
-            : (isTopThree ? Colors.white : Colors.white.withOpacity(0.9)),
+            : (isTopThree ? Colors.white : Colors.white.withValues(alpha: 0.9)),
         borderRadius: BorderRadius.circular(16),
         boxShadow: isTopThree
             ? [
                 BoxShadow(
-                  color: rankColor.withOpacity(0.3),
+                  color: rankColor.withValues(alpha: 0.3),
                   blurRadius: 15,
                   spreadRadius: 1,
                   offset: const Offset(0, 4),
@@ -150,7 +150,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
               ]
             : [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 10,
                   offset: const Offset(0, 2),
                 ),
@@ -165,7 +165,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
               width: isTopThree ? 40 : 35,
               height: isTopThree ? 40 : 35,
               decoration: BoxDecoration(
-                color: isTopThree ? rankColor : Colors.grey.withOpacity(0.2),
+                color: isTopThree ? rankColor : Colors.grey.withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
               child: Center(
@@ -190,7 +190,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isTopThree ? rankColor : Colors.grey.withOpacity(0.3),
+                  color: isTopThree ? rankColor : Colors.grey.withValues(alpha: 0.3),
                   width: isTopThree ? 3 : 2,
                 ),
               ),
@@ -229,7 +229,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.orange.withOpacity(0.2),
+                            color: Colors.orange.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
@@ -256,7 +256,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: tierColor.withOpacity(0.2),
+                          color: tierColor.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
@@ -291,8 +291,8 @@ class _RankingsScreenState extends State<RankingsScreen> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: isTopThree
-                      ? [rankColor.withOpacity(0.8), rankColor]
-                      : [tierColor.withOpacity(0.8), tierColor],
+                      ? [rankColor.withValues(alpha: 0.8), rankColor]
+                      : [tierColor.withValues(alpha: 0.8), tierColor],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -478,9 +478,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: Colors.orange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                    border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
                   ),
                   child: Column(
                     children: [

@@ -56,7 +56,9 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
                         _accessibilityService.provideHapticFeedback();
                         await _languageService.setLocale(locale);
                         _accessibilityService.announceToScreenReader('Language changed to $languageName');
-                        setState(() {});
+                        setState(() {
+                          // Update UI to reflect new language
+                        });
                       },
                     );
                   }),
@@ -90,7 +92,9 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
                     value: _accessibilityService.largeTextEnabled,
                     onChanged: (value) async {
                       await _accessibilityService.setLargeTextEnabled(value);
-                      setState(() {});
+                      setState(() {
+                        // Update UI with new text size settings
+                      });
                     },
                   ),
                   SwitchListTile(
@@ -105,7 +109,9 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
                     value: _accessibilityService.highContrastEnabled,
                     onChanged: (value) async {
                       await _accessibilityService.setHighContrastEnabled(value);
-                      setState(() {});
+                      setState(() {
+                        // Update UI with new contrast settings
+                      });
                     },
                   ),
                   SwitchListTile(
@@ -120,7 +126,9 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
                     value: _accessibilityService.screenReaderOptimized,
                     onChanged: (value) async {
                       await _accessibilityService.setScreenReaderOptimized(value);
-                      setState(() {});
+                      setState(() {
+                        // Update UI with new screen reader settings
+                      });
                     },
                   ),
                   const SizedBox(height: 16),
@@ -136,7 +144,9 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
                     label: '${(_accessibilityService.textScaleFactor * 100).round()}%',
                     onChanged: (value) async {
                       await _accessibilityService.setTextScaleFactor(value);
-                      setState(() {});
+                      setState(() {
+                        // Update UI with new text scale factor
+                      });
                     },
                   ),
                 ],

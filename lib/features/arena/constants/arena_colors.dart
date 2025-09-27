@@ -12,7 +12,11 @@ class ArenaColors {
   // Additional colors used throughout arena
   static const Color goldWinner = Colors.amber;
   static const Color greenAffirmative = Colors.green;
-  
+
+  // UI theme colors
+  static const Color cardDark = Color(0xFF1A1A1A);
+  static const Color primary = Color(0xFF8B5CF6);
+
   // Private constructor to prevent instantiation
   ArenaColors._();
 }

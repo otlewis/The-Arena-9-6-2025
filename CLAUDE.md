@@ -32,10 +32,10 @@ flutter pub run build_runner build --delete-conflicting-outputs  # Generate code
 
 ### LiveKit Server
 ```bash
-# IMPORTANT: ALWAYS deploy LiveKit to the Linode server (172.236.109.9)
-# NEVER run LiveKit locally - it must be accessible to all beta testers
-# Server location: /opt/livekit-arena/
-# Deploy with: ./fix-livekit-config-v2.sh or ./deploy-livekit-linode.sh
+# LiveKit is now hosted on Google Cloud Services (GCS)
+# Use LiveKit Cloud for development and production
+# For testing: LiveKit Cloud free tier (50 participant minutes/month)
+# Production: LiveKit Cloud paid tier as needed
 ```
 
 ## Architecture Overview
@@ -184,11 +184,11 @@ lib/features/[feature_name]/
 - Never change the UI layout and design of the code when fixing issues/errors
 - Never change the features of this app
 - **DO NOT commit code unless explicitly asked by the user**
-- **ALWAYS deploy LiveKit to the Linode server (172.236.109.9) - NEVER run LiveKit locally**
-  - LiveKit server must be accessible to all beta testers
-  - Local LiveKit instances won't work for production testing
-  - All LiveKit configurations should be deployed to `/opt/livekit-arena/` on the server
-  - Use SSH key authentication or password to deploy: `ssh root@172.236.109.9`
+- **LiveKit is hosted on Google Cloud Services (GCS)**
+  - Use LiveKit Cloud for all development and testing
+  - Free tier available for testing (50 participant minutes/month)
+  - Production scaling handled automatically by LiveKit Cloud
+  - No server management required
 
 ## Appwrite API Deprecation Warnings (Info Only)
 

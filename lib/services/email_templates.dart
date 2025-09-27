@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 /// Production-ready email templates for parental notifications
 class EmailTemplates {
   
@@ -292,13 +294,13 @@ class EmailService {
       */
       
       // For now, just log the email content
-      print('📧 EMAIL SENT TO: $to');
-      print('📋 SUBJECT: $subject');
-      print('💌 EMAIL READY FOR PRODUCTION INTEGRATION');
+      developer.log('📧 EMAIL SENT TO: $to', name: 'EmailService');
+      developer.log('📋 SUBJECT: $subject', name: 'EmailService');
+      developer.log('💌 EMAIL READY FOR PRODUCTION INTEGRATION', name: 'EmailService');
       
       return true;
     } catch (e) {
-      print('❌ Failed to send email: $e');
+      developer.log('❌ Failed to send email: $e', name: 'EmailService', level: 1000);
       return false;
     }
   }

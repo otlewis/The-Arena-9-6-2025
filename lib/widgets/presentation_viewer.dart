@@ -8,18 +8,25 @@ import '../core/logging/app_logger.dart';
 import '../constants/appwrite.dart';
 import 'package:appwrite/appwrite.dart' as appwrite;
 import 'dart:async';
+import 'floating_timer_pill.dart';
 
 class PresentationViewer extends StatefulWidget {
   final SlideData slideData;
   final LiveKitMaterialSyncService syncService;
   final AppwriteService appwriteService;
   final bool isPresenter;
+  final String roomId;
+  final String roomType;
+  final String userId;
 
   const PresentationViewer({
     super.key,
     required this.slideData,
     required this.syncService,
     required this.appwriteService,
+    required this.roomId,
+    required this.userId,
+    this.roomType = 'arena',
     this.isPresenter = false,
   });
 
@@ -327,24 +334,36 @@ class _PresentationViewerState extends State<PresentationViewer> {
   }
 
   Widget _buildPortraitLayout() {
-    return Column(
+    return Stack(
       children: [
-        // Presentation area
-        Expanded(
-          child: Container(
-            width: double.infinity,
-            color: Colors.black,
-            child: _buildPresentationContent(),
-          ),
+        Column(
+          children: [
+            // Presentation area
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                color: Colors.black,
+                child: _buildPresentationContent(),
+              ),
+            ),
+            
+            // Bottom controls
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: Colors.grey[900],
+              child: widget.isPresenter 
+                  ? _buildPresenterControls()
+                  : _buildViewerControls(),
+            ),
+          ],
         ),
         
-        // Bottom controls
-        Container(
-          padding: const EdgeInsets.all(16),
-          color: Colors.grey[900],
-          child: widget.isPresenter 
-              ? _buildPresenterControls()
-              : _buildViewerControls(),
+        // Floating timer pill
+        FloatingTimerPill(
+          roomId: widget.roomId,
+          roomType: widget.roomType,
+          userRole: widget.isPresenter ? 'moderator' : 'audience',
+          userId: widget.userId,
         ),
       ],
     );
@@ -480,6 +499,14 @@ class _PresentationViewerState extends State<PresentationViewer> {
               child: _buildLandscapeViewerStatus(),
             ),
           ),
+        
+        // Floating timer pill
+        FloatingTimerPill(
+          roomId: widget.roomId,
+          roomType: widget.roomType,
+          userRole: widget.isPresenter ? 'moderator' : 'audience',
+          userId: widget.userId,
+        ),
       ],
     );
   }

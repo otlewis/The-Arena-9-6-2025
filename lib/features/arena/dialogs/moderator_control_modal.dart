@@ -12,6 +12,7 @@ class ModeratorControlModal extends StatelessWidget {
   final Function(String) onSpeakerChange;
   final VoidCallback onToggleSpeaking;
   final VoidCallback onToggleJudging;
+  final VoidCallback onMuteAll;
   final String currentSpeaker;
   final bool speakingEnabled;
   final bool judgingEnabled;
@@ -29,6 +30,7 @@ class ModeratorControlModal extends StatelessWidget {
     required this.onSpeakerChange,
     required this.onToggleSpeaking,
     required this.onToggleJudging,
+    required this.onMuteAll,
     required this.currentSpeaker,
     required this.speakingEnabled,
     required this.judgingEnabled,
@@ -224,13 +226,13 @@ class ModeratorControlModal extends StatelessWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: _buildControlButton(
-                        icon: judgingEnabled ? Icons.gavel_outlined : Icons.gavel,
-                        label: judgingEnabled ? 'Close Voting' : 'Open Voting',
+                        icon: Icons.gavel,
+                        label: 'Close Voting & Determine Winner',
                         onPressed: () {
                           onToggleJudging();
                           Navigator.pop(context);
                         },
-                        color: judgingEnabled ? Colors.orange : Colors.teal,
+                        color: Colors.red,
                       ),
                     ),
                   ],
@@ -295,7 +297,7 @@ class ModeratorControlModal extends StatelessWidget {
                         label: 'Mute All',
                         onPressed: () {
                           Navigator.pop(context);
-                          _showComingSoonSnackBar(context, 'Mute All Participants');
+                          onMuteAll();
                         },
                         color: Colors.red,
                       ),

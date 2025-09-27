@@ -11,15 +11,15 @@ class ModeratorReputationService {
   final AppwriteService _appwriteService = AppwriteService();
 
   /// Common reputation percentage penalties
-  static const int MINOR_VIOLATION_PENALTY = 5; // -5%
-  static const int MODERATE_VIOLATION_PENALTY = 10; // -10%
-  static const int SERIOUS_VIOLATION_PENALTY = 20; // -20%
-  static const int SEVERE_VIOLATION_PENALTY = 35; // -35%
-  static const int MAJOR_VIOLATION_PENALTY = 50; // -50%
+  static const int minorViolationPenalty = 5; // -5%
+  static const int moderateViolationPenalty = 10; // -10%
+  static const int seriousViolationPenalty = 20; // -20%
+  static const int severeViolationPenalty = 35; // -35%
+  static const int majorViolationPenalty = 50; // -50%
 
   /// Common reputation percentage bonuses (rare, for exceptional behavior)
-  static const int EXCEPTIONAL_BEHAVIOR_BONUS = 5; // +5%
-  static const int COMMUNITY_CONTRIBUTION_BONUS = 10; // +10%
+  static const int exceptionalBehaviorBonus = 5; // +5%
+  static const int communityContributionBonus = 10; // +10%
 
   /// Adjust user reputation percentage (moderators only)
   Future<bool> adjustUserReputation({
@@ -90,39 +90,39 @@ class ModeratorReputationService {
     
     switch (violationType) {
       case ViolationType.minorViolation:
-        penalty = -MINOR_VIOLATION_PENALTY;
+        penalty = -minorViolationPenalty;
         reason = customReason ?? 'Minor community guideline violation';
         break;
       case ViolationType.moderateViolation:
-        penalty = -MODERATE_VIOLATION_PENALTY;
+        penalty = -moderateViolationPenalty;
         reason = customReason ?? 'Moderate community guideline violation';
         break;
       case ViolationType.seriousViolation:
-        penalty = -SERIOUS_VIOLATION_PENALTY;
+        penalty = -seriousViolationPenalty;
         reason = customReason ?? 'Serious community guideline violation';
         break;
       case ViolationType.severeViolation:
-        penalty = -SEVERE_VIOLATION_PENALTY;
+        penalty = -severeViolationPenalty;
         reason = customReason ?? 'Severe community guideline violation';
         break;
       case ViolationType.majorViolation:
-        penalty = -MAJOR_VIOLATION_PENALTY;
+        penalty = -majorViolationPenalty;
         reason = customReason ?? 'Major community guideline violation';
         break;
       case ViolationType.spamming:
-        penalty = -MINOR_VIOLATION_PENALTY;
+        penalty = -minorViolationPenalty;
         reason = customReason ?? 'Spamming in discussions';
         break;
       case ViolationType.harassment:
-        penalty = -SERIOUS_VIOLATION_PENALTY;
+        penalty = -seriousViolationPenalty;
         reason = customReason ?? 'Harassment of other users';
         break;
       case ViolationType.hateSpeech:
-        penalty = -SEVERE_VIOLATION_PENALTY;
+        penalty = -severeViolationPenalty;
         reason = customReason ?? 'Hate speech or discriminatory language';
         break;
       case ViolationType.disruptiveBehavior:
-        penalty = -MODERATE_VIOLATION_PENALTY;
+        penalty = -moderateViolationPenalty;
         reason = customReason ?? 'Disruptive behavior in debates';
         break;
     }
@@ -147,19 +147,19 @@ class ModeratorReputationService {
     
     switch (bonusType) {
       case BonusType.exceptionalBehavior:
-        bonus = EXCEPTIONAL_BEHAVIOR_BONUS;
+        bonus = exceptionalBehaviorBonus;
         reason = customReason ?? 'Exceptional positive behavior in community';
         break;
       case BonusType.communityContribution:
-        bonus = COMMUNITY_CONTRIBUTION_BONUS;
+        bonus = communityContributionBonus;
         reason = customReason ?? 'Outstanding contribution to community';
         break;
       case BonusType.helpfulModerator:
-        bonus = EXCEPTIONAL_BEHAVIOR_BONUS;
+        bonus = exceptionalBehaviorBonus;
         reason = customReason ?? 'Excellent moderation and community support';
         break;
       case BonusType.qualityDebater:
-        bonus = EXCEPTIONAL_BEHAVIOR_BONUS;
+        bonus = exceptionalBehaviorBonus;
         reason = customReason ?? 'Consistently high-quality debate participation';
         break;
     }

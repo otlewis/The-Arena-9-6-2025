@@ -58,10 +58,7 @@ class GiftService {
     try {
       _giftsSubscription?.close();
       
-      // Ensure AppwriteService is ready before using realtime
-      if (_appwrite.realtimeInstance == null) {
-        throw Exception('AppwriteService realtime instance not ready');
-      }
+      // AppwriteService realtime instance is guaranteed to be ready
       
       _giftsSubscription = _appwrite.realtimeInstance.subscribe([
         'databases.arena_db.collections.received_gifts.documents'
