@@ -12,6 +12,7 @@ import '../widgets/mattermost_chat_widget.dart';
 import '../models/discussion_chat_message.dart';
 import '../screens/email_compose_screen.dart';
 import 'dart:async';
+import 'dart:convert';
 import '../main.dart' show ArenaApp, getIt;
 import '../core/logging/app_logger.dart';
 import '../services/livekit_service.dart';
@@ -40,6 +41,9 @@ import '../widgets/shared_link_popup.dart';
 import '../widgets/slide_update_popup.dart';
 import '../models/debate_source.dart';
 import '../services/disposal_tracking_system.dart';
+import '../services/recording_service.dart';
+import '../services/simple_audio_recording_service.dart';
+import '../services/super_moderator_service.dart';
 
 // Static helper methods for avatar system - accessible by all classes
 Widget buildAvatarText(UserProfile participant, double fontSize) {
@@ -374,6 +378,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   final AppwriteService _appwrite = AppwriteService();
   late final SoundService _soundService;
   late final SpeakingDetectionService _speakingService;
+  late final RecordingService _recordingService;
+  final SimpleAudioRecordingService _simpleRecordingService = SimpleAudioRecordingService();
   
   // Room data
   Map<String, dynamic>? _roomData;
@@ -526,6 +532,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     // Initialize services
     _soundService = getIt<SoundService>();
     _speakingService = getIt<SpeakingDetectionService>();
+    _recordingService = getIt<RecordingService>();
     // Using LiveKitService directly instead of RoomAudioAdapter
     _liveKitService = getIt<LiveKitService>();
     _initializeInstantMessaging();
@@ -695,6 +702,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _hasNavigated = true;
     _isExiting = true;
     
+    // Stop recording if still active
+    if (_recordingService.isRecording && _userRole == 'moderator') {
+      AppLogger().info('🎬 Stopping recording in dispose');
+      _recordingService.stopRecording().catchError((e) {
+        AppLogger().error('Failed to stop recording in dispose: $e');
+        return null; // Return null to fix warning
+      });
+    }
+
     // Dispose material sync service
     _materialSyncService?.dispose();
     _materialSyncService = null;
@@ -1347,7 +1363,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   /// Connect to WebRTC server for Arena audio using LiveKit - OPTIMIZED FOR SPEED
   Future<void> _connectToWebRTC() async {
     AppLogger().info('🚀 INSTANT: _connectToWebRTC() called - optimized connection');
-    
+
     if (_currentUser == null) {
       AppLogger().debug('🚀 INSTANT: Fetching current user...');
       // Try to get current user quickly
@@ -1362,16 +1378,20 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );
+        AppLogger().debug('🚀 INSTANT: User fetched successfully: ${_currentUser?.id}');
       }
       if (_currentUser == null) {
         AppLogger().error('❌ Still no current user after trying to fetch');
         return;
       }
+    } else {
+      AppLogger().debug('🚀 INSTANT: User already available: ${_currentUser?.id}');
     }
-    
+
     // Prevent reconnection if already connected
+    AppLogger().debug('🔍 WebRTC connection state check: _isWebRTCConnected=$_isWebRTCConnected');
     if (_isWebRTCConnected) {
-      AppLogger().debug('🎥 WebRTC already connected, skipping reconnection attempt');
+      AppLogger().warning('⚠️ WebRTC already connected, skipping reconnection - THIS BLOCKS RECORDING START');
       return;
     }
     
@@ -1493,19 +1513,39 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         );
         
         AppLogger().info('✅ ARENA: Connected via LiveKitService successfully');
-        
+
         // ANDROID FIX: Add stabilization period to prevent immediate disconnection
         if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
           AppLogger().debug('🔧 ANDROID: Connection stabilization period starting...');
           await Future.delayed(const Duration(milliseconds: 1000)); // 1 second stabilization
           AppLogger().debug('🔧 ANDROID: Connection stabilization completed');
         }
-        
+
         // Update connection state
         if (mounted) {
           setState(() {
             _isWebRTCConnected = true;
           });
+        }
+
+        // Debug log for recording conditions
+        AppLogger().debug('🔍 RECORDING CHECK: _roomData=${_roomData != null}, enablePlayback=${_roomData?['enablePlayback']}, webrtcRole=$webrtcRole, isModerator=${webrtcRole == 'moderator'}');
+
+        // Start recording if playback is enabled and user is moderator
+        if (_roomData != null &&
+            _roomData!['enablePlayback'] == true &&
+            webrtcRole == 'moderator') {
+          AppLogger().info('🎬 Starting audio recording for arena room with playback enabled');
+          try {
+            await _simpleRecordingService.startRecording(
+              roomId: widget.roomId,
+              roomName: _roomData!['topic'] ?? 'Arena Debate',
+            );
+            AppLogger().info('✅ Audio recording started successfully');
+          } catch (e) {
+            AppLogger().error('❌ Failed to start audio recording: $e');
+            // Continue without recording - don't break the room
+          }
         }
         
         // Initialize material sync service for slides and sources
@@ -1860,7 +1900,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       } catch (audioError) {
         AppLogger().error('❌ TOGGLE MUTE: Audio operation failed: $audioError');
         // Don't rethrow here - handle in the outer catch block
-        throw audioError;
+        rethrow;
       }
     } catch (e) {
       AppLogger().error('❌ Error toggling mute: $e');
@@ -1952,7 +1992,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         onPressed: _toggleMute,
       );
     }
-    
+
     return _buildControlButton(
       icon: _isMuted ? Icons.mic_off : Icons.mic,
       label: _isMuted ? 'Unmute' : 'Mute',
@@ -1960,7 +2000,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       onPressed: _toggleMute,
     );
   }
-  
+
 
   /// Show materials bottom sheet (slides and sources)
   void _showShareScreenBottomSheet() {
@@ -2461,15 +2501,19 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           }
         }
       }
-      
-      // Check if both debaters are now present and trigger invitation modal
-      await _checkForBothDebatersAndTriggerInvitations();
 
+      // Check if both debaters are now present and trigger invitation modal
+      AppLogger().debug('🔍 STEP: About to call _checkForBothDebatersAndTriggerInvitations()');
+      await _checkForBothDebatersAndTriggerInvitations();
+      AppLogger().debug('🔍 STEP: _checkForBothDebatersAndTriggerInvitations() completed');
+
+      AppLogger().debug('🔍 STEP: About to call setState()');
       if (mounted) {
         setState(() {
           // Update UI after loading arena participants
         });
       }
+      AppLogger().debug('🔍 STEP: setState() completed');
       AppLogger().info('Arena participants loaded successfully');
 
       // Validate role consistency after loading participants
@@ -2501,7 +2545,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         }
       }
     } catch (e) {
-      AppLogger().error('Error loading participants: $e');
+      AppLogger().error('❌ CRITICAL: Error loading participants: $e');
+      AppLogger().error('❌ CRITICAL: Exception type: ${e.runtimeType}');
+      AppLogger().error('❌ CRITICAL: Stack trace: ${StackTrace.current}');
     }
   }
 
@@ -2706,9 +2752,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     // Check if both debaters are now present and trigger invitation modal
     _checkForBothDebatersAndTriggerInvitations();
 
-    if (mounted) setState(() {
-      // Update UI after participant role change
-    });
+    if (mounted) {
+      setState(() {
+        // Update UI after participant role change
+      });
+    }
   }
   
   // iOS caching helper methods
@@ -2846,7 +2894,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   // Moderator Controls
-  bool get _isModerator => _userRole == 'moderator';
+  bool get _isModerator {
+    // Check if user is the room moderator OR is a Super Moderator
+    if (_userRole == 'moderator') return true;
+    if (_currentUserId != null) {
+      final superModService = SuperModeratorService();
+      return superModService.isSuperModerator(_currentUserId!);
+    }
+    return false;
+  }
   bool get _isJudge => _userRole?.startsWith('judge') == true;
 
   void _forceSpeakerChange(String newSpeaker) {
@@ -2921,8 +2977,30 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       return;
     }
 
+    // Show confirmation dialog to prevent accidental mute all
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('🔇 Mute All Participants'),
+        content: const Text('Are you sure you want to mute all participants? This will silence everyone in the room.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.orange),
+            child: const Text('Mute All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
     try {
-      AppLogger().info('🔇 MODERATOR: Initiating mute all participants');
+      AppLogger().info('🔇 MODERATOR: Confirmed mute all participants');
 
       // Use LiveKit service to mute all participants
       await _liveKitService.muteAllParticipants();
@@ -3218,7 +3296,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
-    return Scaffold(
+    return PopScope(
+      canPop: false, // Prevent accidental back navigation
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _handleBackPressed();
+      },
+      child: Scaffold(
         backgroundColor: Colors.black,
         appBar: ArenaAppBar(
           isModerator: _isModerator,
@@ -3257,6 +3341,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             
           ],
         ),
+      ), // Close PopScope
     );
   }
 
@@ -3711,6 +3796,53 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       );
     },
   );
+  }
+
+  /// Handle back button press with proper room closure
+  Future<void> _handleBackPressed() async {
+    if (_isModerator) {
+      await _showModeratorExitDialog();
+    } else {
+      _exitArena();
+    }
+  }
+
+  /// Show moderator exit dialog with room closure options
+  Future<void> _showModeratorExitDialog() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.grey[900],
+          title: Text(
+            'Moderator Exit',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Text(
+            'As the moderator, leaving will close this arena for all participants. Are you sure?',
+            style: TextStyle(color: Colors.grey[300]),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Stay', style: TextStyle(color: Colors.grey[400])),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context); // Close dialog
+                _exitArena(); // Trigger moderator exit with room closure
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: Text('Close Arena'),
+            ),
+          ],
+        );
+      },
+    );
 }
   
   Widget _buildAudienceScrollSection() {
@@ -4808,6 +4940,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 return const SizedBox.shrink();
               }),
 
+
               // View Results button (when judging is complete)
               if (_judgingComplete && _winner != null)
                 Padding(
@@ -5537,6 +5670,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   )
                 : Container(
                     padding: const EdgeInsets.all(20),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFE0E5EC), // Neumorphism background
+                    ),
                     child: ListView.builder(
                       key: const ValueKey('arena_all_participants_list'),
                       itemCount: allParticipants.length,
@@ -5545,167 +5681,208 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                         final currentRole = participant['currentRole'] as String;
                         final isCurrentUser = participant['userId'] == _currentUserId;
                         final isCurrentlyModerator = currentRole == 'moderator';
-                        final canChangeRole = !(isCurrentUser && isCurrentlyModerator);
+
+                        // Super moderators can change any role, including their own
+                        final superModService = SuperModeratorService();
+                        final isSuperMod = _currentUserId != null && superModService.isSuperModerator(_currentUserId!);
+                        final canChangeRole = isSuperMod || !(isCurrentUser && isCurrentlyModerator);
                         
                         return Container(
-                          margin: const EdgeInsets.only(bottom: 16),
+                          margin: const EdgeInsets.only(bottom: 20),
                           decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                Colors.white,
-                                Colors.grey.shade50,
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(16),
+                            color: const Color(0xFFE0E5EC),
+                            borderRadius: BorderRadius.circular(20),
                             boxShadow: [
+                              // Neumorphism shadows
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.08),
-                                spreadRadius: 0,
-                                blurRadius: 10,
-                                offset: const Offset(0, 2),
+                                color: Colors.white.withValues(alpha: 0.9),
+                                spreadRadius: -2,
+                                blurRadius: 8,
+                                offset: const Offset(-4, -4),
+                              ),
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.15),
+                                spreadRadius: -2,
+                                blurRadius: 8,
+                                offset: const Offset(4, 4),
                               ),
                             ],
-                            border: Border.all(
-                              color: isCurrentlyModerator 
-                                ? Colors.purple.shade300 
-                                : Colors.grey.shade200,
-                              width: 1.5,
-                            ),
                           ),
                           child: Padding(
                             padding: const EdgeInsets.all(20),
                             child: Row(
                               children: [
-                                // Enhanced Avatar with role indicator
-                                Stack(
+                                // Avatar column with Current above and username below
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    // Current role badge above avatar
                                     Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                       decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
+                                        color: const Color(0xFFE0E5EC),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: Colors.purple.shade600, // Purple outline
+                                          width: 2,
+                                        ),
                                         boxShadow: [
+                                          // Inner shadow effect for neumorphism
                                           BoxShadow(
-                                            color: getAvatarColorForRole(currentRole).withValues(alpha: 0.3),
-                                            spreadRadius: 0,
-                                            blurRadius: 8,
-                                            offset: const Offset(0, 2),
+                                            color: Colors.black.withValues(alpha: 0.1),
+                                            spreadRadius: -1,
+                                            blurRadius: 4,
+                                            offset: const Offset(2, 2),
+                                          ),
+                                          BoxShadow(
+                                            color: Colors.white.withValues(alpha: 0.7),
+                                            spreadRadius: -1,
+                                            blurRadius: 4,
+                                            offset: const Offset(-2, -2),
                                           ),
                                         ],
                                       ),
-                                      child: CircleAvatar(
-                                        radius: 30,
-                                        backgroundColor: getAvatarColorForRole(currentRole),
-                                        backgroundImage: participant['avatar'] != null && participant['avatar'].isNotEmpty
-                                            ? NetworkImage(participant['avatar'])
-                                            : null,
-                                        child: participant['avatar'] == null || participant['avatar'].isEmpty
-                                            ? Text(
-                                                participant['name'].isNotEmpty 
-                                                    ? participant['name'][0].toUpperCase() 
-                                                    : 'U',
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 18,
-                                                ),
-                                              )
-                                            : null,
+                                      child: RichText(
+                                        text: TextSpan(
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                          children: [
+                                            const TextSpan(text: 'Current: '),
+                                            TextSpan(
+                                              text: _formatRoleName(currentRole),
+                                              style: TextStyle(
+                                                color: getAvatarColorForRole(currentRole),
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                    // Role indicator badge
-                                    if (isCurrentlyModerator)
-                                      Positioned(
-                                        bottom: 0,
-                                        right: 0,
-                                        child: Container(
-                                          padding: const EdgeInsets.all(4),
+                                    const SizedBox(height: 6),
+                                    // Enhanced Avatar with role indicator
+                                    Stack(
+                                      children: [
+                                        Container(
                                           decoration: BoxDecoration(
-                                            color: Colors.purple.shade600,
                                             shape: BoxShape.circle,
-                                            border: Border.all(color: Colors.white, width: 2),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: getAvatarColorForRole(currentRole).withValues(alpha: 0.3),
+                                                spreadRadius: 0,
+                                                blurRadius: 8,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ],
                                           ),
-                                          child: const Icon(
-                                            Icons.admin_panel_settings,
-                                            color: Colors.white,
-                                            size: 12,
+                                          child: CircleAvatar(
+                                            radius: 30,
+                                            backgroundColor: getAvatarColorForRole(currentRole),
+                                            backgroundImage: participant['avatar'] != null && participant['avatar'].isNotEmpty
+                                                ? NetworkImage(participant['avatar'])
+                                                : null,
+                                            child: participant['avatar'] == null || participant['avatar'].isEmpty
+                                                ? Text(
+                                                    participant['name'].isNotEmpty
+                                                        ? participant['name'][0].toUpperCase()
+                                                        : 'U',
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 18,
+                                                    ),
+                                                  )
+                                                : null,
                                           ),
                                         ),
-                                      ),
+                                        // Role indicator badge
+                                        if (isCurrentlyModerator)
+                                          Positioned(
+                                            bottom: 0,
+                                            right: 0,
+                                            child: Container(
+                                              padding: const EdgeInsets.all(4),
+                                              decoration: BoxDecoration(
+                                                color: Colors.purple.shade600,
+                                                shape: BoxShape.circle,
+                                                border: Border.all(color: Colors.white, width: 2),
+                                              ),
+                                              child: const Icon(
+                                                Icons.admin_panel_settings,
+                                                color: Colors.white,
+                                                size: 12,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    // Username below avatar
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          participant['name'],
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                            color: Colors.grey.shade800,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        ),
+                                        if (isCurrentUser) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.blue.shade100,
+                                              borderRadius: BorderRadius.circular(10),
+                                              border: Border.all(color: Colors.blue.shade300),
+                                            ),
+                                            child: Text(
+                                              'you',
+                                              style: TextStyle(
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.blue.shade700,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
                                   ],
                                 ),
-                                const SizedBox(width: 20),
-                                
-                                // Enhanced name and role info
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              participant['name'],
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 18,
-                                                color: Colors.grey.shade800,
-                                              ),
-                                            ),
-                                          ),
-                                          if (isCurrentUser)
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                              decoration: BoxDecoration(
-                                                color: Colors.blue.shade100,
-                                                borderRadius: BorderRadius.circular(12),
-                                                border: Border.all(color: Colors.blue.shade300),
-                                              ),
-                                              child: Text(
-                                                'YOU',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.blue.shade700,
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                        decoration: BoxDecoration(
-                                          color: getAvatarColorForRole(currentRole).withValues(alpha: 0.2),
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(
-                                            color: getAvatarColorForRole(currentRole).withValues(alpha: 0.5),
-                                          ),
-                                        ),
-                                        child: Text(
-                                          'Current: ${_formatRoleName(currentRole)}',
-                                          style: TextStyle(
-                                            color: getAvatarColorForRole(currentRole),
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              
-                                const SizedBox(width: 16),
-                              
+
+                                const Spacer(),
+
                                 // Enhanced Role Selector
                                 if (!canChangeRole)
                                   // Locked indicator for moderators trying to change their own role
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                     decoration: BoxDecoration(
-                                      color: Colors.purple.shade100,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: Colors.purple.shade300),
+                                      color: const Color(0xFFE0E5EC),
+                                      borderRadius: BorderRadius.circular(15),
+                                      boxShadow: [
+                                        // Inner shadow for pressed neumorphism effect
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.1),
+                                          spreadRadius: -1,
+                                          blurRadius: 6,
+                                          offset: const Offset(3, 3),
+                                        ),
+                                        BoxShadow(
+                                          color: Colors.white.withValues(alpha: 0.7),
+                                          spreadRadius: -1,
+                                          blurRadius: 6,
+                                          offset: const Offset(-3, -3),
+                                        ),
+                                      ],
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -5713,7 +5890,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                         Icon(
                                           Icons.lock,
                                           color: Colors.purple.shade600,
-                                          size: 16,
+                                          size: 18,
                                         ),
                                         const SizedBox(width: 8),
                                         Text(
@@ -5728,17 +5905,31 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                     ),
                                   )
                                 else
-                                  // Enhanced dropdown for changeable roles
+                                  // Neumorphism dropdown for changeable roles
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                     decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [Colors.blue.shade50, Colors.blue.shade100],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
+                                      color: const Color(0xFFE0E5EC),
+                                      borderRadius: BorderRadius.circular(15),
+                                      border: Border.all(
+                                        color: const Color(0xFFDC143C), // Scarlet outline
+                                        width: 2,
                                       ),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: Colors.blue.shade300),
+                                      boxShadow: [
+                                        // Elevated neumorphism effect
+                                        BoxShadow(
+                                          color: Colors.white.withValues(alpha: 0.9),
+                                          spreadRadius: -2,
+                                          blurRadius: 8,
+                                          offset: const Offset(-4, -4),
+                                        ),
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.15),
+                                          spreadRadius: -2,
+                                          blurRadius: 8,
+                                          offset: const Offset(4, 4),
+                                        ),
+                                      ],
                                     ),
                                     child: DropdownButton<String>(
                                       value: currentRole,
@@ -5748,14 +5939,21 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                         }
                                       },
                                       underline: const SizedBox.shrink(),
-                                      icon: Icon(Icons.arrow_drop_down, color: Colors.blue.shade700),
-                                      dropdownColor: Colors.white,
-                                      borderRadius: BorderRadius.circular(12),
+                                      icon: Icon(Icons.arrow_drop_down, color: Colors.grey.shade700),
+                                      dropdownColor: const Color(0xFFE0E5EC),
+                                      borderRadius: BorderRadius.circular(15),
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey.shade800,
+                                      ),
                                       items: [
+                                        // Always show base roles
                                         'affirmative',
                                         'negative',
-                                        'affirmative2',
-                                        'negative2',
+                                        // Only show 2v2 roles if teamSize is 2
+                                        if (_teamSize == 2) 'affirmative2',
+                                        if (_teamSize == 2) 'negative2',
                                         'moderator',
                                         'judge1',
                                         'judge2',
@@ -5765,18 +5963,48 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                         return DropdownMenuItem<String>(
                                           value: role,
                                           child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                             decoration: BoxDecoration(
-                                              color: role == currentRole 
-                                                ? getAvatarColorForRole(role).withValues(alpha: 0.1)
-                                                : Colors.transparent,
-                                              borderRadius: BorderRadius.circular(8),
+                                              color: const Color(0xFFE0E5EC),
+                                              borderRadius: BorderRadius.circular(12),
+                                              boxShadow: role == currentRole
+                                                ? [
+                                                    // Pressed/inset effect for current role
+                                                    BoxShadow(
+                                                      color: Colors.black.withValues(alpha: 0.1),
+                                                      spreadRadius: -1,
+                                                      blurRadius: 4,
+                                                      offset: const Offset(2, 2),
+                                                    ),
+                                                    BoxShadow(
+                                                      color: Colors.white.withValues(alpha: 0.7),
+                                                      spreadRadius: -1,
+                                                      blurRadius: 4,
+                                                      offset: const Offset(-2, -2),
+                                                    ),
+                                                  ]
+                                                : [
+                                                    // Subtle raised effect for other roles
+                                                    BoxShadow(
+                                                      color: Colors.white.withValues(alpha: 0.7),
+                                                      spreadRadius: -1,
+                                                      blurRadius: 3,
+                                                      offset: const Offset(-2, -2),
+                                                    ),
+                                                    BoxShadow(
+                                                      color: Colors.black.withValues(alpha: 0.08),
+                                                      spreadRadius: -1,
+                                                      blurRadius: 3,
+                                                      offset: const Offset(2, 2),
+                                                    ),
+                                                  ],
                                             ),
                                             child: Text(
                                               _formatRoleName(role),
                                               style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13,
+                                                fontWeight: role == currentRole ? FontWeight.w700 : FontWeight.w600,
                                                 color: getAvatarColorForRole(role),
                                               ),
                                               overflow: TextOverflow.ellipsis,
@@ -6342,15 +6570,28 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   /// Check if both debaters are present and trigger invitation flow
   Future<void> _checkForBothDebatersAndTriggerInvitations() async {
     try {
+      AppLogger().info('🔍 DIAGNOSTIC: _checkForBothDebatersAndTriggerInvitations called');
       AppLogger().debug('🎭 DEBUG: _checkForBothDebatersAndTriggerInvitations called');
       
       final affirmative = _participants['affirmative'];
       final negative = _participants['negative'];
-      
+
+      AppLogger().info('🔍 DIAGNOSTIC: Participants check - Affirmative: ${affirmative?.name ?? "NULL"}, Negative: ${negative?.name ?? "NULL"}');
+      AppLogger().info('🔍 DIAGNOSTIC: Room status: ${_roomData?['status'] ?? "NULL"}');
+      AppLogger().info('🔍 DIAGNOSTIC: Total participants: ${_participants.length}');
+      AppLogger().info('🔍 DIAGNOSTIC: All roles: ${_participants.keys.toList()}');
       AppLogger().debug('🎭 DEBUG: Affirmative participant: $affirmative');
       AppLogger().debug('🎭 DEBUG: Negative participant: $negative');
-      
+
+      // Check for both challenge-based rooms (affirmative/negative) and manual rooms (audience count)
       final bothPresent = affirmative != null && negative != null;
+
+      // For manual rooms, check if we have at least 2 participants (excluding moderator)
+      final audienceCount = _audience.length;
+      final hasMinimalParticipants = audienceCount >= 2;
+
+      AppLogger().info('🔍 DIAGNOSTIC: Challenge room check - Both present: $bothPresent');
+      AppLogger().info('🔍 DIAGNOSTIC: Manual room check - Audience count: $audienceCount, Has minimal: $hasMinimalParticipants');
       
       AppLogger().debug('🎭 ${_isIOSOptimizationEnabled ? "iOS" : "Android"} Checking debater presence: Affirmative=${affirmative?.name}, Negative=${negative?.name}');
       AppLogger().debug('🎭 Both present: $bothPresent, Modal shown: $_invitationModalShown, In progress: $_invitationsInProgress, User Role: $_userRole');
@@ -6363,12 +6604,28 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
       // DISABLED: All automatic invitation systems disabled for testing
       AppLogger().debug('🚫 DISABLED: All automatic invitations disabled - manually join as audience to test UI');
-      
-      if (bothPresent) {
-        AppLogger().debug('🎭 DEBUG: Both present but modal already shown or in progress');
+
+      // Check if we should auto-start the room (either challenge-based or manual room with enough participants)
+      final shouldAutoStart = bothPresent || hasMinimalParticipants;
+
+      if (shouldAutoStart) {
+        AppLogger().info('🚀 AUTO-START CONDITION MET: Challenge room both present: $bothPresent, Manual room sufficient participants: $hasMinimalParticipants');
         _bothDebatersPresent = true;
+
+        // Auto-start arena debate when conditions are met and room is still waiting
+        if (_roomData != null && _roomData!['status'] == 'waiting') {
+          AppLogger().info('🚀 AUTO-START: Starting arena debate for room type...');
+          try {
+            await _appwrite.startArenaDebate(widget.roomId);
+            AppLogger().info('✅ Arena debate started successfully');
+          } catch (e) {
+            AppLogger().error('❌ Error auto-starting arena debate: $e');
+          }
+        } else {
+          AppLogger().info('🔍 DIAGNOSTIC: Room status is not waiting - Status: ${_roomData?['status']}');
+        }
       } else {
-        AppLogger().debug('🎭 DEBUG: Not both debaters present yet');
+        AppLogger().info('🔍 DIAGNOSTIC: Auto-start conditions not met - Both present: $bothPresent, Has minimal: $hasMinimalParticipants');
         _bothDebatersPresent = false;
       }
     } catch (e) {
@@ -6388,18 +6645,18 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   /// Perform the mixed invitation system (personal + random)
 
   void _emergencyCloseRoom() {
-    // Show confirmation dialog for emergency room closure
+    // Show choice dialog for room ending options
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.warning, color: Colors.red, size: 20),
+            Icon(Icons.stop_circle, color: Colors.orange, size: 20),
             SizedBox(width: 6),
             Flexible(
               child: Text(
-                'Emergency Close Room',
+                'End Room',
                 style: TextStyle(fontSize: 16),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -6407,10 +6664,26 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           ],
         ),
         content: Container(
-          constraints: const BoxConstraints(maxWidth: 280),
-          child: const Text(
-            'Are you sure you want to immediately close this room? This action cannot be undone and will end the debate for all participants.',
-            style: TextStyle(fontSize: 14),
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Choose how to end this room:',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+              SizedBox(height: 12),
+              Text(
+                '🎬 Complete Room: Creates a playback recording that users can watch later in Arena Playbacks.',
+                style: TextStyle(fontSize: 13),
+              ),
+              SizedBox(height: 8),
+              Text(
+                '🗑️ Close Room: Permanently deletes the room without saving any recording.',
+                style: TextStyle(fontSize: 13),
+              ),
+            ],
           ),
         ),
         actions: [
@@ -6421,12 +6694,22 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           TextButton(
             onPressed: () {
               Navigator.pop(context); // Close dialog
+              _executeRoomCompletion();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.blue,
+            ),
+            child: const Text('🎬 Complete Room'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
               _executeEmergencyClose();
             },
             style: TextButton.styleFrom(
               foregroundColor: Colors.red,
             ),
-            child: const Text('Close Room'),
+            child: const Text('🗑️ Close Room'),
           ),
         ],
       ),
@@ -6438,9 +6721,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       AppLogger().info('🚨 Emergency room close initiated by moderator');
 
       // Set up a timeout for the entire operation
+      AppLogger().info('🚨 EMERGENCY CLOSE - About to call _closeRoomWithRetries for room: ${widget.roomId}');
       await _closeRoomWithRetries(widget.roomId).timeout(
         Duration(seconds: 10),
+        onTimeout: () {
+          AppLogger().error('❌ EMERGENCY CLOSE - _closeRoomWithRetries TIMED OUT after 10 seconds');
+          throw Exception('Room closure timed out after 10 seconds');
+        },
       );
+      AppLogger().info('✅ EMERGENCY CLOSE - _closeRoomWithRetries completed successfully');
 
       AppLogger().info('🚨 Emergency room close completed successfully');
 
@@ -6456,35 +6745,49 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       }
 
     } catch (e) {
-      AppLogger().error('🚨 Emergency room close failed: $e');
+      AppLogger().error('❌ EMERGENCY CLOSE EXCEPTION: $e');
+      AppLogger().error('📊 Error type: ${e.runtimeType}');
+      AppLogger().error('📊 Error string: ${e.toString()}');
 
       // Handle specific errors more intelligently
       String errorMessage = 'Failed to close room';
       bool shouldForceExit = false;
+      bool isRecoverableError = false;
 
-      if (e.toString().contains('TimeoutException')) {
-        errorMessage = 'Room close timed out - room may still be closing';
+      if (e.toString().contains('TimeoutException') || e.toString().contains('timed out')) {
+        errorMessage = 'Room close timed out - room likely closed successfully';
         shouldForceExit = true;
+        isRecoverableError = true;
         AppLogger().info('🚨 Room close timeout - forcing exit as room is likely closing');
       } else if (e.toString().contains('document_already_exists') ||
                  e.toString().contains('already closed') ||
                  e.toString().contains('completed')) {
-        errorMessage = 'Room is already being closed';
+        errorMessage = 'Room is already closed';
         shouldForceExit = true;
+        isRecoverableError = true;
         AppLogger().info('🚨 Room already closed/closing - forcing exit');
       } else if (e.toString().contains('document_not_found')) {
         errorMessage = 'Room no longer exists';
         shouldForceExit = true;
+        isRecoverableError = true;
         AppLogger().info('🚨 Room not found - forcing exit');
       } else if (e.toString().contains('network') ||
                  e.toString().contains('connection') ||
                  e.toString().contains('timeout')) {
-        errorMessage = 'Network error - room may still be closing';
+        errorMessage = 'Network error - room may have closed successfully';
         shouldForceExit = true;
+        isRecoverableError = true;
         AppLogger().info('🚨 Network error during room close - forcing exit');
       }
 
       if (shouldForceExit) {
+        // For recoverable errors, just exit without showing error to user
+        if (isRecoverableError) {
+          AppLogger().info('🚨 Recoverable error during room close - exiting silently');
+          _forceExitArena();
+          return;
+        }
+
         // These are recoverable errors where we should still exit
         _forceExitArena();
         return;
@@ -6511,14 +6814,70 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
+  void _executeRoomCompletion() async {
+    try {
+      AppLogger().info('🎬 Room completion initiated by moderator');
+
+      // Complete room with playback creation and status update
+      AppLogger().info('🎬 COMPLETE ROOM - Completing room: ${widget.roomId}');
+
+      // Use the appwrite service to complete the room (updates status to completed)
+      await _appwrite.completeArenaRoom(widget.roomId).timeout(
+        Duration(seconds: 15),
+        onTimeout: () {
+          AppLogger().error('❌ COMPLETE ROOM - Room completion TIMED OUT after 15 seconds');
+          throw Exception('Room completion timed out after 15 seconds');
+        },
+      );
+
+      AppLogger().info('✅ COMPLETE ROOM - Room completed successfully');
+
+      // Show completion modal to all users before navigating home
+      if (mounted) {
+        ArenaModals.showRoomClosingModal(
+          context,
+          3, // 3 second countdown for room completion
+          onRoomClosed: () {
+            _forceExitArena();
+          },
+        );
+      }
+
+    } catch (e) {
+      AppLogger().error('❌ ROOM COMPLETION EXCEPTION: $e');
+      AppLogger().error('📊 Error type: ${e.runtimeType}');
+      AppLogger().error('📊 Error string: ${e.toString()}');
+
+      // Show error to user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to complete room: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 4),
+          ),
+        );
+
+        // Try to exit anyway after error
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            AppLogger().info('🚨 Forcing navigation home after completion error');
+            _forceExitArena();
+          }
+        });
+      }
+    }
+  }
+
   /// Resilient room close method with retries and better error handling
   Future<void> _closeRoomWithRetries(String roomId) async {
+    AppLogger().info('🚪 CLOSE ROOM - Starting _closeRoomWithRetries for: $roomId');
     int retryCount = 0;
     const maxRetries = 3;
 
     while (retryCount < maxRetries) {
       try {
-        AppLogger().debug('🔄 Attempting room close (attempt ${retryCount + 1}/$maxRetries)');
+        AppLogger().info('🔄 CLOSE ROOM - Attempting room close (attempt ${retryCount + 1}/$maxRetries)');
 
         // First, check if room is already closed
         try {
@@ -6542,18 +6901,57 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           // Other errors, continue with close attempt
         }
 
+        // Stop audio recording if active before closing room
+        if (_simpleRecordingService.isRecording && _userRole == 'moderator') {
+          AppLogger().info('🎬 ROOM CLOSURE - Stopping audio recording before closing room');
+          AppLogger().info('📊 Recording state - isRecording: ${_simpleRecordingService.isRecording}, userRole: $_userRole');
+          try {
+            final playbackId = await _simpleRecordingService.stopRecording();
+            if (playbackId != null) {
+              AppLogger().info('✅ ROOM CLOSURE - Audio recording stopped, playback created: $playbackId');
+            } else {
+              AppLogger().warning('⚠️ ROOM CLOSURE - Audio recording stopped but no playback created');
+            }
+          } catch (e) {
+            AppLogger().error('❌ ROOM CLOSURE - Failed to stop audio recording: $e');
+            // Continue with room close even if recording fails
+          }
+        } else {
+          AppLogger().info('ℹ️ ROOM CLOSURE - No recording to stop (isRecording: ${_simpleRecordingService.isRecording}, userRole: $_userRole)');
+        }
+
         // Try the close operation
+        AppLogger().info('🚪 ROOM CLOSURE - Calling closeArenaRoom for: $roomId');
         await _appwrite.closeArenaRoom(roomId);
-        AppLogger().info('✅ Room closed successfully on attempt ${retryCount + 1}');
+        AppLogger().info('✅ ROOM CLOSURE - Room closed successfully on attempt ${retryCount + 1}');
+        AppLogger().info('🎯 ROOM CLOSURE - Room should now be removed from lobby lists');
         return; // Success, exit retry loop
 
       } catch (e) {
         retryCount++;
-        AppLogger().warning('⚠️ Room close attempt $retryCount failed: $e');
+        AppLogger().error('❌ CLOSE ROOM - Attempt $retryCount failed: $e');
+        AppLogger().error('📊 CLOSE ROOM - Error type: ${e.runtimeType}');
+        AppLogger().error('📊 CLOSE ROOM - Error details: ${e.toString()}');
+
+        // Categorize the error for better debugging
+        String errorCategory = 'unknown';
+        if (e.toString().contains('network') || e.toString().contains('connection')) {
+          errorCategory = 'network';
+        } else if (e.toString().contains('timeout') || e.toString().contains('Timeout')) {
+          errorCategory = 'timeout';
+        } else if (e.toString().contains('document_not_found')) {
+          errorCategory = 'document_not_found';
+        } else if (e.toString().contains('permission') || e.toString().contains('Unauthorized')) {
+          errorCategory = 'permission';
+        } else if (e.toString().contains('validation') || e.toString().contains('invalid')) {
+          errorCategory = 'validation';
+        }
+        AppLogger().error('🏷️ CLOSE ROOM - Error category: $errorCategory');
 
         // If this was the last retry, rethrow the error
         if (retryCount >= maxRetries) {
-          AppLogger().error('❌ All $maxRetries room close attempts failed');
+          AppLogger().error('❌ CLOSE ROOM - All $maxRetries attempts failed, rethrowing error');
+          AppLogger().error('🚨 CLOSE ROOM - FINAL ERROR: $e');
           rethrow;
         }
 
@@ -6585,12 +6983,51 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
 
     try {
+      // INSTANT UPDATE: Send LiveKit role change notification BEFORE database update
+      if (_liveKitService.isConnected) {
+        AppLogger().info('⚡ LIVEKIT: Sending instant role change notification to $userId -> $newRole');
+        await _sendRoleChangeNotification(userId, newRole);
+      }
+
+      // OPTIMISTIC UPDATE: Update moderator's UI immediately
+      if (mounted) {
+        setState(() {
+          // Update participant in the correct slot
+          if (_participants.containsKey(newRole)) {
+            // Find the user in audience or other slots
+            UserProfile? userProfile;
+
+            // Check audience
+            final audienceIndex = _audience.indexWhere((u) => u.id == userId);
+            if (audienceIndex >= 0) {
+              userProfile = _audience[audienceIndex];
+              _audience.removeAt(audienceIndex);
+            }
+
+            // Check other role slots
+            _participants.forEach((role, user) {
+              if (user?.id == userId) {
+                userProfile = user;
+                _participants[role] = null;
+              }
+            });
+
+            // Assign to new role
+            if (userProfile != null) {
+              _participants[newRole] = userProfile;
+              AppLogger().info('⚡ OPTIMISTIC: Moderator UI updated instantly - assigned $userId to $newRole');
+            }
+          }
+        });
+      }
+
+      // Now update database (UI already updated)
       await _appwrite.assignArenaRole(
         roomId: widget.roomId,
         userId: userId,
         role: newRole,
       );
-      
+
       // Refresh participants list
       await _loadParticipants();
       
@@ -6612,6 +7049,36 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           ),
         );
       }
+    }
+  }
+
+  /// Send instant role change notification via LiveKit data channel
+  Future<void> _sendRoleChangeNotification(String userId, String newRole) async {
+    try {
+      if (!_liveKitService.isConnected) return;
+
+      final messageData = {
+        'type': 'role_change',
+        'targetUserId': userId,
+        'newRole': newRole,
+        'roomId': widget.roomId,
+        'fromModerator': _currentUserId,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      };
+
+      final messageJson = jsonEncode(messageData);
+      final messageBytes = utf8.encode(messageJson);
+
+      // Send to specific user via LiveKit data channel
+      await _liveKitService.localParticipant?.publishData(
+        messageBytes,
+        reliable: true,
+        destinationIdentities: [userId],
+      );
+
+      AppLogger().info('✅ LIVEKIT: Role change notification sent to $userId');
+    } catch (e) {
+      AppLogger().error('❌ Failed to send role change notification: $e');
     }
   }
 
@@ -6637,6 +7104,27 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         return 'Audience';
       default:
         return role.toUpperCase();
+    }
+  }
+
+  IconData _getRoleIcon(String role) {
+    switch (role) {
+      case 'affirmative':
+      case 'affirmative2':
+        return Icons.thumb_up;
+      case 'negative':
+      case 'negative2':
+        return Icons.thumb_down;
+      case 'moderator':
+        return Icons.admin_panel_settings;
+      case 'judge1':
+      case 'judge2':
+      case 'judge3':
+        return Icons.balance;
+      case 'audience':
+        return Icons.people;
+      default:
+        return Icons.person;
     }
   }
 
@@ -6763,6 +7251,17 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     if (userId == null || newRole == null) return;
 
     AppLogger().info('🎭 Arena role change: $userId -> $newRole');
+
+    // OPTIMISTIC UPDATE: If this is the current user, update UI IMMEDIATELY
+    final isCurrentUser = userId == _currentUserId;
+    if (isCurrentUser && mounted) {
+      AppLogger().info('⚡ INSTANT: Current user role change detected - updating UI immediately');
+      setState(() {
+        final oldRole = _userRole;
+        _userRole = newRole;
+        AppLogger().info('⚡ INSTANT: Updated current user role from $oldRole to $newRole');
+      });
+    }
 
     try {
       // Find and remove user from current position
@@ -7508,8 +8007,23 @@ class ModeratorControlModal extends StatelessWidget {
         maxHeight: MediaQuery.of(context).size.height * 0.7,
       ),
       decoration: BoxDecoration(
-        color: Colors.grey[900],
+        color: const Color(0xFFE0E5EC), // Neumorphism background
         borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          // Elevated neumorphism effect for modal
+          BoxShadow(
+            color: Colors.white.withValues(alpha: 0.9),
+            spreadRadius: -5,
+            blurRadius: 15,
+            offset: const Offset(-8, -8),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            spreadRadius: -5,
+            blurRadius: 15,
+            offset: const Offset(8, 8),
+          ),
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -7530,13 +8044,13 @@ class ModeratorControlModal extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.admin_panel_settings, color: Colors.black, size: 24),
+                const Icon(Icons.admin_panel_settings, color: Colors.white, size: 24),
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text(
                     'MODERATOR CONTROLS',
                     style: TextStyle(
-                      color: Colors.black,
+                      color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
@@ -7544,7 +8058,7 @@ class ModeratorControlModal extends StatelessWidget {
                 ),
                 GestureDetector(
                   onTap: () => Navigator.pop(context),
-                  child: const Icon(Icons.close, color: Colors.black),
+                  child: const Icon(Icons.close, color: Colors.white),
                 ),
               ],
             ),
@@ -7559,12 +8073,31 @@ class ModeratorControlModal extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.purple.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(8),
+                    color: const Color(0xFFE0E5EC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.purple.shade600,
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      // Inner shadow for neumorphism
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        spreadRadius: -1,
+                        blurRadius: 4,
+                        offset: const Offset(2, 2),
+                      ),
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        spreadRadius: -1,
+                        blurRadius: 4,
+                        offset: const Offset(-2, -2),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.info, color: Colors.purple),
+                      Icon(Icons.info, color: Colors.purple.shade600),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Column(
@@ -7572,15 +8105,15 @@ class ModeratorControlModal extends StatelessWidget {
                           children: [
                             Text(
                               currentPhase.displayName,
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: Colors.grey.shade800,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             Text(
                               currentPhase.description,
-                              style: const TextStyle(
-                                color: Colors.white70,
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
                                 fontSize: 12,
                               ),
                             ),
@@ -7667,11 +8200,12 @@ class ModeratorControlModal extends StatelessWidget {
                 // Speaker Assignment
                 if (affirmativeParticipant != null || negativeParticipant != null) ...[
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'Assign Speaker',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: Colors.grey.shade800,
                       fontWeight: FontWeight.bold,
+                      fontSize: 14,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -7723,28 +8257,67 @@ class ModeratorControlModal extends StatelessWidget {
     required Color color,
   }) {
     final isEnabled = onPressed != null;
-    
+
     return GestureDetector(
       onTap: onPressed,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
         decoration: BoxDecoration(
-          color: isEnabled ? color : Colors.grey[600],
-          borderRadius: BorderRadius.circular(8),
+          color: const Color(0xFFE0E5EC),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isEnabled ? color : Colors.grey.shade400,
+            width: 2,
+          ),
+          boxShadow: isEnabled
+              ? [
+                  // Raised neumorphism effect
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    spreadRadius: -1,
+                    blurRadius: 4,
+                    offset: const Offset(-2, -2),
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    spreadRadius: -1,
+                    blurRadius: 4,
+                    offset: const Offset(2, 2),
+                  ),
+                ]
+              : [
+                  // Pressed/disabled neumorphism effect
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    spreadRadius: -1,
+                    blurRadius: 4,
+                    offset: const Offset(2, 2),
+                  ),
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    spreadRadius: -1,
+                    blurRadius: 4,
+                    offset: const Offset(-2, -2),
+                  ),
+                ],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Colors.white, size: 16),
-            const SizedBox(width: 4),
+            Icon(
+              icon,
+              color: isEnabled ? color : Colors.grey.shade400,
+              size: 18,
+            ),
+            const SizedBox(width: 6),
             Flexible(
               child: Text(
                 label,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: isEnabled ? color : Colors.grey.shade400,
                   fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                 ),
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
@@ -7811,18 +8384,52 @@ class ModeratorControlModal extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
         decoration: BoxDecoration(
-          color: isActive ? Colors.green : Colors.grey[700],
-          borderRadius: BorderRadius.circular(6),
-          border: isActive ? Border.all(color: Colors.greenAccent, width: 2) : null,
+          color: const Color(0xFFE0E5EC),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isActive ? Colors.green : Colors.grey.shade400,
+            width: 2,
+          ),
+          boxShadow: isActive
+              ? [
+                  // Raised neumorphism effect when active
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    spreadRadius: -1,
+                    blurRadius: 4,
+                    offset: const Offset(-2, -2),
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    spreadRadius: -1,
+                    blurRadius: 4,
+                    offset: const Offset(2, 2),
+                  ),
+                ]
+              : [
+                  // Inset neumorphism effect when inactive
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    spreadRadius: -1,
+                    blurRadius: 4,
+                    offset: const Offset(2, 2),
+                  ),
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    spreadRadius: -1,
+                    blurRadius: 4,
+                    offset: const Offset(-2, -2),
+                  ),
+                ],
         ),
         child: Text(
           label,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: isActive ? Colors.green : Colors.grey.shade600,
             fontSize: 12,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
           ),
           textAlign: TextAlign.center,
         ),

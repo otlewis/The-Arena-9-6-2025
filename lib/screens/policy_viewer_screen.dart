@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:markdown_widget/markdown_widget.dart';
 
 class PolicyViewerScreen extends StatefulWidget {
   final String policyType;
@@ -33,6 +33,8 @@ class _PolicyViewerScreenState extends State<PolicyViewerScreen> {
         content = await rootBundle.loadString('PRIVACY_POLICY.md');
       } else if (widget.policyType == 'Parental Consent Policy') {
         content = await rootBundle.loadString('PARENTAL_CONSENT_POLICY.md');
+      } else if (widget.policyType == 'Beta Testing Agreement') {
+        content = await rootBundle.loadString('BETA_TESTING_AGREEMENT.md');
       } else {
         content = await rootBundle.loadString('PRIVACY_POLICY.md');
       }
@@ -110,6 +112,33 @@ This policy explains how we handle accounts for users aged 13-17.
 
 ## Contact
 Email: thearenadtd@gmail.com''';
+        } else if (widget.policyType == 'Beta Testing Agreement') {
+          _policyContent = '''# Beta Testing Agreement & NDA
+**The Arena DTD**
+
+*Last Updated: September 2025*
+
+## CONFIDENTIALITY
+You will NOT share, copy, screenshot, or distribute any part of this beta app.
+
+## INTELLECTUAL PROPERTY
+All rights remain with Otis Lewis Sr., d/b/a Dialectic Labs.
+
+## FEEDBACK
+Any feedback you provide becomes property of the Company.
+
+## LICENSE
+Temporary, revocable license for beta testing only.
+
+## DISCLAIMER
+App provided "AS IS" - may contain bugs.
+
+## GOVERNING LAW
+State of Ohio - Montgomery County
+
+By using this beta, you agree to these terms.
+
+Contact: thearenadtd@gmail.com''';
         } else {
           _policyContent = '''# Privacy Policy
 **The Arena DTD**
@@ -158,39 +187,39 @@ Contact: thearenadtd@gmail.com''';
                   ),
                 ],
               ),
-              child: Markdown(
+              child: MarkdownWidget(
                 data: _policyContent,
-                styleSheet: MarkdownStyleSheet(
-                  h1: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2D3748),
-                  ),
-                  h2: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2D3748),
-                  ),
-                  h3: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF4A5568),
-                  ),
-                  p: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade700,
-                    height: 1.6,
-                  ),
-                  listBullet: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade700,
-                  ),
-                  strong: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
-                  em: const TextStyle(
-                    fontStyle: FontStyle.italic,
-                  ),
+                config: MarkdownConfig(
+                  configs: [
+                    H1Config(
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2D3748),
+                      ),
+                    ),
+                    H2Config(
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2D3748),
+                      ),
+                    ),
+                    H3Config(
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF4A5568),
+                      ),
+                    ),
+                    PConfig(
+                      textStyle: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
+                        height: 1.6,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

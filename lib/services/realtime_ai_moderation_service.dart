@@ -18,8 +18,8 @@ class RealtimeAIModerationService {
   final AppwriteService _appwrite = AppwriteService();
   final LiveKitService _livekit = LiveKitService();
 
-  // Configuration
-  static const bool _enableAutoMute = true;
+  // Configuration - Temporarily disabled auto-mute to fix user reports of unwanted muting
+  static const bool _enableAutoMute = false; // TODO: Re-enable with better thresholds after testing
   static const bool _enableAutoBan = true;
   static const double _hostilityThreshold = 0.7;
   static const double _severeHostilityThreshold = 0.9;

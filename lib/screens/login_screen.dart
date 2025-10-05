@@ -27,6 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
   DateTime? _selectedBirthDate;
   bool _acceptedTos = false;
   bool _acceptedPrivacy = false;
+  bool _acceptedBeta = false; // Beta Testing Agreement
 
   // Colors matching app theme (keeping scarletRed for potential future use)
   static const Color scarletRed = Color(0xFFFF2400);
@@ -89,10 +90,10 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
       
-      if (!_acceptedTos || !_acceptedPrivacy) {
+      if (!_acceptedTos || !_acceptedPrivacy || !_acceptedBeta) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Please accept the Terms of Service and Privacy Policy'),
+            content: Text('Please accept all agreements to continue'),
             backgroundColor: Color(0xFFFF2400),
           ),
         );
@@ -225,13 +226,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleGoogleAuth() async {
     setState(() => _isLoading = true);
-    
+
     // Capture ScaffoldMessenger reference before async operations
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     try {
       await _appwrite.signInWithGoogle();
-      
+
       if (mounted) {
         scaffoldMessenger.showSnackBar(
           const SnackBar(
@@ -247,6 +248,41 @@ class _LoginScreenState extends State<LoginScreen> {
         scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text('Google sign-in failed: ${_getErrorMessage(e.toString())}'),
+            backgroundColor: const Color(0xFFFF2400),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _handleAppleAuth() async {
+    setState(() => _isLoading = true);
+
+    // Capture ScaffoldMessenger reference before async operations
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    try {
+      await _appwrite.signInWithApple();
+
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(
+            content: Text('Successfully signed in with Apple!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Notify parent and go back
+        widget.onLoginSuccess?.call();
+      }
+    } catch (e) {
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('Apple sign-in failed: ${_getErrorMessage(e.toString())}'),
             backgroundColor: const Color(0xFFFF2400),
           ),
         );
@@ -747,6 +783,75 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ],
                           ),
+                          const SizedBox(height: 12),
+                          // Beta Testing Agreement Checkbox
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Checkbox(
+                                value: _acceptedBeta,
+                                onChanged: (bool? value) {
+                                  setState(() {
+                                    _acceptedBeta = value ?? false;
+                                  });
+                                },
+                                activeColor: const Color(0xFF6B46C1),
+                              ),
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => _showPolicyDialog('Beta Testing Agreement'),
+                                  child: RichText(
+                                    text: TextSpan(
+                                      style: TextStyle(
+                                        color: Colors.grey.shade800,
+                                        fontSize: 14,
+                                      ),
+                                      children: const [
+                                        TextSpan(text: 'I accept the '),
+                                        TextSpan(
+                                          text: 'Beta Testing Agreement & NDA',
+                                          style: TextStyle(
+                                            color: Color(0xFF6B46C1),
+                                            decoration: TextDecoration.underline,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF2F2),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFFCA5A5)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: Color(0xFFDC2626),
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'This is a confidential beta. Do not share, screenshot, or distribute any part of this app.',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade700,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                           const SizedBox(height: 8),
                           Text(
                             'You must be 13 years or older to use The Arena DTD. Teens 13-17 require parental consent.',
@@ -816,79 +921,71 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   
+                  // OAuth providers temporarily disabled for beta testing
+                  // Uncomment when ready to implement
+                  /*
                   const SizedBox(height: 24),
-                  
-                  // Google Sign-In Button
-                  Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: _isLoading ? [] : const [
-                        BoxShadow(
-                          color: Colors.grey,
-                          offset: Offset(4, 4),
-                          blurRadius: 8,
-                          spreadRadius: 0,
-                        ),
-                        BoxShadow(
-                          color: Colors.white,
-                          offset: Offset(-4, -4),
-                          blurRadius: 8,
-                          spreadRadius: 0,
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      child: InkWell(
-                        onTap: _isLoading ? null : _handleGoogleAuth,
-                        borderRadius: BorderRadius.circular(16),
-                        child: Container(
-                          padding: const EdgeInsets.all(18),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Image.asset(
-                                'assets/images/google2.png',
-                                height: 34,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    width: 34,
-                                    height: 34,
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.shade100,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Text('G', 
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: Colors.red,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                _isSignUp ? 'Sign up with Google' : 'Sign in with Google',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+
+                  // Sign in with text
+                  Text(
+                    'Sign in with:',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey.shade700,
                     ),
                   ),
-                  
+
                   const SizedBox(height: 16),
-                  
+
+                  // OAuth provider logos
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Google logo
+                      GestureDetector(
+                        onTap: _isLoading ? null : _handleGoogleAuth,
+                        child: Image.asset(
+                          'assets/images/google2.png',
+                          height: 48,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade100,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Text('G',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+
+                      const SizedBox(width: 32),
+
+                      // Apple logo
+                      GestureDetector(
+                        onTap: _isLoading ? null : _handleAppleAuth,
+                        child: const Icon(
+                          Icons.apple,
+                          size: 48,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+                  */
+
                   // Forgot Password Link (only show on sign in)
                   if (!_isSignUp)
                     Center(

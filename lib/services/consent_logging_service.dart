@@ -113,7 +113,7 @@ class ConsentLoggingService {
       developer.log('Teen account suspended for user: $userId', name: 'ConsentLoggingService');
     } catch (e) {
       developer.log('Failed to suspend teen account: $e', name: 'ConsentLoggingService', level: 1000);
-      throw e; // Account suspension failures should be thrown
+      rethrow; // Account suspension failures should be thrown
     }
   }
   
@@ -163,7 +163,7 @@ class ConsentLoggingService {
       developer.log('Teen account reactivated for user: $userId', name: 'ConsentLoggingService');
     } catch (e) {
       developer.log('Failed to reactivate teen account: $e', name: 'ConsentLoggingService', level: 1000);
-      throw e;
+      rethrow;
     }
   }
 
@@ -236,7 +236,7 @@ class ConsentLoggingService {
       developer.log('Policy update re-consent flagging completed', name: 'ConsentLoggingService');
     } catch (e) {
       developer.log('Failed to flag accounts for re-consent: $e', name: 'ConsentLoggingService', level: 1000);
-      throw e;
+      rethrow;
     }
   }
 

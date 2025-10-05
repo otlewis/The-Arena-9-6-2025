@@ -348,42 +348,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                     const SizedBox(width: 4), // Reduced from 8
                     AnimatedScaleIn(
-                      delay: const Duration(milliseconds: 350),
-                      child: Container(
-                        width: 36, // Reduced from 44
-                        height: 36, // Reduced from 44
-                        decoration: BoxDecoration(
-                          color: _themeService.isDarkMode 
-                              ? const Color(0xFF3A3A3A)
-                              : const Color(0xFFF0F0F3),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: _themeService.isDarkMode 
-                                  ? Colors.white.withValues(alpha: 0.03)
-                                  : Colors.white.withValues(alpha: 0.7),
-                              offset: const Offset(-4, -4),
-                              blurRadius: 8,
-                            ),
-                            BoxShadow(
-                              color: _themeService.isDarkMode 
-                                  ? Colors.black.withValues(alpha: 0.5)
-                                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
-                              offset: const Offset(4, 4),
-                              blurRadius: 8,
-                            ),
-                          ],
-                        ),
-                        child: const Center(
-                          child: SimpleMessageBell(
-                            iconColor: Color(0xFF8B5CF6), // Purple
-                            iconSize: 20, // Reduced from 24
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4), // Reduced from 8
-                    AnimatedScaleIn(
                       delay: const Duration(milliseconds: 375),
                       child: Container(
                         width: 36, // Reduced from 44

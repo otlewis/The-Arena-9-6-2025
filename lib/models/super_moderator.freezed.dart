@@ -203,7 +203,7 @@ class __$$SuperModeratorImplCopyWithImpl<$Res>
 
 /// @nodoc
 @JsonSerializable()
-class _$SuperModeratorImpl implements _SuperModerator {
+class _$SuperModeratorImpl extends _SuperModerator {
   const _$SuperModeratorImpl(
       {this.id,
       required this.userId,
@@ -215,7 +215,8 @@ class _$SuperModeratorImpl implements _SuperModerator {
       final List<String> permissions = const [],
       final Map<String, dynamic> metadata = const {}})
       : _permissions = permissions,
-        _metadata = metadata;
+        _metadata = metadata,
+        super._();
 
   factory _$SuperModeratorImpl.fromJson(Map<String, dynamic> json) =>
       _$$SuperModeratorImplFromJson(json);
@@ -309,7 +310,7 @@ class _$SuperModeratorImpl implements _SuperModerator {
   }
 }
 
-abstract class _SuperModerator implements SuperModerator {
+abstract class _SuperModerator extends SuperModerator {
   const factory _SuperModerator(
       {final String? id,
       required final String userId,
@@ -320,6 +321,7 @@ abstract class _SuperModerator implements SuperModerator {
       required final bool isActive,
       final List<String> permissions,
       final Map<String, dynamic> metadata}) = _$SuperModeratorImpl;
+  const _SuperModerator._() : super._();
 
   factory _SuperModerator.fromJson(Map<String, dynamic> json) =
       _$SuperModeratorImpl.fromJson;

@@ -1,3 +1,7 @@
+// ignore_for_file: avoid_print
+// This is a utility script for database schema updates, not production code.
+// Print statements are appropriate for console output.
+
 import 'dart:io';
 import 'dart:convert';
 

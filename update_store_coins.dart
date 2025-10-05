@@ -1,3 +1,8 @@
+// ignore_for_file: avoid_print, deprecated_member_use
+// This is a utility script for updating store data, not production code.
+// Print statements are appropriate for console output.
+// Deprecated Appwrite APIs are used until TablesDB is available in Flutter SDK.
+
 import 'package:appwrite/appwrite.dart';
 
 void main() async {

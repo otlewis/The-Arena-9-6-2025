@@ -46,7 +46,7 @@ class CoinService {
         documentId: userId,
         data: {
           'coinBalance': 500, // Starting coin balance
-          'updatedAt': DateTime.now().toIso8601String(),
+          // Appwrite automatically updates $updatedAt
         },
       );
       AppLogger().info('Initialized user $userId with 500 starting coins');
@@ -60,7 +60,7 @@ class CoinService {
     try {
       final currentCoins = await getUserCoins(userId);
       final newBalance = currentCoins + amount;
-      
+
       // Update the coin balance in the user profile
       await _appwrite.databases.updateDocument(
         databaseId: 'arena_db',
@@ -68,10 +68,10 @@ class CoinService {
         documentId: userId,
         data: {
           'coinBalance': newBalance,
-          'updatedAt': DateTime.now().toIso8601String(),
+          // Appwrite automatically updates $updatedAt
         },
       );
-      
+
       AppLogger().info('Added $amount coins to user $userId. New balance: $newBalance');
       return true;
     } catch (e) {
@@ -99,7 +99,7 @@ class CoinService {
         documentId: userId,
         data: {
           'coinBalance': newBalance,
-          'updatedAt': DateTime.now().toIso8601String(),
+          // Appwrite automatically updates $updatedAt
         },
       );
       
@@ -158,11 +158,11 @@ class CoinService {
           documentId: senderId,
           data: {
             'totalGiftsSent': senderProfile.totalGiftsSent + 1,
-            'updatedAt': DateTime.now().toIso8601String(),
+            // Appwrite automatically updates $updatedAt
           },
         );
       }
-      
+
       // Update receiver's gifts received count
       final receiverProfile = await _appwrite.getUserProfile(receiverId);
       if (receiverProfile != null) {
@@ -172,7 +172,7 @@ class CoinService {
           documentId: receiverId,
           data: {
             'totalGiftsReceived': receiverProfile.totalGiftsReceived + 1,
-            'updatedAt': DateTime.now().toIso8601String(),
+            // Appwrite automatically updates $updatedAt
           },
         );
       }

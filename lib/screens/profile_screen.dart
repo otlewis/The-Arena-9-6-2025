@@ -33,6 +33,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _followerCount = 0;
   int _followingCount = 0;
   CustomerInfo? _customerInfo;
+  bool? _cachedPremiumStatus;
 
   // Colors matching home screen
   static const Color scarletRed = Color(0xFFFF2400);
@@ -49,7 +50,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadUserData() async {
     try {
-      setState(() => _isLoading = true);
+      setState(() {
+        _isLoading = true;
+        _cachedPremiumStatus = null; // Clear cache when loading new data
+      });
       final models.User? user = await _appwrite.getCurrentUser();
       
       if (user != null) {
@@ -198,6 +202,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) {
         setState(() {
           _customerInfo = customerInfo;
+          _cachedPremiumStatus = null; // Clear cache when subscription info changes
         });
       }
     } catch (e) {
@@ -206,14 +211,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   bool get _hasPremiumSubscription {
-    // Use profile data for premium status (works on web)
+    // Return cached value if available
+    if (_cachedPremiumStatus != null) {
+      return _cachedPremiumStatus!;
+    }
+
+    // Calculate and cache the value
     final isPremium = _userProfile?.isPremium == true;
-    AppLogger().debug('🏆 Premium status check: isPremium=$isPremium, profile=${_userProfile?.isPremium}, revenueCat=${_customerInfo?.entitlements.active.containsKey(RevenueCatService.premiumEntitlement)}');
     if (isPremium) {
+      _cachedPremiumStatus = true;
       return true;
     }
     // Fall back to RevenueCat for native platforms
-    return _customerInfo?.entitlements.active.containsKey(RevenueCatService.premiumEntitlement) ?? false;
+    final revenueCatPremium = _customerInfo?.entitlements.active.containsKey(RevenueCatService.premiumEntitlement) ?? false;
+    _cachedPremiumStatus = revenueCatPremium;
+    return revenueCatPremium;
   }
 
   Future<void> _editProfile() async {

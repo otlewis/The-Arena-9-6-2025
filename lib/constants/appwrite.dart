@@ -1,6 +1,6 @@
 class AppwriteConstants {
   static const String projectId = "683a37a8003719978879";  // Arena Debate App project where all collections exist
-  static const String endpoint = "https://cloud.appwrite.io/v1";
+  static const String endpoint = "https://fra.cloud.appwrite.io/v1";
   static const String databaseId = "arena_db";
   
   // Collection IDs

@@ -12,7 +12,7 @@ class InitializeRankingsScreen extends StatefulWidget {
 class _InitializeRankingsScreenState extends State<InitializeRankingsScreen> {
   final AppwriteService _appwriteService = AppwriteService();
   bool _isRunning = false;
-  List<String> _logs = [];
+  final List<String> _logs = [];
   int _successCount = 0;
   int _totalUsers = 0;
 

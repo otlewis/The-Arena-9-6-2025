@@ -93,10 +93,11 @@ class AudioVolumeService {
   /// Configure LiveKit-specific audio settings for maximum volume
   void configureLiveKitAudio(Room room) {
     try {
-      // Apply audio options to local participant
-      room.localParticipant?.setMicrophoneEnabled(true);
+      // DO NOT force microphone state - let the arena screen manage it
+      // The arena screen has its own sophisticated mic management logic
+      // that this service should not interfere with
 
-      _logger.info('🎤 LiveKit audio optimized for clarity and volume');
+      _logger.info('🎤 LiveKit audio optimized for clarity and volume (mic state unchanged)');
 
     } catch (e) {
       _logger.error('Failed to configure LiveKit audio: $e');

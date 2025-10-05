@@ -460,7 +460,7 @@ class _ModerationDashboardScreenState extends State<ModerationDashboardScreen> {
             const SizedBox(height: 12),
             Row(
               children: [
-                _buildBadge('${action.toUpperCase()}', _getActionColor(action)),
+                _buildBadge(action.toUpperCase(), _getActionColor(action)),
                 const SizedBox(width: 8),
                 _buildBadge(source.toUpperCase(), ArenaColors.primary),
                 const Spacer(),

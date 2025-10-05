@@ -35,6 +35,8 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
   late Animation<double> _slideAnimation;
   bool _isFollowing = false; // TODO: Get actual follow status
   bool _currentUserIsPremium = false;
+  int? _globalRank;
+  String _tier = 'Bronze';
 
   @override
   void initState() {
@@ -53,6 +55,39 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
 
     _animationController.forward();
     _checkCurrentUserPremiumStatus();
+    _fetchUserRanking();
+  }
+
+  Future<void> _fetchUserRanking() async {
+    try {
+      final appwrite = AppwriteService();
+      final currentMonth = _getCurrentMonthKey();
+
+      final response = await appwrite.databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'monthly_rankings',
+      );
+
+      // Find this user's ranking for current month
+      for (final doc in response.documents) {
+        if (doc.data['userId'] == widget.user.id && doc.data['monthKey'] == currentMonth) {
+          if (mounted) {
+            setState(() {
+              _globalRank = doc.data['globalRank'] ?? 0;
+              _tier = doc.data['tier'] ?? 'Bronze';
+            });
+          }
+          break;
+        }
+      }
+    } catch (e) {
+      AppLogger().error('Failed to fetch user ranking: $e');
+    }
+  }
+
+  String _getCurrentMonthKey() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}';
   }
 
   Future<void> _checkCurrentUserPremiumStatus() async {
@@ -96,6 +131,23 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
     super.dispose();
   }
 
+  String _getTierEmoji(String tier) {
+    switch (tier.toLowerCase()) {
+      case 'bronze':
+        return '🥉';
+      case 'silver':
+        return '🥈';
+      case 'gold':
+        return '🥇';
+      case 'platinum':
+        return '💎';
+      case 'diamond':
+        return '💠';
+      default:
+        return '🥉';
+    }
+  }
+
   void _close() {
     _animationController.reverse().then((_) {
       if (mounted) {
@@ -113,19 +165,28 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
         return Transform.translate(
           offset: Offset(0, _slideAnimation.value * 300),
           child: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF8B5CF6), // Purple gradient top
-                  Color(0xFF6B46C1), // Darker purple bottom
-                ],
-              ),
-              borderRadius: BorderRadius.only(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(24),
                 topRight: Radius.circular(24),
               ),
+              boxShadow: [
+                // Neumorphic outer shadow (dark)
+                BoxShadow(
+                  color: Colors.grey.shade400,
+                  offset: const Offset(8, 8),
+                  blurRadius: 16,
+                  spreadRadius: 0,
+                ),
+                // Neumorphic inner highlight (light)
+                const BoxShadow(
+                  color: Colors.white,
+                  offset: Offset(-8, -8),
+                  blurRadius: 16,
+                  spreadRadius: 0,
+                ),
+              ],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -136,7 +197,7 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                   height: 4,
                   margin: const EdgeInsets.only(top: 12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.3),
+                    color: Colors.grey.shade300,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -148,14 +209,14 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Row(
                     children: [
-                      // Profile picture with white circle
+                      // Profile picture with neumorphic circle
                       Container(
                         width: 80,
                         height: 80,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: Colors.white,
+                            color: const Color(0xFF8B5CF6),
                             width: 3,
                           ),
                         ),
@@ -225,7 +286,7 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                                   child: Text(
                                     widget.user.name,
                                     style: const TextStyle(
-                                      color: Colors.white,
+                                      color: Color(0xFF2D3748),
                                       fontSize: 24,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -243,7 +304,7 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                             Text(
                               '${widget.user.name.toLowerCase()}@arena.dtd',
                               style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.8),
+                                color: Colors.grey.shade600,
                                 fontSize: 14,
                               ),
                             ),
@@ -258,12 +319,12 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                           width: 36,
                           height: 36,
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.2),
+                            color: Colors.grey.shade200,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.close,
-                            color: Colors.white,
+                            color: Colors.grey.shade700,
                             size: 20,
                           ),
                         ),
@@ -274,13 +335,28 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                 
                 const SizedBox(height: 24),
                 
-                // Stats section with dark background
+                // Stats section with neumorphic card
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 20),
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1F1F1F),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      // Neumorphic shadow
+                      BoxShadow(
+                        color: Colors.grey.shade300,
+                        offset: const Offset(4, 4),
+                        blurRadius: 8,
+                        spreadRadius: 0,
+                      ),
+                      const BoxShadow(
+                        color: Colors.white,
+                        offset: Offset(-4, -4),
+                        blurRadius: 8,
+                        spreadRadius: 0,
+                      ),
+                    ],
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -323,29 +399,40 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF8B5CF6),
+                            color: Colors.grey.shade100,
                             borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(0xFF8B5CF6),
+                              width: 2,
+                            ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                                color: Colors.grey.shade300,
+                                offset: const Offset(4, 4),
                                 blurRadius: 8,
-                                offset: const Offset(0, 2),
+                                spreadRadius: 0,
+                              ),
+                              const BoxShadow(
+                                color: Colors.white,
+                                offset: Offset(-4, -4),
+                                blurRadius: 8,
+                                spreadRadius: 0,
                               ),
                             ],
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
+                              const Icon(
                                 Icons.mail,
-                                color: Colors.white,
+                                color: Color(0xFF8B5CF6),
                                 size: 18,
                               ),
-                              SizedBox(width: 8),
+                              const SizedBox(width: 8),
                               Text(
                                 'Send Email',
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: Colors.grey.shade700,
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -372,13 +459,24 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                               child: Container(
                                 padding: const EdgeInsets.symmetric(vertical: 14),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF10B981),
+                                  color: Colors.grey.shade100,
                                   borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: const Color(0xFF10B981),
+                                    width: 2,
+                                  ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                                      color: Colors.grey.shade300,
+                                      offset: const Offset(4, 4),
                                       blurRadius: 8,
-                                      offset: const Offset(0, 2),
+                                      spreadRadius: 0,
+                                    ),
+                                    const BoxShadow(
+                                      color: Colors.white,
+                                      offset: Offset(-4, -4),
+                                      blurRadius: 8,
+                                      spreadRadius: 0,
                                     ),
                                   ],
                                 ),
@@ -387,14 +485,14 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                                   children: [
                                     Icon(
                                       _isFollowing ? Icons.check : Icons.person_add,
-                                      color: Colors.white,
+                                      color: const Color(0xFF10B981),
                                       size: 18,
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
                                       _isFollowing ? 'Following' : 'Follow',
-                                      style: const TextStyle(
-                                        color: Colors.white,
+                                      style: TextStyle(
+                                        color: Colors.grey.shade700,
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -423,17 +521,26 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                               child: Container(
                                 padding: const EdgeInsets.symmetric(vertical: 14),
                                 decoration: BoxDecoration(
-                                  color: _currentUserIsPremium
-                                      ? const Color(0xFFDC2626)
-                                      : Colors.grey.shade400,
+                                  color: Colors.grey.shade100,
                                   borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: _currentUserIsPremium
+                                        ? const Color(0xFFDC2626)
+                                        : Colors.grey.shade400,
+                                    width: 2,
+                                  ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: (_currentUserIsPremium
-                                          ? const Color(0xFFDC2626)
-                                          : Colors.grey.shade400).withValues(alpha: 0.3),
+                                      color: Colors.grey.shade300,
+                                      offset: const Offset(4, 4),
                                       blurRadius: 8,
-                                      offset: const Offset(0, 2),
+                                      spreadRadius: 0,
+                                    ),
+                                    const BoxShadow(
+                                      color: Colors.white,
+                                      offset: Offset(-4, -4),
+                                      blurRadius: 8,
+                                      spreadRadius: 0,
                                     ),
                                   ],
                                 ),
@@ -442,14 +549,16 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                                   children: [
                                     Icon(
                                       _currentUserIsPremium ? Icons.gavel : Icons.lock,
-                                      color: Colors.white,
+                                      color: _currentUserIsPremium
+                                          ? const Color(0xFFDC2626)
+                                          : Colors.grey.shade600,
                                       size: 18,
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
                                       _currentUserIsPremium ? 'Challenge' : 'Premium',
-                                      style: const TextStyle(
-                                        color: Colors.white,
+                                      style: TextStyle(
+                                        color: Colors.grey.shade700,
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -463,56 +572,54 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                       ),
                       
                       const SizedBox(height: 12),
-                      
-                      // Gift button (full width)
-                      GestureDetector(
-                        onTap: () {
-                          // Close this modal and show gift sending sheet
-                          Navigator.pop(context);
-                          showSimpleGiftBottomSheet(
-                            context,
-                            recipient: widget.user,
-                          );
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF8B5CF6), Color(0xFF6B46C1)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
+
+                      // Global Ranking display (full width)
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(0xFF8B5CF6),
+                            width: 2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.shade300,
+                              offset: const Offset(4, 4),
+                              blurRadius: 8,
+                              spreadRadius: 0,
                             ),
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF8B5CF6).withValues(alpha: 0.4),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
+                            const BoxShadow(
+                              color: Colors.white,
+                              offset: Offset(-4, -4),
+                              blurRadius: 8,
+                              spreadRadius: 0,
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _getTierEmoji(_tier),
+                              style: const TextStyle(fontSize: 18),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _globalRank != null && _globalRank! > 0
+                                  ? 'Rank #$_globalRank • $_tier'
+                                  : 'Unranked',
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
                               ),
-                            ],
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.card_giftcard,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                'Send Gift',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                      
+
                       const SizedBox(height: 12),
                       
                       // Report button (full width)
@@ -555,29 +662,40 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFFF2400),
+                            color: Colors.grey.shade100,
                             borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(0xFFFF2400),
+                              width: 2,
+                            ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFFFF2400).withValues(alpha: 0.3),
+                                color: Colors.grey.shade300,
+                                offset: const Offset(4, 4),
                                 blurRadius: 8,
-                                offset: const Offset(0, 2),
+                                spreadRadius: 0,
+                              ),
+                              const BoxShadow(
+                                color: Colors.white,
+                                offset: Offset(-4, -4),
+                                blurRadius: 8,
+                                spreadRadius: 0,
                               ),
                             ],
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
+                              const Icon(
                                 Icons.report_problem,
-                                color: Colors.white,
+                                color: Color(0xFFFF2400),
                                 size: 18,
                               ),
-                              SizedBox(width: 8),
+                              const SizedBox(width: 8),
                               Text(
                                 'Report User',
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: Colors.grey.shade700,
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -605,7 +723,7 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
         Text(
           value,
           style: const TextStyle(
-            color: Colors.white,
+            color: Color(0xFF2D3748),
             fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
@@ -614,7 +732,7 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.7),
+            color: Colors.grey.shade600,
             fontSize: 12,
             fontWeight: FontWeight.w500,
           ),

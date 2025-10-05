@@ -10,10 +10,14 @@ import 'real_time_coin_balance.dart';
 /// Simple gift bottom sheet that definitely works
 class SimpleGiftBottomSheet extends StatefulWidget {
   final UserProfile recipient;
+  final String? roomId;
+  final Function(String emoji, String giftName, int giftValue, String senderName)? onGiftSent;
 
   const SimpleGiftBottomSheet({
     super.key,
     required this.recipient,
+    this.roomId,
+    this.onGiftSent,
   });
 
   @override
@@ -36,16 +40,25 @@ class _SimpleGiftBottomSheetState extends State<SimpleGiftBottomSheet> {
   }
 
   Future<void> _sendGift() async {
-    if (_selectedGift == null) return;
+    AppLogger().info('🎁 🎁 🎁 SEND GIFT BUTTON TAPPED! 🎁 🎁 🎁');
 
+    if (_selectedGift == null) {
+      AppLogger().warning('⚠️ No gift selected!');
+      return;
+    }
+
+    AppLogger().info('🎁 Selected gift: ${_selectedGift!.name} (${_selectedGift!.cost} coins)');
 
     try {
       // Get current user
+      AppLogger().debug('🎁 Getting current user...');
       final user = await _appwriteService.getCurrentUser();
       if (user == null) {
+        AppLogger().error('❌ User not logged in!');
         _showError('You must be logged in to send gifts');
         return;
       }
+      AppLogger().debug('🎁 Current user: ${user.$id}');
 
       // Check coin balance
       final balance = await _coinService.getUserCoins(user.$id);
@@ -54,16 +67,53 @@ class _SimpleGiftBottomSheetState extends State<SimpleGiftBottomSheet> {
         return;
       }
 
-      // Send the gift
-      await _giftService.sendGift(
-        giftId: _selectedGift!.id,
-        receiverId: widget.recipient.id,
-        receiverName: widget.recipient.displayName,
-        message: _messageController.text.trim(),
-      );
+      // If we have a callback (for in-room gifts), use it for real-time visual
+      if (widget.onGiftSent != null && widget.roomId != null) {
+        try {
+          AppLogger().debug('🎁 Getting current user profile for gift visual...');
+          final currentUserProfile = await _appwriteService.getUserProfile(user.$id);
+          AppLogger().debug('🎁 Calling onGiftSent callback to broadcast gift...');
+          widget.onGiftSent!(
+            _selectedGift!.emoji,
+            _selectedGift!.name,
+            _selectedGift!.cost,
+            currentUserProfile?.displayName ?? 'Someone',
+          );
+          AppLogger().info('✅ Gift broadcast sent via callback!');
+        } catch (e) {
+          AppLogger().error('❌ Failed to broadcast gift visual: $e');
+        }
+      } else {
+        // No callback - this is a profile gift (not in-room), use Firebase
+        try {
+          AppLogger().info('📬 Sending gift via Firebase (profile gift)...');
+          await _giftService.sendGift(
+            giftId: _selectedGift!.id,
+            receiverId: widget.recipient.id,
+            receiverName: widget.recipient.displayName,
+            message: _messageController.text.trim(),
+          );
+          AppLogger().info('✅ Firebase gift sent!');
+        } catch (e) {
+          AppLogger().error('❌ Firebase gift send failed: $e');
+          _showError('Failed to send gift: $e');
+          return;
+        }
+      }
 
       // Deduct coins from sender's balance
-      await _coinService.deductCoins(user.$id, _selectedGift!.cost);
+      try {
+        AppLogger().debug('💰 Attempting to deduct ${_selectedGift!.cost} coins from user ${user.$id}...');
+        final deductSuccess = await _coinService.deductCoins(user.$id, _selectedGift!.cost);
+        if (deductSuccess) {
+          AppLogger().info('✅ Successfully deducted ${_selectedGift!.cost} coins!');
+        } else {
+          AppLogger().warning('⚠️ Coin deduction returned false - insufficient balance?');
+        }
+      } catch (e) {
+        AppLogger().error('❌ Coin deduction failed with error: $e');
+        // Continue anyway - gift was sent, coin sync can happen later
+      }
 
       // Show success message
       if (mounted) {
@@ -379,6 +429,8 @@ class _SimpleGiftBottomSheetState extends State<SimpleGiftBottomSheet> {
 void showSimpleGiftBottomSheet(
   BuildContext context, {
   required UserProfile recipient,
+  String? roomId,
+  Function(String emoji, String giftName, int giftValue, String senderName)? onGiftSent,
 }) {
   showModalBottomSheet(
     context: context,
@@ -388,6 +440,8 @@ void showSimpleGiftBottomSheet(
     ),
     builder: (context) => SimpleGiftBottomSheet(
       recipient: recipient,
+      roomId: roomId,
+      onGiftSent: onGiftSent,
     ),
   );
 }

@@ -5,6 +5,8 @@ part 'super_moderator.g.dart';
 
 @freezed
 class SuperModerator with _$SuperModerator {
+  const SuperModerator._();
+
   const factory SuperModerator({
     String? id,
     required String userId,
@@ -17,8 +19,29 @@ class SuperModerator with _$SuperModerator {
     @Default({}) Map<String, dynamic> metadata,
   }) = _SuperModerator;
 
-  factory SuperModerator.fromJson(Map<String, dynamic> json) => 
+  factory SuperModerator.fromJson(Map<String, dynamic> json) =>
       _$SuperModeratorFromJson(json);
+
+  factory SuperModerator.fromDocument(dynamic doc) {
+    final data = doc.data as Map<String, dynamic>;
+    return SuperModerator(
+      id: doc.$id,
+      userId: data['userId'] ?? '',
+      username: data['username'] ?? '',
+      profileImageUrl: data['profileImageUrl'],
+      grantedAt: data['grantedAt'] != null
+          ? DateTime.parse(data['grantedAt'])
+          : DateTime.now(),
+      grantedBy: data['grantedBy'],
+      isActive: data['isActive'] ?? true,
+      permissions: data['permissions'] != null
+          ? List<String>.from(data['permissions'])
+          : [],
+      metadata: data['metadata'] is Map
+          ? Map<String, dynamic>.from(data['metadata'])
+          : {},
+    );
+  }
 }
 
 // Super Moderator permissions

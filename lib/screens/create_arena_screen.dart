@@ -25,6 +25,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
   String? _currentUserId;
   bool _isCreating = false;
   DateTime? _lastCreateAttempt;
+  bool _enablePlayback = false; // Playback recording toggle
   
   // Moderator/Judge selection
   DebateCategory _selectedCategory = DebateCategory.any;
@@ -198,6 +199,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
         creatorId: _currentUserId!,
         topic: topic,
         description: description.isNotEmpty ? description : null,
+        enablePlayback: _enablePlayback,
       );
 
       AppLogger().info('Successfully created arena room: $roomId');
@@ -555,6 +557,66 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
                 }
                 return null;
               },
+            ),
+
+            const SizedBox(height: 24),
+
+            // Playback Toggle
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: accentPurple.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: accentPurple.withValues(alpha: 0.2),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.play_circle_outline,
+                    color: accentPurple,
+                    size: 28,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Enable Playback',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: deepPurple,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Record this debate for later viewing. Others can join the playback room to experience it like they were there.',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                            height: 1.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Switch(
+                    value: _enablePlayback,
+                    onChanged: _isCreating ? null : (value) {
+                      setState(() {
+                        _enablePlayback = value;
+                      });
+                    },
+                    activeColor: accentPurple,
+                    activeTrackColor: accentPurple.withValues(alpha: 0.3),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

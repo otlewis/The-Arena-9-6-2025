@@ -1,3 +1,7 @@
+// ignore_for_file: avoid_print
+// This is a utility script for administrative tasks, not production code.
+// Print statements are appropriate for console output.
+
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'dart:convert';

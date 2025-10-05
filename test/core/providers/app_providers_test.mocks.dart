@@ -277,6 +277,51 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
       ) as _i6.Future<void>);
 
   @override
+  _i6.Future<Map<String, dynamic>> changeUserRole({
+    required String? roomName,
+    required String? targetUserId,
+    required String? newRole,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #changeUserRole,
+          [],
+          {
+            #roomName: roomName,
+            #targetUserId: targetUserId,
+            #newRole: newRole,
+          },
+        ),
+        returnValue:
+            _i6.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i6.Future<Map<String, dynamic>>);
+
+  @override
+  _i6.Future<Map<String, dynamic>> createLiveKitToken(
+          {required String? roomName}) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #createLiveKitToken,
+          [],
+          {#roomName: roomName},
+        ),
+        returnValue:
+            _i6.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i6.Future<Map<String, dynamic>>);
+
+  @override
+  _i6.Future<Map<String, dynamic>> reconcileRoom({required String? roomName}) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #reconcileRoom,
+          [],
+          {#roomName: roomName},
+        ),
+        returnValue:
+            _i6.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i6.Future<Map<String, dynamic>>);
+
+  @override
   _i6.Future<void> debugUserProfileLoading(String? userId) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1352,6 +1397,16 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
       ) as _i6.Future<void>);
 
   @override
+  _i6.Future<void> completeArenaRoom(String? roomId) => (super.noSuchMethod(
+        Invocation.method(
+          #completeArenaRoom,
+          [roomId],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
   _i6.Future<String> assignArenaRole({
     required String? roomId,
     required String? userId,
@@ -1640,6 +1695,17 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
       ) as _i6.Future<List<_i7.UserProfile>>);
 
   @override
+  _i6.Future<List<_i7.UserProfile>> searchUsersByUsername(String? query) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #searchUsersByUsername,
+          [query],
+        ),
+        returnValue:
+            _i6.Future<List<_i7.UserProfile>>.value(<_i7.UserProfile>[]),
+      ) as _i6.Future<List<_i7.UserProfile>>);
+
+  @override
   _i6.Future<void> debugUserSearch() => (super.noSuchMethod(
         Invocation.method(
           #debugUserSearch,
@@ -1704,6 +1770,7 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
     required String? creatorId,
     required String? topic,
     String? description,
+    bool? enablePlayback = false,
     int? maxParticipants = 1000,
   }) =>
       (super.noSuchMethod(
@@ -1714,6 +1781,7 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
             #creatorId: creatorId,
             #topic: topic,
             #description: description,
+            #enablePlayback: enablePlayback,
             #maxParticipants: maxParticipants,
           },
         ),
@@ -1726,6 +1794,7 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
               #creatorId: creatorId,
               #topic: topic,
               #description: description,
+              #enablePlayback: enablePlayback,
               #maxParticipants: maxParticipants,
             },
           ),
@@ -1770,6 +1839,7 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
     required String? creatorId,
     required String? topic,
     String? description,
+    bool? enablePlayback = false,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1779,6 +1849,7 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
             #creatorId: creatorId,
             #topic: topic,
             #description: description,
+            #enablePlayback: enablePlayback,
           },
         ),
         returnValue: _i6.Future<String>.value(_i9.dummyValue<String>(
@@ -1790,6 +1861,7 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
               #creatorId: creatorId,
               #topic: topic,
               #description: description,
+              #enablePlayback: enablePlayback,
             },
           ),
         )),
@@ -2036,6 +2108,340 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
         Invocation.method(
           #cleanupExpiredPingRequests,
           [],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<List<Map<String, dynamic>>> getSpeakerQueue(String? roomId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getSpeakerQueue,
+          [roomId],
+        ),
+        returnValue: _i6.Future<List<Map<String, dynamic>>>.value(
+            <Map<String, dynamic>>[]),
+      ) as _i6.Future<List<Map<String, dynamic>>>);
+
+  @override
+  _i6.Future<void> addToSpeakerQueue({
+    required String? roomId,
+    required String? userId,
+    required String? userName,
+    required int? queuePosition,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #addToSpeakerQueue,
+          [],
+          {
+            #roomId: roomId,
+            #userId: userId,
+            #userName: userName,
+            #queuePosition: queuePosition,
+          },
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> removeFromSpeakerQueue({
+    required String? roomId,
+    required String? userId,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #removeFromSpeakerQueue,
+          [],
+          {
+            #roomId: roomId,
+            #userId: userId,
+          },
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> setCurrentSpeaker({
+    required String? roomId,
+    required String? userId,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #setCurrentSpeaker,
+          [],
+          {
+            #roomId: roomId,
+            #userId: userId,
+          },
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i2.RealtimeSubscription? subscribeToSpeakerQueue({
+    required String? roomId,
+    required dynamic Function(Map<String, dynamic>)? onUpdate,
+  }) =>
+      (super.noSuchMethod(Invocation.method(
+        #subscribeToSpeakerQueue,
+        [],
+        {
+          #roomId: roomId,
+          #onUpdate: onUpdate,
+        },
+      )) as _i2.RealtimeSubscription?);
+
+  @override
+  _i6.Future<void> startArenaRecording(String? roomId) => (super.noSuchMethod(
+        Invocation.method(
+          #startArenaRecording,
+          [roomId],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<String> stopArenaRecording({
+    required String? roomId,
+    required String? audioUrl,
+    required int? duration,
+    required int? fileSize,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #stopArenaRecording,
+          [],
+          {
+            #roomId: roomId,
+            #audioUrl: audioUrl,
+            #duration: duration,
+            #fileSize: fileSize,
+          },
+        ),
+        returnValue: _i6.Future<String>.value(_i9.dummyValue<String>(
+          this,
+          Invocation.method(
+            #stopArenaRecording,
+            [],
+            {
+              #roomId: roomId,
+              #audioUrl: audioUrl,
+              #duration: duration,
+              #fileSize: fileSize,
+            },
+          ),
+        )),
+      ) as _i6.Future<String>);
+
+  @override
+  _i6.Future<Map<String, dynamic>?> getPlayback(String? playbackId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getPlayback,
+          [playbackId],
+        ),
+        returnValue: _i6.Future<Map<String, dynamic>?>.value(),
+      ) as _i6.Future<Map<String, dynamic>?>);
+
+  @override
+  _i6.Future<List<Map<String, dynamic>>> getPlaybacksByRoomId(String? roomId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getPlaybacksByRoomId,
+          [roomId],
+        ),
+        returnValue: _i6.Future<List<Map<String, dynamic>>>.value(
+            <Map<String, dynamic>>[]),
+      ) as _i6.Future<List<Map<String, dynamic>>>);
+
+  @override
+  _i6.Future<List<Map<String, dynamic>>> getPlaybackTimeline(
+          String? playbackId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getPlaybackTimeline,
+          [playbackId],
+        ),
+        returnValue: _i6.Future<List<Map<String, dynamic>>>.value(
+            <Map<String, dynamic>>[]),
+      ) as _i6.Future<List<Map<String, dynamic>>>);
+
+  @override
+  _i6.Future<List<Map<String, dynamic>>> getPlaybackEventsAtTime({
+    required String? playbackId,
+    required int? timestamp,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getPlaybackEventsAtTime,
+          [],
+          {
+            #playbackId: playbackId,
+            #timestamp: timestamp,
+          },
+        ),
+        returnValue: _i6.Future<List<Map<String, dynamic>>>.value(
+            <Map<String, dynamic>>[]),
+      ) as _i6.Future<List<Map<String, dynamic>>>);
+
+  @override
+  _i6.Future<void> recordPlaybackParticipant({
+    required String? playbackId,
+    required String? action,
+    required int? position,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #recordPlaybackParticipant,
+          [],
+          {
+            #playbackId: playbackId,
+            #action: action,
+            #position: position,
+          },
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> updatePlaybackParticipantPosition({
+    required String? playbackId,
+    required int? position,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updatePlaybackParticipantPosition,
+          [],
+          {
+            #playbackId: playbackId,
+            #position: position,
+          },
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> updatePlaybackParticipantSpeed({
+    required String? playbackId,
+    required String? speed,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updatePlaybackParticipantSpeed,
+          [],
+          {
+            #playbackId: playbackId,
+            #speed: speed,
+          },
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> incrementPlaybackViewCount(String? playbackId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #incrementPlaybackViewCount,
+          [playbackId],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<List<Map<String, dynamic>>> getAvailablePlaybacks({
+    int? limit = 20,
+    int? offset = 0,
+    String? searchQuery,
+    String? userId,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getAvailablePlaybacks,
+          [],
+          {
+            #limit: limit,
+            #offset: offset,
+            #searchQuery: searchQuery,
+            #userId: userId,
+          },
+        ),
+        returnValue: _i6.Future<List<Map<String, dynamic>>>.value(
+            <Map<String, dynamic>>[]),
+      ) as _i6.Future<List<Map<String, dynamic>>>);
+
+  @override
+  _i6.Future<void> createTimelineSegment({
+    required String? playbackId,
+    required int? startTime,
+    required int? endTime,
+    required String? segmentType,
+    String? speakerId,
+    String? speakerRole,
+    String? phase,
+    String? title,
+    String? description,
+    bool? isSkippable = true,
+    required int? order,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #createTimelineSegment,
+          [],
+          {
+            #playbackId: playbackId,
+            #startTime: startTime,
+            #endTime: endTime,
+            #segmentType: segmentType,
+            #speakerId: speakerId,
+            #speakerRole: speakerRole,
+            #phase: phase,
+            #title: title,
+            #description: description,
+            #isSkippable: isSkippable,
+            #order: order,
+          },
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> recordPlaybackEvent({
+    required String? playbackId,
+    required int? timestamp,
+    required String? eventType,
+    String? userId,
+    String? userName,
+    String? userRole,
+    String? content,
+    Map<String, dynamic>? metadata,
+    bool? isVisible = true,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #recordPlaybackEvent,
+          [],
+          {
+            #playbackId: playbackId,
+            #timestamp: timestamp,
+            #eventType: eventType,
+            #userId: userId,
+            #userName: userName,
+            #userRole: userRole,
+            #content: content,
+            #metadata: metadata,
+            #isVisible: isVisible,
+          },
         ),
         returnValue: _i6.Future<void>.value(),
         returnValueForMissingStub: _i6.Future<void>.value(),

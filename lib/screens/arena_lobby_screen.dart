@@ -5,9 +5,11 @@ import '../services/appwrite_service.dart';
 import '../services/theme_service.dart';
 import '../features/arena/providers/arena_lobby_provider.dart';
 import '../widgets/challenge_bell.dart';
-import '../widgets/instant_message_bell.dart';
 import 'arena_screen.dart';
+import 'arena_playbacks_screen.dart';
+import 'arena_playback_screen.dart';
 import 'dart:async';
+import 'package:get_it/get_it.dart';
 import '../core/logging/app_logger.dart';
 
 class ArenaLobbyScreen extends ConsumerStatefulWidget {
@@ -279,6 +281,41 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
     }
   }
 
+  Future<void> _openPlayback(String roomId, String topic) async {
+    try {
+      // Navigate to playback screen
+      // First check if a playback record exists for this room
+      final appwriteService = GetIt.instance<AppwriteService>();
+      final playbacks = await appwriteService.getPlaybacksByRoomId(roomId);
+
+      if (playbacks.isNotEmpty) {
+        final playback = playbacks.first;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ArenaPlaybackScreen(
+              playbackId: playback['\$id'],
+              initialTitle: playback['title'] ?? topic,
+            ),
+          ),
+        );
+      } else {
+        // Show message that playback is not available yet
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🎵 Playback is being processed, please try again later'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      AppLogger().error('Error opening playback: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error opening playback: $e')),
+      );
+    }
+  }
+
   Future<bool> _validateRoomPassword(String metadataStr) async {
     // Extract actual password from metadata
     String roomPassword = '';
@@ -325,6 +362,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
         final scheduledTime = dialogResult['scheduledTime'] as DateTime?;
         final isPrivate = dialogResult['isPrivate'] as bool? ?? false;
         final password = dialogResult['password'] as String?;
+        final enablePlayback = dialogResult['enablePlayback'] as bool? ?? false;
         
         // Build debaters description with additional metadata
         String debatersNames;
@@ -376,6 +414,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
             creatorId: _currentUserId!,
             topic: topic,
             description: fullDescription,
+            enablePlayback: enablePlayback,
           );
 
           // Navigate to the created arena
@@ -514,10 +553,14 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
           tooltip: 'Back to Home',
         ),
         actions: [
-          // Message notification icon
-          InstantMessageBell(
-            iconColor: _themeService.isDarkMode ? Colors.white70 : deepPurple,
-            iconSize: 24,
+          // Playback button
+          _buildNeumorphicIcon(
+            icon: Icons.play_circle_outline,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const ArenaPlaybacksScreen()),
+            ),
+            tooltip: 'Arena Playbacks',
           ),
           const SizedBox(width: 8),
           // Challenge notification bell
@@ -708,23 +751,24 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
         ),
         const SizedBox(height: 12),
         ...activeArenas.map((arena) => _buildArenaCard(
-          arena.id, 
-          arena.topic, 
-          arena.status, 
-          arena.challengeId ?? '', 
-          arena.description ?? '', 
-          arena.currentParticipants, 
-          arena.isManual, 
-          arena.category ?? '', 
-          arena.teamSize, 
+          arena.id,
+          arena.topic,
+          arena.status,
+          arena.challengeId ?? '',
+          arena.description ?? '',
+          arena.currentParticipants,
+          arena.isManual,
+          arena.category ?? '',
+          arena.teamSize,
           arena.moderatorId,
           arena.moderatorProfile,
+          arena.enablePlayback,
         )),
       ],
     );
   }
 
-  Widget _buildArenaCard(String roomId, String topic, String status, String challengeId, String description, int currentParticipants, bool isManual, String category, int teamSize, String? moderatorId, Map<String, dynamic>? moderatorProfile) {
+  Widget _buildArenaCard(String roomId, String topic, String status, String challengeId, String description, int currentParticipants, bool isManual, String category, int teamSize, String? moderatorId, Map<String, dynamic>? moderatorProfile, bool enablePlayback) {
     const maxParticipants = 1000; // Allow unlimited participants
     
     // Check if room is private by looking in the description metadata
@@ -761,9 +805,11 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: status == 'scheduled' 
+          onTap: status == 'scheduled'
               ? () => _handleScheduledRoomTap(roomId, topic, challengeId)
-              : () => _joinArenaAsAudience(roomId, challengeId, topic),
+              : enablePlayback && (status == 'completed' || status == 'abandoned' || status == 'force_cleaned')
+                  ? () => _openPlayback(roomId, topic)
+                  : () => _joinArenaAsAudience(roomId, challengeId, topic),
           borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -817,6 +863,41 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                         ),
                       ),
                     ),
+                    if (enablePlayback) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: status == 'completed' || status == 'abandoned' || status == 'force_cleaned'
+                              ? Colors.purple
+                              : Colors.purple.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              status == 'completed' || status == 'abandoned' || status == 'force_cleaned'
+                                  ? Icons.play_circle_filled
+                                  : Icons.radio_button_checked,
+                              color: Colors.white,
+                              size: 12,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              status == 'completed' || status == 'abandoned' || status == 'force_cleaned'
+                                  ? 'PLAYBACK'
+                                  : 'REC',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     if (teamSize > 1) ...[
                       const SizedBox(width: 8),
                       Container(
@@ -1600,6 +1681,7 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
   bool _isCustomCategory = false;
   bool _isScheduled = false;
   bool _isPrivate = false;
+  bool _enablePlayback = false;
   DateTime? _scheduledTime;
 
   // Categories
@@ -1970,7 +2052,19 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
                       },
                       activeColor: accentPurple,
                     ),
-                    
+
+                    CheckboxListTile(
+                      title: const Text('Enable Playback'),
+                      subtitle: const Text('Record this debate for later viewing'),
+                      value: _enablePlayback,
+                      onChanged: (value) {
+                        setState(() {
+                          _enablePlayback = value ?? false;
+                        });
+                      },
+                      activeColor: accentPurple,
+                    ),
+
                     if (_isPrivate) ...[
                       const SizedBox(height: 8),
                       TextFormField(
@@ -2193,6 +2287,7 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
         'scheduledTime': _scheduledTime,
         'isPrivate': _isPrivate,
         'password': _isPrivate ? _passwordController.text.trim() : null,
+        'enablePlayback': _enablePlayback,
       });
     }
   }

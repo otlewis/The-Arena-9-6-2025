@@ -3,6 +3,7 @@ import 'dart:async';
 import '../../../services/appwrite_service.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/providers/app_providers.dart';
+import 'package:appwrite/appwrite.dart';
 
 /// Arena room data model
 class ArenaRoom {
@@ -18,6 +19,7 @@ class ArenaRoom {
   final bool isManual;
   final String? moderatorId;
   final Map<String, dynamic>? moderatorProfile;
+  final bool enablePlayback;
 
   const ArenaRoom({
     required this.id,
@@ -32,6 +34,7 @@ class ArenaRoom {
     required this.isManual,
     this.moderatorId,
     this.moderatorProfile,
+    this.enablePlayback = false,
   });
 
   factory ArenaRoom.fromMap(Map<String, dynamic> map) {
@@ -48,6 +51,7 @@ class ArenaRoom {
       isManual: (map['challengeId'] ?? '').isEmpty,
       moderatorId: map['moderatorId'],
       moderatorProfile: map['moderatorProfile'] as Map<String, dynamic>?,
+      enablePlayback: map['enablePlayback'] ?? false,
     );
   }
 
@@ -64,6 +68,7 @@ class ArenaRoom {
     bool? isManual,
     String? moderatorId,
     Map<String, dynamic>? moderatorProfile,
+    bool? enablePlayback,
   }) {
     return ArenaRoom(
       id: id ?? this.id,
@@ -78,6 +83,7 @@ class ArenaRoom {
       isManual: isManual ?? this.isManual,
       moderatorId: moderatorId ?? this.moderatorId,
       moderatorProfile: moderatorProfile ?? this.moderatorProfile,
+      enablePlayback: enablePlayback ?? this.enablePlayback,
     );
   }
 }
@@ -119,15 +125,18 @@ class ArenaLobbyState {
 class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
   ArenaLobbyNotifier(this._appwrite, this._logger) : super(const ArenaLobbyState()) {
     _startPeriodicRefresh();
+    _startRealtimeSubscription();
   }
 
   final AppwriteService _appwrite;
   final AppLogger _logger;
   Timer? _refreshTimer;
+  StreamSubscription<RealtimeMessage>? _roomSubscription;
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _roomSubscription?.cancel();
     super.dispose();
   }
 
@@ -140,6 +149,44 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
         timer.cancel();
       }
     });
+  }
+
+  /// Start real-time subscription for arena room status changes
+  void _startRealtimeSubscription() {
+    try {
+      _logger.info('🔔 Starting real-time arena lobby subscription');
+
+      _roomSubscription = _appwrite.realtime.subscribe([
+        'databases.arena_db.collections.arena_rooms.documents'
+      ]).stream.listen((response) {
+        if (!mounted) return;
+
+        try {
+          final eventType = response.events.isNotEmpty ? response.events.first : 'unknown';
+          _logger.debug('🔔 Arena lobby real-time event: $eventType');
+
+          // Refresh lobby for any arena room changes
+          if (eventType.contains('arena_rooms')) {
+            _logger.debug('🔄 Arena room changed - refreshing lobby');
+            loadActiveArenas(isBackgroundRefresh: true);
+          }
+        } catch (e) {
+          _logger.warning('⚠️ Error processing real-time event: $e');
+        }
+      }, onError: (error) {
+        _logger.warning('⚠️ Arena lobby real-time subscription error: $error');
+        // Try to reconnect after a delay
+        Timer(const Duration(seconds: 10), () {
+          if (mounted) {
+            _startRealtimeSubscription();
+          }
+        });
+      });
+
+      _logger.info('✅ Arena lobby real-time subscription established');
+    } catch (e) {
+      _logger.error('❌ Failed to start arena lobby real-time subscription: $e');
+    }
   }
 
   Future<void> loadActiveArenas({bool isBackgroundRefresh = false}) async {
@@ -203,10 +250,16 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
         final id = arena['id'] ?? 'no-id';
         final topic = arena['topic'] ?? 'no-topic';
 
-        // Skip completed, closed, cleaning, or abandoned rooms
+        // Skip completed, closed, cleaning, or abandoned rooms UNLESS they have playback enabled
         if (['completed', 'abandoned', 'force_cleaned', 'force_closed', 'closing'].contains(status)) {
-          _logger.debug('   ❌ FILTERED OUT ($id): Status "$status" is excluded');
-          return false;
+          final hasPlayback = arena['enablePlayback'] ?? false;
+          _logger.info('🎬 LOBBY FILTER - Room $id: status="$status", enablePlayback=$hasPlayback');
+          if (!hasPlayback) {
+            _logger.info('   ❌ FILTERED OUT ($id): Status "$status" is excluded (no playback)');
+            return false;
+          } else {
+            _logger.info('   ✅ KEPT ($id): Status "$status" but has playback enabled');
+          }
         }
 
         // Skip very old waiting rooms (older than 6 hours)
@@ -325,10 +378,16 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
 
         _logger.debug('🔍 FILTER DEBUG: Room $roomId - status: $status, participants: $activeParticipants, age: ${roomAge.inMinutes}min');
 
-        // Only exclude rooms that are definitely dead
+        // Only exclude rooms that are definitely dead UNLESS they have playback enabled
         if (status == 'completed' || status == 'abandoned' || status == 'force_cleaned') {
-          shouldInclude = false;
-          _logger.debug('🔍 FILTER: Excluding completed/abandoned room');
+          final hasPlayback = arena['enablePlayback'] ?? false;
+          _logger.info('🎬 FINAL FILTER - Room $roomId: status="$status", enablePlayback=$hasPlayback');
+          if (!hasPlayback) {
+            shouldInclude = false;
+            _logger.info('🔍 FILTER: Excluding completed/abandoned room (no playback)');
+          } else {
+            _logger.info('🔍 FILTER: Keeping completed room - has playback enabled');
+          }
         } else if (status == 'waiting' && roomAge.inHours > 12 && activeParticipants == 0) {
           // Only exclude very old waiting rooms with no participants (12+ hours)
           shouldInclude = false;
@@ -428,10 +487,13 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
           shouldCleanup = true;
           reason = 'Waiting room too old (${roomAge.inHours} hours)';
         }
-        // Check for completed or already closed rooms
+        // Check for completed or already closed rooms (but preserve playback-enabled ones)
         else if (['completed', 'abandoned', 'force_closed', 'force_cleaned'].contains(status)) {
-          shouldCleanup = true;
-          reason = 'Room already closed (status: $status)';
+          final hasPlayback = room.data['enablePlayback'] ?? false;
+          if (!hasPlayback) {
+            shouldCleanup = true;
+            reason = 'Room already closed (status: $status, no playback)';
+          }
         }
         
         if (shouldCleanup) {

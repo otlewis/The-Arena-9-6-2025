@@ -157,10 +157,19 @@ class SuperModeratorService {
   }) async {
     try {
       // Check if granter has permission to promote
-      if (!hasPermission(grantedBy, SuperModPermissions.promoteSupermods) && 
-          grantedBy != 'system') {
+      // Allow hardcoded founder (Kritik) to always promote, or 'system'
+      // Also allow if no super mods exist yet (bootstrap case)
+      final isFounder = grantedBy == '6843c3781d2c1c7154a0'; // Kritik's ID
+      final hasPromotion = hasPermission(grantedBy, SuperModPermissions.promoteSupermods);
+      final isSystem = grantedBy == 'system';
+      final noSuperModsExist = _superModCache.isEmpty;
+
+      if (!hasPromotion && !isFounder && !isSystem && !noSuperModsExist) {
+        _logger.error('Permission denied - grantedBy: $grantedBy, isFounder: $isFounder, hasPromotion: $hasPromotion, isSystem: $isSystem, noSuperModsExist: $noSuperModsExist');
         throw Exception('User does not have permission to promote super moderators');
       }
+
+      _logger.info('💡 Permission granted - grantedBy: $grantedBy, isFounder: $isFounder, hasPromotion: $hasPromotion, isSystem: $isSystem, noSuperModsExist: $noSuperModsExist');
       
       final metadataMap = {
         'grantedByUserId': grantedBy,
@@ -168,6 +177,7 @@ class SuperModeratorService {
       };
 
       // Create database document with JSON string metadata
+      _logger.info('🔨 Creating super mod document for user: $userId');
       final doc = await _appwrite.databases.createDocument(
         databaseId: _databaseId,
         collectionId: _collectionId,
@@ -183,6 +193,7 @@ class SuperModeratorService {
           'metadata': jsonEncode(metadataMap),
         },
       );
+      _logger.info('✅ Successfully created super mod document: ${doc.$id}');
       
       // Convert back to SuperModerator model with parsed metadata
       final docData = doc.data;
@@ -210,6 +221,34 @@ class SuperModeratorService {
     }
   }
   
+  /// Get all super moderators from database
+  Future<List<SuperModerator>> getAllSuperModerators() async {
+    try {
+      final response = await _appwrite.databases.listDocuments(
+        databaseId: _databaseId,
+        collectionId: _collectionId,
+        queries: [
+          Query.equal('isActive', true),
+          Query.orderDesc('grantedAt'),
+        ],
+      );
+
+      final superMods = <SuperModerator>[];
+      for (final doc in response.documents) {
+        try {
+          superMods.add(SuperModerator.fromDocument(doc));
+        } catch (e) {
+          _logger.warning('Failed to parse super moderator: $e');
+        }
+      }
+
+      return superMods;
+    } catch (e) {
+      _logger.error('Failed to get all super moderators: $e');
+      return [];
+    }
+  }
+
   /// Revoke super moderator status
   Future<bool> revokeSuperModeratorStatus(String userId, String revokedBy) async {
     try {

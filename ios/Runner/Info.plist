@@ -85,11 +85,11 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.example.arena</string>
+			<string>com.thearenadtd.app</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.example.arena</string>
-				<string>com.googleusercontent.apps.18237618385-159de79359b3a43e52edf0</string>
+				<string>com.googleusercontent.apps.47728906894-blo0lqf01en24o5qegeseg38qfkl32fq</string>
+				<string>appwrite-callback-683a37a8003719978879</string>
 			</array>
 		</dict>
 	</array>

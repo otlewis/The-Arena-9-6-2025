@@ -560,14 +560,11 @@ class _StreamingDestinationsModalState extends State<StreamingDestinationsModal>
                   obscureText: true,
                   textInputAction: TextInputAction.done,
                   onTap: () {
-                    // Capture context before async operation to avoid BuildContext async gap
-                    final currentContext = context;
-                    
                     // Small delay to ensure keyboard is up before scrolling
                     Future.delayed(const Duration(milliseconds: 300), () {
-                      if (mounted) {
+                      if (mounted && context.mounted) {
                         Scrollable.ensureVisible(
-                          currentContext,
+                          context,
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeInOut,
                         );

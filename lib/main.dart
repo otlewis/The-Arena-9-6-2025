@@ -56,6 +56,9 @@ import 'services/revenue_cat_service.dart';
 import 'services/reputation_service.dart';
 import 'services/moderator_reputation_service.dart';
 import 'services/gamified_ranking_service.dart';
+import 'services/arena_playback_service.dart';
+import 'services/recording_service.dart';
+import 'services/ionos_storage_service.dart';
 
 // Service locator instance
 final getIt = GetIt.instance;
@@ -130,6 +133,11 @@ void setupServiceLocator() {
   getIt.registerLazySingleton<PersistentAudioService>(() => PersistentAudioService());
   getIt.registerLazySingleton<AudioInitializationService>(() => AudioInitializationService());
   getIt.registerLazySingleton<RoomAudioAdapter>(() => RoomAudioAdapter());
+
+  // Register Arena Playback services
+  getIt.registerLazySingleton<ArenaPlaybackService>(() => ArenaPlaybackService());
+  getIt.registerLazySingleton<RecordingService>(() => RecordingService());
+  getIt.registerLazySingleton<IonosStorageService>(() => IonosStorageService());
 }
 
 void resetMessagingService() {

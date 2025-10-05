@@ -1,6 +1,7 @@
 // ignore_for_file: prefer_const_constructors
 import 'package:flutter/material.dart';
 import '../core/logging/app_logger.dart';
+import '../screens/debates_discussions_screen.dart' show ReactionData;
 
 /// High-performance audience grid optimized for Arena's needs
 class PerformanceOptimizedAudienceGrid extends StatefulWidget {
@@ -618,7 +619,10 @@ class PerformanceOptimizedSpeakersPanel extends StatefulWidget {
   final VoidCallback? onNextSpeaker; // Next speaker callback
   final Function(String userId)? onRemoveFromQueue; // Remove from queue callback
   final VoidCallback? onToggleQueue; // Toggle queue mode callback
-  
+
+  // Reaction system
+  final List<ReactionData> activeReactions; // Active emoji reactions
+
   const PerformanceOptimizedSpeakersPanel({
     super.key,
     required this.speakers,
@@ -640,6 +644,7 @@ class PerformanceOptimizedSpeakersPanel extends StatefulWidget {
     this.onNextSpeaker,
     this.onRemoveFromQueue,
     this.onToggleQueue,
+    this.activeReactions = const [],
   });
 
   @override
@@ -768,13 +773,14 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
       }
     }
     
-    _cachedSpeakerWidgets = speakersWithPlaceholders.map((speaker) => 
+    _cachedSpeakerWidgets = speakersWithPlaceholders.map((speaker) =>
       _VideoTile(
         key: ValueKey(speaker['userId'] ?? speaker['isEmpty'] ?? DateTime.now().millisecondsSinceEpoch),
         speaker: speaker,
         onTap: widget.onSpeakerTap,
         isModerator: false,
         isDebateLayout: isDebateLayout,
+        activeReactions: widget.activeReactions,
       )
     ).toList();
   }
@@ -949,21 +955,65 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
           
           // Space between speakers and moderator
           const SizedBox(height: tileSpacing),
-          
+
           // Moderator at the bottom (always shown)
           if (widget.moderator != null)
-            SizedBox(
-              width: isDebateLayout || isTakeLayout ? tileWidth * 0.8 : tileWidth, // Slightly smaller for debate/take layout
-              height: isDebateLayout || isTakeLayout ? tileHeight * 0.8 : tileHeight,
-              child: _VideoTile(
-                speaker: {
-                  ...widget.moderator!,
-                  'role': 'moderator',
-                },
-                onTap: widget.onSpeakerTap,
-                isModerator: true,
-                isDebateLayout: isDebateLayout || isTakeLayout,
-              ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Purple tab for moderator
+                if (isDebateLayout || isTakeLayout)
+                  Container(
+                    width: isDebateLayout || isTakeLayout ? tileWidth * 0.8 : tileWidth,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),  // Purple
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(8),
+                        topRight: Radius.circular(8),
+                      ),
+                      border: Border(
+                        top: BorderSide(
+                          color: const Color(0xFF8B5CF6),
+                          width: 2,
+                        ),
+                        left: BorderSide(
+                          color: const Color(0xFF8B5CF6),
+                          width: 2,
+                        ),
+                        right: BorderSide(
+                          color: const Color(0xFF8B5CF6),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'MODERATOR',
+                        style: TextStyle(
+                          color: Color(0xFF8B5CF6),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                // Moderator slot
+                SizedBox(
+                  width: isDebateLayout || isTakeLayout ? tileWidth * 0.8 : tileWidth,
+                  height: isDebateLayout || isTakeLayout ? tileHeight * 0.8 : tileHeight,
+                  child: _VideoTile(
+                    speaker: {
+                      ...widget.moderator!,
+                      'role': 'moderator',
+                    },
+                    onTap: widget.onSpeakerTap,
+                    isModerator: true,
+                    isDebateLayout: isDebateLayout || isTakeLayout,
+                    activeReactions: widget.activeReactions,
+                  ),
+                ),
+              ],
             ),
           
           // Speaker requests section (only for moderator)
@@ -1315,29 +1365,41 @@ class _VideoTile extends StatelessWidget {
   final Function(String userId)? onTap;
   final bool isModerator;
   final bool isDebateLayout;
-  
+  final List<ReactionData> activeReactions;
+
   const _VideoTile({
     super.key,
     required this.speaker,
     this.onTap,
     this.isModerator = false,
     this.isDebateLayout = false,
+    this.activeReactions = const [],
   });
   
   @override
   Widget build(BuildContext context) {
     if (speaker['isEmpty'] == true) {
       // Different display for debate layout vs Take layout vs regular layout
-      final displayText = isDebateLayout && speaker['debatePosition'] != null 
+      final displayText = isDebateLayout && speaker['debatePosition'] != null
           ? speaker['debatePosition']
           : speaker['takePosition'] ?? '${speaker['slotNumber'] ?? ''}';
-      
+
+      // Determine border color for empty slots
+      Color emptyBorderColor = const Color(0xFF8B5CF6); // Default purple
+      if (isDebateLayout && speaker['debatePosition'] != null) {
+        if (speaker['debatePosition'] == 'Affirmative') {
+          emptyBorderColor = const Color(0xFF4CAF50); // Green for affirmative
+        } else if (speaker['debatePosition'] == 'Negative') {
+          emptyBorderColor = const Color(0xFFF44336); // Red for negative
+        }
+      }
+
       return Container(
         decoration: BoxDecoration(
           color: const Color(0xFF2D2D2D),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: const Color(0xFF8B5CF6),
+            color: emptyBorderColor,
             width: 2,
           ),
         ),
@@ -1345,9 +1407,9 @@ class _VideoTile extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
+              Icon(
                 Icons.gavel,
-                color: Color(0xFF8B5CF6),
+                color: emptyBorderColor,
                 size: 32,
               ),
               const SizedBox(height: 4),
@@ -1369,10 +1431,56 @@ class _VideoTile extends StatelessWidget {
     final userId = speaker['userId'] ?? '';
     final name = speaker['name'] ?? speaker['userName'] ?? 'Unknown';
     final avatarUrl = speaker['avatarUrl'] ?? speaker['avatar'] ?? '';
-    
+    final isSpeaking = speaker['isSpeaking'] ?? false;
+
     // Beautiful gradient and styling for different roles
     final isModeratorRole = isModerator || speaker['role'] == 'moderator';
-    
+    final role = speaker['role'] ?? '';
+    final isAffirmative = role == 'affirmative';
+    final isNegative = role == 'negative';
+
+    // Determine border color based on role
+    Color borderColor;
+    if (isModeratorRole) {
+      borderColor = const Color(0xFF8B5CF6);  // Purple for moderator
+    } else if (isAffirmative) {
+      borderColor = const Color(0xFF4CAF50);  // Green for affirmative (matches tab)
+    } else if (isNegative) {
+      borderColor = const Color(0xFFF44336);  // Red for negative (matches tab)
+    } else {
+      borderColor = const Color(0xFF8B5CF6);  // Purple for regular speaker
+    }
+
+    // Determine gradient colors based on role
+    List<Color> gradientColors;
+    if (isModeratorRole) {
+      gradientColors = [
+        const Color(0xFF5B21B6), // Dark purple
+        const Color(0xFF8B5CF6), // Bright purple
+      ];
+    } else if (isAffirmative) {
+      gradientColors = [
+        const Color(0xFF2E7D32), // Dark green
+        const Color(0xFF4CAF50), // Bright green
+      ];
+    } else if (isNegative) {
+      gradientColors = [
+        const Color(0xFFC62828), // Dark red
+        const Color(0xFFF44336), // Bright red
+      ];
+    } else {
+      gradientColors = [
+        const Color(0xFF5B21B6), // Dark purple
+        const Color(0xFF8B5CF6), // Bright purple
+      ];
+    }
+
+    // Check if this user has an active gift
+    final hasActiveGift = activeReactions.any((r) => r.targetUserId == userId && r.isGift);
+    final giftReaction = hasActiveGift
+        ? activeReactions.firstWhere((r) => r.targetUserId == userId && r.isGift)
+        : null;
+
     return RepaintBoundary(
       child: GestureDetector(
         onTap: onTap != null ? () => onTap!(userId) : null,
@@ -1381,29 +1489,20 @@ class _VideoTile extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: isModeratorRole
-                  ? [
-                      const Color(0xFF7C2D12), // Dark red-orange
-                      const Color(0xFF991B1B), // Deep red
-                    ]
-                  : [
-                      const Color(0xFF5B21B6), // Dark purple
-                      const Color(0xFF8B5CF6), // Bright purple
-                    ],
+              colors: gradientColors,
             ),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: isModeratorRole
-                  ? const Color(0xFFDC2626)  // Red border for moderator
-                  : const Color(0xFF8B5CF6), // Purple border for speaker
-              width: 2,
+              color: hasActiveGift ? const Color(0xFFFFD700) : borderColor,
+              width: hasActiveGift ? 3 : 2,
             ),
             boxShadow: [
               BoxShadow(
-                color: (isModeratorRole 
-                    ? const Color(0xFFDC2626) 
-                    : const Color(0xFF8B5CF6)).withValues(alpha: 0.3),
-                blurRadius: 8,
+                color: hasActiveGift
+                    ? const Color(0xFFFFD700).withValues(alpha: 0.6)
+                    : borderColor.withValues(alpha: 0.3),
+                blurRadius: hasActiveGift ? 12 : 8,
+                spreadRadius: hasActiveGift ? 2 : 0,
                 offset: const Offset(0, 2),
               ),
             ],
@@ -1416,89 +1515,158 @@ class _VideoTile extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     // Avatar - larger round profile pics with gavel fallback
+                    // OR gift emoji if gift is active
                     Container(
-                      width: 60,
-                      height: 60,
+                      width: 70,
+                      height: 70,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.8),
-                          width: 2,
+                          color: isSpeaking
+                              ? Colors.green
+                              : Colors.white.withValues(alpha: 0.8),
+                          width: isSpeaking ? 3 : 2,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.3),
-                            blurRadius: 4,
+                            color: isSpeaking
+                                ? Colors.green.withValues(alpha: 0.5)
+                                : Colors.black.withValues(alpha: 0.3),
+                            blurRadius: isSpeaking ? 8 : 4,
                             offset: const Offset(0, 2),
                           ),
                         ],
                       ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(30),
-                        child: avatarUrl.isNotEmpty
-                            ? Image.network(
-                                avatarUrl,
-                                width: 60,
-                                height: 60,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    Container(
-                                  width: 60,
-                                  height: 60,
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF8B5CF6),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: _buildAvatarTextFromMap(speaker, 20),
-                                ),
-                              )
-                            : Container(
-                                width: 60,
-                                height: 60,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF8B5CF6),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: _buildAvatarTextFromMap(speaker, 20),
+                      child: giftReaction != null
+                          ? Center(
+                              child: Text(
+                                giftReaction.emoji,
+                                style: const TextStyle(fontSize: 38),
                               ),
-                      ),
+                            )
+                          : ClipRRect(
+                              borderRadius: BorderRadius.circular(35),
+                              child: avatarUrl.isNotEmpty
+                                  ? Image.network(
+                                      avatarUrl,
+                                      width: 70,
+                                      height: 70,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) =>
+                                          Container(
+                                        width: 70,
+                                        height: 70,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFF8B5CF6),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: _buildAvatarTextFromMap(speaker, 20),
+                                      ),
+                                    )
+                                  : Container(
+                                      width: 70,
+                                      height: 70,
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFF8B5CF6),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: _buildAvatarTextFromMap(speaker, 20),
+                                    ),
+                            ),
                     ),
-                    const SizedBox(height: 6),
-                    // Name - stacked for first/last
+                    const SizedBox(height: 4),
+                    // Name - stacked for first/last OR gift name if gift is active
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: _buildStackedNameDisplayForVideoTile(name),
+                      child: giftReaction != null
+                          ? _buildStackedGiftName(giftReaction.giftName ?? 'Gift')
+                          : _buildStackedNameDisplayForVideoTile(name),
                     ),
                   ],
                 ),
               ),
-              
-              // Role indicator
-              if (isModeratorRole)
-                Positioned(
-                  top: 4,
-                  right: 4,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFDC2626),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.white, width: 1),
-                    ),
-                    child: const Text(
-                      'MOD',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
+
+              // Reaction overlay - show emoji reactions in top-right
+              ...activeReactions
+                  .where((reaction) => reaction.targetUserId == userId && !reaction.isGift)
+                  .map((reaction) => Positioned(
+                        top: 10,
+                        right: 10,
+                        child: TweenAnimationBuilder<double>(
+                          duration: const Duration(milliseconds: 500),
+                          tween: Tween(begin: 0.0, end: 1.0),
+                          builder: (context, value, child) {
+                            return Transform.scale(
+                              scale: value,
+                              child: Opacity(
+                                opacity: value,
+                                child: _buildReactionOverlay(reaction),
+                              ),
+                            );
+                          },
+                        ),
+                      )),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildReactionOverlay(ReactionData reaction) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Text(
+        reaction.emoji,
+        style: const TextStyle(fontSize: 24),
+      ),
+    );
+  }
+
+  Widget _buildStackedGiftName(String giftName) {
+    final words = giftName.split(' ');
+
+    // If single word or empty, show as is
+    if (words.length <= 1) {
+      return Text(
+        giftName,
+        style: const TextStyle(
+          color: Color(0xFFFFD700),
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+        ),
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+
+    // Stack words vertically for multi-word names
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: words.map((word) => Text(
+        word,
+        style: const TextStyle(
+          color: Color(0xFFFFD700),
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          height: 1.1,
+        ),
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      )).toList(),
     );
   }
 }

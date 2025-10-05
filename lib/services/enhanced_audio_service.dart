@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:vibration/vibration.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,7 +34,7 @@ class EnhancedAudioService {
 
   // Ducking state
   bool _isDucking = false;
-  double _duckingLevel = 0.3; // Reduce to 30% volume when ducking
+  final double _duckingLevel = 0.3; // Reduce to 30% volume when ducking
   Timer? _duckingTimer;
 
   // Haptic feedback settings

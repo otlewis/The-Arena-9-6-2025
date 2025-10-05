@@ -12,6 +12,7 @@ import 'firebase_arena_timer_service.dart';
 import 'network_resilience_service.dart';
 import 'offline_data_cache.dart';
 import 'package:get_it/get_it.dart';
+import 'recording_service.dart';
 
 class AppwriteService {
   static final AppwriteService _instance = AppwriteService._internal();
@@ -437,17 +438,48 @@ class AppwriteService {
   Future<models.Session> signInWithGoogle() async {
     try {
       AppLogger().debug('🔐 Starting Google OAuth sign-in');
-      
-      final session = await account.createOAuth2Session(
-        provider: OAuthProvider.google,
-      );
-      
-      AppLogger().debug('🔐 ✅ Google OAuth successful');
 
+      final result = await account.createOAuth2Session(
+        provider: OAuthProvider.google,
+        success: 'appwrite-callback-683a37a8003719978879://oauth2/success',
+        failure: 'appwrite-callback-683a37a8003719978879://oauth2/failure',
+      );
+
+      AppLogger().debug('🔐 OAuth flow completed: $result');
+
+      // On mobile, createOAuth2Session returns bool, so we need to get the session
+      final session = await account.getSession(sessionId: 'current');
+
+      AppLogger().debug('🔐 ✅ Google OAuth successful - Session retrieved');
 
       return session;
     } catch (e) {
       AppLogger().debug('🔐 ❌ Error with Google OAuth: $e');
+      rethrow;
+    }
+  }
+
+  // Apple OAuth Sign-In
+  Future<models.Session> signInWithApple() async {
+    try {
+      AppLogger().debug('🔐 Starting Apple OAuth sign-in');
+
+      final result = await account.createOAuth2Session(
+        provider: OAuthProvider.apple,
+        success: 'appwrite-callback-683a37a8003719978879://oauth2/success',
+        failure: 'appwrite-callback-683a37a8003719978879://oauth2/failure',
+      );
+
+      AppLogger().debug('🔐 OAuth flow completed: $result');
+
+      // On mobile, createOAuth2Session returns bool, so we need to get the session
+      final session = await account.getSession(sessionId: 'current');
+
+      AppLogger().debug('🔐 ✅ Apple OAuth successful - Session retrieved');
+
+      return session;
+    } catch (e) {
+      AppLogger().debug('🔐 ❌ Error with Apple OAuth: $e');
       rethrow;
     }
   }
@@ -558,8 +590,14 @@ class AppwriteService {
             collectionId: 'users',
             documentId: userId,
             data: profileData,
+            permissions: [
+              Permission.read(Role.user(userId)), // User can read their own profile
+              Permission.update(Role.user(userId)), // User can update their own profile
+              Permission.delete(Role.user(userId)), // User can delete their own profile
+              Permission.read(Role.users()), // All authenticated users can read this profile
+            ],
           );
-          AppLogger().debug('✅ Successfully created user profile: $userId');
+          AppLogger().debug('✅ Successfully created user profile with permissions: $userId');
         } catch (createError) {
           AppLogger().error('❌ Failed to create user profile: $userId');
           AppLogger().error('Create error details: $createError');
@@ -1171,9 +1209,8 @@ class AppwriteService {
     try {
       final response = await databases.listDocuments(
         databaseId: 'arena_db',
-        collectionId: AppwriteConstants.roomsCollection,
+        collectionId: AppwriteConstants.debateDiscussionRoomsCollection,
         queries: [
-          Query.equal('type', 'discussion'),
           Query.or([
             Query.equal('status', 'active'),
             Query.equal('status', 'scheduled'),
@@ -1216,16 +1253,15 @@ class AppwriteService {
           }
         }
         
-        // Get participant count
+        // Get participant count - use correct collection based on room type
         final participantsResponse = await databases.listDocuments(
           databaseId: 'arena_db',
-          collectionId: AppwriteConstants.roomParticipantsCollection,
+          collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
           queries: [
             Query.equal('roomId', doc.$id),
-            Query.equal('status', 'joined'),
           ],
         );
-        
+
         roomData['participantCount'] = participantsResponse.documents.length;
         roomData['participants'] = participantsResponse.documents.map((p) => p.data['userId']).toList();
         
@@ -2042,6 +2078,7 @@ class AppwriteService {
           'isScheduled': isScheduled,
           'scheduledDate': scheduledDate?.toIso8601String(),
           'maxParticipants': 999999,
+          'queueEnabled': true, // Default queue enabled when room is created
           'settings': json.encode({
             'allowChat': true,
             'recordSession': false,
@@ -2705,9 +2742,10 @@ class AppwriteService {
 
   Future<void> closeArenaRoom(String roomId) async {
     try {
-      AppLogger().debug('🚨 Starting closeArenaRoom for $roomId');
+      AppLogger().info('🚨 CLOSE ARENA ROOM - Starting for $roomId');
 
       // 1. First verify the room exists and check its current status
+      Map<String, dynamic>? roomData;
       try {
         final roomDoc = await databases.getDocument(
           databaseId: 'arena_db',
@@ -2715,11 +2753,14 @@ class AppwriteService {
           documentId: roomId,
         );
 
-        final currentStatus = roomDoc.data['status'];
+        roomData = roomDoc.data;
+        final currentStatus = roomData['status'];
+        final enablePlayback = roomData['enablePlayback'] ?? false;
+        AppLogger().info('📊 CLOSE ARENA ROOM - Current status: $currentStatus, enablePlayback: $enablePlayback');
         if (currentStatus == 'completed' ||
             currentStatus == 'abandoned' ||
             currentStatus == 'closed') {
-          AppLogger().info('🚨 Arena room $roomId already has final status: $currentStatus');
+          AppLogger().info('🚨 CLOSE ARENA ROOM - Already has final status: $currentStatus');
           return; // Room is already closed
         }
       } catch (e) {
@@ -2734,16 +2775,27 @@ class AppwriteService {
       // 2. Update arena room status to completed (with retry logic)
       for (int attempt = 1; attempt <= 2; attempt++) {
         try {
+          AppLogger().info('🔄 CLOSE ARENA ROOM - Setting status to completed (attempt $attempt)');
+
+          // Preserve enablePlayback field if it was true
+          final updateData = {
+            'status': 'completed',
+            'endedAt': DateTime.now().toIso8601String(),
+          };
+
+          // CRITICAL: Preserve enablePlayback for lobby visibility
+          if (roomData != null && roomData['enablePlayback'] == true) {
+            updateData['enablePlayback'] = 'true';
+            AppLogger().info('🎬 CLOSE ARENA ROOM - Preserving enablePlayback=true for lobby visibility');
+          }
+
           await databases.updateDocument(
             databaseId: 'arena_db',
             collectionId: 'arena_rooms',
             documentId: roomId,
-            data: {
-              'status': 'completed',
-              'endedAt': DateTime.now().toIso8601String(),
-            },
+            data: updateData,
           );
-          AppLogger().debug('✅ Room status updated on attempt $attempt');
+          AppLogger().info('✅ CLOSE ARENA ROOM - Status updated to completed on attempt $attempt');
           break;
         } catch (e) {
           AppLogger().warning('⚠️ Room status update attempt $attempt failed: $e');
@@ -2753,7 +2805,7 @@ class AppwriteService {
               AppLogger().info('🚨 Room disappeared during close operation');
               return; // Room was deleted by someone else
             }
-            throw e; // Rethrow for genuine failures
+            rethrow; // Rethrow for genuine failures
           }
           await Future.delayed(Duration(milliseconds: 300)); // Brief delay before retry
         }
@@ -2817,6 +2869,180 @@ class AppwriteService {
         throw Exception('Network error while closing room: ${e.toString()}');
       } else if (e.toString().contains('timeout')) {
         throw Exception('Timeout while closing room: ${e.toString()}');
+      } else if (e.toString().contains('document_not_found')) {
+        throw Exception('Room not found: ${e.toString()}');
+      } else {
+        rethrow;
+      }
+    }
+  }
+
+  /// Complete arena room with LiveKit recording
+  Future<void> completeArenaRoom(String roomId) async {
+    try {
+      AppLogger().info('🎬 COMPLETE ARENA ROOM - Starting for $roomId');
+
+      // 1. Stop recording (if active) and create playback
+      String? playbackId;
+      try {
+        AppLogger().info('🎬 Attempting to stop recording and create playback...');
+
+        // Try to stop any active recording
+        try {
+          final recordingService = GetIt.instance<RecordingService>();
+          final recordingUrl = await recordingService.stopRecording();
+
+          if (recordingUrl != null) {
+            AppLogger().info('✅ Recording stopped with URL: $recordingUrl');
+            // Playback already created by stopRecording
+            return; // Exit early since playback was created
+          }
+        } catch (e) {
+          AppLogger().info('ℹ️ No active recording to stop: $e');
+        }
+
+        // If no recording was active, create a manual playback entry
+        AppLogger().info('📝 Creating manual playback entry for completed room...');
+
+        // Get room data for playback
+        final roomDoc = await databases.getDocument(
+          databaseId: 'arena_db',
+          collectionId: 'arena_rooms',
+          documentId: roomId,
+        );
+
+        // Generate unique playback ID with timestamp
+        playbackId = 'playback_${roomId.replaceAll('arena_', '')}_${DateTime.now().millisecondsSinceEpoch}';
+
+        await databases.createDocument(
+          databaseId: 'arena_db',
+          collectionId: 'arena_playbacks',
+          documentId: playbackId,
+          data: {
+            'originalRoomId': roomId,
+            'title': roomDoc.data['topic'] ?? 'Arena Debate',
+            'topic': roomDoc.data['topic'] ?? '',
+            'description': roomDoc.data['description'] ?? 'Completed arena room',
+            'audioUrl': 'http://50.21.187.76/arena-recordings/placeholder.mp3', // Placeholder URL
+            'audioFormat': 'mp3',
+            'duration': 0,
+            'fileSize': 0,
+            'status': 'manual', // Mark as manually completed without recording
+            'visibility': 'public',
+            'debater1Id': roomDoc.data['challengerId'] ?? roomDoc.data['moderatorId'],
+            'debater2Id': roomDoc.data['challengedId'] ?? roomDoc.data['moderatorId'],
+            'moderatorId': roomDoc.data['moderatorId'],
+            'winnerSide': roomDoc.data['winnerSide'],
+            'totalJudges': roomDoc.data['totalJudges'] ?? 0,
+            'affirmativeVotes': roomDoc.data['affirmativeVotes'] ?? 0,
+            'negativeVotes': roomDoc.data['negativeVotes'] ?? 0,
+            'viewCount': 0,
+            'likeCount': 0,
+            'recordedAt': DateTime.now().toIso8601String(),
+            'processingCompleted': DateTime.now().toIso8601String(),
+          },
+        );
+
+        AppLogger().info('✅ Manual playback created: $playbackId');
+
+      } catch (e) {
+        AppLogger().error('❌ Error creating playback: $e');
+        // Continue with room completion even if playback fails
+      }
+
+      // 2. Update room status to completed (reuse logic from closeArenaRoom)
+      Map<String, dynamic>? roomData;
+      try {
+        final roomDoc = await databases.getDocument(
+          databaseId: 'arena_db',
+          collectionId: 'arena_rooms',
+          documentId: roomId,
+        );
+        roomData = roomDoc.data;
+      } catch (e) {
+        AppLogger().warning('⚠️ Could not verify room status, continuing with completion: $e');
+      }
+
+      // Update room with completion data
+      for (int attempt = 1; attempt <= 2; attempt++) {
+        try {
+          AppLogger().info('🔄 COMPLETE ARENA ROOM - Setting status to completed (attempt $attempt)');
+
+          final updateData = {
+            'status': 'completed',
+            'endedAt': DateTime.now().toIso8601String(),
+            'recordingStatus': 'ready',
+            'recordingEnded': DateTime.now().toIso8601String(),
+            'enablePlayback': true, // Always enable playback for completed rooms
+            'playbackId': playbackId ?? '', // Include playback ID if created
+          };
+
+          await databases.updateDocument(
+            databaseId: 'arena_db',
+            collectionId: 'arena_rooms',
+            documentId: roomId,
+            data: updateData,
+          );
+          AppLogger().info('✅ COMPLETE ARENA ROOM - Status updated to completed on attempt $attempt');
+          break;
+        } catch (e) {
+          AppLogger().warning('⚠️ Room completion attempt $attempt failed: $e');
+          if (attempt == 2) {
+            rethrow; // Rethrow for genuine failures
+          }
+          await Future.delayed(Duration(milliseconds: 300)); // Brief delay before retry
+        }
+      }
+
+      // 3. Set all participants as inactive (same as closeArenaRoom)
+      try {
+        final participants = await databases.listDocuments(
+          databaseId: 'arena_db',
+          collectionId: 'arena_participants',
+          queries: [
+            Query.equal('roomId', roomId),
+            Query.equal('isActive', true),
+          ],
+        );
+
+        AppLogger().debug('🧑‍🤝‍🧑 Found ${participants.documents.length} active participants to deactivate');
+
+        // Update participants in parallel for better performance
+        final updateFutures = participants.documents.map((participant) async {
+          try {
+            await databases.updateDocument(
+              databaseId: 'arena_db',
+              collectionId: 'arena_participants',
+              documentId: participant.$id,
+              data: {
+                'isActive': false,
+                'leftAt': DateTime.now().toIso8601String(),
+              },
+            );
+          } catch (e) {
+            AppLogger().warning('⚠️ Failed to deactivate participant ${participant.$id}: $e');
+            // Don't fail the entire operation for individual participant failures
+          }
+        });
+
+        await Future.wait(updateFutures);
+        AppLogger().debug('✅ Participant deactivation completed');
+
+      } catch (e) {
+        AppLogger().warning('⚠️ Error deactivating participants (room is still completed): $e');
+        // Don't fail the operation - room status update is what matters most
+      }
+
+      AppLogger().info('✅ Arena room $roomId completed successfully');
+
+    } catch (e) {
+      AppLogger().error('❌ Error completing Arena room $roomId: $e');
+
+      // Add more context to the error for better debugging
+      if (e.toString().contains('network')) {
+        throw Exception('Network error while completing room: ${e.toString()}');
+      } else if (e.toString().contains('timeout')) {
+        throw Exception('Timeout while completing room: ${e.toString()}');
       } else if (e.toString().contains('document_not_found')) {
         throw Exception('Room not found: ${e.toString()}');
       } else {
@@ -3204,6 +3430,11 @@ class AppwriteService {
       );
 
       AppLogger().info('Arena debate started: $roomId');
+
+      // Start arena recording when room becomes active
+      AppLogger().info('🎬 Starting arena recording for active room: $roomId');
+      await startArenaRecording(roomId);
+      AppLogger().info('✅ Arena recording initiated successfully');
     } catch (e) {
       AppLogger().error('Error starting Arena debate: $e');
       rethrow;
@@ -3693,6 +3924,83 @@ class AppwriteService {
     }
   }
 
+  /// Search users specifically by username
+  Future<List<UserProfile>> searchUsersByUsername(String query) async {
+    try {
+      if (query.trim().isEmpty) {
+        return [];
+      }
+
+      AppLogger().debug('Searching users with username query: $query');
+
+      // Try using the search functionality - search by 'name' field
+      final response = await databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'users',
+        queries: [
+          Query.search('name', query),
+          Query.limit(10),
+        ],
+      );
+
+      final profiles = <UserProfile>[];
+      for (final doc in response.documents) {
+        try {
+          final userData = Map<String, dynamic>.from(doc.data);
+          userData['id'] = doc.$id;
+          userData['createdAt'] = doc.$createdAt;
+          userData['updatedAt'] = doc.$updatedAt;
+          final profile = UserProfile.fromMap(userData);
+          profiles.add(profile);
+        } catch (e) {
+          AppLogger().warning('Failed to parse user profile: $e');
+        }
+      }
+
+      AppLogger().debug('Found ${profiles.length} users matching username "$query"');
+      return profiles;
+    } catch (e) {
+      AppLogger().error('Error searching users by username: $e');
+
+      // Fallback to simple listing with manual filter
+      try {
+        final response = await databases.listDocuments(
+          databaseId: 'arena_db',
+          collectionId: 'users',
+          queries: [
+            Query.limit(100),
+          ],
+        );
+
+        final profiles = <UserProfile>[];
+        for (final doc in response.documents) {
+          try {
+            final userData = Map<String, dynamic>.from(doc.data);
+            userData['id'] = doc.$id;
+            userData['createdAt'] = doc.$createdAt;
+            userData['updatedAt'] = doc.$updatedAt;
+
+            // Manual filter by name
+            final name = (userData['name'] ?? '').toString().toLowerCase();
+            if (name.contains(query.toLowerCase())) {
+              final profile = UserProfile.fromMap(userData);
+              profiles.add(profile);
+
+              if (profiles.length >= 10) break; // Limit results
+            }
+          } catch (e) {
+            AppLogger().warning('Failed to parse user profile: $e');
+          }
+        }
+
+        return profiles;
+      } catch (fallbackError) {
+        AppLogger().error('Fallback search also failed: $fallbackError');
+        return [];
+      }
+    }
+  }
+
   // Debug method to test user search functionality
   Future<void> debugUserSearch() async {
     try {
@@ -4090,6 +4398,7 @@ class AppwriteService {
     required String creatorId,
     required String topic,
     String? description,
+    bool enablePlayback = false,
     int maxParticipants = 1000, // Allow unlimited participants (high limit)
   }) async {
     try {
@@ -4280,6 +4589,11 @@ class AppwriteService {
             'judgesSubmitted': 0,
             'teamSize': teamSize, // CRITICAL: Store team size for 2v2 support
             'moderatorId': creatorId,
+            'enablePlayback': enablePlayback,
+            'recordingStatus': null,
+            'recordingStarted': null,
+            'recordingEnded': null,
+            'playbackId': null,
           },
         );
       } catch (e) {
@@ -4386,6 +4700,7 @@ class AppwriteService {
     required String creatorId,
     required String topic,
     String? description,
+    bool enablePlayback = false,
   }) async {
     // Use a deterministic document ID for waiting rooms
     final documentId = 'waiting_$creatorId';
@@ -4441,6 +4756,11 @@ class AppwriteService {
           'judgesSubmitted': 0,
           'moderatorId': creatorId,
           'teamSize': 1, // Simple rooms only support 1v1
+          'enablePlayback': enablePlayback,
+          'recordingStatus': null,
+          'recordingStarted': null,
+          'recordingEnded': null,
+          'playbackId': null,
         },
       );
       AppLogger().info('✅ Room document created: $documentId');
@@ -5188,7 +5508,7 @@ class AppwriteService {
       AppLogger().info('Added user $userId to speaker queue at position $queuePosition');
     } catch (e) {
       AppLogger().error('Error adding to speaker queue: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -5219,7 +5539,7 @@ class AppwriteService {
       }
     } catch (e) {
       AppLogger().error('Error removing from speaker queue: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -5253,7 +5573,7 @@ class AppwriteService {
       }
     } catch (e) {
       AppLogger().error('Error setting current speaker: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -5298,6 +5618,472 @@ class AppwriteService {
     } catch (e) {
       AppLogger().error('Error subscribing to speaker queue: $e');
       return null;
+    }
+  }
+
+  // ==========================================
+  // ARENA PLAYBACK METHODS
+  // ==========================================
+
+  /// Start recording an arena debate
+  Future<void> startArenaRecording(String roomId) async {
+    try {
+      AppLogger().info('🎬 Starting recording for arena room: $roomId');
+
+      await databases.updateDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'arena_rooms',
+        documentId: roomId,
+        data: {
+          'recordingStatus': 'recording',
+          'recordingStarted': DateTime.now().toIso8601String(),
+        },
+      );
+
+      AppLogger().info('✅ Arena recording started');
+    } catch (e) {
+      AppLogger().error('❌ Error starting arena recording: $e');
+      rethrow;
+    }
+  }
+
+  /// Stop recording and create playback entry
+  Future<String> stopArenaRecording({
+    required String roomId,
+    required String audioUrl,
+    required int duration,
+    required int fileSize,
+  }) async {
+    try {
+      AppLogger().info('🎬 Stopping recording for arena room: $roomId');
+
+      final roomDoc = await databases.getDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'arena_rooms',
+        documentId: roomId,
+      );
+
+      final playbackId = ID.unique();
+
+      final playbackDoc = await databases.createDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'arena_playbacks',
+        documentId: playbackId,
+        data: {
+          'originalRoomId': roomId,
+          'title': roomDoc.data['topic'] ?? 'Arena Debate',
+          'topic': roomDoc.data['topic'] ?? '',
+          'description': roomDoc.data['description'],
+          'audioUrl': audioUrl,
+          'audioFormat': 'mp3',
+          'duration': duration,
+          'fileSize': fileSize,
+          'status': 'ready',
+          'visibility': 'public',
+          'debater1Id': roomDoc.data['debater1Id'] ?? roomDoc.data['moderatorId'], // Use moderator for manual rooms
+          'debater2Id': roomDoc.data['debater2Id'] ?? roomDoc.data['moderatorId'], // Use moderator for manual rooms
+          'moderatorId': roomDoc.data['moderatorId'],
+          'winnerSide': roomDoc.data['winnerSide'],
+          'totalJudges': roomDoc.data['totalJudges'] ?? 0,
+          'affirmativeVotes': roomDoc.data['affirmativeVotes'] ?? 0,
+          'negativeVotes': roomDoc.data['negativeVotes'] ?? 0,
+          'viewCount': 0,
+          'likeCount': 0,
+          'recordedAt': DateTime.now().toIso8601String(),
+          'processingCompleted': DateTime.now().toIso8601String(),
+        },
+        permissions: [
+          Permission.read(Role.any()), // Allow anyone to read public playbacks
+        ],
+      );
+
+      // CRITICAL: Preserve enablePlayback field when marking as completed
+      // This ensures the lobby continues to show the room for playback access
+      await databases.updateDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'arena_rooms',
+        documentId: roomId,
+        data: {
+          'status': 'completed',
+          'recordingStatus': 'ready',
+          'recordingEnded': DateTime.now().toIso8601String(),
+          'playbackId': playbackId,
+          'enablePlayback': 'true', // Ensure lobby shows this completed room
+        },
+      );
+
+      AppLogger().info('✅ Arena recording stopped, playback created: $playbackId');
+      return playbackId;
+    } catch (e) {
+      AppLogger().error('❌ Error stopping arena recording: $e');
+      rethrow;
+    }
+  }
+
+  /// Get a specific playback
+  Future<Map<String, dynamic>?> getPlayback(String playbackId) async {
+    try {
+      final doc = await databases.getDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'arena_playbacks',
+        documentId: playbackId,
+      );
+      return {
+        ...doc.data,
+        '\$id': doc.$id,
+      };
+    } catch (e) {
+      AppLogger().error('❌ Error getting playback: $e');
+      return null;
+    }
+  }
+
+  /// Get playbacks by original room ID
+  Future<List<Map<String, dynamic>>> getPlaybacksByRoomId(String roomId) async {
+    try {
+      final response = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'arena_playbacks',
+        queries: [
+          Query.equal('originalRoomId', roomId),
+          Query.orderDesc('\$createdAt'),
+        ],
+      );
+      return response.documents.map((doc) => {
+        ...doc.data,
+        '\$id': doc.$id,
+      }).toList();
+    } catch (e) {
+      AppLogger().error('❌ Error getting playbacks by room ID: $e');
+      return [];
+    }
+  }
+
+  /// Get playback timeline segments
+  Future<List<Map<String, dynamic>>> getPlaybackTimeline(String playbackId) async {
+    try {
+      final response = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'playback_timeline',
+        queries: [
+          Query.equal('playbackId', playbackId),
+          Query.orderAsc('order'),
+        ],
+      );
+      return response.documents.map((doc) => doc.data).toList();
+    } catch (e) {
+      AppLogger().error('❌ Error getting playback timeline: $e');
+      return [];
+    }
+  }
+
+  /// Get playback events at a specific time
+  Future<List<Map<String, dynamic>>> getPlaybackEventsAtTime({
+    required String playbackId,
+    required int timestamp,
+  }) async {
+    try {
+      final response = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'playback_events',
+        queries: [
+          Query.equal('playbackId', playbackId),
+          Query.equal('timestamp', timestamp),
+          Query.equal('isVisible', true),
+        ],
+      );
+      return response.documents.map((doc) => doc.data).toList();
+    } catch (e) {
+      AppLogger().error('❌ Error getting playback events: $e');
+      return [];
+    }
+  }
+
+  /// Record participant joining/leaving playback
+  Future<void> recordPlaybackParticipant({
+    required String playbackId,
+    required String action,
+    required int position,
+  }) async {
+    try {
+      final currentUser = await getCurrentUser();
+      if (currentUser == null) return;
+
+      if (action == 'joined') {
+        await databases.createDocument(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: 'playback_participants',
+          documentId: ID.unique(),
+          data: {
+            'playbackId': playbackId,
+            'userId': currentUser.$id,
+            'joinedAt': DateTime.now().toIso8601String(),
+            'currentPosition': position,
+            'isActive': true,
+            'watchTime': 0,
+          },
+        );
+      } else if (action == 'left') {
+        final response = await databases.listDocuments(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: 'playback_participants',
+          queries: [
+            Query.equal('playbackId', playbackId),
+            Query.equal('userId', currentUser.$id),
+            Query.equal('isActive', true),
+          ],
+        );
+
+        if (response.documents.isNotEmpty) {
+          final doc = response.documents.first;
+          await databases.updateDocument(
+            databaseId: AppwriteConstants.databaseId,
+            collectionId: 'playback_participants',
+            documentId: doc.$id,
+            data: {
+              'leftAt': DateTime.now().toIso8601String(),
+              'isActive': false,
+            },
+          );
+        }
+      }
+    } catch (e) {
+      AppLogger().error('❌ Error recording playback participant: $e');
+    }
+  }
+
+  /// Update participant position in playback
+  Future<void> updatePlaybackParticipantPosition({
+    required String playbackId,
+    required int position,
+  }) async {
+    try {
+      final currentUser = await getCurrentUser();
+      if (currentUser == null) return;
+
+      final response = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'playback_participants',
+        queries: [
+          Query.equal('playbackId', playbackId),
+          Query.equal('userId', currentUser.$id),
+          Query.equal('isActive', true),
+        ],
+      );
+
+      if (response.documents.isNotEmpty) {
+        final doc = response.documents.first;
+        await databases.updateDocument(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: 'playback_participants',
+          documentId: doc.$id,
+          data: {
+            'currentPosition': position,
+          },
+        );
+      }
+    } catch (e) {
+      AppLogger().error('❌ Error updating participant position: $e');
+    }
+  }
+
+  /// Update participant playback speed
+  Future<void> updatePlaybackParticipantSpeed({
+    required String playbackId,
+    required String speed,
+  }) async {
+    try {
+      final currentUser = await getCurrentUser();
+      if (currentUser == null) return;
+
+      final response = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'playback_participants',
+        queries: [
+          Query.equal('playbackId', playbackId),
+          Query.equal('userId', currentUser.$id),
+          Query.equal('isActive', true),
+        ],
+      );
+
+      if (response.documents.isNotEmpty) {
+        final doc = response.documents.first;
+        await databases.updateDocument(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: 'playback_participants',
+          documentId: doc.$id,
+          data: {
+            'playbackSpeed': speed,
+          },
+        );
+      }
+    } catch (e) {
+      AppLogger().error('❌ Error updating participant speed: $e');
+    }
+  }
+
+  /// Increment playback view count
+  Future<void> incrementPlaybackViewCount(String playbackId) async {
+    try {
+      final doc = await databases.getDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'arena_playbacks',
+        documentId: playbackId,
+      );
+
+      await databases.updateDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'arena_playbacks',
+        documentId: playbackId,
+        data: {
+          'viewCount': (doc.data['viewCount'] ?? 0) + 1,
+        },
+      );
+    } catch (e) {
+      AppLogger().error('❌ Error incrementing view count: $e');
+    }
+  }
+
+  /// Get list of available playbacks
+  Future<List<Map<String, dynamic>>> getAvailablePlaybacks({
+    int limit = 20,
+    int offset = 0,
+    String? searchQuery,
+    String? userId,
+  }) async {
+    try {
+      AppLogger().info('🔍 getAvailablePlaybacks called with userId: $userId, limit: $limit');
+
+      List<String> queries = [
+        Query.equal('status', 'ready'),
+        Query.equal('visibility', 'public'),
+        Query.orderDesc('\$createdAt'),
+        Query.limit(limit),
+        Query.offset(offset),
+      ];
+
+      if (userId != null) {
+        queries.add(Query.or([
+          Query.equal('debater1Id', userId),
+          Query.equal('debater2Id', userId),
+          Query.equal('moderatorId', userId),
+        ]));
+        AppLogger().info('🔍 Added user filter for: $userId');
+      }
+
+      AppLogger().info('🔍 Executing query with ${queries.length} filters');
+
+      final response = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'arena_playbacks',
+        queries: queries,
+      );
+
+      AppLogger().info('✅ Found ${response.documents.length} playback documents');
+
+      final results = response.documents.map((doc) => {
+        ...doc.data,
+        '\$id': doc.$id,
+      }).toList();
+
+      if (results.isNotEmpty) {
+        AppLogger().info('📹 Playback titles: ${results.map((p) => p['title']).join(', ')}');
+      } else {
+        AppLogger().warning('❌ No playbacks found with current filters');
+
+        // Try a simpler query without filters to debug
+        AppLogger().info('🔧 Trying query without status/visibility filters...');
+        AppLogger().info('🔧 Database ID: ${AppwriteConstants.databaseId}');
+        AppLogger().info('🔧 Collection ID: arena_playbacks');
+        final debugResponse = await databases.listDocuments(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: 'arena_playbacks',
+          queries: [Query.limit(10)],
+        );
+        AppLogger().info('📊 Debug query found ${debugResponse.documents.length} total documents');
+
+        for (final doc in debugResponse.documents) {
+          final data = doc.data;
+          AppLogger().info('📋 Document: ${data['title']} - status: ${data['status']}, visibility: ${data['visibility']}');
+        }
+      }
+
+      return results;
+    } catch (e) {
+      AppLogger().error('❌ Error getting available playbacks: $e');
+      return [];
+    }
+  }
+
+  /// Create timeline segment during recording
+  Future<void> createTimelineSegment({
+    required String playbackId,
+    required int startTime,
+    required int endTime,
+    required String segmentType,
+    String? speakerId,
+    String? speakerRole,
+    String? phase,
+    String? title,
+    String? description,
+    bool isSkippable = true,
+    required int order,
+  }) async {
+    try {
+      await databases.createDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'playback_timeline',
+        documentId: ID.unique(),
+        data: {
+          'playbackId': playbackId,
+          'startTime': startTime,
+          'endTime': endTime,
+          'speakerId': speakerId,
+          'speakerRole': speakerRole,
+          'segmentType': segmentType,
+          'phase': phase,
+          'title': title,
+          'description': description,
+          'isSkippable': isSkippable,
+          'order': order,
+        },
+      );
+    } catch (e) {
+      AppLogger().error('❌ Error creating timeline segment: $e');
+    }
+  }
+
+  /// Record an event during playback
+  Future<void> recordPlaybackEvent({
+    required String playbackId,
+    required int timestamp,
+    required String eventType,
+    String? userId,
+    String? userName,
+    String? userRole,
+    String? content,
+    Map<String, dynamic>? metadata,
+    bool isVisible = true,
+  }) async {
+    try {
+      await databases.createDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'playback_events',
+        documentId: ID.unique(),
+        data: {
+          'playbackId': playbackId,
+          'timestamp': timestamp,
+          'eventType': eventType,
+          'userId': userId,
+          'userName': userName,
+          'userRole': userRole,
+          'content': content,
+          'metadata': metadata,
+          'isVisible': isVisible,
+        },
+      );
+    } catch (e) {
+      AppLogger().error('❌ Error recording playback event: $e');
     }
   }
 } 

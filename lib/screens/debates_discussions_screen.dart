@@ -23,6 +23,7 @@ import '../widgets/appwrite_timer_widget.dart';
 import '../widgets/user_profile_bottom_sheet.dart';
 import '../widgets/challenge_bell.dart';
 import '../widgets/mattermost_chat_widget.dart';
+import '../widgets/real_time_coin_balance.dart';
 import 'email_compose_screen.dart';
 import '../models/discussion_chat_message.dart';
 // import '../widgets/floating_im_widget.dart'; // Unused import
@@ -55,6 +56,58 @@ import '../services/audio_preloader_service.dart';
 import 'package:get_it/get_it.dart';
 
 final getIt = GetIt.instance;
+
+// Reaction data model for displaying emoji reactions and gifts
+class ReactionData {
+  final String emoji;
+  final String targetUserId;
+  final String senderUserId;
+  final String? senderName;
+  final DateTime timestamp;
+  final String id;
+  final bool isGift;
+  final int? giftValue;
+  final String? giftName;
+
+  ReactionData({
+    required this.emoji,
+    required this.targetUserId,
+    required this.senderUserId,
+    this.senderName,
+    required this.timestamp,
+    String? id,
+    this.isGift = false,
+    this.giftValue,
+    this.giftName,
+  }) : id = id ?? '${DateTime.now().millisecondsSinceEpoch}_${targetUserId}_${senderUserId}';
+
+  Map<String, dynamic> toMap() {
+    return {
+      'emoji': emoji,
+      'targetUserId': targetUserId,
+      'senderUserId': senderUserId,
+      'senderName': senderName,
+      'timestamp': timestamp.toIso8601String(),
+      'isGift': isGift,
+      'giftValue': giftValue,
+      'giftName': giftName,
+    };
+  }
+
+  factory ReactionData.fromMap(Map<String, dynamic> map, String id) {
+    return ReactionData(
+      id: id,
+      emoji: map['emoji'] ?? '👍',
+      targetUserId: map['targetUserId'] ?? '',
+      senderUserId: map['senderUserId'] ?? '',
+      senderName: map['senderName'],
+      timestamp: DateTime.parse(map['timestamp'] ?? DateTime.now().toIso8601String()),
+      isGift: map['isGift'] ?? false,
+      giftValue: map['giftValue'],
+      giftName: map['giftName'],
+    );
+  }
+}
 
 class DebatesDiscussionsScreen extends StatefulWidget {
   final String roomId;
@@ -125,7 +178,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   // Gift system
   int _currentUserCoinBalance = 0;
   List<Gift> _availableGifts = [];
-  
+
+  // Reaction system
+  final List<ReactionData> _activeReactions = [];
+
   // Participants
   final List<UserProfile> _speakerPanelists = []; // Max 6 speakers
   final List<UserProfile> _audienceMembers = [];
@@ -138,10 +194,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
   // Real-time speaker queue sync
   RealtimeSubscription? _speakerQueueSubscription;
-  
+
+  // Real-time reactions sync
+  RealtimeSubscription? _reactionsSubscription;
+
   // Role mapping for participants (userId -> role)
   final Map<String, String> _participantRoles = {};
-  
+
+  // In-flight fetch tracking to prevent redundant database calls
+  final Set<String> _inFlightFetches = {};
+
   // Performance optimization - cache last participants to prevent unnecessary rebuilds
   final ParticipantDiffManager _diffManager = ParticipantDiffManager();
   List<dynamic> _lastParticipants = [];
@@ -239,9 +301,20 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     _loadGiftData();
     _initializeWebRTC();
     _initializeSpeakerQueueSync();
+    _initializeReactionsSync();
 
     // Add LiveKit service listener to sync mute state changes from data messages
     _liveKitService.addListener(_onLiveKitStateChanged);
+
+    // Set up speaking detection callback to trigger UI updates
+    _liveKitService.onSpeakingChanged = (String userId, bool isSpeaking) {
+      AppLogger().debug('🗣️ Speaking state changed for $userId: $isSpeaking');
+      if (mounted) {
+        setState(() {
+          // Trigger UI rebuild when speaking state changes
+        });
+      }
+    };
 
     // Configure audio for maximum volume
     _configureAudio();
@@ -439,9 +512,12 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     } catch (e) {
       AppLogger().error('❌ Error toggling mute: $e');
       
-      // Check if this is a permission error - if so, try to reconnect with correct role
-      if (e.toString().contains('permission') || e.toString().contains('publish audio')) {
-        AppLogger().warning('🚨 PERMISSION ERROR: Attempting to reconnect with correct role');
+      // Check if this is a permission/token error - if so, try to reconnect with correct role
+      if (e.toString().contains('permission') ||
+          e.toString().contains('publish audio') ||
+          e.toString().contains('TrackPublishException') ||
+          e.toString().contains('Failed to publish track')) {
+        AppLogger().warning('🚨 TOKEN/PERMISSION ERROR: Attempting to reconnect with correct role');
         
         // Force disconnect and reconnect with updated permissions
         try {
@@ -821,7 +897,14 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   Future<void> _reinitializeAudioForSpeaker() async {
     try {
       AppLogger().debug('🔄 Reinitializing LiveKit audio connection for speaker role...');
-      
+      AppLogger().debug('🔄 Current state: moderator=$_isCurrentUserModerator, speaker=$_isCurrentUserSpeaker');
+
+      // Verify the speaker flag is set
+      if (!_isCurrentUserSpeaker && !_isCurrentUserModerator) {
+        AppLogger().error('❌ Cannot reinitialize audio for speaker - user is not marked as speaker/moderator!');
+        return;
+      }
+
       // Disconnect existing audio service if connected
       if (_isAudioConnected) {
         AppLogger().debug('🔌 Disconnecting existing LiveKit audio connection...');
@@ -833,14 +916,26 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           });
         }
       }
-      
+
       // Brief delay to ensure cleanup
       await Future.delayed(const Duration(milliseconds: 500));
-      
+
+      // Double-check role before reconnecting
+      final expectedRole = _computeInitialRole();
+      AppLogger().debug('🔄 Expected role for reconnection: $expectedRole');
+
+      if (expectedRole == 'audience') {
+        AppLogger().error('❌ Role mismatch - computed role is "audience" but should be speaker/moderator!');
+        AppLogger().error('❌ State: moderator=$_isCurrentUserModerator, speaker=$_isCurrentUserSpeaker');
+        return;
+      }
+
       // Reconnect with speaker role
-      AppLogger().debug('🎤 Reconnecting with speaker role...');
+      AppLogger().debug('🎤 Reconnecting with $expectedRole role...');
       await _connectToAudio();
-      
+
+      AppLogger().debug('✅ Audio reinitialization complete');
+
     } catch (e) {
       AppLogger().error('❌ Error reinitializing LiveKit audio for speaker: $e');
       // Continue anyway - user can try manual connect
@@ -978,6 +1073,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         );
         setState(() {
           _roomData = optimizedRoomData;
+
+          // Initialize queue state from room data (default to true if not set)
+          if (roomData['queueEnabled'] != null) {
+            _queueEnabled = roomData['queueEnabled'];
+            AppLogger().debug('🔄 Loaded queue state from database: $_queueEnabled');
+          } else {
+            // Default to enabled for new rooms or rooms without this field
+            _queueEnabled = true;
+            AppLogger().debug('🔄 No queue state in database, defaulting to enabled');
+          }
         });
         
         // Load moderator profile if available
@@ -1467,7 +1572,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
     // Speaker queue subscription
     _speakerQueueSubscription?.close();
-    
+
+    // Reactions subscription
+    _reactionsSubscription?.close();
+
     // Clean up Firebase when leaving room (temporarily disabled)
     // _firebaseSync.clearRoom(widget.roomId);
     
@@ -2014,6 +2122,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
   /// Handle participant updates using diff-based approach
   Future<void> _handleParticipantUpdate(dynamic response) async {
+    final handlerStartTime = DateTime.now();
+    AppLogger().info('📥 SUBSCRIPTION: Received update at ${handlerStartTime.millisecondsSinceEpoch}');
+
     try {
       // Extract update information
       String updateType = 'unknown';
@@ -2030,7 +2141,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         return;
       }
 
-      AppLogger().info('🔄 DIFF UPDATE: Processing $updateType event for room ${widget.roomId}');
+      final processingStartTime = DateTime.now();
+      final subscriptionLatency = processingStartTime.difference(handlerStartTime).inMilliseconds;
+      AppLogger().info('🔄 DIFF UPDATE: Processing $updateType event for room ${widget.roomId} (subscription latency: ${subscriptionLatency}ms)');
 
       // Get current participant state
       final currentParticipants = <String, UserProfile>{};
@@ -2152,16 +2265,29 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       AppLogger().info('📤 DIFF: Removed participant $userId');
     }
 
-    // Handle additions (need to fetch user profiles)
+    // Handle additions (use stub-first for instant UI)
     for (final userId in diff.addedIds) {
       final role = diff.newRoles[userId] ?? 'audience';
-      final userProfile = await _fetchUserProfile(userId);
 
-      if (userProfile != null) {
-        _addParticipantToList(userProfile, role);
-        needsUIUpdate = true;
-        AppLogger().info('📥 DIFF: Added participant $userId with role $role');
-      }
+      // Create stub immediately for instant feedback
+      var userProfile = _createStubParticipant(userId);
+      _addParticipantToList(userProfile, role);
+      needsUIUpdate = true;
+      AppLogger().info('📥 DIFF: Added stub participant $userId with role $role');
+
+      // Hydrate in background
+      _fetchUserProfile(userId).then((fullProfile) {
+        if (fullProfile != null && mounted && !_isDisposing) {
+          _mergeParticipantProfile(userProfile, fullProfile);
+          if (mounted) {
+            setState(() {
+              // UI updates with full profile
+            });
+          }
+        }
+      }).catchError((e) {
+        AppLogger().error('Failed to hydrate new participant $userId: $e');
+      });
     }
 
     // Handle role changes
@@ -2169,24 +2295,100 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       final userId = entry.key;
       final roleChange = entry.value;
 
-      final userProfile = _findParticipantById(userId);
-      if (userProfile != null) {
-        _moveParticipantToRole(userProfile, roleChange.newRole);
-        needsUIUpdate = true;
+      var userProfile = _findParticipantById(userId);
 
-        // Check for special role changes
-        if (roleChange.newRole == 'pending') {
-          isHandRaiseEvent = true;
-        } else if (roleChange.newRole == 'audience' && roleChange.oldRole == 'pending') {
-          if (userId == _currentUser?.id && _hasRequestedSpeaker) {
+      // OPTIMIZED FIX: If user not found, use stub-first hydration for instant UI
+      if (userProfile == null) {
+        AppLogger().warning('⚠️ DRIFT FIX: User $userId not found in local state');
+
+        // Create lightweight stub immediately
+        userProfile = _createStubParticipant(userId);
+        _addParticipantToList(userProfile, roleChange.oldRole);
+        AppLogger().info('⚡ STUB: Created instant stub for $userId with role ${roleChange.oldRole}');
+
+        // Hydrate full profile in background (don't await)
+        _fetchUserProfile(userId).then((fullProfile) {
+          if (fullProfile != null && mounted && !_isDisposing) {
+            _mergeParticipantProfile(userProfile!, fullProfile);
+            if (mounted) {
+              setState(() {
+                // UI will update with full profile data
+              });
+            }
+          }
+        }).catchError((e) {
+          AppLogger().error('Failed to hydrate profile for $userId: $e');
+        });
+      }
+
+      // OPTIMISTIC UPDATE: If this role change affects the current user, update UI IMMEDIATELY
+      final isCurrentUser = userId == _currentUser?.id;
+      if (isCurrentUser) {
+        // Apply role change instantly for current user (before waiting for full batch processing)
+        _moveParticipantToRole(userProfile, roleChange.newRole);
+
+        // Trigger immediate UI update for current user's perspective
+        if (mounted && !_isDisposing) {
+          setState(() {
+            // Current user sees their role change instantly
+          });
+          AppLogger().info('⚡ INSTANT: Current user role changed to ${roleChange.newRole} - UI updated immediately');
+        }
+      } else {
+        // For other users, apply normally
+        _moveParticipantToRole(userProfile, roleChange.newRole);
+      }
+
+      needsUIUpdate = true;
+
+      // Check for special role changes
+      if (roleChange.newRole == 'pending') {
+        isHandRaiseEvent = true;
+
+        // INSTANT NOTIFICATION: Show hand-raise dialog immediately for moderator
+        if (_hasModeratorPowers && userProfile != null) {
+          final notificationTime = DateTime.now();
+          AppLogger().info('⚡ INSTANT: Hand raise detected for ${userProfile.name} at ${notificationTime.millisecondsSinceEpoch}, showing notification NOW');
+          // Don't wait for batch processing, show notification immediately
+          Future.microtask(() {
+            if (mounted && !_isDisposing) {
+              _showHandRaiseNotificationFromPayload({'userId': userId});
+            }
+          });
+        }
+      } else if (roleChange.newRole == 'audience') {
+        // User demoted/moved to audience
+        if (isCurrentUser) {
+          if (roleChange.oldRole == 'pending' && _hasRequestedSpeaker) {
             isHandLowerEvent = true;
           }
-        } else if (['speaker', 'affirmative', 'negative'].contains(roleChange.newRole) && userId == _currentUser?.id) {
-          needsLiveKitUpdate = true;
-        }
 
-        AppLogger().info('🔄 DIFF: Role change for $userId: ${roleChange.oldRole} -> ${roleChange.newRole}');
+          // FORCE MUTE when current user is demoted to audience
+          if (['speaker', 'affirmative', 'negative'].contains(roleChange.oldRole)) {
+            AppLogger().info('🔇 SUBSCRIPTION: Current user demoted from ${roleChange.oldRole} to audience - FORCE MUTING');
+
+            _isCurrentUserSpeaker = false;
+
+            // Force unpublish audio tracks
+            Future.microtask(() async {
+              await _liveKitService.unpublishAllTracks();
+              if (_liveKitService.isConnected) {
+                await _liveKitService.disableAudio();
+              }
+              if (mounted) {
+                setState(() {
+                  _isMuted = true;
+                  _isVideoEnabled = false;
+                });
+              }
+            });
+          }
+        }
+      } else if (['speaker', 'affirmative', 'negative'].contains(roleChange.newRole) && isCurrentUser) {
+        needsLiveKitUpdate = true;
       }
+
+      AppLogger().info('🔄 DIFF: Role change for $userId: ${roleChange.oldRole} -> ${roleChange.newRole}');
     }
 
     // Update UI if needed
@@ -2194,11 +2396,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       setState(() {
         // UI will rebuild with updated participant lists
       });
-    }
-
-    // Handle special events
-    if (isHandRaiseEvent && _hasModeratorPowers) {
-      _showHandRaiseNotificationFromPayload({'userId': diff.roleChanges.keys.first});
     }
 
     if (isHandLowerEvent) {
@@ -2268,10 +2465,51 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   /// Fetch a single user profile (with batching and caching)
   Future<UserProfile?> _fetchUserProfile(String userId) async {
     try {
-      return await _batchProfileService.getUserProfile(userId);
+      // Check if fetch is already in-flight
+      if (_inFlightFetches.contains(userId)) {
+        AppLogger().debug('⏳ Fetch already in-flight for $userId, skipping duplicate request');
+        return null;
+      }
+
+      // Mark as in-flight
+      _inFlightFetches.add(userId);
+
+      try {
+        final profile = await _batchProfileService.getUserProfile(userId);
+        return profile;
+      } finally {
+        // Always remove from in-flight set
+        _inFlightFetches.remove(userId);
+      }
     } catch (e) {
       AppLogger().error('Failed to fetch user profile for $userId: $e');
+      _inFlightFetches.remove(userId);
       return null;
+    }
+  }
+
+  /// Create a lightweight stub participant for instant UI feedback
+  UserProfile _createStubParticipant(String userId) {
+    return UserProfile(
+      id: userId,
+      name: 'Loading...',
+      email: '',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      avatar: null, // Will show default avatar
+    );
+  }
+
+  /// Merge full profile data into existing stub participant
+  void _mergeParticipantProfile(UserProfile stub, UserProfile fullProfile) {
+    // Find the stub in all lists and replace with full profile
+    final role = _participantRoles[stub.id];
+    if (role != null) {
+      // Remove stub
+      _removeParticipantFromLists(stub.id);
+      // Add full profile
+      _addParticipantToList(fullProfile, role);
+      AppLogger().debug('✅ Merged full profile for ${fullProfile.name} (was stub)');
     }
   }
 
@@ -2633,13 +2871,44 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       // Check if this update is for our current room
       if (response.payload != null && response.payload['\$id'] == widget.roomId) {
         final roomStatus = response.payload['status'];
-        
-        AppLogger().debug('Room status update: $roomStatus');
-        
+        final queueEnabled = response.payload['queueEnabled'];
+
+        AppLogger().debug('Room update - status: $roomStatus, queueEnabled: $queueEnabled');
+
+        // Handle queue status changes
+        if (queueEnabled != null && queueEnabled != _queueEnabled && mounted && !_isDisposing) {
+          AppLogger().info('Queue status changed by moderator: $queueEnabled');
+
+          setState(() {
+            _queueEnabled = queueEnabled;
+            if (!_queueEnabled) {
+              // Clear queue and current speaker when disabled by moderator
+              _speakerQueue.clear();
+              _currentSpeaker = null;
+              _speakerRequests.clear();
+            }
+          });
+
+          // Show notification to all users about queue status change
+          if (!_isCurrentUserModerator) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  queueEnabled
+                    ? '✅ Moderator enabled speaker queue'
+                    : '❌ Moderator disabled speaker queue'
+                ),
+                backgroundColor: queueEnabled ? Colors.green : Colors.orange,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+
         // If room is ended and current user is not the moderator (who ended it)
         if (roomStatus == 'ended' && !_isCurrentUserModerator && mounted && !_isDisposing) {
           AppLogger().debug('Room ended by moderator, navigating all users out');
-          
+
           // Show notification that room was ended
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -2648,9 +2917,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
               duration: Duration(seconds: 3),
             ),
           );
-          
+
           // Audio/Video cleanup handled by LiveKit
-          
+
           // Navigate back to home screen
           Future.delayed(const Duration(seconds: 1), () {
             if (mounted) {
@@ -2670,25 +2939,48 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     if (_isCurrentUserModerator || _currentUser == null) {
       return;
     }
-    
+
     // Check if current user is a Super Moderator
     final superModService = SuperModeratorService();
     final isSuperMod = superModService.isSuperModerator(_currentUser!.id);
-    
+
     try {
       if (_hasRequestedSpeaker) {
-        // User wants to lower their hand - change back to audience
+        // CRITICAL: Mute audio FIRST, BEFORE database update when lowering hand
+        AppLogger().info('🔇 HAND LOWER: Force muting IMMEDIATELY for ${_currentUser!.name}');
+        _isCurrentUserSpeaker = false;
+        _isMuted = true;
+        _isVideoEnabled = false;
+
+        // Force unpublish audio tracks BEFORE database update
+        await _liveKitService.unpublishAllTracks();
+
+        // Force disable audio for audience role
+        if (_liveKitService.isConnected) {
+          await _liveKitService.disableAudio();
+        }
+
+        // Update UI immediately
+        if (mounted) {
+          setState(() {});
+        }
+
+        AppLogger().info('✅ HAND LOWER: Audio muted instantly, now updating database');
+
+        // Now update database (audio already muted)
         await _appwrite.updateDebateDiscussionParticipantRole(
           roomId: widget.roomId,
           userId: _currentUser!.id,
           newRole: 'audience',
         );
-        
+
+        AppLogger().info('🔇 HAND LOWER: Audio cleanup complete for ${_currentUser!.name} returning to audience');
+
         if (mounted && !_isDisposing) {
           setState(() {
             _hasRequestedSpeaker = false;
           });
-          
+
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('✋ Hand lowered - request cancelled'),
@@ -2697,7 +2989,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
             ),
           );
         }
-        
+
         AppLogger().info('User ${_currentUser!.name} lowered their hand');
       } else if (isSuperMod) {
         // Super Moderator - instant promotion to speaker
@@ -2727,17 +3019,27 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         AppLogger().info('🛡️ Super Moderator ${_currentUser!.name} joined speaker panel instantly');
       } else {
         // Regular user wants to raise their hand - change to pending
+        // OPTIMISTIC: Update local state first for instant user feedback
+        if (mounted && !_isDisposing) {
+          setState(() {
+            _hasRequestedSpeaker = true;
+          });
+        }
+
+        final handRaiseStartTime = DateTime.now();
+        AppLogger().info('⏱️ HAND RAISE: Starting database update at ${handRaiseStartTime.millisecondsSinceEpoch}');
+
         await _appwrite.updateDebateDiscussionParticipantRole(
           roomId: widget.roomId,
           userId: _currentUser!.id,
           newRole: 'pending',
         );
-        
+
+        final handRaiseEndTime = DateTime.now();
+        final handRaiseDuration = handRaiseEndTime.difference(handRaiseStartTime).inMilliseconds;
+        AppLogger().info('⏱️ HAND RAISE: Database updated in ${handRaiseDuration}ms');
+
         if (mounted && !_isDisposing) {
-          setState(() {
-            _hasRequestedSpeaker = true;
-          });
-          
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('✋ Request sent to moderator for approval'),
@@ -2746,8 +3048,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
             ),
           );
         }
-        
-        AppLogger().info('User ${_currentUser!.name} raised their hand');
+
+        AppLogger().info('✋ User ${_currentUser!.name} raised their hand - waiting for moderator subscription to trigger...');
       }
       
       // The real-time subscription will update the UI automatically
@@ -2935,6 +3237,35 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   }
 
   Future<void> _assignUserToRole(UserProfile user, String role) async {
+    // INSTANT MUTE: If demoting to audience, send mute command IMMEDIATELY via LiveKit
+    if (role == 'audience') {
+      AppLogger().info('🔇 INSTANT MUTE: Sending mute command for ${user.name} BEFORE database update');
+
+      // If demoting current user, mute locally immediately
+      if (user.id == _currentUser?.id) {
+        _isCurrentUserSpeaker = false;
+        _isMuted = true;
+        _isVideoEnabled = false;
+
+        // Force unpublish immediately
+        _liveKitService.unpublishAllTracks();
+        if (_liveKitService.isConnected) {
+          _liveKitService.disableAudio();
+        }
+
+        if (mounted) {
+          setState(() {});
+        }
+      } else {
+        // If demoting OTHER user, send LiveKit mute command via data channel IMMEDIATELY
+        if (_liveKitService.isConnected && _hasModeratorPowers) {
+          AppLogger().info('🔇 LIVEKIT MUTE: Sending instant mute command to ${user.name} via data channel');
+          await _liveKitService.muteParticipant(user.id);
+          AppLogger().info('✅ LIVEKIT MUTE: Command sent to ${user.name}');
+        }
+      }
+    }
+
     // Check if user is a Super Moderator being moved to audience (kicked/removed)
     final superModService = SuperModeratorService();
     if (superModService.isSuperModerator(user.id) && role == 'audience') {
@@ -2984,79 +3315,17 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       }
       return;
     }
-    
-    try {
-      await _appwrite.updateDebateDiscussionParticipantRole(
-        roomId: widget.roomId,
-        userId: user.id,
-        newRole: role,
-      );
-      
-      if (mounted) {
-        final roleDisplayName = role == 'affirmative' ? 'Affirmative' : 
-                               role == 'negative' ? 'Negative' : 'Speakers Panel';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ ${user.name} assigned to $roleDisplayName'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-      
-      // If the approved user is the current user, update their role and permissions immediately
-      if (user.id == _currentUser?.id) {
-        AppLogger().info('🔄 ROLE ASSIGNMENT: Current user assigned to role: $role');
-        
-        // Update local role state
-        if (role == 'speaker' || role == 'affirmative' || role == 'negative') {
-          _isCurrentUserSpeaker = true;
-          AppLogger().info('🔄 ROLE ASSIGNMENT: Updated local speaker status to true');
-          
-          // CRITICAL: Reinitialize LiveKit connection with new speaker role
-          AppLogger().info('🔄 ROLE ASSIGNMENT: User promoted to speaker - reinitializing audio connection');
-          await _reinitializeAudioForSpeaker();
-          _showSpeakerActivationDialog();
-        } else if (role == 'audience') {
-          // DEMOTION: Current user demoted back to audience
-          _isCurrentUserSpeaker = false;
-          AppLogger().info('🔄 ROLE ASSIGNMENT: Current user demoted to audience - disabling speaker privileges');
-          
-          // Disable audio/video if they were enabled
-          if (!_isMuted && _isAudioConnected) {
-            await _toggleMute(); // Mute audio
-          }
-          if (_isVideoEnabled) {
-            await _toggleVideo(); // Disable video
-          }
-        }
-      }
-      
-      // CRITICAL: Handle current user demotion BEFORE UI update
-      if (role == 'audience') {
-        final currentUser = await _appwrite.getCurrentUser();
-        if (currentUser != null && user.id == currentUser.$id) {
-          AppLogger().debug('🔇 DEMOTION: Current user demoted to audience - unpublishing audio tracks');
-          await _liveKitService.unpublishAllTracks();
-          
-          // Update local speaker status
-          _isCurrentUserSpeaker = false;
-          
-          // Mute microphone for audience role
-          if (_liveKitService.isConnected) {
-            await _liveKitService.disableAudio();
-          }
-        }
-      }
 
-      // Immediately update moderator UI for instant feedback
+    try {
+      // OPTIMISTIC UPDATE: Update moderator UI BEFORE database call for instant feedback
       if (mounted && !_isDisposing) {
         setState(() {
           // Remove user from speaker requests list (applies to all role changes)
           _speakerRequests.removeWhere((participant) => participant.id == user.id);
-          
+
           // Update participant role mapping
           _participantRoles[user.id] = role;
-          
+
           if (role == 'audience') {
             // DEMOTION: Move user from speakers back to audience
             _speakerPanelists.removeWhere((participant) => participant.id == user.id);
@@ -3071,14 +3340,67 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
             }
           }
         });
-        
-        AppLogger().info('🚀 IMMEDIATE UI: Moderator screen updated instantly for ${user.name} → $role');
+
+        AppLogger().info('⚡ OPTIMISTIC: Moderator UI updated instantly BEFORE database call for ${user.name} → $role');
       }
-      
-      // Sync to Firebase for instant cross-device updates (temporarily disabled)
-      // await _syncParticipantToFirebase(user, role);
-      
-      // Real-time subscription will sync any missed updates from other sources
+
+      // Now update database (moderator already sees the change)
+      await _appwrite.updateDebateDiscussionParticipantRole(
+        roomId: widget.roomId,
+        userId: user.id,
+        newRole: role,
+      );
+
+      if (mounted) {
+        final roleDisplayName = role == 'affirmative' ? 'Affirmative' :
+                               role == 'negative' ? 'Negative' : 'Speakers Panel';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ ${user.name} assigned to $roleDisplayName'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
+      // If the approved user is the current user, update their role and permissions immediately
+      if (user.id == _currentUser?.id) {
+        AppLogger().info('🔄 ROLE ASSIGNMENT: Current user assigned to role: $role');
+        
+        // Update local role state
+        if (role == 'speaker' || role == 'affirmative' || role == 'negative') {
+          _isCurrentUserSpeaker = true;
+          AppLogger().info('🔄 ROLE ASSIGNMENT: Updated local speaker status to true');
+          
+          // CRITICAL: Reinitialize LiveKit connection with new speaker role
+          AppLogger().info('🔄 ROLE ASSIGNMENT: User promoted to speaker - reinitializing audio connection');
+          await _reinitializeAudioForSpeaker();
+          _showSpeakerActivationDialog();
+        } else if (role == 'audience') {
+          // DEMOTION: Current user demoted back to audience - FORCE MUTE
+          _isCurrentUserSpeaker = false;
+          AppLogger().info('🔄 ROLE ASSIGNMENT: Current user demoted to audience - FORCE MUTING');
+
+          // Force unpublish all audio/video tracks
+          await _liveKitService.unpublishAllTracks();
+
+          // Force disable audio
+          if (_liveKitService.isConnected) {
+            await _liveKitService.disableAudio();
+          }
+
+          // Force local mute state
+          _isMuted = true;
+          _isVideoEnabled = false;
+
+          if (mounted) {
+            setState(() {});
+          }
+
+          AppLogger().info('🔇 DEMOTION: Current user force muted and disabled');
+        }
+      }
+
+      // Real-time subscription will sync the promoted user's screen and any other participants
     } catch (e) {
       AppLogger().error('Error assigning user to role: $e');
       if (mounted) {
@@ -3146,14 +3468,29 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     if (!_isCurrentUserModerator || user.id == _moderator?.id) {
       return;
     }
-    
+
     try {
+      // OPTIMISTIC UPDATE: Update moderator UI BEFORE database call
+      if (mounted && !_isDisposing) {
+        setState(() {
+          // Remove from speakers, add to audience
+          _speakerPanelists.removeWhere((participant) => participant.id == user.id);
+          if (!_audienceMembers.any((p) => p.id == user.id)) {
+            _audienceMembers.add(user);
+          }
+          _participantRoles[user.id] = 'audience';
+        });
+
+        AppLogger().info('⚡ OPTIMISTIC: Moderator sees ${user.name} demoted to audience instantly');
+      }
+
+      // Now update database
       await _appwrite.updateDebateDiscussionParticipantRole(
         roomId: widget.roomId,
         userId: user.id,
         newRole: 'audience',
       );
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -3162,8 +3499,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           ),
         );
       }
-      
-      // The real-time subscription will update the UI automatically
+
+      // The real-time subscription will update the demoted user's screen
     } catch (e) {
       AppLogger().error('Error removing speaker: $e');
       if (mounted) {
@@ -3472,16 +3809,17 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
             ),
           ),
           const Spacer(),
-          // Timer Widget
-          AppwriteTimerWidget(
-            key: const ValueKey('debates_timer_widget'),
-            roomId: widget.roomId,
-            roomType: RoomType.debatesDiscussions,
-            isModerator: _isCurrentUserModerator,
-            userId: _currentUser?.id ?? '',
-            compact: true,
-            showControls: _hasModeratorPowers,
-            showConnectionStatus: false,
+          // Coin Balance
+          const RealTimeCoinBalance(
+            textStyle: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+            backgroundColor: Colors.transparent,
+            showCoinIcon: true,
+            iconSize: 12,
+            padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
           ),
           SizedBox(width: isSmallScreen ? 8 : 16),
           const ChallengeBell(
@@ -3714,6 +4052,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
               'avatarUrl': speaker.avatar,
               'avatar': speaker.avatar,
               'role': _participantRoles[speaker.id] ?? 'speaker', // Use actual role
+              'isSpeaking': _liveKitService.isUserSpeaking(speaker.id), // Add speaking state
             })
         .toList();
 
@@ -3726,6 +4065,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         'avatarUrl': _moderator!.avatar,
         'avatar': _moderator!.avatar,
         'role': 'moderator',
+        'isSpeaking': _liveKitService.isUserSpeaking(_moderator!.id), // Add speaking state
       };
     }
 
@@ -3756,6 +4096,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       speakerRequests: speakerRequests, // Pass speaker requests data
       debateStyle: _roomData?['debateStyle'], // Pass the debate style from room data
       isCurrentUserModerator: _isCurrentUserModerator, // Pass moderator status
+      activeReactions: _activeReactions, // Pass active reactions
       onSpeakerTap: (userId) {
         final speaker = _speakerPanelists.firstWhere((s) => s.id == userId);
         final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
@@ -3793,16 +4134,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
   /// Determine the correct LiveKit room type based on debate style
   String _getRoomTypeForLiveKit() {
-    final debateStyle = _roomData?['debateStyle'];
-    
-    // If it's a formal debate (2 slots) or structured take (3 slots), use debate_discussion
-    // If it's an open discussion (8 slots), use open_discussion
-    if (debateStyle == 'Debate' || debateStyle == 'Take') {
-      return 'debate_discussion';
-    } else {
-      // Default to open_discussion for regular discussion rooms
-      return 'open_discussion';
-    }
+    // All three room types (Debate, Take, Discussion) use debate_discussion
+    return 'debate_discussion';
   }
 
   /// Compute user role synchronously - bulletproof against race conditions
@@ -4214,6 +4547,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                         ),
                         const SizedBox(width: 8),
                       ],
+                      _buildReactionButton(),
+                      const SizedBox(width: 8),
                       _buildGiftButton(),
                       const SizedBox(width: 8),
                       _buildControlButton(
@@ -4326,9 +4661,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                         color: _isRecordingClip ? Colors.red : Colors.purple,
                         onTap: _toggleAudioClip,
                       ),
+                    _buildReactionButton(),
                     _buildGiftButton(),
                     _buildControlButton(
-                      icon: _isAudioConnected 
+                      icon: _isAudioConnected
                         ? (_isMuted ? Icons.volume_off : Icons.volume_up)
                         : (_isAudioConnecting ? Icons.hourglass_empty : Icons.speaker),
                       label: _isAudioConnected 
@@ -4573,11 +4909,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                       },
                     ),
                     _buildOptionTile(
-                      icon: LucideIcons.settings,
-                      title: 'Room Settings',
+                      icon: LucideIcons.clock,
+                      title: 'Room Duration',
                       onTap: () {
                         Navigator.pop(context);
-                        _showRoomSettings();
+                        _showRoomDurationInfo();
                       },
                     ),
                     _buildOptionTile(
@@ -5340,12 +5676,34 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         }
         return;
       }
-      
+
+      // Show confirmation dialog to prevent accidental mute all
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('🔇 Mute All Participants'),
+          content: Text('Are you sure you want to mute all ${_webrtcService.remoteParticipants.length} participants? This will silence everyone in the room.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.orange),
+              child: const Text('Mute All'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) return;
+
       // Use LiveKit to mute all participants
       await _webrtcService.muteAllParticipants();
-      
-      AppLogger().info('🔇 Successfully sent mute all command');
-      
+
+      AppLogger().info('🔇 Successfully sent confirmed mute all command');
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -5463,27 +5821,31 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
   void _denySpeakerRequest(UserProfile user) async {
     try {
+      // OPTIMISTIC UPDATE: Update moderator UI BEFORE database call
+      if (mounted) {
+        setState(() {
+          _speakerRequests.removeWhere((request) => request.id == user.id);
+
+          // Make sure user is in audience (not speakers)
+          if (!_audienceMembers.any((p) => p.id == user.id)) {
+            _audienceMembers.add(user);
+          }
+
+          // Update participant role mapping
+          _participantRoles[user.id] = 'audience';
+        });
+
+        AppLogger().info('⚡ OPTIMISTIC: Moderator sees ${user.name} denied instantly');
+      }
+
       // Change user role back to audience
       await _appwrite.updateDebateDiscussionParticipantRole(
         roomId: widget.roomId,
         userId: user.id,
         newRole: 'audience',
       );
-      
-      // Remove from speaker requests and ensure user is in audience
+
       if (mounted) {
-        setState(() {
-          _speakerRequests.removeWhere((request) => request.id == user.id);
-          
-          // Make sure user is in audience (not speakers)
-          if (!_audienceMembers.any((p) => p.id == user.id)) {
-            _audienceMembers.add(user);
-          }
-          
-          // Update participant role mapping
-          _participantRoles[user.id] = 'audience';
-        });
-        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ Denied speaker request from ${user.name}'),
@@ -5491,7 +5853,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           ),
         );
       }
-      
+
       AppLogger().info('Moderator denied speaker request from ${user.name}');
     } catch (e) {
       AppLogger().error('Error denying speaker request: $e');
@@ -5559,22 +5921,26 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       );
 
       // Local state will be updated by real-time subscription
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✅ Added to queue (position $queuePosition)'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Added to queue (position $queuePosition)'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
 
       AppLogger().info('User ${_currentUser!.name} joined speaker queue at position $queuePosition');
     } catch (e) {
       AppLogger().error('❌ Failed to join speaker queue: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('❌ Failed to join speaker queue'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Failed to join speaker queue'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -5602,22 +5968,26 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       );
 
       // Local state will be updated by real-time subscription
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Removed from speaker queue'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Removed from speaker queue'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
 
       AppLogger().info('User ${_currentUser!.name} left speaker queue');
     } catch (e) {
       AppLogger().error('❌ Failed to leave speaker queue: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('❌ Failed to leave speaker queue'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Failed to leave speaker queue'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -5732,31 +6102,109 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   }
 
 
-  /// Toggle queue mode on/off
-  void _toggleQueueMode() {
+  /// Toggle queue mode on/off - now syncs across all users
+  void _toggleQueueMode() async {
     if (!mounted || !_hasModeratorPowers) return;
 
-    setState(() {
-      _queueEnabled = !_queueEnabled;
-      if (!_queueEnabled) {
-        // Clear queue and current speaker when disabling
-        _speakerQueue.clear();
-        _currentSpeaker = null;
-      }
-    });
+    final newQueueState = !_queueEnabled;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _queueEnabled
-            ? '✅ Speaker queue enabled'
-            : '❌ Speaker queue disabled'
+    try {
+      // Update room document in database to sync across all users
+      await _appwrite.updateDebateDiscussionRoom(
+        roomId: widget.roomId,
+        data: {
+          'queueEnabled': newQueueState,
+        },
+      );
+
+      // Update local state
+      setState(() {
+        _queueEnabled = newQueueState;
+        if (!_queueEnabled) {
+          // Clear queue and current speaker when disabling
+          _speakerQueue.clear();
+          _currentSpeaker = null;
+
+          // Also clear any pending speaker requests
+          _speakerRequests.clear();
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _queueEnabled
+              ? '✅ Speaker queue enabled for all participants'
+              : '❌ Speaker queue disabled for all participants'
+          ),
+          backgroundColor: _queueEnabled ? Colors.green : Colors.orange,
         ),
-        backgroundColor: _queueEnabled ? Colors.green : Colors.orange,
-      ),
-    );
+      );
 
-    AppLogger().info('Moderator ${_queueEnabled ? "enabled" : "disabled"} speaker queue');
+      AppLogger().info('Moderator ${_queueEnabled ? "enabled" : "disabled"} speaker queue - synced to all users');
+    } catch (e) {
+      AppLogger().error('Failed to update queue status: $e');
+
+      // Check if this is a field-not-found error (older rooms without queueEnabled field)
+      if (e.toString().contains('Server Error (500)') ||
+          e.toString().contains('document') ||
+          e.toString().contains('queueEnabled')) {
+
+        AppLogger().info('Attempting to initialize queueEnabled field for older room');
+
+        try {
+          // Try to initialize the field by getting current room data and adding queueEnabled
+          final currentRoomData = await _appwrite.getDebateDiscussionRoom(widget.roomId);
+          if (currentRoomData != null) {
+            // Create a complete update with all existing data plus queueEnabled
+            final updateData = Map<String, dynamic>.from(currentRoomData);
+            updateData['queueEnabled'] = newQueueState;
+
+            // Try update again with full data
+            await _appwrite.updateDebateDiscussionRoom(
+              roomId: widget.roomId,
+              data: {
+                'queueEnabled': newQueueState,
+              },
+            );
+
+            // Update local state on success
+            setState(() {
+              _queueEnabled = newQueueState;
+              if (!_queueEnabled) {
+                _speakerQueue.clear();
+                _currentSpeaker = null;
+                _speakerRequests.clear();
+              }
+            });
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  _queueEnabled
+                    ? '✅ Speaker queue enabled for all participants'
+                    : '❌ Speaker queue disabled for all participants'
+                ),
+                backgroundColor: _queueEnabled ? Colors.green : Colors.orange,
+              ),
+            );
+
+            AppLogger().info('Successfully initialized and updated queue status');
+            return; // Exit successfully
+          }
+        } catch (initError) {
+          AppLogger().error('Failed to initialize queueEnabled field: $initError');
+        }
+      }
+
+      // Show error feedback if initialization failed
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update queue status: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _showRoomDurationInfo() {
@@ -5982,6 +6430,68 @@ To join this debate:
     }
   }
 
+  /// Initialize real-time reactions sync
+  Future<void> _initializeReactionsSync() async {
+    if (!mounted) return;
+
+    try {
+      // Subscribe to reactions for this room
+      final realtime = _appwrite.realtime;
+
+      _reactionsSubscription = realtime.subscribe([
+        'databases.arena_db.collections.room_reactions.documents'
+      ]);
+
+      _reactionsSubscription!.stream.listen((response) {
+        if (!mounted) return;
+
+        try {
+          final payload = response.payload;
+
+          // Only process create events
+          if (response.events.any((event) => event.contains('.create'))) {
+            final roomId = payload['roomId'];
+
+            // Only process reactions for this room
+            if (roomId == widget.roomId) {
+              final reaction = ReactionData.fromMap(payload, payload['\$id']);
+
+              // Add to active reactions
+              setState(() {
+                _activeReactions.add(reaction);
+              });
+
+              // Remove after duration (gifts stay longer)
+              final duration = reaction.isGift
+                  ? const Duration(seconds: 7)  // Gifts stay 7 seconds
+                  : const Duration(seconds: 3); // Reactions stay 3 seconds
+
+              Future.delayed(duration, () {
+                if (mounted) {
+                  setState(() {
+                    _activeReactions.removeWhere((r) => r.id == reaction.id);
+                  });
+                }
+              });
+
+              if (reaction.isGift) {
+                AppLogger().info('🎁 Received gift: ${reaction.emoji} (${reaction.giftName}) from ${reaction.senderName} to ${reaction.targetUserId}');
+              } else {
+                AppLogger().info('✨ Received reaction: ${reaction.emoji} for ${reaction.targetUserId}');
+              }
+            }
+          }
+        } catch (e) {
+          AppLogger().error('❌ Error processing reaction update: $e');
+        }
+      });
+
+      AppLogger().info('🔄 Reactions real-time sync initialized for room ${widget.roomId}');
+    } catch (e) {
+      AppLogger().error('❌ Failed to initialize reactions sync: $e');
+    }
+  }
+
   // Gift modal methods - simplified to use working gift bottom sheet
   void _showGiftModal() {
     AppLogger().debug('🎁 DEBUG: Gift modal button pressed');
@@ -6041,6 +6551,10 @@ To join this debate:
                 showSimpleGiftBottomSheet(
                   context,
                   recipient: recipient,
+                  roomId: widget.roomId,
+                  onGiftSent: (emoji, giftName, giftValue, senderName) {
+                    _broadcastGift(emoji, giftName, giftValue, senderName, recipient.id);
+                  },
                 );
               },
             )).toList(),
@@ -6063,9 +6577,9 @@ To join this debate:
 
 
 
-  Widget _buildGiftButton() {
+  Widget _buildReactionButton() {
     return GestureDetector(
-      onTap: _showGiftModal,
+      onTap: _showReactionPicker,
       child: Container(
         width: 50,
         height: 50,
@@ -6075,12 +6589,377 @@ To join this debate:
           border: Border.all(color: Colors.grey[600]!, width: 1),
         ),
         child: const Icon(
-          LucideIcons.gift,
+          LucideIcons.smile,
           color: Colors.white,
           size: 24,
         ),
       ),
     );
+  }
+
+  Widget _buildGiftButton() {
+    return GestureDetector(
+      onTap: _showGiftModal,
+      child: Container(
+        width: 50,
+        height: 50,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(25),
+          border: Border.all(color: const Color(0xFFFFD700), width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+              blurRadius: 8,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: const Icon(
+          Icons.card_giftcard,
+          color: Colors.white,
+          size: 24,
+        ),
+      ),
+    );
+  }
+
+  void _showReactionPicker() {
+    // Get all speakers (moderator + speakers in slots)
+    final speakers = <Map<String, dynamic>>[];
+
+    // Add moderator
+    if (_moderator != null) {
+      speakers.add({
+        'userId': _moderator!.id,
+        'name': _moderator!.name,
+        'avatarUrl': _moderator!.avatar ?? '',
+        'role': 'moderator',
+      });
+    }
+
+    // Add speakers
+    for (final speaker in _speakerPanelists) {
+      speakers.add({
+        'userId': speaker.id,
+        'name': speaker.name,
+        'avatarUrl': speaker.avatar ?? '',
+        'role': 'speaker',
+      });
+    }
+
+    if (speakers.isEmpty) {
+      // No speakers available
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No speakers available to react to'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    // Show speaker selection bottom sheet
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.shade400,
+              offset: const Offset(8, 8),
+              blurRadius: 16,
+            ),
+            const BoxShadow(
+              color: Colors.white,
+              offset: Offset(-8, -8),
+              blurRadius: 16,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Title
+            Text(
+              'Send Reaction To',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Speaker list
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: speakers.length,
+                itemBuilder: (context, index) {
+                  final speaker = speakers[index];
+                  return ListTile(
+                    leading: CircleAvatar(
+                      radius: 24,
+                      backgroundColor: const Color(0xFF8B5CF6),
+                      backgroundImage: speaker['avatarUrl'].isNotEmpty
+                          ? NetworkImage(speaker['avatarUrl'])
+                          : null,
+                      child: speaker['avatarUrl'].isEmpty
+                          ? Text(
+                              speaker['name'][0].toUpperCase(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )
+                          : null,
+                    ),
+                    title: Text(
+                      speaker['name'],
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                    subtitle: Text(
+                      speaker['role'] == 'moderator' ? 'Moderator' : 'Speaker',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showEmojiPicker(speaker);
+                    },
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEmojiPicker(Map<String, dynamic> targetSpeaker) {
+    // Common reaction emojis
+    final emojis = [
+      '👍', // Thumbs up
+      '👎', // Thumbs down
+      '😂', // Laughing
+      '😮', // Wow
+      '💯', // 100
+      '❤️', // Heart
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.shade400,
+                offset: const Offset(8, 8),
+                blurRadius: 16,
+              ),
+              const BoxShadow(
+                color: Colors.white,
+                offset: Offset(-8, -8),
+                blurRadius: 16,
+              ),
+            ],
+          ),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Handle bar
+                  Container(
+                    margin: const EdgeInsets.only(top: 12),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Title
+                  Text(
+                    'React to ${targetSpeaker['name']}',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  // Emoji grid
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 4,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                      ),
+                      itemCount: emojis.length,
+                      itemBuilder: (context, index) {
+                        final emoji = emojis[index];
+                        return GestureDetector(
+                          onTap: () {
+                            Navigator.pop(context);
+                            _sendReaction(emoji, targetSpeaker);
+                          },
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.grey.shade300,
+                                  offset: const Offset(4, 4),
+                                  blurRadius: 8,
+                                ),
+                                const BoxShadow(
+                                  color: Colors.white,
+                                  offset: Offset(-4, -4),
+                                  blurRadius: 8,
+                                ),
+                              ],
+                            ),
+                            child: Center(
+                              child: Text(
+                                emoji,
+                                style: const TextStyle(fontSize: 32),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendReaction(String emoji, Map<String, dynamic> targetSpeaker) async {
+    if (!mounted || _currentUser == null) return;
+
+    try {
+      // Create reaction data
+      final reaction = ReactionData(
+        emoji: emoji,
+        targetUserId: targetSpeaker['userId'],
+        senderUserId: _currentUser!.id,
+        timestamp: DateTime.now(),
+      );
+
+      // Save to Appwrite to broadcast to all users
+      await _appwrite.databases.createDocument(
+        databaseId: 'arena_db',
+        collectionId: 'room_reactions',
+        documentId: ID.unique(),
+        data: {
+          ...reaction.toMap(),
+          'roomId': widget.roomId,
+        },
+      );
+
+      AppLogger().info('✅ Reaction sent: $emoji to ${targetSpeaker['name']}');
+    } catch (e) {
+      AppLogger().error('❌ Error sending reaction: $e');
+    }
+  }
+
+  Future<void> _broadcastGift(
+    String emoji,
+    String giftName,
+    int giftValue,
+    String senderName,
+    String targetUserId,
+  ) async {
+    AppLogger().debug('🎁 _broadcastGift called: $emoji ($giftName) value=$giftValue from=$senderName to=$targetUserId');
+
+    if (!mounted || _currentUser == null) {
+      AppLogger().warning('⚠️ Cannot broadcast gift - mounted=$mounted, currentUser=${_currentUser != null}');
+      return;
+    }
+
+    try {
+      // Create gift reaction data
+      final giftReaction = ReactionData(
+        emoji: emoji,
+        targetUserId: targetUserId,
+        senderUserId: _currentUser!.id,
+        senderName: senderName,
+        timestamp: DateTime.now(),
+        isGift: true,
+        giftValue: giftValue,
+        giftName: giftName,
+      );
+
+      AppLogger().debug('🎁 Creating Appwrite document for gift...');
+
+      // Save to Appwrite to broadcast to all users
+      await _appwrite.databases.createDocument(
+        databaseId: 'arena_db',
+        collectionId: 'room_reactions',
+        documentId: ID.unique(),
+        data: {
+          ...giftReaction.toMap(),
+          'roomId': widget.roomId,
+        },
+      );
+
+      AppLogger().info('✅ Gift sent to Appwrite: $emoji ($giftName) value=$giftValue to $targetUserId');
+    } catch (e) {
+      AppLogger().error('❌ Error broadcasting gift: $e');
+    }
   }
 
   // void _showUserProfile(UserProfile userProfile, String? userRole) {

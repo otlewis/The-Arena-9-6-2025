@@ -151,6 +151,34 @@ class GiftConstants {
 
     // SUPPORTIVE & ENCOURAGING GIFTS
     Gift(
+      id: 'strong_argument',
+      name: 'Strong Argument',
+      emoji: '💪',
+      description: 'For powerful reasoning',
+      cost: 7,
+      category: GiftCategory.supportive,
+      tier: GiftTier.standard,
+      hasVisualEffect: true,
+    ),
+    Gift(
+      id: 'solidarity',
+      name: 'Solidarity',
+      emoji: '✊',
+      description: 'For standing together',
+      cost: 5,
+      category: GiftCategory.supportive,
+      tier: GiftTier.standard,
+    ),
+    Gift(
+      id: 'praise',
+      name: 'Praise',
+      emoji: '🙌',
+      description: 'For excellent contribution',
+      cost: 4,
+      category: GiftCategory.supportive,
+      tier: GiftTier.basic,
+    ),
+    Gift(
       id: 'standing_ovation',
       name: 'Standing Ovation',
       emoji: '👏',
@@ -209,6 +237,24 @@ class GiftConstants {
     ),
 
     // FUN & PERSONALITY GIFTS
+    Gift(
+      id: 'thinking',
+      name: 'Thinking',
+      emoji: '🤔',
+      description: 'For thought-provoking points',
+      cost: 3,
+      category: GiftCategory.fun,
+      tier: GiftTier.basic,
+    ),
+    Gift(
+      id: 'watching',
+      name: 'Watching',
+      emoji: '👀',
+      description: 'For keeping close attention',
+      cost: 2,
+      category: GiftCategory.fun,
+      tier: GiftTier.basic,
+    ),
     Gift(
       id: 'entertainer',
       name: 'Entertainer',

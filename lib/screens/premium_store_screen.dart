@@ -7,6 +7,7 @@ import '../services/appwrite_service.dart';
 import '../services/store_config_service.dart';
 import '../models/store_config.dart';
 import '../widgets/real_time_coin_balance.dart';
+import '../services/super_moderator_service.dart';
 
 /// Premium store screen powered by RevenueCat
 class PremiumStoreScreen extends StatefulWidget {
@@ -28,6 +29,8 @@ class _PremiumStoreScreenState extends State<PremiumStoreScreen> {
   bool _isProcessing = false;
   String? _error;
   CustomerInfo? _customerInfo;
+  String? _currentUserId;
+  bool _isSuperMod = false;
 
   @override
   void initState() {
@@ -42,6 +45,18 @@ class _PremiumStoreScreenState extends State<PremiumStoreScreen> {
       await GetIt.instance.isReady<AppwriteService>();
       _appwriteService = GetIt.instance<AppwriteService>();
       AppLogger().debug('✅ AppwriteService ready for Premium Store');
+
+      // Get current user and check super moderator status
+      final currentUser = await _appwriteService?.getCurrentUser();
+      if (currentUser != null) {
+        _currentUserId = currentUser.$id;
+        final superModService = SuperModeratorService();
+        _isSuperMod = superModService.isSuperModerator(_currentUserId!);
+      }
+
+      if (mounted) {
+        setState(() {});
+      }
     } catch (e) {
       AppLogger().error('AppwriteService initialization failed: $e');
     }
@@ -275,9 +290,53 @@ class _PremiumStoreScreenState extends State<PremiumStoreScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Check if user is a Super Moderator
+    if (!_isSuperMod) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Premium Store'),
+          backgroundColor: const Color(0xFF8B5CF6),
+          foregroundColor: Colors.white,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.lock_outline,
+                  size: 80,
+                  color: Colors.grey.shade400,
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Access Restricted',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'The Premium Store is currently only accessible to Super Moderators.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Premium Store'),
+        title: const Text('Premium Store'),
         backgroundColor: const Color(0xFF8B5CF6),
         foregroundColor: Colors.white,
       ),

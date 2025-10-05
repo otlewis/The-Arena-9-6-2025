@@ -111,7 +111,13 @@ class _RealTimeCoinBalanceState extends State<RealTimeCoinBalance> {
       ]);
       
       _subscription!.stream.listen((event) {
-        if (event.events.contains('databases.arena_db.collections.users.documents.$_userId.update')) {
+        // Check if this is an update event for the user document
+        final isUpdate = event.events.any((e) =>
+          e.contains('update') ||
+          e.contains('databases.arena_db.collections.users.documents.$_userId')
+        );
+
+        if (isUpdate) {
           // Balance was updated, reload it
           _loadBalance();
           AppLogger().debug('🪙 Coin balance updated via real-time subscription');

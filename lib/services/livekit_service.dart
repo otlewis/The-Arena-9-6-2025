@@ -23,7 +23,7 @@ class LiveKitService extends ChangeNotifier {
   
   // State
   bool _isConnected = false;
-  bool _isMuted = false;
+  bool _isMuted = true; // Start muted by default to prevent audio bleeding
   bool _isDisposed = false;
   String? _currentRoom;
   String? _currentRoomType;
@@ -431,6 +431,9 @@ class LiveKitService extends ChangeNotifier {
           AppLogger().debug('🏟️ ARENA AUTO-FIX: Auto-fix temporarily disabled to prevent crashes');
         }
         */
+
+        // Enforce speaker mute state for existing audio tracks to prevent bleeding
+        await _enforceSpeakerMuteState();
       } else {
         AppLogger().debug('⚠️ Local participant is null, skipping media setup');
       }
@@ -506,6 +509,14 @@ class LiveKitService extends ChangeNotifier {
     // Track subscribed
     roomListener.on<TrackSubscribedEvent>((event) {
       AppLogger().debug('🎵 Track subscribed: ${event.track.kind}');
+
+      // Always enable audio tracks - this is a debate room, everyone should be heard
+      if (event.publication.kind.name == 'audio' && event.track is RemoteAudioTrack) {
+        final audioTrack = event.track as RemoteAudioTrack;
+        audioTrack.enable();
+        AppLogger().debug('🔊 Audio enabled from ${event.participant.identity}');
+      }
+
       onTrackSubscribed?.call(event.publication, event.participant);
       notifyListeners();
     });
@@ -544,12 +555,29 @@ class LiveKitService extends ChangeNotifier {
     roomListener.on<DataReceivedEvent>((event) {
       _handleDataReceived(event);
     });
+
+    // Active speakers changed - this is the proper way to detect who is speaking
+    roomListener.on<ActiveSpeakersChangedEvent>((event) {
+      AppLogger().debug('🗣️ Active speakers changed: ${event.speakers.map((s) => s.identity).join(", ")}');
+
+      // Reset all speaking states first
+      _speakingStates.keys.toList().forEach((userId) {
+        if (_speakingStates[userId] == true) {
+          _updateSpeakingState(userId, false);
+        }
+      });
+
+      // Update speaking state for active speakers
+      for (final speaker in event.speakers) {
+        final userId = speaker.identity;
+        _updateSpeakingState(userId, true);
+      }
+    });
     
-    // Audio track published event - set up speaking detection
+    // Audio track published event
     roomListener.on<TrackPublishedEvent>((event) {
       if (event.publication.kind.name == 'audio') {
         AppLogger().debug('🎤 Audio track published for ${event.participant.identity}');
-        _setupSpeakingDetection(event.participant, event.publication);
 
         // Register remote track with track manager
         if (_currentRoom != null) {
@@ -564,11 +592,10 @@ class LiveKitService extends ChangeNotifier {
       }
     });
 
-    // Local track published - set up speaking detection for local user
+    // Local track published
     roomListener.on<LocalTrackPublishedEvent>((event) {
       if (event.publication.kind.name == 'audio') {
         AppLogger().debug('🎤 Local audio track published');
-        _setupLocalSpeakingDetection(event.publication);
 
         // Register local track with track manager
         if (_currentRoom != null) {
@@ -670,15 +697,19 @@ class LiveKitService extends ChangeNotifier {
       
       switch (type) {
         case 'mute_request':
-          AppLogger().debug('🔇 Processing mute request - currently muted: $_isMuted');
-          // Auto-mute when moderator requests it
-          if (!_isMuted) {
-            AppLogger().debug('🔇 Calling disableAudio() to mute participant');
-            await disableAudio();
-            AppLogger().debug('🔇 Auto-muted by moderator request');
-          } else {
-            AppLogger().debug('🔇 Already muted, no action needed');
-          }
+          AppLogger().warning('🔇 MUTE REQUEST received from moderator: $fromModerator');
+          AppLogger().warning('🔇 Target participant: $targetParticipant');
+          AppLogger().warning('🔇 Current mute state: $_isMuted');
+          AppLogger().warning('🔇 Local participant ID: ${_localParticipant?.identity}');
+
+          // FORCE MUTE: Always unpublish tracks and disable audio, even if already "muted"
+          // This ensures audio is actually off, not just the mute button state
+          AppLogger().warning('🔇 FORCE MUTE: Unpublishing all tracks due to moderator request');
+          await unpublishAllTracks();
+          await disableAudio();
+          _isMuted = true;
+          notifyListeners();
+          AppLogger().warning('🔇 FORCE MUTE COMPLETED by moderator: $fromModerator');
           break;
           
         case 'unmute_request':
@@ -700,13 +731,14 @@ class LiveKitService extends ChangeNotifier {
           break;
           
         case 'mute_all_command':
-          AppLogger().debug('🔇 Mute-all command received from $fromModerator');
-          AppLogger().debug('🔇 Current mute state: $_isMuted');
+          AppLogger().warning('🔇 MUTE ALL COMMAND received from moderator: $fromModerator');
+          AppLogger().warning('🔇 Current mute state: $_isMuted');
+          AppLogger().warning('🔇 Command timestamp: ${message['timestamp']}');
           // Mute immediately if not already muted
           if (!_isMuted) {
-            AppLogger().debug('🔇 Auto-muting due to mute-all command');
+            AppLogger().warning('🔇 EXECUTING MUTE ALL - Auto-muting due to broadcast command');
             await disableAudio();
-            AppLogger().debug('🔇 Successfully auto-muted by mute-all command');
+            AppLogger().warning('🔇 MUTE ALL COMPLETED by moderator: $fromModerator');
           } else {
             AppLogger().debug('🔇 Already muted, ignoring mute-all command');
           }
@@ -718,7 +750,7 @@ class LiveKitService extends ChangeNotifier {
           final sourceTitle = message['sourceTitle'] as String?;
           final description = message['description'] as String?;
           final sharedByUserId = message['userId'] as String?;
-          
+
           if (sourceUrl != null && sourceTitle != null) {
             AppLogger().debug('📌 Processing source share: $sourceTitle -> $sourceUrl');
             // Forward to material sync service to handle source sharing
@@ -731,7 +763,32 @@ class LiveKitService extends ChangeNotifier {
             AppLogger().debug('📌 Invalid source share data - missing url or title');
           }
           break;
-          
+
+        case 'role_change':
+          AppLogger().warning('🎭 ROLE CHANGE notification received from moderator');
+          final targetUserId = message['targetUserId'] as String?;
+          final newRole = message['newRole'] as String?;
+          final myIdentity = _localParticipant?.identity;
+
+          AppLogger().warning('🎭 Target: $targetUserId, NewRole: $newRole, MyId: $myIdentity');
+
+          // Only process if this message is for the current user
+          if (targetUserId == myIdentity && newRole != null && myIdentity != null) {
+            AppLogger().warning('🎭 INSTANT ROLE UPDATE: This role change is for ME!');
+            // Update the stored role immediately
+            _userRole = newRole;
+            AppLogger().warning('🎭 Updated LiveKit service role to: $_userRole');
+
+            // Notify listeners so UI can update
+            notifyListeners();
+
+            // Trigger metadata callback if registered
+            if (onMetadataChanged != null) {
+              onMetadataChanged!(myIdentity, {'role': newRole});
+            }
+          }
+          break;
+
         default:
           AppLogger().debug('📨 Unknown message type: $type');
       }
@@ -944,7 +1001,8 @@ class LiveKitService extends ChangeNotifier {
 
         } catch (fallbackError) {
           AppLogger().error('❌ ENABLE AUDIO: Both primary and fallback methods failed: $fallbackError');
-          throw Exception('Failed to enable microphone: $fallbackError');
+          // Throw with TrackPublishException in message so screen can detect and reconnect
+          throw Exception('TrackPublishException: Failed to enable microphone - token may have wrong permissions. $fallbackError');
         }
       }
       
@@ -999,8 +1057,20 @@ class LiveKitService extends ChangeNotifier {
         return;
       }
 
-      // Disable microphone
+      // Disable microphone completely
       await lp.setMicrophoneEnabled(false);
+
+      // Additional safeguard: Explicitly disable any published audio tracks
+      try {
+        for (final publication in lp.audioTrackPublications) {
+          if (publication.track != null) {
+            await publication.track!.stop();
+            AppLogger().debug('🔇 Stopped local audio track: ${publication.track!.sid}');
+          }
+        }
+      } catch (trackError) {
+        AppLogger().debug('⚠️ Error stopping local audio tracks: $trackError');
+      }
 
       // ANDROID CRASH PROTECTION: Only update state if service is still valid
       if (!_isDisposed) {
@@ -1017,6 +1087,49 @@ class LiveKitService extends ChangeNotifier {
     }
   }
   
+  /// Toggle speaker mute - mutes/unmutes all incoming audio from other participants
+  Future<void> toggleSpeakerMute() async {
+    // Do nothing - speaker is never muted in debate rooms
+    AppLogger().debug('🔊 Speaker toggle called but ignored - audio is always enabled in debate rooms');
+    return;
+  }
+
+  /// Enforce speaker mute state on all existing audio tracks (prevents bleeding on join)
+  Future<void> _enforceSpeakerMuteState() async {
+    try {
+      AppLogger().debug('🔇 ENFORCE SPEAKER MUTE: Checking ${_isSpeakerMuted ? "muted" : "unmuted"} state');
+
+      if (_room == null || !_isConnected) {
+        AppLogger().debug('⚠️ ENFORCE SPEAKER MUTE: Not connected to room');
+        return;
+      }
+
+      // Apply speaker mute state to all existing remote audio tracks
+      int trackCount = 0;
+      for (final participant in _room!.remoteParticipants.values) {
+        for (final publication in participant.audioTrackPublications) {
+          if (publication.track != null && publication.subscribed) {
+            final audioTrack = publication.track as RemoteAudioTrack;
+            trackCount++;
+
+            // Always enable audio - this is a debate room, everyone should be heard
+            await audioTrack.enable();
+            AppLogger().debug('🔊 Enabled audio from ${participant.identity}');
+          }
+        }
+      }
+
+      AppLogger().debug('✅ ENFORCE SPEAKER MUTE: Processed $trackCount existing audio tracks');
+
+    } catch (error) {
+      AppLogger().error('❌ ENFORCE SPEAKER MUTE: Failed to enforce speaker mute state: $error');
+    }
+  }
+
+  /// Speaker is never muted in debate rooms - everyone should always be heard
+  bool get isSpeakerMuted => false;  // Always return false - audio is never muted
+  bool _isSpeakerMuted = false; // Deprecated - keeping for compatibility
+
   /// Toggle mute state (connection + null safe)
   Future<void> toggleMute() async {
     try {
