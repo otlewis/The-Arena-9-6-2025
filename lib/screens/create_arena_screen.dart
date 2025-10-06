@@ -7,6 +7,7 @@ import '../core/logging/app_logger.dart';
 import '../widgets/challenge_bell.dart';
 import '../models/moderator_judge.dart';
 import '../constants/appwrite.dart';
+import '../utils/input_validator.dart';
 import 'arena_screen.dart';
 
 class CreateArenaScreen extends ConsumerStatefulWidget {
@@ -505,12 +506,16 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
                 if (value == null || value.trim().isEmpty) {
                   return 'Please enter a debate topic';
                 }
-                if (value.trim().length < 10) {
+
+                // Sanitize and validate using InputValidator
+                final sanitized = InputValidator.sanitizeText(value, maxLength: 120);
+                if (sanitized.isEmpty) {
+                  return 'Topic contains invalid characters';
+                }
+                if (sanitized.length < 10) {
                   return 'Topic should be at least 10 characters';
                 }
-                if (value.trim().length > 120) {
-                  return 'Topic should be less than 120 characters';
-                }
+
                 return null;
               },
             ),
@@ -552,8 +557,12 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
                 fillColor: Colors.grey[50],
               ),
               validator: (value) {
-                if (value != null && value.trim().length > 500) {
-                  return 'Description should be less than 500 characters';
+                if (value != null && value.isNotEmpty) {
+                  // Sanitize and validate using InputValidator
+                  final sanitized = InputValidator.sanitizeBio(value);
+                  if (sanitized.length > 500) {
+                    return 'Description should be less than 500 characters';
+                  }
                 }
                 return null;
               },

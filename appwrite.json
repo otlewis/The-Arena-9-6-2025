@@ -21,6 +21,132 @@
                 ".appwrite"
             ],
             "path": "functions/ranking-sync"
+        },
+        {
+            "$id": "ban-user",
+            "name": "Ban User from Room",
+            "runtime": "node-18.0",
+            "execute": [
+                "users"
+            ],
+            "events": [],
+            "schedule": "",
+            "timeout": 15,
+            "enabled": true,
+            "logging": true,
+            "entrypoint": "index.js",
+            "commands": "npm install",
+            "ignore": [
+                "node_modules",
+                ".git",
+                ".appwrite"
+            ],
+            "path": "appwrite-functions/ban-user"
+        },
+        {
+            "$id": "kick-user",
+            "name": "Kick User from Room",
+            "runtime": "node-18.0",
+            "execute": [
+                "users"
+            ],
+            "events": [],
+            "schedule": "",
+            "timeout": 15,
+            "enabled": true,
+            "logging": true,
+            "entrypoint": "index.js",
+            "commands": "npm install",
+            "ignore": [
+                "node_modules",
+                ".git",
+                ".appwrite"
+            ],
+            "path": "appwrite-functions/kick-user"
+        },
+        {
+            "$id": "timeout-user",
+            "name": "Timeout User in Room",
+            "runtime": "node-18.0",
+            "execute": [
+                "users"
+            ],
+            "events": [],
+            "schedule": "",
+            "timeout": 15,
+            "enabled": true,
+            "logging": true,
+            "entrypoint": "index.js",
+            "commands": "npm install",
+            "ignore": [
+                "node_modules",
+                ".git",
+                ".appwrite"
+            ],
+            "path": "appwrite-functions/timeout-user"
+        },
+        {
+            "$id": "lock-microphones",
+            "name": "Lock/Unlock Microphones",
+            "runtime": "node-18.0",
+            "execute": [
+                "users"
+            ],
+            "events": [],
+            "schedule": "",
+            "timeout": 15,
+            "enabled": true,
+            "logging": true,
+            "entrypoint": "index.js",
+            "commands": "npm install",
+            "ignore": [
+                "node_modules",
+                ".git",
+                ".appwrite"
+            ],
+            "path": "appwrite-functions/lock-microphones"
+        },
+        {
+            "$id": "generate-livekit-token",
+            "name": "Generate LiveKit Token",
+            "runtime": "node-18.0",
+            "execute": [
+                "users"
+            ],
+            "events": [],
+            "schedule": "",
+            "timeout": 15,
+            "enabled": true,
+            "logging": true,
+            "entrypoint": "index.js",
+            "commands": "npm install",
+            "ignore": [
+                "node_modules",
+                ".git",
+                ".appwrite"
+            ],
+            "path": "appwrite-functions/generate-livekit-token"
+        },
+        {
+            "$id": "generate-upload-url",
+            "name": "Generate Pre-Signed Upload URL",
+            "runtime": "node-18.0",
+            "execute": [
+                "users"
+            ],
+            "events": [],
+            "schedule": "",
+            "timeout": 15,
+            "enabled": true,
+            "logging": true,
+            "entrypoint": "index.js",
+            "commands": "npm install",
+            "ignore": [
+                "node_modules",
+                ".git",
+                ".appwrite"
+            ],
+            "path": "appwrite-functions/generate-upload-url"
         }
     ]
 }

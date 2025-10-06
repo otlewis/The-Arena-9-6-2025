@@ -13,13 +13,12 @@ import '../services/livekit_service.dart';
 import '../services/livekit_token_service.dart';
 import '../services/livekit_config_service.dart';
 import '../services/super_moderator_service.dart';
+import '../services/user_timeout_service.dart';
 // import '../services/chat_service.dart'; // Removed with new chat system
 import '../models/user_profile.dart';
 import '../models/gift.dart';
-import '../models/timer_state.dart';
 import '../features/arena/constants/arena_colors.dart';
 import '../widgets/animated_fade_in.dart';
-import '../widgets/appwrite_timer_widget.dart';
 import '../widgets/user_profile_bottom_sheet.dart';
 import '../widgets/challenge_bell.dart';
 import '../widgets/mattermost_chat_widget.dart';
@@ -233,6 +232,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   bool _isJoined = false;
   bool _isCurrentUserModerator = false;
   bool _isCurrentUserSpeaker = false;
+  bool _isCurrentUserTimedOut = false;
   bool _hasRequestedSpeaker = false;
   bool _isDisposing = false;
   
@@ -487,6 +487,28 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           );
         }
         return;
+      }
+
+      // Check if user is timed out
+      if (_currentUser?.id != null) {
+        final timeoutService = UserTimeoutService();
+        final isTimedOut = await timeoutService.isUserTimedOut(_currentUser!.id, widget.roomId);
+
+        if (isTimedOut) {
+          final remainingMinutes = await timeoutService.getRemainingTimeoutMinutes(_currentUser!.id, widget.roomId);
+          AppLogger().debug('⏰ User is timed out - cannot unmute (${remainingMinutes ?? 0} minutes remaining)');
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('⏰ You are timed out and cannot speak for ${remainingMinutes ?? 0} more minute(s)'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+          return;
+        }
       }
       
       // Connect to audio first if not connected
@@ -1148,6 +1170,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       await _aiModerationService.startRoomMonitoring(widget.roomId);
       AppLogger().info('🛡️ AI moderation started for Debates & Discussions room: ${widget.roomId}');
 
+      // Check if user is timed out
+      await _checkTimeoutStatus();
+
       // Immediately refresh participants to ensure this user appears in all other users' screens
       Future.microtask(() async {
         if (mounted && !_isDisposing) {
@@ -1156,7 +1181,24 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       });
     } catch (e) {
       AppLogger().error('❌ Error joining room: $e');
-      // Continue anyway - user might already be in room
+
+      // Check if user is banned
+      if (e.toString().contains('You are banned from this room')) {
+        AppLogger().warning('🚫 User is banned from room - navigating to home');
+
+        // Show ban modal to user
+        if (mounted && !_isDisposing) {
+          await _showRemovalModal();
+
+          // Navigate back to home screen
+          if (mounted && !_isDisposing) {
+            Navigator.of(context).popUntil((route) => route.isFirst);
+          }
+        }
+        return; // Don't continue with room initialization
+      }
+
+      // For other errors, continue anyway - user might already be in room
       if (mounted && !_isDisposing) {
         setState(() {
           _isJoined = true; // Allow room to continue loading
@@ -1172,6 +1214,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       isScrollControlled: true,
       builder: (context) => UserProfileBottomSheet(
         user: user,
+        roomId: widget.roomId,
+        roomType: 'debate_discussion',
+        isCurrentUserModerator: _isCurrentUserModerator,
         onFollow: () {
           // TODO: Implement follow functionality
           if (mounted) {
@@ -1201,6 +1246,175 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
             );
           }
         },
+      ),
+    );
+  }
+
+  /// Check if current user is timed out
+  Future<void> _checkTimeoutStatus() async {
+    if (_currentUser == null) return;
+
+    try {
+      final timeoutService = UserTimeoutService();
+      final isTimedOut = await timeoutService.isUserTimedOut(_currentUser!.id, widget.roomId);
+
+      // If status changed from not timed out to timed out, show modal
+      if (mounted && !_isCurrentUserTimedOut && isTimedOut) {
+        final remainingMinutes = await timeoutService.getRemainingTimeoutMinutes(_currentUser!.id, widget.roomId);
+
+        setState(() {
+          _isCurrentUserTimedOut = isTimedOut;
+        });
+
+        // Show timeout modal
+        if (mounted) {
+          _showTimeoutModal(remainingMinutes ?? 0);
+        }
+      } else if (mounted && _isCurrentUserTimedOut != isTimedOut) {
+        setState(() {
+          _isCurrentUserTimedOut = isTimedOut;
+        });
+      }
+    } catch (e) {
+      AppLogger().error('Error checking timeout status: $e');
+    }
+  }
+
+  /// Show timeout notification modal
+  void _showTimeoutModal(int remainingMinutes) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.timer,
+                color: Colors.orange,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Flexible(
+              child: Text(
+                'You\'ve Been Timed Out',
+                style: TextStyle(
+                  color: Colors.black87,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.orange.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.access_time, color: Colors.orange, size: 18),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            '$remainingMinutes minute${remainingMinutes != 1 ? 's' : ''}',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'You cannot:',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Row(
+                      children: [
+                        Icon(Icons.mic_off, size: 14, color: Colors.black54),
+                        SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            'Speak or unmute',
+                            style: TextStyle(fontSize: 13, color: Colors.black54),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Row(
+                      children: [
+                        Icon(Icons.chat_bubble_outline, size: 14, color: Colors.black54),
+                        SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            'Send messages',
+                            style: TextStyle(fontSize: 13, color: Colors.black54),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'You can still listen. Privileges will be restored when timeout expires.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.black54,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Understood'),
+          ),
+        ],
       ),
     );
   }
@@ -1464,6 +1678,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     // Ultra-aggressive sync for immediate participant visibility (5-second intervals)
     _participantSyncTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
       if (mounted && !_isDisposing) {
+        // Check timeout status periodically
+        _checkTimeoutStatus();
+
         try {
           final currentCount = _audienceMembers.length + _speakerPanelists.length;
           
@@ -1973,6 +2190,29 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         final currentUserRole = currentUserParticipant['role'] ?? 'not found';
         AppLogger().info('🎤 ROLE DEBUG: Current user database role: $currentUserRole');
         AppLogger().info('🎤 ROLE DEBUG: Current user in speaker panel: ${_speakerPanelists.any((s) => s.id == _currentUser!.id)}');
+
+        // CHECK: If current user is not in participants list, they were kicked/banned
+        if (currentUserRole == 'not found' && mounted && !_isDisposing) {
+          AppLogger().warning('🚪 Current user not found in participants - was removed (kicked/banned) - navigating to home screen');
+
+          // Clean up LiveKit connection before navigating
+          try {
+            await _liveKitService.disconnect();
+          } catch (e) {
+            AppLogger().error('Error disconnecting LiveKit after kick: $e');
+          }
+
+          // Show modal with kick/ban details
+          await _showRemovalModal();
+
+          // Navigate to home screen
+          if (mounted && !_isDisposing) {
+            Navigator.of(context).popUntil((route) => route.isFirst);
+          }
+
+          // Return early - don't continue with audio connection
+          return;
+        }
       }
       
       // AUTO-CONNECT: Automatically connect to audio for all users
@@ -2255,7 +2495,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   Future<void> _applyParticipantDiff(ParticipantDiff diff) async {
     bool needsUIUpdate = false;
     bool needsLiveKitUpdate = false;
-    bool isHandRaiseEvent = false;
+    // Note: isHandRaiseEvent and isHandLowerEvent were unused legacy variables
     bool isHandLowerEvent = false;
 
     // Handle removals
@@ -2263,6 +2503,30 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       _removeParticipantFromLists(userId);
       needsUIUpdate = true;
       AppLogger().info('📤 DIFF: Removed participant $userId');
+
+      // CHECK: If the removed user is the current user, they were kicked/banned - navigate to home
+      final isCurrentUser = userId == _currentUser?.id;
+      if (isCurrentUser && mounted && !_isDisposing) {
+        AppLogger().warning('🚪 Current user was removed from room (kicked/banned) - navigating to home screen');
+
+        // Clean up LiveKit connection before navigating
+        try {
+          await _liveKitService.disconnect();
+        } catch (e) {
+          AppLogger().error('Error disconnecting LiveKit after kick: $e');
+        }
+
+        // Show modal with kick/ban details
+        await _showRemovalModal();
+
+        // Navigate to home screen
+        if (mounted && !_isDisposing) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+
+        // Return early - no need to continue processing updates
+        return;
+      }
     }
 
     // Handle additions (use stub-first for instant UI)
@@ -2343,16 +2607,35 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
       // Check for special role changes
       if (roleChange.newRole == 'pending') {
-        isHandRaiseEvent = true;
-
         // INSTANT NOTIFICATION: Show hand-raise dialog immediately for moderator
-        if (_hasModeratorPowers && userProfile != null) {
+        // Note: userProfile is guaranteed non-null here due to stub creation above
+        if (_hasModeratorPowers) {
           final notificationTime = DateTime.now();
           AppLogger().info('⚡ INSTANT: Hand raise detected for ${userProfile.name} at ${notificationTime.millisecondsSinceEpoch}, showing notification NOW');
           // Don't wait for batch processing, show notification immediately
           Future.microtask(() {
             if (mounted && !_isDisposing) {
               _showHandRaiseNotificationFromPayload({'userId': userId});
+            }
+          });
+        }
+      } else if (roleChange.newRole == 'speaker') {
+        // Check if this user is a Super Moderator joining the speaker panel
+        final superModService = SuperModeratorService();
+        final isSuperMod = superModService.isSuperModerator(userId);
+        if (isSuperMod) {
+          final userName = userProfile.name.isNotEmpty ? userProfile.name : 'Super Moderator';
+          AppLogger().info('🛡️ Super Moderator $userName joined speaker panel');
+          // Show notification to ALL users (not just the super mod)
+          Future.microtask(() {
+            if (mounted && !_isDisposing) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('🛡️ Super Moderator $userName joined speaker panel'),
+                  backgroundColor: const Color(0xFF6B46C1), // Purple for super mod
+                  duration: const Duration(seconds: 3),
+                ),
+              );
             }
           });
         }
@@ -2998,24 +3281,19 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           userId: _currentUser!.id,
           newRole: 'speaker',
         );
-        
+
         if (mounted && !_isDisposing) {
           setState(() {
             _isCurrentUserSpeaker = true;
             _hasRequestedSpeaker = false;
           });
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('🛡️ Super Moderator joined speaker panel'),
-              backgroundColor: Color(0xFFFFD700),
-              duration: Duration(seconds: 2),
-            ),
-          );
-          
+
+          // Note: Notification will be shown to ALL users via real-time update handler
+          // No need for local notification here
+
           // Audio will be reinitialized automatically by the role change
         }
-        
+
         AppLogger().info('🛡️ Super Moderator ${_currentUser!.name} joined speaker panel instantly');
       } else {
         // Regular user wants to raise their hand - change to pending
@@ -3722,6 +4000,146 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     } catch (e) {
       AppLogger().error('Failed to leave room cleanly: $e');
     }
+  }
+
+  /// Show modal dialog when user is kicked or banned from room
+  Future<void> _showRemovalModal() async {
+    if (!mounted || _isDisposing || _currentUser == null) return;
+
+    // Check if user is banned to show appropriate message
+    String title = '⚠️ Removed from Room';
+    String message = 'You have been kicked from this room.';
+    String? banDetails;
+    Color titleColor = Colors.orange;
+
+    try {
+      // Check for active ban
+      final banQuery = await _appwrite.databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'room_bans',
+        queries: [
+          Query.equal('userId', _currentUser!.id),
+          Query.equal('roomId', widget.roomId),
+          Query.equal('isActive', true),
+          Query.limit(1),
+        ],
+      );
+
+      if (banQuery.documents.isNotEmpty) {
+        final ban = banQuery.documents.first;
+        final banData = ban.data;
+        final bannedBy = banData['bannedByUsername'] ?? 'moderator';
+        final reason = banData['reason'] ?? 'No reason provided';
+        final expiresAtStr = banData['expiresAt'] as String?;
+
+        title = '🚫 Banned from Room';
+        message = 'You have been banned from this room by $bannedBy.';
+        titleColor = Colors.red;
+
+        if (expiresAtStr != null && expiresAtStr.isNotEmpty) {
+          final expiresAt = DateTime.parse(expiresAtStr);
+          final duration = expiresAt.difference(DateTime.now());
+
+          if (duration.inMinutes > 0) {
+            final hours = duration.inHours;
+            final minutes = duration.inMinutes % 60;
+
+            if (hours > 0) {
+              banDetails = 'Ban duration: $hours hour${hours > 1 ? 's' : ''} ${minutes > 0 ? 'and $minutes minute${minutes > 1 ? 's' : ''}' : ''}';
+            } else {
+              banDetails = 'Ban duration: $minutes minute${minutes > 1 ? 's' : ''}';
+            }
+          }
+        } else {
+          banDetails = 'This is a permanent ban.';
+        }
+
+        if (reason.isNotEmpty && reason != 'No reason provided') {
+          banDetails = '${banDetails != null ? '$banDetails\n' : ''}Reason: $reason';
+        }
+      }
+    } catch (e) {
+      AppLogger().error('Error checking ban status for modal: $e');
+    }
+
+    if (!mounted || _isDisposing) return;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              banDetails != null ? Icons.block : Icons.warning,
+              color: titleColor,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: titleColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              message,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            if (banDetails != null) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.info_outline, size: 20, color: Colors.red),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        banDetails,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // Close dialog
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: titleColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -4510,13 +4928,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                   child: Row(
                     key: const ValueKey('debates_controls_row_narrow'),
                     children: [
-                      _buildControlButton(
-                        icon: LucideIcons.messageCircle,
-                        label: 'Chat',
-                        color: const Color(0xFF8B5CF6),
-                        onTap: _showChat,
-                      ),
-                      const SizedBox(width: 8),
+                      // Hide chat button if user is timed out
+                      if (!_isCurrentUserTimedOut) ...[
+                        _buildControlButton(
+                          icon: LucideIcons.messageCircle,
+                          label: 'Chat',
+                          color: const Color(0xFF8B5CF6),
+                          onTap: _showChat,
+                        ),
+                        const SizedBox(width: 8),
+                      ],
                       if (!_isCurrentUserModerator) ...[
                         _buildControlButton(
                           icon: LucideIcons.hand,
@@ -4630,12 +5051,14 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _buildControlButton(
-                      icon: LucideIcons.messageCircle,
-                      label: 'Chat',
-                      color: const Color(0xFF8B5CF6),
-                      onTap: _showChat,
-                    ),
+                    // Hide chat button if user is timed out
+                    if (!_isCurrentUserTimedOut)
+                      _buildControlButton(
+                        icon: LucideIcons.messageCircle,
+                        label: 'Chat',
+                        color: const Color(0xFF8B5CF6),
+                        onTap: _showChat,
+                      ),
                     if (!_isCurrentUserModerator)
                       _buildControlButton(
                         icon: LucideIcons.hand,
@@ -4795,6 +5218,18 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   /// Show chat modal
   void _showChat() {
     if (_currentUser == null) return;
+
+    // Prevent opening chat if user is timed out
+    if (_isCurrentUserTimedOut) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⏰ You are timed out and cannot access chat'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
 
     // Create participants list for chat
     final chatParticipants = <ChatParticipant>[
@@ -5725,6 +6160,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     }
   }
 
+  // ignore: unused_element
   void _showRoomSettings() {
     showModalBottomSheet(
       context: context,

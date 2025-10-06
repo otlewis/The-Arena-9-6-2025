@@ -1,0 +1,13 @@
+{
+  "name": "timeout-user",
+  "version": "1.0.0",
+  "description": "Timeout user from room with server-side authorization",
+  "main": "index.js",
+  "scripts": {},
+  "dependencies": {
+    "node-appwrite": "^13.0.0"
+  },
+  "devDependencies": {},
+  "author": "",
+  "license": "ISC"
+}

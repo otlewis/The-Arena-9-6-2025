@@ -3,10 +3,12 @@ import 'package:flutter/services.dart';
 import '../models/user_profile.dart';
 import '../services/challenge_messaging_service.dart';
 import '../services/appwrite_service.dart';
+import '../services/super_moderator_service.dart';
+import '../services/user_timeout_service.dart';
+import '../services/room_audio_adapter.dart';
 import '../core/logging/app_logger.dart';
 import '../widgets/report_user_dialog.dart';
 import '../widgets/premium_badge.dart';
-import '../widgets/simple_gift_bottom_sheet.dart';
 
 /// Beautiful user profile bottom sheet modal
 class UserProfileBottomSheet extends StatefulWidget {
@@ -15,6 +17,9 @@ class UserProfileBottomSheet extends StatefulWidget {
   final VoidCallback? onChallenge;
   final VoidCallback? onEmail;
   final VoidCallback? onClose;
+  final String? roomId;
+  final String? roomType;
+  final bool isCurrentUserModerator;
 
   const UserProfileBottomSheet({
     super.key,
@@ -23,6 +28,9 @@ class UserProfileBottomSheet extends StatefulWidget {
     this.onChallenge,
     this.onEmail,
     this.onClose,
+    this.roomId,
+    this.roomType,
+    this.isCurrentUserModerator = false,
   });
 
   @override
@@ -35,6 +43,8 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
   late Animation<double> _slideAnimation;
   bool _isFollowing = false; // TODO: Get actual follow status
   bool _currentUserIsPremium = false;
+  bool _isCurrentUserSuperMod = false;
+  String? _currentUserId;
   int? _globalRank;
   String _tier = 'Bronze';
 
@@ -56,6 +66,7 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
     _animationController.forward();
     _checkCurrentUserPremiumStatus();
     _fetchUserRanking();
+    _checkSuperModStatus();
   }
 
   Future<void> _fetchUserRanking() async {
@@ -122,6 +133,29 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
       */
     } catch (e) {
       AppLogger().error('Error checking current user premium status: $e');
+    }
+  }
+
+  Future<void> _checkSuperModStatus() async {
+    try {
+      AppLogger().info('🔍 Checking super mod status...');
+      final appwrite = AppwriteService();
+      final currentUser = await appwrite.getCurrentUser();
+
+      if (currentUser != null) {
+        final superModService = SuperModeratorService();
+        if (mounted) {
+          setState(() {
+            _currentUserId = currentUser.$id;
+            _isCurrentUserSuperMod = superModService.isSuperModerator(currentUser.$id);
+          });
+        }
+        AppLogger().info('✅ Super mod status set - userId: $_currentUserId, isSuperMod: $_isCurrentUserSuperMod');
+      } else {
+        AppLogger().error('❌ getCurrentUser returned null');
+      }
+    } catch (e) {
+      AppLogger().error('❌ Error checking super mod status: $e');
     }
   }
 
@@ -621,7 +655,214 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                       ),
 
                       const SizedBox(height: 12),
-                      
+
+                      // Moderator Actions: Ban and Kick (visible for both moderators and super mods, only if viewing another user)
+                      if ((widget.isCurrentUserModerator || _isCurrentUserSuperMod) &&
+                          widget.roomId != null &&
+                          widget.roomType != null &&
+                          widget.user.id != _currentUserId) ...[
+                        Row(
+                          children: [
+                            // Ban User button
+                            Expanded(
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () {
+                                    AppLogger().info('🔨 Ban button tapped - userId: ${widget.user.id}, currentUserId: $_currentUserId, roomId: ${widget.roomId}, roomType: ${widget.roomType}');
+                                    HapticFeedback.lightImpact();
+                                    _showBanDialog();
+                                  },
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFF6B35).withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: const Color(0xFFFF6B35),
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(
+                                          Icons.block,
+                                          color: Color(0xFFFF6B35),
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Ban',
+                                          style: TextStyle(
+                                            color: Colors.grey.shade700,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(width: 12),
+
+                            // Kick User button
+                            Expanded(
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () {
+                                    AppLogger().info('👢 Kick button tapped - userId: ${widget.user.id}, currentUserId: $_currentUserId, roomId: ${widget.roomId}');
+                                    HapticFeedback.lightImpact();
+                                    _showKickDialog();
+                                  },
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFFA500).withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: const Color(0xFFFFA500),
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(
+                                          Icons.exit_to_app,
+                                          color: Color(0xFFFFA500),
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Kick',
+                                          style: TextStyle(
+                                            color: Colors.grey.shade700,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 12),
+                      ],
+
+                      // Moderator Controls: Timeout and Mute (visible for both moderators and super mods, only if not viewing self)
+                      if ((widget.isCurrentUserModerator || _isCurrentUserSuperMod) &&
+                          widget.roomId != null &&
+                          widget.user.id != _currentUserId) ...[
+                        Row(
+                          children: [
+                            // Timeout User button
+                            Expanded(
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () {
+                                    AppLogger().info('⏰ Timeout button tapped - userId: ${widget.user.id}...');
+                                    HapticFeedback.lightImpact();
+                                    _showTimeoutDialog();
+                                  },
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFFA500).withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: const Color(0xFFFFA500),
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(
+                                          Icons.timer,
+                                          color: Color(0xFFFFA500),
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Timeout',
+                                          style: TextStyle(
+                                            color: Colors.grey.shade700,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(width: 12),
+
+                            // Mute User button
+                            Expanded(
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () {
+                                    AppLogger().info('🔇 Mute User button tapped - userId: ${widget.user.id}...');
+                                    HapticFeedback.lightImpact();
+                                    _showMuteUserDialog();
+                                  },
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF8B5CF6).withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: const Color(0xFF8B5CF6),
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(
+                                          Icons.mic_off,
+                                          color: Color(0xFF8B5CF6),
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Mute',
+                                          style: TextStyle(
+                                            color: Colors.grey.shade700,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 12),
+                      ],
+
                       // Report button (full width)
                       GestureDetector(
                         onTap: () async {
@@ -950,6 +1191,611 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
     }
   }
 
+  /// Show ban user dialog
+  void _showBanDialog() {
+    AppLogger().info('🔨 Show ban dialog - currentUserId: $_currentUserId, roomId: ${widget.roomId}, roomType: ${widget.roomType}, isSuperMod: $_isCurrentUserSuperMod');
+
+    final reasonController = TextEditingController();
+    int? durationMinutes;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('🛡️ Ban ${widget.user.name}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: reasonController,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason',
+                    hintText: 'Why are you banning this user?',
+                  ),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int?>(
+                  value: durationMinutes,
+                  decoration: const InputDecoration(labelText: 'Duration'),
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('Permanent')),
+                    DropdownMenuItem(value: 30, child: Text('30 minutes')),
+                    DropdownMenuItem(value: 60, child: Text('1 hour')),
+                    DropdownMenuItem(value: 1440, child: Text('24 hours')),
+                    DropdownMenuItem(value: 10080, child: Text('7 days')),
+                  ],
+                  onChanged: (value) => setState(() => durationMinutes = value),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await _banUser(
+                  reasonController.text.trim(),
+                  durationMinutes,
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF6B35),
+              ),
+              child: const Text('Ban User'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Show kick user dialog
+  void _showKickDialog() {
+    final reasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('👢 Kick ${widget.user.name}'),
+        content: TextField(
+          controller: reasonController,
+          decoration: const InputDecoration(
+            labelText: 'Reason (optional)',
+            hintText: 'Why are you kicking this user?',
+          ),
+          maxLines: 2,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _kickUser(reasonController.text.trim());
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFFA500),
+            ),
+            child: const Text('Kick User'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Ban user from room
+  Future<void> _banUser(String reason, int? durationMinutes) async {
+    AppLogger().info('🔨 Attempting to ban user: ${widget.user.id}, currentUserId: $_currentUserId, roomId: ${widget.roomId}, roomType: ${widget.roomType}');
+
+    if (_currentUserId == null) {
+      AppLogger().error('Ban failed: currentUserId is null - still loading');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⏳ Still loading user info, please wait a moment and try again'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (widget.roomId == null || widget.roomType == null) {
+      AppLogger().error('Ban failed: roomId or roomType is null');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error: Room information missing'), backgroundColor: Colors.red),
+        );
+      }
+      return;
+    }
+
+    // Check if target user is a super moderator (super mods are immune to ban)
+    final superModService = SuperModeratorService();
+    bool isTargetSuperMod = superModService.isSuperModerator(widget.user.id);
+
+    // Database fallback if not in cache
+    if (!isTargetSuperMod) {
+      try {
+        final allSuperMods = await superModService.getAllSuperModerators();
+        isTargetSuperMod = allSuperMods.any((sm) => sm.userId == widget.user.id && sm.isActive);
+      } catch (e) {
+        AppLogger().error('Ban check: Database fallback failed: $e');
+      }
+    }
+
+    if (isTargetSuperMod) {
+      _showSuperModImmunityDialog('ban');
+      return;
+    }
+
+    try {
+      final success = await superModService.banUserFromRoom(
+        superModId: _currentUserId!,
+        targetUserId: widget.user.id,
+        roomId: widget.roomId!,
+        roomType: widget.roomType!,
+        reason: reason.isNotEmpty ? reason : '', // Let backend set default based on moderator type
+        durationMinutes: durationMinutes,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              success
+                  ? '🔨 ${widget.user.name} has been banned'
+                  : '❌ Failed to ban user',
+            ),
+            backgroundColor: success ? const Color(0xFFFF6B35) : Colors.red,
+          ),
+        );
+        if (success) {
+          _close();
+        }
+      }
+    } catch (e) {
+      AppLogger().error('Failed to ban user: $e');
+      if (mounted) {
+        final errorMessage = e.toString();
+
+        // Check if error is about trying to ban a super moderator
+        if (errorMessage.contains('Cannot ban super moderators')) {
+          _showSuperModImmunityDialog('ban');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: $errorMessage'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  /// Kick user from room
+  Future<void> _kickUser(String reason) async {
+    AppLogger().info('👢 Attempting to kick user: ${widget.user.id}, currentUserId: $_currentUserId, roomId: ${widget.roomId}');
+
+    if (_currentUserId == null) {
+      AppLogger().error('Kick failed: currentUserId is null');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⏳ Still loading user info, please wait and try again'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (widget.roomId == null) {
+      AppLogger().error('Kick failed: roomId is null');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error: Room information missing'), backgroundColor: Colors.red),
+        );
+      }
+      return;
+    }
+
+    // Check if target user is a super moderator (super mods are immune to kick)
+    final superModService = SuperModeratorService();
+    bool isTargetSuperMod = superModService.isSuperModerator(widget.user.id);
+
+    // Database fallback if not in cache
+    if (!isTargetSuperMod) {
+      try {
+        final allSuperMods = await superModService.getAllSuperModerators();
+        isTargetSuperMod = allSuperMods.any((sm) => sm.userId == widget.user.id && sm.isActive);
+      } catch (e) {
+        AppLogger().error('Kick check: Database fallback failed: $e');
+      }
+    }
+
+    if (isTargetSuperMod) {
+      _showSuperModImmunityDialog('kick');
+      return;
+    }
+
+    try {
+      final success = await superModService.kickUserFromRoom(
+        superModId: _currentUserId!,
+        targetUserId: widget.user.id,
+        roomId: widget.roomId!,
+        reason: reason.isNotEmpty ? reason : '', // Let backend handle default reason
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              success
+                  ? '👢 ${widget.user.name} has been kicked'
+                  : '❌ Failed to kick user',
+            ),
+            backgroundColor: success ? const Color(0xFFFFA500) : Colors.red,
+          ),
+        );
+        if (success) {
+          _close();
+        }
+      }
+    } catch (e) {
+      AppLogger().error('Failed to kick user: $e');
+      if (mounted) {
+        final errorMessage = e.toString();
+
+        // Check if error is about trying to kick a super moderator
+        if (errorMessage.contains('Cannot kick super moderators')) {
+          _showSuperModImmunityDialog('kick');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: $errorMessage'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  /// Show super moderator immunity dialog
+  void _showSuperModImmunityDialog(String action) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.shield, color: Color(0xFF6B46C1), size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Super Moderator',
+                style: TextStyle(
+                  color: Colors.grey.shade800,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'You cannot $action ${widget.user.name}.',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6B46C1).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: const Color(0xFF6B46C1).withOpacity(0.3),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.info_outline,
+                    size: 20,
+                    color: Color(0xFF6B46C1),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'This user is a Super Moderator and is immune to all moderation actions.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6B46C1),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Understood'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show mute user dialog
+  void _showMuteUserDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('🔇 Mute ${widget.user.name}'),
+        content: const Text('Mute this user\'s microphone? They will need to unmute themselves.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _muteUser();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8B5CF6),
+            ),
+            child: const Text('Mute User'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Mute this specific user's microphone
+  Future<void> _muteUser() async {
+    if (_currentUserId == null || widget.roomId == null) {
+      return;
+    }
+
+    // Check if target user is a super moderator (super mods are immune to mute)
+    final superModService = SuperModeratorService();
+    bool isTargetSuperMod = superModService.isSuperModerator(widget.user.id);
+
+    // Database fallback if not in cache
+    if (!isTargetSuperMod) {
+      try {
+        final allSuperMods = await superModService.getAllSuperModerators();
+        isTargetSuperMod = allSuperMods.any((sm) => sm.userId == widget.user.id && sm.isActive);
+      } catch (e) {
+        AppLogger().error('Mute check: Database fallback failed: $e');
+      }
+    }
+
+    if (isTargetSuperMod) {
+      _showSuperModImmunityDialog('mute');
+      return;
+    }
+
+    try {
+      AppLogger().info('🔇 Muting user ${widget.user.id} (${widget.user.name})');
+
+      // Use RoomAudioAdapter to mute the specific participant
+      final audioAdapter = RoomAudioAdapter();
+      await audioAdapter.muteParticipant(widget.user.id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🔇 ${widget.user.name} has been muted'),
+            backgroundColor: const Color(0xFF8B5CF6),
+          ),
+        );
+        _close();
+      }
+    } catch (e) {
+      AppLogger().error('Failed to mute user: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Show timeout dialog (moderator only)
+  void _showTimeoutDialog() {
+    final reasonController = TextEditingController();
+    int selectedDuration = 2; // Default to 2 minutes
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('⏰ Timeout ${widget.user.name}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'User will not be able to speak or send messages during timeout.',
+                  style: TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  value: selectedDuration,
+                  decoration: const InputDecoration(labelText: 'Duration'),
+                  items: const [
+                    DropdownMenuItem(value: 2, child: Text('2 minutes')),
+                    DropdownMenuItem(value: 5, child: Text('5 minutes')),
+                    DropdownMenuItem(value: 10, child: Text('10 minutes')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => selectedDuration = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: reasonController,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason (optional)',
+                    hintText: 'Why timeout this user?',
+                  ),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await _timeoutUser(
+                  selectedDuration,
+                  reasonController.text.trim(),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFA500),
+              ),
+              child: const Text('Timeout'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Timeout user (moderator only)
+  Future<void> _timeoutUser(int durationMinutes, String reason) async {
+    if (_currentUserId == null || widget.roomId == null) {
+      return;
+    }
+
+    // CRITICAL: Pre-check if target is a Super Moderator (prevents authorization errors)
+    final superModService = SuperModeratorService();
+    bool isTargetSuperMod = superModService.isSuperModerator(widget.user.id);
+
+    // Database fallback if not in cache
+    if (!isTargetSuperMod) {
+      try {
+        final allSuperMods = await superModService.getAllSuperModerators();
+        isTargetSuperMod = allSuperMods.any((sm) => sm.userId == widget.user.id && sm.isActive);
+      } catch (e) {
+        AppLogger().error('⏰ Pre-check database fallback failed: $e');
+      }
+    }
+
+    if (isTargetSuperMod) {
+      AppLogger().info('⏰ CLIENT PRE-CHECK: Blocked timeout attempt on super moderator');
+      _showSuperModImmunityDialog('timeout');
+      return;
+    }
+
+    try {
+      final appwrite = AppwriteService();
+      final currentUser = await appwrite.getCurrentUser();
+      if (currentUser == null) return;
+
+      final userProfile = await appwrite.getUserProfile(currentUser.$id);
+      if (userProfile == null) return;
+
+      final timeoutService = UserTimeoutService();
+      final success = await timeoutService.timeoutUser(
+        userId: widget.user.id,
+        roomId: widget.roomId!,
+        moderatorId: _currentUserId!,
+        moderatorName: userProfile.name,
+        durationMinutes: durationMinutes,
+        reason: reason.isNotEmpty ? reason : null,
+      );
+
+      // If timeout successful, also mute the user's microphone
+      if (success) {
+        try {
+          final audioAdapter = RoomAudioAdapter();
+          await audioAdapter.muteParticipant(widget.user.id);
+          AppLogger().info('🔇 Auto-muted user ${widget.user.id} after timeout');
+        } catch (e) {
+          AppLogger().error('Failed to auto-mute timed out user: $e');
+          // Don't fail the timeout if mute fails
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              success
+                  ? '⏰ ${widget.user.name} timed out for $durationMinutes minutes'
+                  : '❌ Failed to timeout user',
+            ),
+            backgroundColor: success ? const Color(0xFFFFA500) : Colors.red,
+          ),
+        );
+        if (success) {
+          _close();
+        }
+      }
+    } catch (e) {
+      AppLogger().error('Failed to timeout user: $e');
+      if (mounted) {
+        final errorMessage = e.toString().toLowerCase();
+
+        // Check if error is about trying to timeout a super moderator
+        // Multiple error messages can indicate super mod immunity:
+        // 1. "Cannot timeout super moderators" (from our function)
+        // 2. "not authorized" (from Appwrite permission checks)
+        // 3. "immune" (from any immunity check)
+        if (errorMessage.contains('cannot timeout super moderator') ||
+            errorMessage.contains('immune') ||
+            errorMessage.contains('not authorized')) {
+          _showSuperModImmunityDialog('timeout');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: ${e.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   /// Static method to show the bottom sheet
   // ignore: unused_element
   static Future<void> show(
@@ -959,6 +1805,9 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
     VoidCallback? onChallenge,
     VoidCallback? onEmail,
     VoidCallback? onClose,
+    String? roomId,
+    String? roomType,
+    bool isCurrentUserModerator = false,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -970,6 +1819,9 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
         onChallenge: onChallenge,
         onEmail: onEmail,
         onClose: onClose,
+        roomId: roomId,
+        roomType: roomType,
+        isCurrentUserModerator: isCurrentUserModerator,
       ),
     );
   }

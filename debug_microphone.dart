@@ -1,7 +1,7 @@
 #!/usr/bin/env dart
 
-/// Debug script to test microphone functionality with LiveKit 2.5.1
-/// Run this after deploying the updated code to test mute/unmute
+// Debug script to test microphone functionality with LiveKit 2.5.1
+// Run this after deploying the updated code to test mute/unmute
 
 // ignore_for_file: avoid_print
 
