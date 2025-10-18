@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/user_profile.dart';
 import '../services/challenge_messaging_service.dart';
 import '../services/appwrite_service.dart';
 import '../services/super_moderator_service.dart';
 import '../services/user_timeout_service.dart';
+import '../services/user_kick_service.dart';
+import '../services/user_ban_service.dart';
 import '../services/room_audio_adapter.dart';
 import '../core/logging/app_logger.dart';
 import '../widgets/report_user_dialog.dart';
 import '../widgets/premium_badge.dart';
+import '../widgets/invite_followers_bottom_sheet.dart';
 
 /// Beautiful user profile bottom sheet modal
 class UserProfileBottomSheet extends StatefulWidget {
@@ -67,6 +71,7 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
     _checkCurrentUserPremiumStatus();
     _fetchUserRanking();
     _checkSuperModStatus();
+    _checkFollowStatus();
   }
 
   Future<void> _fetchUserRanking() async {
@@ -159,6 +164,28 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
     }
   }
 
+  Future<void> _checkFollowStatus() async {
+    try {
+      final appwrite = AppwriteService();
+      final currentUser = await appwrite.getCurrentUser();
+
+      if (currentUser != null && widget.user.id != currentUser.$id) {
+        final isFollowing = await appwrite.isFollowing(
+          followerId: currentUser.$id,
+          followingId: widget.user.id,
+        );
+
+        if (mounted) {
+          setState(() {
+            _isFollowing = isFollowing;
+          });
+        }
+      }
+    } catch (e) {
+      AppLogger().error('Error checking follow status: $e');
+    }
+  }
+
   @override
   void dispose() {
     _animationController.dispose();
@@ -189,6 +216,44 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
         widget.onClose?.call();
       }
     });
+  }
+
+  Future<void> _shareProfile() async {
+    try {
+      final userName = widget.user.name;
+      final userHandle = '${widget.user.name.toLowerCase()}@arena.dtd';
+      final tier = _tier;
+      final rank = _globalRank != null ? '#$_globalRank' : 'Unranked';
+
+      // Build share text
+      final shareText = '''
+Check out $userName on Arena DTD! 🎤
+
+$userHandle
+🏆 Tier: $tier
+📊 Rank: $rank
+
+Join Arena DTD to connect with debaters and participate in live discussions!
+''';
+
+      // Share using native share dialog
+      await Share.share(
+        shareText,
+        subject: 'Check out $userName on Arena DTD',
+      );
+
+      AppLogger().info('Profile shared: ${widget.user.id}');
+    } catch (e) {
+      AppLogger().error('Error sharing profile: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to share profile'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -345,7 +410,27 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                           ],
                         ),
                       ),
-                      
+
+                      // Share button
+                      GestureDetector(
+                        onTap: _shareProfile,
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.share,
+                            color: const Color(0xFF8B5CF6),
+                            size: 20,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(width: 8),
+
                       // Close button
                       GestureDetector(
                         onTap: _close,
@@ -475,20 +560,134 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
                           ),
                         ),
                       ),
-                      
+
                       const SizedBox(height: 12),
-                      
+
+                      // Ping Followers button (full width, only show if in a room)
+                      if (widget.roomId != null)
+                        GestureDetector(
+                          onTap: () async {
+                            HapticFeedback.lightImpact();
+
+                            try {
+                              final appwrite = AppwriteService();
+                              final currentUser = await appwrite.getCurrentUser();
+
+                              if (currentUser == null) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Please log in to invite followers')),
+                                  );
+                                }
+                                return;
+                              }
+
+                              // Get room name from database
+                              String roomName = 'Room';
+                              String roomType = widget.roomType ?? 'Discussion';
+
+                              try {
+                                // Try to get room details
+                                final roomDoc = await appwrite.databases.getDocument(
+                                  databaseId: 'arena_db',
+                                  collectionId: 'debate_discussion_rooms',
+                                  documentId: widget.roomId!,
+                                );
+                                roomName = roomDoc.data['title'] ?? 'Room';
+                                roomType = roomDoc.data['debateStyle'] ?? 'Discussion';
+                              } catch (e) {
+                                AppLogger().error('Failed to get room details: $e');
+                                // Use defaults
+                              }
+
+                              if (mounted) {
+                                // Close current bottom sheet first
+                                Navigator.pop(context);
+
+                                // Show invite followers bottom sheet
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (context) => InviteFollowersBottomSheet(
+                                    roomId: widget.roomId!,
+                                    roomName: roomName,
+                                    roomType: roomType,
+                                    currentUserId: currentUser.$id,
+                                    currentUserName: currentUser.name,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              AppLogger().error('Error showing invite followers: $e');
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Error: $e')),
+                                );
+                              }
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFF8B5CF6),
+                                width: 2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.grey.shade300,
+                                  offset: const Offset(4, 4),
+                                  blurRadius: 8,
+                                  spreadRadius: 0,
+                                ),
+                                const BoxShadow(
+                                  color: Colors.white,
+                                  offset: Offset(-4, -4),
+                                  blurRadius: 8,
+                                  spreadRadius: 0,
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.campaign,
+                                  color: Color(0xFF8B5CF6),
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Ping Followers',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade700,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      if (widget.roomId != null)
+                        const SizedBox(height: 12),
+
                       // Follow and Challenge buttons (side by side)
                       Row(
                         children: [
                           // Follow button
                           Expanded(
                             child: GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _isFollowing = !_isFollowing;
-                                });
+                              onTap: () async {
+                                // Call the callback first
                                 widget.onFollow?.call();
+                                // Wait a moment for the action to complete, then re-check status
+                                await Future.delayed(const Duration(milliseconds: 500));
+                                await _checkFollowStatus();
                               },
                               child: Container(
                                 padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1338,12 +1537,23 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
     }
 
     try {
-      final success = await superModService.banUserFromRoom(
-        superModId: _currentUserId!,
-        targetUserId: widget.user.id,
+      // Get current user profile for moderator name
+      final appwrite = AppwriteService();
+      final currentUser = await appwrite.getCurrentUser();
+      if (currentUser == null) return;
+
+      final userProfile = await appwrite.getUserProfile(currentUser.$id);
+      if (userProfile == null) return;
+
+      // Use UserBanService (calls ban-user Appwrite Function)
+      final banService = UserBanService();
+      final success = await banService.banUser(
+        userId: widget.user.id,
         roomId: widget.roomId!,
-        roomType: widget.roomType!,
-        reason: reason.isNotEmpty ? reason : '', // Let backend set default based on moderator type
+        roomType: widget.roomType ?? 'unknown',
+        moderatorId: _currentUserId!,
+        moderatorName: userProfile.name,
+        reason: reason.isNotEmpty ? reason : null,
         durationMinutes: durationMinutes,
       );
 
@@ -1429,11 +1639,22 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
     }
 
     try {
-      final success = await superModService.kickUserFromRoom(
-        superModId: _currentUserId!,
-        targetUserId: widget.user.id,
+      // Get current user profile for moderator name
+      final appwrite = AppwriteService();
+      final currentUser = await appwrite.getCurrentUser();
+      if (currentUser == null) return;
+
+      final userProfile = await appwrite.getUserProfile(currentUser.$id);
+      if (userProfile == null) return;
+
+      // Use UserKickService (calls kick-user Appwrite Function)
+      final kickService = UserKickService();
+      final success = await kickService.kickUser(
+        userId: widget.user.id,
         roomId: widget.roomId!,
-        reason: reason.isNotEmpty ? reason : '', // Let backend handle default reason
+        moderatorId: _currentUserId!,
+        moderatorName: userProfile.name,
+        reason: reason.isNotEmpty ? reason : null,
       );
 
       if (mounted) {
@@ -1775,14 +1996,10 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
       if (mounted) {
         final errorMessage = e.toString().toLowerCase();
 
-        // Check if error is about trying to timeout a super moderator
-        // Multiple error messages can indicate super mod immunity:
-        // 1. "Cannot timeout super moderators" (from our function)
-        // 2. "not authorized" (from Appwrite permission checks)
-        // 3. "immune" (from any immunity check)
+        // Check if error is specifically about trying to timeout a super moderator
+        // Only show immunity dialog if the error explicitly mentions super moderator immunity
         if (errorMessage.contains('cannot timeout super moderator') ||
-            errorMessage.contains('immune') ||
-            errorMessage.contains('not authorized')) {
+            (errorMessage.contains('super moderator') && errorMessage.contains('immune'))) {
           _showSuperModImmunityDialog('timeout');
         } else {
           ScaffoldMessenger.of(context).showSnackBar(

@@ -130,15 +130,15 @@ class _AudioStatusIndicatorState extends State<AudioStatusIndicator>
                 height: widget.size,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: _statusColor.withValues(
-                    alpha: _isConnected && _isHealthy 
-                        ? 1.0 
+                  color: _statusColor.withOpacity(
+                    _isConnected && _isHealthy
+                        ? 1.0
                         : _pulseAnimation.value,
                   ),
                   boxShadow: [
                     if (!_isConnected || !_isHealthy)
                       BoxShadow(
-                        color: _statusColor.withValues(alpha: 0.3),
+                        color: _statusColor.withOpacity(0.3),
                         blurRadius: 4 * _pulseAnimation.value,
                         spreadRadius: 2 * _pulseAnimation.value,
                       ),

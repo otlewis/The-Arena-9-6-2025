@@ -646,7 +646,7 @@ class ResultsModal extends StatelessWidget {
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Colors.amber.withValues(alpha: 0.2), Colors.orange.withValues(alpha: 0.2)],
+                      colors: [Colors.amber.withOpacity(0.2), Colors.orange.withOpacity(0.2)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -734,7 +734,7 @@ class ResultsModal extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: ArenaModalColors.accentPurple.withValues(alpha: 0.1),
+                  color: ArenaModalColors.accentPurple.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -768,9 +768,9 @@ class ResultsModal extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       margin: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Row(
         children: [
@@ -1256,7 +1256,7 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: teamColor.withValues(alpha: 0.1),
+        color: teamColor.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: teamColor),
       ),
@@ -1301,9 +1301,9 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.blue.withValues(alpha: 0.05),
+        color: Colors.blue.withOpacity(0.05),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+        border: Border.all(color: Colors.blue.withOpacity(0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1348,7 +1348,7 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+        border: Border.all(color: Colors.grey.withOpacity(0.3)),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -1397,9 +1397,9 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
             data: SliderTheme.of(context).copyWith(
               activeTrackColor: getCategoryColor(),
               thumbColor: getCategoryColor(),
-              overlayColor: getCategoryColor().withValues(alpha: 0.2),
+              overlayColor: getCategoryColor().withOpacity(0.2),
               valueIndicatorColor: getCategoryColor(),
-              inactiveTrackColor: Colors.grey.withValues(alpha: 0.3),
+              inactiveTrackColor: Colors.grey.withOpacity(0.3),
             ),
             child: Slider(
               value: currentScore.toDouble(),
@@ -1438,7 +1438,7 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: ArenaModalColors.accentPurple.withValues(alpha: 0.1),
+        color: ArenaModalColors.accentPurple.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: ArenaModalColors.accentPurple),
       ),
@@ -1546,7 +1546,7 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+        border: Border.all(color: Colors.grey.withOpacity(0.3)),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -1616,10 +1616,10 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isWinning ? color : color.withValues(alpha: 0.3),
+          color: isWinning ? color : color.withOpacity(0.3),
           width: isWinning ? 2 : 1,
         ),
       ),
@@ -1682,9 +1682,9 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: ArenaModalColors.accentPurple.withValues(alpha: 0.1),
+                color: ArenaModalColors.accentPurple.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: ArenaModalColors.accentPurple.withValues(alpha: 0.3)),
+                border: Border.all(color: ArenaModalColors.accentPurple.withOpacity(0.3)),
               ),
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
@@ -1745,10 +1745,10 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? color.withValues(alpha: 0.2) : color.withValues(alpha: 0.05),
+          color: isSelected ? color.withOpacity(0.2) : color.withOpacity(0.05),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isSelected ? color : color.withValues(alpha: 0.3),
+            color: isSelected ? color : color.withOpacity(0.3),
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -1825,7 +1825,7 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.orange.withValues(alpha: 0.1),
+        color: Colors.orange.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.orange),
       ),
@@ -1940,9 +1940,9 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: ArenaModalColors.accentPurple.withValues(alpha: 0.1),
+                color: ArenaModalColors.accentPurple.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: ArenaModalColors.accentPurple.withValues(alpha: 0.3)),
+                border: Border.all(color: ArenaModalColors.accentPurple.withOpacity(0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2395,8 +2395,8 @@ class _ShareScreenBottomSheetState extends State<ShareScreenBottomSheet> {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: widget.isScreenSharing 
-                          ? Colors.green.withValues(alpha: 0.1)
-                          : Colors.grey.withValues(alpha: 0.1),
+                          ? Colors.green.withOpacity(0.1)
+                          : Colors.grey.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: widget.isScreenSharing 
@@ -2457,10 +2457,10 @@ class _ShareScreenBottomSheetState extends State<ShareScreenBottomSheet> {
                       decoration: BoxDecoration(
                         color: Colors.black,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.green.withValues(alpha: 0.5), width: 2),
+                        border: Border.all(color: Colors.green.withOpacity(0.5), width: 2),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.green.withValues(alpha: 0.2),
+                            color: Colors.green.withOpacity(0.2),
                             blurRadius: 8,
                             spreadRadius: 2,
                           ),
@@ -2514,7 +2514,7 @@ class _ShareScreenBottomSheetState extends State<ShareScreenBottomSheet> {
                             child: Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.7),
+                                color: Colors.black.withOpacity(0.7),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Text(
@@ -2535,9 +2535,9 @@ class _ShareScreenBottomSheetState extends State<ShareScreenBottomSheet> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.1),
+                        color: Colors.green.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                        border: Border.all(color: Colors.green.withOpacity(0.3)),
                       ),
                       child: Row(
                         children: [
@@ -2627,7 +2627,7 @@ class _ShareScreenBottomSheetState extends State<ShareScreenBottomSheet> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.1),
+                        color: Colors.orange.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.orange),
                       ),
@@ -2814,7 +2814,7 @@ class DebateRulesModal extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
+              color: Colors.black.withOpacity(0.3),
               blurRadius: 20,
               spreadRadius: 5,
             ),
@@ -2931,7 +2931,7 @@ class DebateRulesModal extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: ArenaModalColors.lightGray,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: ArenaModalColors.accentPurple.withValues(alpha: 0.2)),
+                        border: Border.all(color: ArenaModalColors.accentPurple.withOpacity(0.2)),
                       ),
                       child: Row(
                         children: [

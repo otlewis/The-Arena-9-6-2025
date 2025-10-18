@@ -704,16 +704,16 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                 boxShadow: [
                   BoxShadow(
                     color: _themeService.isDarkMode 
-                        ? Colors.black.withValues(alpha: 0.6)
-                        : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                        ? Colors.black.withOpacity(0.6)
+                        : const Color(0xFFA3B1C6).withOpacity(0.3),
                     offset: const Offset(2, 2),
                     blurRadius: 4,
                     spreadRadius: -1,
                   ),
                   BoxShadow(
                     color: _themeService.isDarkMode 
-                        ? Colors.white.withValues(alpha: 0.02)
-                        : Colors.white.withValues(alpha: 0.8),
+                        ? Colors.white.withOpacity(0.02)
+                        : Colors.white.withOpacity(0.8),
                     offset: const Offset(-2, -2),
                     blurRadius: 4,
                     spreadRadius: -1,
@@ -782,21 +782,21 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
             : const Color(0xFFF0F0F3),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: scarletRed.withValues(alpha: 0.2),
+          color: scarletRed.withOpacity(0.2),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
@@ -870,7 +870,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                         decoration: BoxDecoration(
                           color: status == 'completed' || status == 'abandoned' || status == 'force_cleaned'
                               ? Colors.purple
-                              : Colors.purple.withValues(alpha: 0.7),
+                              : Colors.purple.withOpacity(0.7),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Row(
@@ -1015,7 +1015,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: accentPurple.withValues(alpha: 0.3),
+                          color: accentPurple.withOpacity(0.3),
                           width: 1,
                         ),
                       ),
@@ -1031,7 +1031,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                                   width: 20,
                                   height: 20,
                                   decoration: BoxDecoration(
-                                    color: accentPurple.withValues(alpha: 0.1),
+                                    color: accentPurple.withOpacity(0.1),
                                     shape: BoxShape.circle,
                                   ),
                                   child: const Icon(
@@ -1046,7 +1046,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                               width: 20,
                               height: 20,
                               decoration: BoxDecoration(
-                                color: accentPurple.withValues(alpha: 0.1),
+                                color: accentPurple.withOpacity(0.1),
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(
@@ -1122,16 +1122,16 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                 boxShadow: [
                   BoxShadow(
                     color: _themeService.isDarkMode 
-                        ? Colors.black.withValues(alpha: 0.6)
-                        : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                        ? Colors.black.withOpacity(0.6)
+                        : const Color(0xFFA3B1C6).withOpacity(0.3),
                     offset: const Offset(2, 2),
                     blurRadius: 4,
                     spreadRadius: -1,
                   ),
                   BoxShadow(
                     color: _themeService.isDarkMode 
-                        ? Colors.white.withValues(alpha: 0.02)
-                        : Colors.white.withValues(alpha: 0.8),
+                        ? Colors.white.withOpacity(0.02)
+                        : Colors.white.withOpacity(0.8),
                     offset: const Offset(-2, -2),
                     blurRadius: 4,
                     spreadRadius: -1,
@@ -1165,21 +1165,21 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                 : const Color(0xFFF0F0F3),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: scarletRed.withValues(alpha: 0.2),
+              color: scarletRed.withOpacity(0.2),
               width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.white.withValues(alpha: 0.03)
-                    : Colors.white.withValues(alpha: 0.8),
+                    ? Colors.white.withOpacity(0.03)
+                    : Colors.white.withOpacity(0.8),
                 offset: const Offset(-6, -6),
                 blurRadius: 12,
               ),
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.black.withValues(alpha: 0.5)
-                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                    ? Colors.black.withOpacity(0.5)
+                    : const Color(0xFFA3B1C6).withOpacity(0.5),
                 offset: const Offset(6, 6),
                 blurRadius: 12,
               ),
@@ -1205,16 +1205,16 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                         boxShadow: [
                           BoxShadow(
                             color: _themeService.isDarkMode 
-                                ? Colors.black.withValues(alpha: 0.6)
-                                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                                ? Colors.black.withOpacity(0.6)
+                                : const Color(0xFFA3B1C6).withOpacity(0.3),
                             offset: const Offset(2, 2),
                             blurRadius: 4,
                             spreadRadius: -1,
                           ),
                           BoxShadow(
                             color: _themeService.isDarkMode 
-                                ? Colors.white.withValues(alpha: 0.02)
-                                : Colors.white.withValues(alpha: 0.8),
+                                ? Colors.white.withOpacity(0.02)
+                                : Colors.white.withOpacity(0.8),
                             offset: const Offset(-2, -2),
                             blurRadius: 4,
                             spreadRadius: -1,
@@ -1273,21 +1273,21 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                 : const Color(0xFFF0F0F3),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: accentPurple.withValues(alpha: 0.2),
+              color: accentPurple.withOpacity(0.2),
               width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.white.withValues(alpha: 0.03)
-                    : Colors.white.withValues(alpha: 0.8),
+                    ? Colors.white.withOpacity(0.03)
+                    : Colors.white.withOpacity(0.8),
                 offset: const Offset(-6, -6),
                 blurRadius: 12,
               ),
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.black.withValues(alpha: 0.5)
-                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                    ? Colors.black.withOpacity(0.5)
+                    : const Color(0xFFA3B1C6).withOpacity(0.5),
                 offset: const Offset(6, 6),
                 blurRadius: 12,
               ),
@@ -1313,16 +1313,16 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                         boxShadow: [
                           BoxShadow(
                             color: _themeService.isDarkMode 
-                                ? Colors.black.withValues(alpha: 0.6)
-                                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                                ? Colors.black.withOpacity(0.6)
+                                : const Color(0xFFA3B1C6).withOpacity(0.3),
                             offset: const Offset(2, 2),
                             blurRadius: 4,
                             spreadRadius: -1,
                           ),
                           BoxShadow(
                             color: _themeService.isDarkMode 
-                                ? Colors.white.withValues(alpha: 0.02)
-                                : Colors.white.withValues(alpha: 0.8),
+                                ? Colors.white.withOpacity(0.02)
+                                : Colors.white.withOpacity(0.8),
                             offset: const Offset(-2, -2),
                             blurRadius: 4,
                             spreadRadius: -1,
@@ -1391,16 +1391,16 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                 boxShadow: [
                   BoxShadow(
                     color: _themeService.isDarkMode 
-                        ? Colors.black.withValues(alpha: 0.6)
-                        : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                        ? Colors.black.withOpacity(0.6)
+                        : const Color(0xFFA3B1C6).withOpacity(0.3),
                     offset: const Offset(2, 2),
                     blurRadius: 4,
                     spreadRadius: -1,
                   ),
                   BoxShadow(
                     color: _themeService.isDarkMode 
-                        ? Colors.white.withValues(alpha: 0.02)
-                        : Colors.white.withValues(alpha: 0.8),
+                        ? Colors.white.withOpacity(0.02)
+                        : Colors.white.withOpacity(0.8),
                     offset: const Offset(-2, -2),
                     blurRadius: 4,
                     spreadRadius: -1,
@@ -1436,21 +1436,21 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                 : const Color(0xFFF0F0F3),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: (_themeService.isDarkMode ? Colors.white : Colors.grey).withValues(alpha: 0.2),
+              color: (_themeService.isDarkMode ? Colors.white : Colors.grey).withOpacity(0.2),
               width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.white.withValues(alpha: 0.03)
-                    : Colors.white.withValues(alpha: 0.8),
+                    ? Colors.white.withOpacity(0.03)
+                    : Colors.white.withOpacity(0.8),
                 offset: const Offset(-6, -6),
                 blurRadius: 12,
               ),
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.black.withValues(alpha: 0.5)
-                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                    ? Colors.black.withOpacity(0.5)
+                    : const Color(0xFFA3B1C6).withOpacity(0.5),
                 offset: const Offset(6, 6),
                 blurRadius: 12,
               ),
@@ -1513,16 +1513,16 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                 boxShadow: [
                   BoxShadow(
                     color: _themeService.isDarkMode 
-                        ? Colors.black.withValues(alpha: 0.6)
-                        : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                        ? Colors.black.withOpacity(0.6)
+                        : const Color(0xFFA3B1C6).withOpacity(0.3),
                     offset: const Offset(2, 2),
                     blurRadius: 4,
                     spreadRadius: -1,
                   ),
                   BoxShadow(
                     color: _themeService.isDarkMode 
-                        ? Colors.white.withValues(alpha: 0.02)
-                        : Colors.white.withValues(alpha: 0.8),
+                        ? Colors.white.withOpacity(0.02)
+                        : Colors.white.withOpacity(0.8),
                     offset: const Offset(-2, -2),
                     blurRadius: 4,
                     spreadRadius: -1,
@@ -1552,15 +1552,15 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                 boxShadow: [
                   BoxShadow(
                     color: _themeService.isDarkMode 
-                        ? Colors.black.withValues(alpha: 0.6)
-                        : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                        ? Colors.black.withOpacity(0.6)
+                        : const Color(0xFFA3B1C6).withOpacity(0.3),
                     offset: const Offset(1, 1),
                     blurRadius: 2,
                   ),
                   BoxShadow(
                     color: _themeService.isDarkMode 
-                        ? Colors.white.withValues(alpha: 0.02)
-                        : Colors.white.withValues(alpha: 0.8),
+                        ? Colors.white.withOpacity(0.02)
+                        : Colors.white.withOpacity(0.8),
                     offset: const Offset(-1, -1),
                     blurRadius: 2,
                   ),
@@ -1633,15 +1633,15 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
           boxShadow: [
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.white.withValues(alpha: 0.03)
-                  : Colors.white.withValues(alpha: 0.7),
+                  ? Colors.white.withOpacity(0.03)
+                  : Colors.white.withOpacity(0.7),
               offset: const Offset(-3, -3),
               blurRadius: 6,
             ),
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.black.withValues(alpha: 0.5)
-                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                  ? Colors.black.withOpacity(0.5)
+                  : const Color(0xFFA3B1C6).withOpacity(0.5),
               offset: const Offset(3, 3),
               blurRadius: 6,
             ),
@@ -1764,7 +1764,7 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
+              color: Colors.black.withOpacity(0.3),
               blurRadius: 20,
               spreadRadius: 5,
             ),
@@ -2231,7 +2231,7 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? accentPurple.withValues(alpha: 0.1) : Colors.grey[50],
+          color: isSelected ? accentPurple.withOpacity(0.1) : Colors.grey[50],
           border: Border.all(
             color: isSelected ? accentPurple : Colors.grey[300]!,
             width: isSelected ? 2 : 1,

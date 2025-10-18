@@ -42,9 +42,9 @@ import '../widgets/shared_link_popup.dart';
 import '../widgets/slide_update_popup.dart';
 import '../models/debate_source.dart';
 import '../services/participant_recruitment_service.dart';
-import '../services/audio_clip_service.dart';
 import '../services/realtime_ai_moderation_service.dart';
 import '../services/audio_volume_service.dart';
+import '../services/sound_service.dart';
 import '../services/room_realtime_manager.dart';
 import '../services/participant_diff_manager.dart';
 import '../services/granular_state_manager.dart';
@@ -159,10 +159,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   bool _isAudioConnected = false;
   bool _isAudioConnecting = false;
   final LiveKitService _liveKitService = LiveKitService();
-  
-  // Audio clipping state
-  final AudioClipService _audioClipService = AudioClipService();
-  bool _isRecordingClip = false;
 
   // AI Moderation and Audio Volume services
   final RealtimeAIModerationService _aiModerationService = RealtimeAIModerationService();
@@ -180,6 +176,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
   // Reaction system
   final List<ReactionData> _activeReactions = [];
+
+  // Avatar emoji overlays (userId -> emoji)
+  final Map<String, String> _avatarEmojiOverlays = {};
 
   // Participants
   final List<UserProfile> _speakerPanelists = []; // Max 6 speakers
@@ -1217,15 +1216,57 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         roomId: widget.roomId,
         roomType: 'debate_discussion',
         isCurrentUserModerator: _isCurrentUserModerator,
-        onFollow: () {
-          // TODO: Implement follow functionality
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Following ${user.name}'),
-                backgroundColor: const Color(0xFF10B981),
-              ),
+        onFollow: () async {
+          if (_currentUser == null) return;
+
+          try {
+            // Check if already following to determine action
+            final isFollowing = await _appwrite.isFollowing(
+              followerId: _currentUser!.id,
+              followingId: user.id,
             );
+
+            if (isFollowing) {
+              // Unfollow
+              await _appwrite.unfollowUser(
+                followerId: _currentUser!.id,
+                followingId: user.id,
+              );
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Unfollowed ${user.name}'),
+                    backgroundColor: Colors.grey,
+                  ),
+                );
+              }
+            } else {
+              // Follow
+              await _appwrite.followUser(
+                followerId: _currentUser!.id,
+                followingId: user.id,
+              );
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Now following ${user.name}'),
+                    backgroundColor: const Color(0xFF10B981),
+                  ),
+                );
+              }
+            }
+          } catch (e) {
+            AppLogger().error('Error toggling follow: $e');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Failed to update follow status'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            }
           }
         },
         onChallenge: () {
@@ -2966,7 +3007,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                         Container(
                           padding: EdgeInsets.all(isSmallScreen ? 6 : 8),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                            color: const Color(0xFF8B5CF6).withOpacity(0.2),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
@@ -3089,7 +3130,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                  color: const Color(0xFF8B5CF6).withOpacity(0.2),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -3927,9 +3968,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.grey.withValues(alpha: 0.1),
+                    color: Colors.grey.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+                    border: Border.all(color: Colors.grey.withOpacity(0.3)),
                   ),
                   child: Row(
                     children: [
@@ -4216,7 +4257,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.1),
+                color: Colors.white.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Icon(
@@ -4284,7 +4325,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.2),
+                color: Colors.orange.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Row(
@@ -4321,7 +4362,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                       Container(
                         padding: EdgeInsets.all(isSmallScreen ? 6 : 8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                          color: const Color(0xFF8B5CF6).withOpacity(0.2),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Icon(
@@ -4369,7 +4410,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
               child: Container(
                 padding: EdgeInsets.all(isSmallScreen ? 6 : 8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                  color: const Color(0xFF8B5CF6).withOpacity(0.2),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Icon(
@@ -4515,6 +4556,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       debateStyle: _roomData?['debateStyle'], // Pass the debate style from room data
       isCurrentUserModerator: _isCurrentUserModerator, // Pass moderator status
       activeReactions: _activeReactions, // Pass active reactions
+      avatarEmojiOverlays: _avatarEmojiOverlays, // Pass avatar emoji overlays
       onSpeakerTap: (userId) {
         final speaker = _speakerPanelists.firstWhere((s) => s.id == userId);
         final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
@@ -4664,8 +4706,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                 decoration: BoxDecoration(
                   color: isModerator 
-                      ? const Color(0xFF8B5CF6).withValues(alpha: 0.9)
-                      : Colors.black.withValues(alpha: 0.7),
+                      ? const Color(0xFF8B5CF6).withOpacity(0.9)
+                      : Colors.black.withOpacity(0.7),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Row(
@@ -4725,7 +4767,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
               child: Container(
                 padding: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.8),
+                  color: Colors.orange.withOpacity(0.8),
                   borderRadius: BorderRadius.circular(3),
                 ),
                 child: const Icon(
@@ -4836,7 +4878,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       },
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.grey[800]?.withValues(alpha: 0.3),
+          color: Colors.grey[800]?.withOpacity(0.3),
           borderRadius: BorderRadius.zero, // No border radius for flush look
           border: Border.all(
             color: Colors.grey[700]!,
@@ -4958,16 +5000,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                         onTap: _shareRoomToSocial,
                       ),
                       const SizedBox(width: 8),
-                      // Audio clip button - only show for speakers and moderators
-                      if (_isCurrentUserModerator || _isCurrentUserSpeaker) ...[
-                        _buildControlButton(
-                          icon: _isRecordingClip ? LucideIcons.square : LucideIcons.scissors,
-                          label: _isRecordingClip ? 'Stop Clip' : 'Clip Audio',
-                          color: _isRecordingClip ? Colors.red : Colors.purple,
-                          onTap: _toggleAudioClip,
-                        ),
-                        const SizedBox(width: 8),
-                      ],
                       _buildReactionButton(),
                       const SizedBox(width: 8),
                       _buildGiftButton(),
@@ -5028,7 +5060,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                             label: const Text('Enable Audio', style: TextStyle(fontSize: 12)),
                             style: TextButton.styleFrom(
                               foregroundColor: Colors.orange,
-                              backgroundColor: Colors.orange.withValues(alpha: 0.1),
+                              backgroundColor: Colors.orange.withOpacity(0.1),
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             ),
                           ),
@@ -5076,14 +5108,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                       color: Colors.blue,
                       onTap: _shareRoomToSocial,
                     ),
-                    // Audio clip button - only show for speakers and moderators
-                    if (_isCurrentUserModerator || _isCurrentUserSpeaker)
-                      _buildControlButton(
-                        icon: _isRecordingClip ? LucideIcons.square : LucideIcons.scissors,
-                        label: _isRecordingClip ? 'Stop Clip' : 'Clip Audio',
-                        color: _isRecordingClip ? Colors.red : Colors.purple,
-                        onTap: _toggleAudioClip,
-                      ),
                     _buildReactionButton(),
                     _buildGiftButton(),
                     _buildControlButton(
@@ -5141,7 +5165,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                           label: const Text('Enable Audio', style: TextStyle(fontSize: 12)),
                           style: TextButton.styleFrom(
                             foregroundColor: Colors.orange,
-                            backgroundColor: Colors.orange.withValues(alpha: 0.1),
+                            backgroundColor: Colors.orange.withOpacity(0.1),
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           ),
                         ),
@@ -5182,12 +5206,12 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
               color: const Color(0xFF2D2D2D), // Dark background like arena theme
               borderRadius: const BorderRadius.all(Radius.circular(20)),
               border: Border.all(
-                color: color.withValues(alpha: 0.3),
+                color: color.withOpacity(0.3),
                 width: 1,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: color.withValues(alpha: 0.2),
+                  color: color.withOpacity(0.2),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -5374,9 +5398,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
+                  color: Colors.orange.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -5746,7 +5770,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isOccupied ? Colors.red[900]?.withValues(alpha: 0.3) : Colors.green[900]?.withValues(alpha: 0.3),
+        color: isOccupied ? Colors.red[900]?.withOpacity(0.3) : Colors.green[900]?.withOpacity(0.3),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isOccupied ? Colors.red[700]! : Colors.green[700]!,
@@ -6665,7 +6689,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     final roomName = _roomData?['name'] ?? 'Debate Room';
     final moderatorName = _moderator?.name ?? 'Unknown';
     final participantCount = _speakerPanelists.length + _audienceMembers.length;
-    
+
     // Create shareable room info for beta testing
     final shareText = '''🎙️ Join our live debate discussion!
 
@@ -6683,22 +6707,61 @@ To join this debate:
 #ArenaDebate #LiveDebate #Discussion #beta''';
 
     try {
-      // Direct native share - this should show the grid of apps like in your image
-      // Including Facebook, Instagram, TikTok, X (Twitter), Messages, WhatsApp etc.
+      AppLogger().info('Sharing room to social media platforms...');
+
+      // Get the screen size for iOS share sheet positioning
+      final box = context.findRenderObject() as RenderBox?;
+      final sharePositionOrigin = box != null
+          ? box.localToGlobal(Offset.zero) & box.size
+          : null;
+
+      // Direct native share - shows iOS/Android share sheet with all available apps
+      // iOS: Shows Facebook, Instagram, TikTok, X (Twitter), Messages, WhatsApp, etc.
+      // Android: Shows similar app grid based on installed apps
       await Share.share(
         shareText,
         subject: '🎙️ Join our live debate discussion!',
+        sharePositionOrigin: sharePositionOrigin,
       );
-    } catch (e) {
-      // Fallback to clipboard if native share fails
-      Clipboard.setData(ClipboardData(text: shareText));
+
+      AppLogger().info('Share dialog opened successfully');
+
+      // Show confirmation
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Room details copied to clipboard - paste in any app to share!'),
-            backgroundColor: Color(0xFF8B5CF6),
+            content: Text('Share options opened!'),
+            backgroundColor: Color(0xFF10B981),
+            duration: Duration(seconds: 2),
           ),
         );
+      }
+    } catch (e) {
+      AppLogger().error('Error sharing room: $e');
+
+      // Fallback to clipboard if native share fails
+      try {
+        await Clipboard.setData(ClipboardData(text: shareText));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Room details copied to clipboard - paste in any app to share!'),
+              backgroundColor: Color(0xFF8B5CF6),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      } catch (clipboardError) {
+        AppLogger().error('Error copying to clipboard: $clipboardError');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to share room. Please try again.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
       }
     }
   }
@@ -6914,6 +6977,32 @@ To join this debate:
                 AppLogger().info('🎁 Received gift: ${reaction.emoji} (${reaction.giftName}) from ${reaction.senderName} to ${reaction.targetUserId}');
               } else {
                 AppLogger().info('✨ Received reaction: ${reaction.emoji} for ${reaction.targetUserId}');
+
+                // Show emoji on recipient's avatar with confetti
+                if (mounted) {
+                  setState(() {
+                    _avatarEmojiOverlays[reaction.targetUserId] = reaction.emoji;
+                  });
+
+                  // Auto-clear recipient's emoji after 5 seconds (longer for confetti animation)
+                  Future.delayed(const Duration(seconds: 5), () {
+                    if (mounted) {
+                      setState(() {
+                        _avatarEmojiOverlays.remove(reaction.targetUserId);
+                      });
+                    }
+                  });
+                }
+
+                // Play audio for audio reactions on all devices
+                final soundService = SoundService();
+                if (reaction.emoji == '🔔') {
+                  soundService.playBellSound();
+                } else if (reaction.emoji == '🦗') {
+                  soundService.playCricketSound();
+                } else if (reaction.emoji == '👏') {
+                  soundService.playApplauseSound();
+                }
               }
             }
           }
@@ -7020,7 +7109,7 @@ To join this debate:
         width: 50,
         height: 50,
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.1),
+          color: Colors.white.withOpacity(0.1),
           borderRadius: BorderRadius.circular(25),
           border: Border.all(color: Colors.grey[600]!, width: 1),
         ),
@@ -7049,7 +7138,7 @@ To join this debate:
           border: Border.all(color: const Color(0xFFFFD700), width: 2),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+              color: const Color(0xFFFFD700).withOpacity(0.3),
               blurRadius: 8,
               spreadRadius: 1,
             ),
@@ -7202,14 +7291,21 @@ To join this debate:
   }
 
   void _showEmojiPicker(Map<String, dynamic> targetSpeaker) {
-    // Common reaction emojis
-    final emojis = [
+    // Regular reaction emojis
+    final regularEmojis = [
       '👍', // Thumbs up
       '👎', // Thumbs down
       '😂', // Laughing
       '😮', // Wow
       '💯', // 100
       '❤️', // Heart
+    ];
+
+    // Audio reaction emojis
+    final audioEmojis = [
+      '🔔', // Bell (audio)
+      '🦗', // Cricket (audio)
+      '👏', // Applause (audio)
     ];
 
     showModalBottomSheet(
@@ -7266,53 +7362,143 @@ To join this debate:
                     ),
                   ),
                   const SizedBox(height: 24),
-                  // Emoji grid
+
+                  // Regular reactions section
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 4,
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                      ),
-                      itemCount: emojis.length,
-                      itemBuilder: (context, index) {
-                        final emoji = emojis[index];
-                        return GestureDetector(
-                          onTap: () {
-                            Navigator.pop(context);
-                            _sendReaction(emoji, targetSpeaker);
-                          },
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.grey.shade300,
-                                  offset: const Offset(4, 4),
-                                  blurRadius: 8,
-                                ),
-                                const BoxShadow(
-                                  color: Colors.white,
-                                  offset: Offset(-4, -4),
-                                  blurRadius: 8,
-                                ),
-                              ],
-                            ),
-                            child: Center(
-                              child: Text(
-                                emoji,
-                                style: const TextStyle(fontSize: 32),
-                              ),
-                            ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Reactions',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade600,
                           ),
-                        );
-                      },
+                        ),
+                        const SizedBox(height: 12),
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 4,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                          ),
+                          itemCount: regularEmojis.length,
+                          itemBuilder: (context, index) {
+                            final emoji = regularEmojis[index];
+                            return GestureDetector(
+                              onTap: () {
+                                Navigator.pop(context);
+                                _sendReaction(emoji, targetSpeaker);
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.grey.shade300,
+                                      offset: const Offset(4, 4),
+                                      blurRadius: 8,
+                                    ),
+                                    const BoxShadow(
+                                      color: Colors.white,
+                                      offset: Offset(-4, -4),
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    emoji,
+                                    style: const TextStyle(fontSize: 32),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
+
+                  const SizedBox(height: 24),
+
+                  // Audio reactions section
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.volume_up, size: 16, color: Colors.grey.shade600),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Sound Reactions',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 4,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                          ),
+                          itemCount: audioEmojis.length,
+                          itemBuilder: (context, index) {
+                            final emoji = audioEmojis[index];
+                            return GestureDetector(
+                              onTap: () {
+                                Navigator.pop(context);
+                                _sendReaction(emoji, targetSpeaker);
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.purple.shade50,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: Colors.purple.shade200,
+                                    width: 2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.purple.shade100,
+                                      offset: const Offset(4, 4),
+                                      blurRadius: 8,
+                                    ),
+                                    const BoxShadow(
+                                      color: Colors.white,
+                                      offset: Offset(-4, -4),
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    emoji,
+                                    style: const TextStyle(fontSize: 32),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+
                   const SizedBox(height: 16),
                 ],
               ),
@@ -7327,6 +7513,32 @@ To join this debate:
     if (!mounted || _currentUser == null) return;
 
     try {
+      // Play audio for audio reactions
+      final soundService = SoundService();
+      if (emoji == '🔔') {
+        await soundService.playBellSound();
+      } else if (emoji == '🦗') {
+        await soundService.playCricketSound();
+      } else if (emoji == '👏') {
+        await soundService.playApplauseSound();
+      }
+
+      // Show emoji on sender's avatar immediately
+      if (mounted) {
+        setState(() {
+          _avatarEmojiOverlays[_currentUser!.id] = emoji;
+        });
+
+        // Auto-clear sender's emoji after 5 seconds
+        Future.delayed(const Duration(seconds: 5), () {
+          if (mounted) {
+            setState(() {
+              _avatarEmojiOverlays.remove(_currentUser!.id);
+            });
+          }
+        });
+      }
+
       // Create reaction data
       final reaction = ReactionData(
         emoji: emoji,
@@ -7482,150 +7694,4 @@ To join this debate:
     );
   }
 
-  /// Handle audio clip recording toggle
-  Future<void> _toggleAudioClip() async {
-    try {
-      if (!_isRecordingClip) {
-        // Start recording audio clip
-        AppLogger().info('🎙️ Starting audio clip recording');
-        
-        // Show dialog to get clip title
-        final clipTitle = await _showClipTitleDialog();
-        if (clipTitle == null || clipTitle.trim().isEmpty) {
-          return; // User cancelled or didn't enter a title
-        }
-        
-        final success = await _audioClipService.startAudioClip(
-          roomId: widget.roomId,
-          userId: _currentUser?.id ?? '',
-          clipTitle: clipTitle,
-        );
-        
-        if (success) {
-          if (mounted) {
-            setState(() {
-              _isRecordingClip = true;
-            });
-            
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('🎙️ Recording 30-second audio clip...'),
-                backgroundColor: Colors.purple,
-                duration: Duration(seconds: 2),
-              ),
-            );
-            
-            // Auto-stop after 30 seconds
-            Timer(const Duration(seconds: 30), () {
-              if (mounted && _isRecordingClip) {
-                setState(() {
-                  _isRecordingClip = false;
-                });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('✅ Audio clip saved!'),
-                    backgroundColor: Colors.green,
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              }
-            });
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('❌ Failed to start audio recording'),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-        }
-      } else {
-        // Stop recording
-        AppLogger().info('🛑 Stopping audio clip recording');
-        await _audioClipService.cancelRecording();
-        
-        if (mounted) {
-          setState(() {
-            _isRecordingClip = false;
-          });
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('🛑 Audio clip recording stopped'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      AppLogger().error('Error toggling audio clip: $e');
-      if (mounted) {
-        setState(() {
-          _isRecordingClip = false;
-        });
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Audio clip error: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    }
-  }
-
-  /// Show dialog to get clip title from user
-  Future<String?> _showClipTitleDialog() async {
-    final controller = TextEditingController();
-    
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(LucideIcons.mic, color: Colors.purple, size: 20),
-            SizedBox(width: 8),
-            Text('Audio Clip Title'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Give your 30-second audio clip a title:'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              maxLength: 50,
-              decoration: const InputDecoration(
-                hintText: 'e.g., "Great point about healthcare"',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, null),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final title = controller.text.trim();
-              Navigator.pop(context, title.isNotEmpty ? title : null);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple,
-            ),
-            child: const Text('Start Recording', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
 }

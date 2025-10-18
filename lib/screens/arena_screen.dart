@@ -148,8 +148,8 @@ List<Color> getAvatarGradientForRole(String role) {
 List<Color> getSlotGradientForRole(String role, {bool isWinner = false}) {
   if (isWinner) {
     return [
-      Colors.amber.withValues(alpha: 0.2),
-      Colors.amber.withValues(alpha: 0.1),
+      Colors.amber.withOpacity(0.2),
+      Colors.amber.withOpacity(0.1),
     ];
   }
   
@@ -157,31 +157,31 @@ List<Color> getSlotGradientForRole(String role, {bool isWinner = false}) {
     case 'affirmative':
     case 'affirmative2':
       return [
-        Colors.green.withValues(alpha: 0.2),
-        Colors.green.withValues(alpha: 0.1),
+        Colors.green.withOpacity(0.2),
+        Colors.green.withOpacity(0.1),
       ];
     case 'negative':
     case 'negative2':
       return [
-        Colors.red.withValues(alpha: 0.2),
-        Colors.red.withValues(alpha: 0.1),
+        Colors.red.withOpacity(0.2),
+        Colors.red.withOpacity(0.1),
       ];
     case 'moderator':
       return [
-        const Color(0xFF8B5CF6).withValues(alpha: 0.2), // accentPurple
-        const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+        const Color(0xFF8B5CF6).withOpacity(0.2), // accentPurple
+        const Color(0xFF8B5CF6).withOpacity(0.1),
       ];
     case 'judge1':
     case 'judge2':
     case 'judge3':
       return [
-        Colors.amber.withValues(alpha: 0.2),
-        Colors.amber.withValues(alpha: 0.1),
+        Colors.amber.withOpacity(0.2),
+        Colors.amber.withOpacity(0.1),
       ];
     default:
       return [
-        const Color(0xFF8B5CF6).withValues(alpha: 0.2), // Default purple
-        const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+        const Color(0xFF8B5CF6).withOpacity(0.2), // Default purple
+        const Color(0xFF8B5CF6).withOpacity(0.1),
       ];
   }
 }
@@ -817,6 +817,26 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     if (_currentUserId == null) {
       AppLogger().error('Cannot start real-time listening: no current user ID');
       return;
+    }
+
+    // GUARD: Cancel existing subscriptions and timers before creating new ones
+    if (_participantStreamListener != null || _roomStatusStreamListener != null ||
+        _judgmentStreamListener != null || _roomSubscription != null || _reconnectionTimer != null) {
+      AppLogger().warning('🔄 CLEANUP: Cancelling existing subscriptions and timers before creating new ones');
+
+      _reconnectionTimer?.cancel();
+      _reconnectionTimer = null;
+
+      await _participantStreamListener?.cancel();
+      await _roomStatusStreamListener?.cancel();
+      await _judgmentStreamListener?.cancel();
+      _participantStreamListener = null;
+      _roomStatusStreamListener = null;
+      _judgmentStreamListener = null;
+      _roomSubscription = null;
+
+      // Small delay to ensure cleanup completes
+      await Future.delayed(const Duration(milliseconds: 100));
     }
 
     try {
@@ -3225,15 +3245,52 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       isScrollControlled: true,
       builder: (context) => UserProfileBottomSheet(
         user: userProfile,
-        onFollow: () {
-          // TODO: Implement follow functionality
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Following ${userProfile.name}'),
-                backgroundColor: const Color(0xFF10B981),
-              ),
+        onFollow: () async {
+          if (_currentUser == null) return;
+
+          try {
+            final isFollowing = await _appwrite.isFollowing(
+              followerId: _currentUser!.id,
+              followingId: userProfile.id,
             );
+
+            if (isFollowing) {
+              await _appwrite.unfollowUser(
+                followerId: _currentUser!.id,
+                followingId: userProfile.id,
+              );
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Unfollowed ${userProfile.name}'),
+                    backgroundColor: Colors.grey,
+                  ),
+                );
+              }
+            } else {
+              await _appwrite.followUser(
+                followerId: _currentUser!.id,
+                followingId: userProfile.id,
+              );
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Now following ${userProfile.name}'),
+                    backgroundColor: const Color(0xFF10B981),
+                  ),
+                );
+              }
+            }
+          } catch (e) {
+            AppLogger().error('Error toggling follow: $e');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Failed to update follow status'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            }
           }
         },
         onChallenge: () {
@@ -3678,19 +3735,19 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                         gradient: LinearGradient( // Add gradient for more visual impact
                           colors: [
                             const Color(0xFF1A1A2E), // Dark blue-purple
-                            deepPurple.withValues(alpha: 0.3),
+                            deepPurple.withOpacity(0.3),
                           ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         borderRadius: BorderRadius.circular(12), // Slightly more rounded
                         border: Border.all(
-                          color: const Color(0xFFFFD700).withValues(alpha: 0.5), // Gold border to match text
+                          color: const Color(0xFFFFD700).withOpacity(0.5), // Gold border to match text
                           width: 2, // Thicker border for more presence
                         ),
                         boxShadow: [ // Add subtle shadow for depth
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.3),
+                            color: Colors.black.withOpacity(0.3),
                             blurRadius: 4,
                             offset: const Offset(0, 2),
                           ),
@@ -3862,7 +3919,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               height: 2,
               margin: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: accentPurple.withValues(alpha: 0.5),
+                color: accentPurple.withOpacity(0.5),
                 borderRadius: BorderRadius.circular(1),
               ),
             ),
@@ -3899,7 +3956,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   color: Colors.grey[900],
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: accentPurple.withValues(alpha: 0.3),
+                    color: accentPurple.withOpacity(0.3),
                     width: 1,
                   ),
                 ),
@@ -4200,14 +4257,57 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                               isScrollControlled: true,
                               builder: (context) => UserProfileBottomSheet(
                                 user: participant,
-                                onFollow: () {
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Following ${participant.name}'),
-                                        backgroundColor: const Color(0xFF10B981),
-                                      ),
+                                onFollow: () async {
+                                  if (_currentUser == null) return;
+
+                                  try {
+                                    // Check if already following to determine action
+                                    final isFollowing = await _appwrite.isFollowing(
+                                      followerId: _currentUser!.id,
+                                      followingId: participant.id,
                                     );
+
+                                    if (isFollowing) {
+                                      // Unfollow
+                                      await _appwrite.unfollowUser(
+                                        followerId: _currentUser!.id,
+                                        followingId: participant.id,
+                                      );
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Unfollowed ${participant.name}'),
+                                            backgroundColor: Colors.grey,
+                                          ),
+                                        );
+                                      }
+                                    } else {
+                                      // Follow
+                                      await _appwrite.followUser(
+                                        followerId: _currentUser!.id,
+                                        followingId: participant.id,
+                                      );
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Now following ${participant.name}'),
+                                            backgroundColor: const Color(0xFF10B981),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  } catch (e) {
+                                    AppLogger().error('Error toggling follow: $e');
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(e.toString().contains('Already following')
+                                              ? 'You are already following ${participant.name}'
+                                              : 'Failed to follow ${participant.name}'),
+                                          backgroundColor: Colors.orange,
+                                        ),
+                                      );
+                                    }
                                   }
                                 },
                                 onChallenge: () {
@@ -4338,12 +4438,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.9),
+                    color: Colors.white.withOpacity(0.9),
                     width: 3,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
+                      color: Colors.black.withOpacity(0.3),
                       blurRadius: 8,
                       offset: const Offset(0, 4),
                     ),
@@ -4362,7 +4462,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                             width: 70,
                             height: 70,
                             decoration: BoxDecoration(
-                              color: getAvatarColorForRole(role).withValues(alpha: 0.3),
+                              color: getAvatarColorForRole(role).withOpacity(0.3),
                               shape: BoxShape.circle,
                             ),
                             child: Center(
@@ -4381,7 +4481,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                           width: 70,
                           height: 70,
                           decoration: BoxDecoration(
-                            color: getAvatarColorForRole(role).withValues(alpha: 0.3),
+                            color: getAvatarColorForRole(role).withOpacity(0.3),
                             shape: BoxShape.circle,
                           ),
                           child: Center(
@@ -4499,11 +4599,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             child: Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.9),
+                color: Colors.amber.withOpacity(0.9),
                 borderRadius: BorderRadius.circular(6),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
+                    color: Colors.black.withOpacity(0.3),
                     blurRadius: 2,
                     spreadRadius: 1,
                   ),
@@ -4574,14 +4674,57 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           isScrollControlled: true,
           builder: (context) => UserProfileBottomSheet(
             user: participant,
-            onFollow: () {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Following ${participant.name}'),
-                    backgroundColor: const Color(0xFF10B981),
-                  ),
+            onFollow: () async {
+              if (_currentUser == null) return;
+
+              try {
+                // Check if already following to determine action
+                final isFollowing = await _appwrite.isFollowing(
+                  followerId: _currentUser!.id,
+                  followingId: participant.id,
                 );
+
+                if (isFollowing) {
+                  // Unfollow
+                  await _appwrite.unfollowUser(
+                    followerId: _currentUser!.id,
+                    followingId: participant.id,
+                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Unfollowed ${participant.name}'),
+                        backgroundColor: Colors.grey,
+                      ),
+                    );
+                  }
+                } else {
+                  // Follow
+                  await _appwrite.followUser(
+                    followerId: _currentUser!.id,
+                    followingId: participant.id,
+                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Now following ${participant.name}'),
+                        backgroundColor: const Color(0xFF10B981),
+                      ),
+                    );
+                  }
+                }
+              } catch (e) {
+                AppLogger().error('Error toggling follow: $e');
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(e.toString().contains('Already following')
+                          ? 'You are already following ${participant.name}'
+                          : 'Failed to follow ${participant.name}'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                }
               }
             },
             onChallenge: () {
@@ -4623,7 +4766,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isSpeaking ? Colors.green : getAvatarColorForRole(role).withValues(alpha: 0.7), 
+                    color: isSpeaking ? Colors.green : getAvatarColorForRole(role).withOpacity(0.7), 
                     width: isSpeaking ? 2 : 1
                   ),
                 ),
@@ -4647,12 +4790,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.9),
+                                    color: Colors.white.withOpacity(0.9),
                                     width: 3,
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.3),
+                                      color: Colors.black.withOpacity(0.3),
                                       blurRadius: 8,
                                       offset: const Offset(0, 4),
                                     ),
@@ -4671,7 +4814,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                             width: 70,
                                             height: 70,
                                             decoration: BoxDecoration(
-                                              color: getAvatarColorForRole(role).withValues(alpha: 0.3),
+                                              color: getAvatarColorForRole(role).withOpacity(0.3),
                                               shape: BoxShape.circle,
                                             ),
                                             child: Center(
@@ -4690,7 +4833,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                           width: isSmall ? 55 : 70,
                                           height: isSmall ? 55 : 70,
                                           decoration: BoxDecoration(
-                                            color: getAvatarColorForRole(role).withValues(alpha: 0.3),
+                                            color: getAvatarColorForRole(role).withOpacity(0.3),
                                             shape: BoxShape.circle,
                                           ),
                                           child: Center(
@@ -4806,11 +4949,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                           child: Container(
                             padding: const EdgeInsets.all(3),
                             decoration: BoxDecoration(
-                              color: Colors.amber.withValues(alpha: 0.9),
+                              color: Colors.amber.withOpacity(0.9),
                               borderRadius: BorderRadius.circular(4),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.3),
+                                  color: Colors.black.withOpacity(0.3),
                                   blurRadius: 1,
                                   spreadRadius: 0.5,
                                 ),
@@ -5109,12 +5252,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               color: const Color(0xFF2D2D2D), // Dark background like debates_discussions
               borderRadius: const BorderRadius.all(Radius.circular(20)),
               border: Border.all(
-                color: buttonColor.withValues(alpha: 0.3),
+                color: buttonColor.withOpacity(0.3),
                 width: 1,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: buttonColor.withValues(alpha: 0.2),
+                  color: buttonColor.withOpacity(0.2),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -5444,7 +5587,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey.withValues(alpha: 0.1),
+                color: Colors.grey.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -5577,7 +5720,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
+              color: Colors.black.withOpacity(0.2),
               spreadRadius: 0,
               blurRadius: 20,
               offset: const Offset(0, -5),
@@ -5605,7 +5748,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
+                      color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
@@ -5640,7 +5783,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   ),
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
+                      color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: IconButton(
@@ -5695,13 +5838,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                             boxShadow: [
                               // Neumorphism shadows
                               BoxShadow(
-                                color: Colors.white.withValues(alpha: 0.9),
+                                color: Colors.white.withOpacity(0.9),
                                 spreadRadius: -2,
                                 blurRadius: 8,
                                 offset: const Offset(-4, -4),
                               ),
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.15),
+                                color: Colors.black.withOpacity(0.15),
                                 spreadRadius: -2,
                                 blurRadius: 8,
                                 offset: const Offset(4, 4),
@@ -5729,13 +5872,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                         boxShadow: [
                                           // Inner shadow effect for neumorphism
                                           BoxShadow(
-                                            color: Colors.black.withValues(alpha: 0.1),
+                                            color: Colors.black.withOpacity(0.1),
                                             spreadRadius: -1,
                                             blurRadius: 4,
                                             offset: const Offset(2, 2),
                                           ),
                                           BoxShadow(
-                                            color: Colors.white.withValues(alpha: 0.7),
+                                            color: Colors.white.withOpacity(0.7),
                                             spreadRadius: -1,
                                             blurRadius: 4,
                                             offset: const Offset(-2, -2),
@@ -5771,7 +5914,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                             shape: BoxShape.circle,
                                             boxShadow: [
                                               BoxShadow(
-                                                color: getAvatarColorForRole(currentRole).withValues(alpha: 0.3),
+                                                color: getAvatarColorForRole(currentRole).withOpacity(0.3),
                                                 spreadRadius: 0,
                                                 blurRadius: 8,
                                                 offset: const Offset(0, 2),
@@ -5871,13 +6014,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                       boxShadow: [
                                         // Inner shadow for pressed neumorphism effect
                                         BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.1),
+                                          color: Colors.black.withOpacity(0.1),
                                           spreadRadius: -1,
                                           blurRadius: 6,
                                           offset: const Offset(3, 3),
                                         ),
                                         BoxShadow(
-                                          color: Colors.white.withValues(alpha: 0.7),
+                                          color: Colors.white.withOpacity(0.7),
                                           spreadRadius: -1,
                                           blurRadius: 6,
                                           offset: const Offset(-3, -3),
@@ -5918,13 +6061,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                       boxShadow: [
                                         // Elevated neumorphism effect
                                         BoxShadow(
-                                          color: Colors.white.withValues(alpha: 0.9),
+                                          color: Colors.white.withOpacity(0.9),
                                           spreadRadius: -2,
                                           blurRadius: 8,
                                           offset: const Offset(-4, -4),
                                         ),
                                         BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.15),
+                                          color: Colors.black.withOpacity(0.15),
                                           spreadRadius: -2,
                                           blurRadius: 8,
                                           offset: const Offset(4, 4),
@@ -5972,13 +6115,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                                 ? [
                                                     // Pressed/inset effect for current role
                                                     BoxShadow(
-                                                      color: Colors.black.withValues(alpha: 0.1),
+                                                      color: Colors.black.withOpacity(0.1),
                                                       spreadRadius: -1,
                                                       blurRadius: 4,
                                                       offset: const Offset(2, 2),
                                                     ),
                                                     BoxShadow(
-                                                      color: Colors.white.withValues(alpha: 0.7),
+                                                      color: Colors.white.withOpacity(0.7),
                                                       spreadRadius: -1,
                                                       blurRadius: 4,
                                                       offset: const Offset(-2, -2),
@@ -5987,13 +6130,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                                 : [
                                                     // Subtle raised effect for other roles
                                                     BoxShadow(
-                                                      color: Colors.white.withValues(alpha: 0.7),
+                                                      color: Colors.white.withOpacity(0.7),
                                                       spreadRadius: -1,
                                                       blurRadius: 3,
                                                       offset: const Offset(-2, -2),
                                                     ),
                                                     BoxShadow(
-                                                      color: Colors.black.withValues(alpha: 0.08),
+                                                      color: Colors.black.withOpacity(0.08),
                                                       spreadRadius: -1,
                                                       blurRadius: 3,
                                                       offset: const Offset(2, 2),
@@ -6989,17 +7132,22 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         await _sendRoleChangeNotification(userId, newRole);
       }
 
+      // OPTIMISTIC UPDATE WITH ROLLBACK: Save state before update for potential rollback
+      UserProfile? userProfile;
+      String? previousRole;
+      int? previousAudienceIndex;
+
       // OPTIMISTIC UPDATE: Update moderator's UI immediately
       if (mounted) {
         setState(() {
           // Update participant in the correct slot
           if (_participants.containsKey(newRole)) {
             // Find the user in audience or other slots
-            UserProfile? userProfile;
 
             // Check audience
             final audienceIndex = _audience.indexWhere((u) => u.id == userId);
             if (audienceIndex >= 0) {
+              previousAudienceIndex = audienceIndex;
               userProfile = _audience[audienceIndex];
               _audience.removeAt(audienceIndex);
             }
@@ -7007,6 +7155,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             // Check other role slots
             _participants.forEach((role, user) {
               if (user?.id == userId) {
+                previousRole = role;
                 userProfile = user;
                 _participants[role] = null;
               }
@@ -7021,16 +7170,55 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         });
       }
 
-      // Now update database (UI already updated)
-      await _appwrite.assignArenaRole(
+      // Now update database via webhook (UI already updated)
+      final result = await _appwrite.assignArenaRole(
         roomId: widget.roomId,
         userId: userId,
         role: newRole,
       );
 
-      // Refresh participants list
+      // Check if assignment failed (empty string or error message)
+      final success = result.isNotEmpty && !result.toLowerCase().contains('error') && !result.toLowerCase().contains('failed');
+
+      if (!success) {
+        // ROLLBACK: Webhook failed, restore previous state
+        AppLogger().warning('🔄 ROLLBACK: Webhook failed ($result), restoring previous state');
+
+        if (mounted && userProfile != null) {
+          setState(() {
+            // Remove from new role slot
+            if (_participants[newRole]?.id == userId) {
+              _participants[newRole] = null;
+            }
+
+            // Restore to previous position
+            final role = previousRole;
+            final index = previousAudienceIndex;
+
+            if (role != null && role.isNotEmpty) {
+              _participants[role] = userProfile;
+              AppLogger().debug('🔄 Restored user to previous role: $role');
+            } else if (index != null && index >= 0 && index <= _audience.length) {
+              _audience.insert(index, userProfile!);
+              AppLogger().debug('🔄 Restored user to audience at index: $index');
+            }
+          });
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Failed to assign role: $result'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Refresh participants list to sync with server
       await _loadParticipants();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -7868,7 +8056,7 @@ class _RoleManagerPanelState extends State<RoleManagerPanel> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: _getRoleColor(currentRole).withValues(alpha: 0.1),
+                      color: _getRoleColor(currentRole).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: _getRoleColor(currentRole)),
                     ),
@@ -8012,13 +8200,13 @@ class ModeratorControlModal extends StatelessWidget {
         boxShadow: [
           // Elevated neumorphism effect for modal
           BoxShadow(
-            color: Colors.white.withValues(alpha: 0.9),
+            color: Colors.white.withOpacity(0.9),
             spreadRadius: -5,
             blurRadius: 15,
             offset: const Offset(-8, -8),
           ),
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
+            color: Colors.black.withOpacity(0.2),
             spreadRadius: -5,
             blurRadius: 15,
             offset: const Offset(8, 8),
@@ -8082,13 +8270,13 @@ class ModeratorControlModal extends StatelessWidget {
                     boxShadow: [
                       // Inner shadow for neumorphism
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
+                        color: Colors.black.withOpacity(0.1),
                         spreadRadius: -1,
                         blurRadius: 4,
                         offset: const Offset(2, 2),
                       ),
                       BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.7),
+                        color: Colors.white.withOpacity(0.7),
                         spreadRadius: -1,
                         blurRadius: 4,
                         offset: const Offset(-2, -2),
@@ -8273,13 +8461,13 @@ class ModeratorControlModal extends StatelessWidget {
               ? [
                   // Raised neumorphism effect
                   BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.7),
+                    color: Colors.white.withOpacity(0.7),
                     spreadRadius: -1,
                     blurRadius: 4,
                     offset: const Offset(-2, -2),
                   ),
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
+                    color: Colors.black.withOpacity(0.1),
                     spreadRadius: -1,
                     blurRadius: 4,
                     offset: const Offset(2, 2),
@@ -8288,13 +8476,13 @@ class ModeratorControlModal extends StatelessWidget {
               : [
                   // Pressed/disabled neumorphism effect
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
+                    color: Colors.black.withOpacity(0.1),
                     spreadRadius: -1,
                     blurRadius: 4,
                     offset: const Offset(2, 2),
                   ),
                   BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.5),
+                    color: Colors.white.withOpacity(0.5),
                     spreadRadius: -1,
                     blurRadius: 4,
                     offset: const Offset(-2, -2),
@@ -8396,13 +8584,13 @@ class ModeratorControlModal extends StatelessWidget {
               ? [
                   // Raised neumorphism effect when active
                   BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.7),
+                    color: Colors.white.withOpacity(0.7),
                     spreadRadius: -1,
                     blurRadius: 4,
                     offset: const Offset(-2, -2),
                   ),
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
+                    color: Colors.black.withOpacity(0.1),
                     spreadRadius: -1,
                     blurRadius: 4,
                     offset: const Offset(2, 2),
@@ -8411,13 +8599,13 @@ class ModeratorControlModal extends StatelessWidget {
               : [
                   // Inset neumorphism effect when inactive
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
+                    color: Colors.black.withOpacity(0.1),
                     spreadRadius: -1,
                     blurRadius: 4,
                     offset: const Offset(2, 2),
                   ),
                   BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.5),
+                    color: Colors.white.withOpacity(0.5),
                     spreadRadius: -1,
                     blurRadius: 4,
                     offset: const Offset(-2, -2),
@@ -8500,7 +8688,7 @@ class ResultsModal extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
+              color: Colors.black.withOpacity(0.3),
               blurRadius: 20,
               spreadRadius: 5,
             ),
@@ -8558,7 +8746,7 @@ class ResultsModal extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), // Reduced padding
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
+              color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -8593,8 +8781,8 @@ class ResultsModal extends StatelessWidget {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  Colors.amber.withValues(alpha: 0.1),
-                  Colors.orange.withValues(alpha: 0.1),
+                  Colors.amber.withOpacity(0.1),
+                  Colors.orange.withOpacity(0.1),
                 ],
               ),
               borderRadius: BorderRadius.circular(12),
@@ -8664,9 +8852,9 @@ class ResultsModal extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(12), // Reduced from 16
               decoration: BoxDecoration(
-                color: accentPurple.withValues(alpha: 0.05),
+                color: accentPurple.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: accentPurple.withValues(alpha: 0.2)),
+                border: Border.all(color: accentPurple.withOpacity(0.2)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -8924,9 +9112,9 @@ class ResultsModal extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.amber.withValues(alpha: 0.1),
+        color: Colors.amber.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+        border: Border.all(color: Colors.amber.withOpacity(0.3)),
       ),
       child: Column(
         children: [
@@ -9057,7 +9245,7 @@ class _RoomClosingModalState extends State<RoomClosingModal> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
+              color: Colors.black.withOpacity(0.3),
               blurRadius: 20,
               spreadRadius: 5,
             ),
@@ -9072,7 +9260,7 @@ class _RoomClosingModalState extends State<RoomClosingModal> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
+                  color: Colors.white.withOpacity(0.2),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -9114,7 +9302,7 @@ class _RoomClosingModalState extends State<RoomClosingModal> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
+                  color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -9387,7 +9575,7 @@ class _JudgeSelectionModalState extends State<JudgeSelectionModal> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.2),
+                      color: Colors.amber.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -9446,7 +9634,7 @@ class _JudgeSelectionModalState extends State<JudgeSelectionModal> {
                           margin: const EdgeInsets.only(bottom: 8),
                           decoration: BoxDecoration(
                             color: isSelected 
-                                ? Colors.amber.withValues(alpha: 0.2) 
+                                ? Colors.amber.withOpacity(0.2) 
                                 : Colors.grey[800],
                             borderRadius: BorderRadius.circular(12),
                             border: isSelected 
@@ -9995,7 +10183,7 @@ class _RoleSelectionModalState extends State<RoleSelectionModal>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isAssigned ? color.withValues(alpha: 0.1) : Colors.grey.shade100,
+        color: isAssigned ? color.withOpacity(0.1) : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isAssigned ? color : Colors.grey.shade300,

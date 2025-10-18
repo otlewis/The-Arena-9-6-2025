@@ -1459,6 +1459,60 @@ class AppwriteService {
     }
   }
 
+  /// Check if a user is currently banned from a room
+  Future<bool> checkIfUserIsBanned({
+    required String userId,
+    required String roomId,
+  }) async {
+    try {
+      final now = DateTime.now();
+
+      // Query for active bans for this user in this room
+      final response = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.roomBansCollection,
+        queries: [
+          Query.equal('userId', userId),
+          Query.equal('roomId', roomId),
+          Query.equal('isActive', true),
+          Query.limit(1),
+        ],
+      );
+
+      if (response.documents.isEmpty) {
+        return false; // No ban found
+      }
+
+      final banDoc = response.documents.first;
+      final expiresAt = banDoc.data['expiresAt'] as String?;
+
+      // Check if ban has expired
+      if (expiresAt != null) {
+        final expiryDate = DateTime.parse(expiresAt);
+        if (now.isAfter(expiryDate)) {
+          // Ban has expired - deactivate it
+          await databases.updateDocument(
+            databaseId: AppwriteConstants.databaseId,
+            collectionId: AppwriteConstants.roomBansCollection,
+            documentId: banDoc.$id,
+            data: {'isActive': false},
+          );
+          return false; // Ban expired
+        }
+      }
+
+      // Ban is active and not expired
+      final reason = banDoc.data['reason'] ?? 'No reason provided';
+      final bannedBy = banDoc.data['bannedByUsername'] ?? 'Moderator';
+      AppLogger().warning('User $userId is banned from room $roomId. Reason: $reason (by $bannedBy)');
+      return true;
+
+    } catch (e) {
+      AppLogger().error('Error checking ban status: $e');
+      return false; // Allow join on error to prevent lockout
+    }
+  }
+
   /// Join a debate discussion room (uses debate_discussion_participants collection)
   Future<void> joinDebateDiscussionRoom({
     required String roomId,
@@ -1468,7 +1522,13 @@ class AppwriteService {
     try {
       AppLogger().debug('🚪 DEBUG: joinDebateDiscussionRoom called - roomId: $roomId, userId: $userId, role: $role');
       AppLogger().debug('🗂️ DEBUG: Target collection: ${AppwriteConstants.debateDiscussionParticipantsCollection}');
-      
+
+      // Check if user is banned from this room
+      final isBanned = await checkIfUserIsBanned(userId: userId, roomId: roomId);
+      if (isBanned) {
+        throw Exception('You are banned from this room and cannot join');
+      }
+
       // First, clean up any existing entries for this user in this room to prevent duplicates
       await _cleanupDebateDiscussionParticipantDuplicates(roomId, userId);
       
@@ -2569,8 +2629,33 @@ class AppwriteService {
     required String roomId,
     required String userId,
     required String newRole,
+    String? documentId, // Optional cached document ID for performance
   }) async {
     try {
+      String? docId = documentId;
+
+      // If documentId is provided, use it directly (fast path)
+      if (docId != null) {
+        try {
+          await databases.updateDocument(
+            databaseId: AppwriteConstants.databaseId,
+            collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+            documentId: docId,
+            data: {
+              'role': newRole,
+              'lastActiveAt': DateTime.now().toIso8601String(),
+            },
+          );
+          AppLogger().debug('⚡ FAST PATH: Updated participant $userId role to $newRole using cached document ID');
+          return;
+        } catch (e) {
+          AppLogger().warning('⚠️ Cached document ID failed, falling back to query: $e');
+          // Fall through to query-based approach
+          docId = null;
+        }
+      }
+
+      // Fallback: Query for document ID (slow path)
       final participants = await databases.listDocuments(
         databaseId: AppwriteConstants.databaseId,
         collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
@@ -2580,7 +2665,7 @@ class AppwriteService {
           Query.equal('status', 'joined'),
         ],
       );
-      
+
       if (participants.documents.isNotEmpty) {
         await databases.updateDocument(
           databaseId: AppwriteConstants.databaseId,
@@ -2591,11 +2676,59 @@ class AppwriteService {
             'lastActiveAt': DateTime.now().toIso8601String(),
           },
         );
-        
-        AppLogger().debug('Updated participant $userId role to $newRole in room $roomId');
+
+        AppLogger().debug('🐢 SLOW PATH: Updated participant $userId role to $newRole via query');
       }
     } catch (e) {
       AppLogger().error('Error updating participant role: $e');
+      rethrow;
+    }
+  }
+
+  /// Update participant media ready states (video/audio)
+  Future<void> updateDebateDiscussionParticipantMedia({
+    required String roomId,
+    required String userId,
+    bool? videoReady,
+    bool? audioReady,
+    String? videoTrackSid,
+    String? audioTrackSid,
+  }) async {
+    try {
+      // Query for participant document
+      final participants = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('userId', userId),
+          Query.equal('status', 'joined'),
+        ],
+      );
+
+      if (participants.documents.isEmpty) {
+        AppLogger().warning('⚠️ No participant found for userId: $userId in room: $roomId');
+        return;
+      }
+
+      // Build update data (only include non-null values)
+      final Map<String, dynamic> updateData = {};
+      if (videoReady != null) updateData['videoReady'] = videoReady;
+      if (audioReady != null) updateData['audioReady'] = audioReady;
+      if (videoTrackSid != null) updateData['videoTrackSid'] = videoTrackSid;
+      if (audioTrackSid != null) updateData['audioTrackSid'] = audioTrackSid;
+      updateData['lastActiveAt'] = DateTime.now().toIso8601String();
+
+      await databases.updateDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+        documentId: participants.documents.first.$id,
+        data: updateData,
+      );
+
+      AppLogger().debug('✅ Updated media state for $userId: video=$videoReady, audio=$audioReady');
+    } catch (e) {
+      AppLogger().error('Error updating participant media state: $e');
       rethrow;
     }
   }
@@ -2923,7 +3056,7 @@ class AppwriteService {
             'title': roomDoc.data['topic'] ?? 'Arena Debate',
             'topic': roomDoc.data['topic'] ?? '',
             'description': roomDoc.data['description'] ?? 'Completed arena room',
-            'audioUrl': 'http://50.21.187.76/arena-recordings/placeholder.mp3', // Placeholder URL
+            'audioUrl': 'https://50.21.187.76/arena-recordings/placeholder.mp3', // Placeholder URL
             'audioFormat': 'mp3',
             'duration': 0,
             'fileSize': 0,
@@ -2951,14 +3084,12 @@ class AppwriteService {
       }
 
       // 2. Update room status to completed (reuse logic from closeArenaRoom)
-      Map<String, dynamic>? roomData;
       try {
-        final roomDoc = await databases.getDocument(
+        await databases.getDocument(
           databaseId: 'arena_db',
           collectionId: 'arena_rooms',
           documentId: roomId,
         );
-        roomData = roomDoc.data;
       } catch (e) {
         AppLogger().warning('⚠️ Could not verify room status, continuing with completion: $e');
       }
@@ -5665,7 +5796,7 @@ class AppwriteService {
 
       final playbackId = ID.unique();
 
-      final playbackDoc = await databases.createDocument(
+      await databases.createDocument(
         databaseId: AppwriteConstants.databaseId,
         collectionId: 'arena_playbacks',
         documentId: playbackId,

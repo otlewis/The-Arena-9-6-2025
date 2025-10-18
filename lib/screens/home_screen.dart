@@ -324,15 +324,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           boxShadow: [
                             BoxShadow(
                               color: _themeService.isDarkMode 
-                                  ? Colors.white.withValues(alpha: 0.03)
-                                  : Colors.white.withValues(alpha: 0.7),
+                                  ? Colors.white.withOpacity(0.03)
+                                  : Colors.white.withOpacity(0.7),
                               offset: const Offset(-4, -4),
                               blurRadius: 8,
                             ),
                             BoxShadow(
                               color: _themeService.isDarkMode 
-                                  ? Colors.black.withValues(alpha: 0.5)
-                                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                                  ? Colors.black.withOpacity(0.5)
+                                  : const Color(0xFFA3B1C6).withOpacity(0.5),
                               offset: const Offset(4, 4),
                               blurRadius: 8,
                             ),
@@ -360,15 +360,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           boxShadow: [
                             BoxShadow(
                               color: _themeService.isDarkMode 
-                                  ? Colors.white.withValues(alpha: 0.03)
-                                  : Colors.white.withValues(alpha: 0.7),
+                                  ? Colors.white.withOpacity(0.03)
+                                  : Colors.white.withOpacity(0.7),
                               offset: const Offset(-4, -4),
                               blurRadius: 8,
                             ),
                             BoxShadow(
                               color: _themeService.isDarkMode 
-                                  ? Colors.black.withValues(alpha: 0.5)
-                                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                                  ? Colors.black.withOpacity(0.5)
+                                  : const Color(0xFFA3B1C6).withOpacity(0.5),
                               offset: const Offset(4, 4),
                               blurRadius: 8,
                             ),
@@ -413,15 +413,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             boxShadow: [
                               BoxShadow(
                                 color: _themeService.isDarkMode 
-                                    ? Colors.white.withValues(alpha: 0.03)
-                                    : Colors.white.withValues(alpha: 0.7),
+                                    ? Colors.white.withOpacity(0.03)
+                                    : Colors.white.withOpacity(0.7),
                                 offset: const Offset(-4, -4),
                                 blurRadius: 8,
                               ),
                               BoxShadow(
                                 color: _themeService.isDarkMode 
-                                    ? Colors.black.withValues(alpha: 0.5)
-                                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                                    ? Colors.black.withOpacity(0.5)
+                                    : const Color(0xFFA3B1C6).withOpacity(0.5),
                                 offset: const Offset(4, 4),
                                 blurRadius: 8,
                               ),
@@ -456,21 +456,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         : const Color(0xFFF0F0F3),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: const Color(0xFFFF2400).withValues(alpha: 0.3),
+                      color: const Color(0xFFFF2400).withOpacity(0.3),
                       width: 2,
                     ),
                     boxShadow: [
                       BoxShadow(
                         color: _themeService.isDarkMode 
-                            ? Colors.white.withValues(alpha: 0.03)
-                            : Colors.white.withValues(alpha: 0.8),
+                            ? Colors.white.withOpacity(0.03)
+                            : Colors.white.withOpacity(0.8),
                         offset: const Offset(-8, -8),
                         blurRadius: 16,
                       ),
                       BoxShadow(
                         color: _themeService.isDarkMode 
-                            ? Colors.black.withValues(alpha: 0.5)
-                            : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                            ? Colors.black.withOpacity(0.5)
+                            : const Color(0xFFA3B1C6).withOpacity(0.5),
                         offset: const Offset(8, 8),
                         blurRadius: 16,
                       ),
@@ -497,7 +497,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             borderRadius: BorderRadius.circular(25),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF6B46C1).withValues(alpha: 0.3),
+                                color: const Color(0xFF6B46C1).withOpacity(0.3),
                                 blurRadius: 15,
                                 offset: const Offset(0, 8),
                               ),
@@ -697,7 +697,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               decoration: BoxDecoration(
                 color: (roleType == 'moderator' 
                     ? const Color(0xFF8B5CF6) 
-                    : const Color(0xFFFFC107)).withValues(alpha: 0.1),
+                    : const Color(0xFFFFC107)).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: roleType == 'moderator' 
@@ -862,15 +862,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           boxShadow: [
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.white.withValues(alpha: 0.03)
-                  : Colors.white.withValues(alpha: 0.7),
+                  ? Colors.white.withOpacity(0.03)
+                  : Colors.white.withOpacity(0.7),
               offset: const Offset(-4, -4),
               blurRadius: 8,
             ),
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.black.withValues(alpha: 0.5)
-                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                  ? Colors.black.withOpacity(0.5)
+                  : const Color(0xFFA3B1C6).withOpacity(0.5),
               offset: const Offset(4, 4),
               blurRadius: 8,
             ),
@@ -909,16 +909,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.6)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                ? Colors.black.withOpacity(0.6)
+                : const Color(0xFFA3B1C6).withOpacity(0.3),
             offset: const Offset(3, 3),
             blurRadius: 6,
             spreadRadius: -2,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.02)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.02)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-3, -3),
             blurRadius: 6,
             spreadRadius: -2,
@@ -1076,21 +1076,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 : const Color(0xFFF0F0F3),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: const Color(0xFFFF2400).withValues(alpha: 0.2),
+              color: const Color(0xFFFF2400).withOpacity(0.2),
               width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.white.withValues(alpha: 0.03)
-                    : Colors.white.withValues(alpha: 0.7),
+                    ? Colors.white.withOpacity(0.03)
+                    : Colors.white.withOpacity(0.7),
                 offset: const Offset(-6, -6),
                 blurRadius: 12,
               ),
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.black.withValues(alpha: 0.5)
-                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                    ? Colors.black.withOpacity(0.5)
+                    : const Color(0xFFA3B1C6).withOpacity(0.5),
                 offset: const Offset(6, 6),
                 blurRadius: 12,
               ),
@@ -1116,16 +1116,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     boxShadow: [
                       BoxShadow(
                         color: _themeService.isDarkMode 
-                            ? Colors.black.withValues(alpha: 0.6)
-                            : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                            ? Colors.black.withOpacity(0.6)
+                            : const Color(0xFFA3B1C6).withOpacity(0.3),
                         offset: const Offset(3, 3),
                         blurRadius: 6,
                         spreadRadius: -2,
                       ),
                       BoxShadow(
                         color: _themeService.isDarkMode 
-                            ? Colors.white.withValues(alpha: 0.02)
-                            : Colors.white.withValues(alpha: 0.8),
+                            ? Colors.white.withOpacity(0.02)
+                            : Colors.white.withOpacity(0.8),
                         offset: const Offset(-3, -3),
                         blurRadius: 6,
                         spreadRadius: -2,
@@ -1368,7 +1368,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           boxShadow: [
             BoxShadow(
-              color: color.withValues(alpha: 0.1),
+              color: color.withOpacity(0.1),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -1381,7 +1381,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
+                color: color.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
@@ -1456,12 +1456,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               : const Color(0xFFF8F9FA),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: color.withValues(alpha: 0.3),
+            color: color.withOpacity(0.3),
             width: 2,
           ),
           boxShadow: [
             BoxShadow(
-              color: color.withValues(alpha: 0.1),
+              color: color.withOpacity(0.1),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -1474,7 +1474,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
+                color: color.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Icon(
