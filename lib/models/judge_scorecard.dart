@@ -202,19 +202,25 @@ class JudgeScorecard {
   }
 
   bool get isComplete {
-    if (speakerScores.isEmpty) return false;
-    
-    // Check if all speakers have scores for all categories
-    for (final speakerScore in speakerScores) {
+    if (speakerScores.isEmpty || speakerScores.length < 2) return false;
+
+    // Check if at least the first 2 speakers have scores for all categories
+    // This ensures the button only becomes available after the 2nd speaker is scored
+    for (int i = 0; i < 2; i++) {
+      if (i >= speakerScores.length) return false;
+
+      final speakerScore = speakerScores[i];
       for (final category in ScoringCategory.values) {
-        if (!speakerScore.categoryScores.containsKey(category) || 
+        if (!speakerScore.categoryScores.containsKey(category) ||
             speakerScore.categoryScores[category]! == 0) {
           return false;
         }
       }
     }
-    
-    return reasonForDecision.isNotEmpty;
+
+    // Submit button is enabled once all scores are complete
+    // No longer requires reasonForDecision field
+    return true;
   }
 
   JudgeScorecard copyWith({

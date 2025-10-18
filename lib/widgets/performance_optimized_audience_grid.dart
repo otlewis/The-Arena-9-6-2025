@@ -1,5 +1,6 @@
 // ignore_for_file: prefer_const_constructors
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 import '../core/logging/app_logger.dart';
 import '../screens/debates_discussions_screen.dart' show ReactionData;
 
@@ -351,7 +352,7 @@ class _AudienceCard extends StatelessWidget {
               height: 60,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.grey.withValues(alpha: 0.3),
+                color: Colors.grey.withOpacity(0.3),
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(30),
@@ -444,11 +445,11 @@ class _ParticipantCard extends StatelessWidget {
   Color _getRoleColor(String role) {
     switch (role) {
       case 'moderator':
-        return Colors.red.withValues(alpha: 0.1);
+        return Colors.red.withOpacity(0.1);
       case 'speaker':
-        return Colors.purple.withValues(alpha: 0.1);
+        return Colors.purple.withOpacity(0.1);
       case 'pending':
-        return Colors.orange.withValues(alpha: 0.1);
+        return Colors.orange.withOpacity(0.1);
       default:
         return Colors.white;
     }
@@ -622,6 +623,7 @@ class PerformanceOptimizedSpeakersPanel extends StatefulWidget {
 
   // Reaction system
   final List<ReactionData> activeReactions; // Active emoji reactions
+  final Map<String, String> avatarEmojiOverlays; // Avatar emoji overlays (userId -> emoji)
 
   const PerformanceOptimizedSpeakersPanel({
     super.key,
@@ -645,6 +647,7 @@ class PerformanceOptimizedSpeakersPanel extends StatefulWidget {
     this.onRemoveFromQueue,
     this.onToggleQueue,
     this.activeReactions = const [],
+    this.avatarEmojiOverlays = const {},
   });
 
   @override
@@ -780,7 +783,9 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
         onTap: widget.onSpeakerTap,
         isModerator: false,
         isDebateLayout: isDebateLayout,
+        debateStyle: widget.debateStyle,
         activeReactions: widget.activeReactions,
+        avatarEmojiOverlays: widget.avatarEmojiOverlays,
       )
     ).toList();
   }
@@ -839,8 +844,8 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
                           height: 30,
                           decoration: BoxDecoration(
                             color: i == 0 
-                                ? const Color(0xFF4CAF50).withValues(alpha: 0.15)  // Green for Affirmative
-                                : const Color(0xFFF44336).withValues(alpha: 0.15), // Red for Negative  
+                                ? const Color(0xFF4CAF50).withOpacity(0.15)  // Green for Affirmative
+                                : const Color(0xFFF44336).withOpacity(0.15), // Red for Negative  
                             borderRadius: const BorderRadius.only(
                               topLeft: Radius.circular(8),
                               topRight: Radius.circular(8),
@@ -961,43 +966,53 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Purple tab for moderator
-                if (isDebateLayout || isTakeLayout)
-                  Container(
-                    width: isDebateLayout || isTakeLayout ? tileWidth * 0.8 : tileWidth,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),  // Purple
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(8),
-                        topRight: Radius.circular(8),
-                      ),
-                      border: Border(
-                        top: BorderSide(
-                          color: const Color(0xFF8B5CF6),
-                          width: 2,
-                        ),
-                        left: BorderSide(
-                          color: const Color(0xFF8B5CF6),
-                          width: 2,
-                        ),
-                        right: BorderSide(
-                          color: const Color(0xFF8B5CF6),
-                          width: 2,
-                        ),
-                      ),
+                // Moderator tab (purple for Debate, scarlet for Take/Discussion)
+                // Show tab for all debate styles (Debate, Take, and Discussion)
+                Container(
+                  width: isDebateLayout || isTakeLayout ? tileWidth * 0.8 : tileWidth,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: isDebateLayout
+                        ? const Color(0xFF8B5CF6).withOpacity(0.15)  // Purple for Debate
+                        : const Color(0xFFDC143C).withOpacity(0.15),  // Scarlet for Take/Discussion
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(8),
+                      topRight: Radius.circular(8),
                     ),
-                    child: const Center(
-                      child: Text(
-                        'MODERATOR',
-                        style: TextStyle(
-                          color: Color(0xFF8B5CF6),
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    border: Border(
+                      top: BorderSide(
+                        color: isDebateLayout
+                            ? const Color(0xFF8B5CF6)  // Purple for Debate
+                            : const Color(0xFFDC143C),  // Scarlet for Take/Discussion
+                        width: 2,
+                      ),
+                      left: BorderSide(
+                        color: isDebateLayout
+                            ? const Color(0xFF8B5CF6)  // Purple for Debate
+                            : const Color(0xFFDC143C),  // Scarlet for Take/Discussion
+                        width: 2,
+                      ),
+                      right: BorderSide(
+                        color: isDebateLayout
+                            ? const Color(0xFF8B5CF6)  // Purple for Debate
+                            : const Color(0xFFDC143C),  // Scarlet for Take/Discussion
+                        width: 2,
                       ),
                     ),
                   ),
+                  child: Center(
+                    child: Text(
+                      'MODERATOR',
+                      style: TextStyle(
+                        color: isDebateLayout
+                            ? const Color(0xFF8B5CF6)  // Purple for Debate
+                            : const Color(0xFFDC143C),  // Scarlet for Take/Discussion
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
                 // Moderator slot
                 SizedBox(
                   width: isDebateLayout || isTakeLayout ? tileWidth * 0.8 : tileWidth,
@@ -1010,7 +1025,9 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
                     onTap: widget.onSpeakerTap,
                     isModerator: true,
                     isDebateLayout: isDebateLayout || isTakeLayout,
+                    debateStyle: widget.debateStyle,
                     activeReactions: widget.activeReactions,
+                    avatarEmojiOverlays: widget.avatarEmojiOverlays,
                   ),
                 ),
               ],
@@ -1024,9 +1041,9 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
               padding: const EdgeInsets.all(8),
               margin: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.1),
+                color: Colors.orange.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1064,9 +1081,9 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
               padding: const EdgeInsets.all(12),
               margin: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                color: Colors.purple.withValues(alpha: 0.1),
+                color: Colors.purple.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
+                border: Border.all(color: Colors.purple.withOpacity(0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1111,9 +1128,9 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.2),
+                        color: Colors.green.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
+                        border: Border.all(color: Colors.green.withOpacity(0.4)),
                       ),
                       child: Row(
                         children: [
@@ -1166,7 +1183,7 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
                         margin: const EdgeInsets.only(bottom: 4),
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.purple.withValues(alpha: 0.1),
+                          color: Colors.purple.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Row(
@@ -1242,7 +1259,7 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.grey.withValues(alpha: 0.1),
+                        color: Colors.grey.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: const Text(
@@ -1366,6 +1383,8 @@ class _VideoTile extends StatelessWidget {
   final bool isModerator;
   final bool isDebateLayout;
   final List<ReactionData> activeReactions;
+  final Map<String, String> avatarEmojiOverlays;
+  final String? debateStyle;
 
   const _VideoTile({
     super.key,
@@ -1374,6 +1393,8 @@ class _VideoTile extends StatelessWidget {
     this.isModerator = false,
     this.isDebateLayout = false,
     this.activeReactions = const [],
+    this.avatarEmojiOverlays = const {},
+    this.debateStyle,
   });
   
   @override
@@ -1416,7 +1437,7 @@ class _VideoTile extends StatelessWidget {
               Text(
                 displayText,
                 style: TextStyle(
-                  color: Colors.grey.withValues(alpha: 0.6),
+                  color: Colors.grey.withOpacity(0.6),
                   fontSize: isDebateLayout ? 14 : 12, // Slightly larger text for debate positions
                   fontWeight: FontWeight.w500,
                 ),
@@ -1439,10 +1460,16 @@ class _VideoTile extends StatelessWidget {
     final isAffirmative = role == 'affirmative';
     final isNegative = role == 'negative';
 
+    // Check if this is a Debate room (only Debate uses purple moderator)
+    final isDebateRoom = debateStyle == 'Debate';
+
     // Determine border color based on role
     Color borderColor;
     if (isModeratorRole) {
-      borderColor = const Color(0xFF8B5CF6);  // Purple for moderator
+      // Use purple for Debate rooms only, scarlet for Take and Discussion rooms
+      borderColor = isDebateRoom
+          ? const Color(0xFF8B5CF6)  // Purple for moderator in Debate rooms
+          : const Color(0xFFDC143C);  // Scarlet red for moderator in Take/Discussion rooms
     } else if (isAffirmative) {
       borderColor = const Color(0xFF4CAF50);  // Green for affirmative (matches tab)
     } else if (isNegative) {
@@ -1454,10 +1481,18 @@ class _VideoTile extends StatelessWidget {
     // Determine gradient colors based on role
     List<Color> gradientColors;
     if (isModeratorRole) {
-      gradientColors = [
-        const Color(0xFF5B21B6), // Dark purple
-        const Color(0xFF8B5CF6), // Bright purple
-      ];
+      // Use purple gradient for Debate rooms, scarlet gradient for Take/Discussion rooms
+      if (isDebateRoom) {
+        gradientColors = [
+          const Color(0xFF5B21B6), // Dark purple
+          const Color(0xFF8B5CF6), // Bright purple
+        ];
+      } else {
+        gradientColors = [
+          const Color(0xFFB22222), // Dark scarlet
+          const Color(0xFFDC143C), // Bright scarlet
+        ];
+      }
     } else if (isAffirmative) {
       gradientColors = [
         const Color(0xFF2E7D32), // Dark green
@@ -1481,6 +1516,27 @@ class _VideoTile extends StatelessWidget {
         ? activeReactions.firstWhere((r) => r.targetUserId == userId && r.isGift)
         : null;
 
+    // Check gift type:
+    // giftValue = -1: Audience reaction (no ring, just emoji)
+    // giftValue = 0: Speaker reaction (silver ring)
+    // giftValue > 0: Real gift (gold ring)
+    final isAudienceReaction = giftReaction != null && giftReaction.giftValue == -1;
+    final isSpeakerReaction = giftReaction != null && giftReaction.giftValue == 0;
+    final ringColor = isSpeakerReaction
+        ? const Color(0xFFC0C0C0)  // Silver for speaker reactions
+        : const Color(0xFFFFD700);  // Gold for gifts
+
+    // Override gradient colors for speaker reactions with silver gradient
+    if (isSpeakerReaction) {
+      gradientColors = [
+        const Color(0xFF9E9E9E), // Dark silver
+        const Color(0xFFE0E0E0), // Light silver
+      ];
+    }
+
+    // For audience reactions, keep role-based gradient but no ring
+    final showRing = hasActiveGift && !isAudienceReaction;
+
     return RepaintBoundary(
       child: GestureDetector(
         onTap: onTap != null ? () => onTap!(userId) : null,
@@ -1493,16 +1549,16 @@ class _VideoTile extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: hasActiveGift ? const Color(0xFFFFD700) : borderColor,
-              width: hasActiveGift ? 3 : 2,
+              color: showRing ? ringColor : borderColor,
+              width: showRing ? 3 : 2,
             ),
             boxShadow: [
               BoxShadow(
-                color: hasActiveGift
-                    ? const Color(0xFFFFD700).withValues(alpha: 0.6)
-                    : borderColor.withValues(alpha: 0.3),
-                blurRadius: hasActiveGift ? 12 : 8,
-                spreadRadius: hasActiveGift ? 2 : 0,
+                color: showRing
+                    ? ringColor.withOpacity(0.6)
+                    : borderColor.withOpacity(0.3),
+                blurRadius: showRing ? 12 : 8,
+                spreadRadius: showRing ? 2 : 0,
                 offset: const Offset(0, 2),
               ),
             ],
@@ -1516,6 +1572,7 @@ class _VideoTile extends StatelessWidget {
                   children: [
                     // Avatar - larger round profile pics with gavel fallback
                     // OR gift emoji if gift is active
+                    // OR reaction emoji if user has active emoji overlay
                     Container(
                       width: 70,
                       height: 70,
@@ -1524,14 +1581,14 @@ class _VideoTile extends StatelessWidget {
                         border: Border.all(
                           color: isSpeaking
                               ? Colors.green
-                              : Colors.white.withValues(alpha: 0.8),
+                              : Colors.white.withOpacity(0.8),
                           width: isSpeaking ? 3 : 2,
                         ),
                         boxShadow: [
                           BoxShadow(
                             color: isSpeaking
-                                ? Colors.green.withValues(alpha: 0.5)
-                                : Colors.black.withValues(alpha: 0.3),
+                                ? Colors.green.withOpacity(0.5)
+                                : Colors.black.withOpacity(0.3),
                             blurRadius: isSpeaking ? 8 : 4,
                             offset: const Offset(0, 2),
                           ),
@@ -1544,35 +1601,37 @@ class _VideoTile extends StatelessWidget {
                                 style: const TextStyle(fontSize: 38),
                               ),
                             )
-                          : ClipRRect(
-                              borderRadius: BorderRadius.circular(35),
-                              child: avatarUrl.isNotEmpty
-                                  ? Image.network(
-                                      avatarUrl,
-                                      width: 70,
-                                      height: 70,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) =>
-                                          Container(
-                                        width: 70,
-                                        height: 70,
-                                        decoration: const BoxDecoration(
-                                          color: Color(0xFF8B5CF6),
-                                          shape: BoxShape.circle,
+                          : avatarEmojiOverlays.containsKey(userId)
+                              ? _buildEmojiOverlayWithConfetti(avatarEmojiOverlays[userId]!)
+                              : ClipRRect(
+                                  borderRadius: BorderRadius.circular(35),
+                                  child: avatarUrl.isNotEmpty
+                                      ? Image.network(
+                                          avatarUrl,
+                                          width: 70,
+                                          height: 70,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) =>
+                                              Container(
+                                            width: 70,
+                                            height: 70,
+                                            decoration: const BoxDecoration(
+                                              color: Color(0xFF8B5CF6),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: _buildAvatarTextFromMap(speaker, 20),
+                                          ),
+                                        )
+                                      : Container(
+                                          width: 70,
+                                          height: 70,
+                                          decoration: const BoxDecoration(
+                                            color: Color(0xFF8B5CF6),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: _buildAvatarTextFromMap(speaker, 20),
                                         ),
-                                        child: _buildAvatarTextFromMap(speaker, 20),
-                                      ),
-                                    )
-                                  : Container(
-                                      width: 70,
-                                      height: 70,
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFF8B5CF6),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: _buildAvatarTextFromMap(speaker, 20),
-                                    ),
-                            ),
+                                ),
                     ),
                     const SizedBox(height: 4),
                     // Name - stacked for first/last OR gift name if gift is active
@@ -1586,25 +1645,23 @@ class _VideoTile extends StatelessWidget {
                 ),
               ),
 
-              // Reaction overlay - show emoji reactions in top-right
+              // Reaction badge for RECEIVER - small emoji with white background (no confetti)
+              // Note: Sender's emoji explosion is handled by avatarEmojiOverlays (avatar replacement)
               ...activeReactions
                   .where((reaction) => reaction.targetUserId == userId && !reaction.isGift)
                   .map((reaction) => Positioned(
-                        top: 10,
-                        right: 10,
-                        child: TweenAnimationBuilder<double>(
-                          duration: const Duration(milliseconds: 500),
-                          tween: Tween(begin: 0.0, end: 1.0),
-                          builder: (context, value, child) {
-                            return Transform.scale(
-                              scale: value,
-                              child: Opacity(
-                                opacity: value,
-                                child: _buildReactionOverlay(reaction),
-                              ),
-                            );
-                          },
-                        ),
+                        top: 5,
+                        right: 5,
+                        child: _buildReceiverReactionBadge(reaction),
+                      )),
+
+              // Gift sender badge - small gift icon for users who sent a gift
+              ...activeReactions
+                  .where((reaction) => reaction.senderUserId == userId && reaction.isGift)
+                  .map((reaction) => Positioned(
+                        top: 5,
+                        right: 5,
+                        child: _buildGiftSenderBadge(),
                       )),
             ],
           ),
@@ -1613,24 +1670,70 @@ class _VideoTile extends StatelessWidget {
     );
   }
 
-  Widget _buildReactionOverlay(ReactionData reaction) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+  Widget _buildReceiverReactionBadge(ReactionData reaction) {
+    // Simple badge with white circle background and emoji - no confetti, no explosion
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 300),
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        return Transform.scale(
+          scale: value,
+          child: Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Text(
+                reaction.emoji,
+                style: const TextStyle(fontSize: 16),
+              ),
+            ),
           ),
-        ],
-      ),
-      child: Text(
-        reaction.emoji,
-        style: const TextStyle(fontSize: 24),
-      ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGiftSenderBadge() {
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 300),
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        return Transform.scale(
+          scale: value,
+          child: Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Center(
+              child: Text(
+                '🎁',
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1668,5 +1771,107 @@ class _VideoTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       )).toList(),
     );
+  }
+
+  /// Build emoji overlay with confetti explosion effect
+  Widget _buildEmojiOverlayWithConfetti(String emoji) {
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 5000),
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        // Animation stages (5 seconds total):
+        // 0.0 - 0.1: Pop in (scale from 0 to 1.2) - 500ms
+        // 0.1 - 0.2: Settle (scale from 1.2 to 1.0) - 500ms
+        // 0.2 - 0.8: Hold steady - 3000ms
+        // 0.8 - 1.0: Explode with confetti particles - 1000ms
+
+        double scale;
+        double opacity;
+        bool showConfetti = false;
+
+        if (value < 0.1) {
+          // Pop in phase (500ms)
+          scale = (value / 0.1) * 1.2;
+          opacity = value / 0.1;
+        } else if (value < 0.2) {
+          // Settle phase (500ms)
+          final settleProgress = (value - 0.1) / 0.1;
+          scale = 1.2 - (settleProgress * 0.2);
+          opacity = 1.0;
+        } else if (value < 0.8) {
+          // Hold steady (3000ms)
+          scale = 1.0;
+          opacity = 1.0;
+        } else {
+          // Explode phase (1000ms) with confetti
+          final explodeProgress = (value - 0.8) / 0.2;
+          scale = 1.0 + (explodeProgress * 1.5);
+          opacity = 1.0 - explodeProgress;
+          showConfetti = true;
+        }
+
+        return SizedBox(
+          width: 70,
+          height: 70,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              // Main emoji
+              Transform.scale(
+                scale: scale,
+                child: Opacity(
+                  opacity: opacity,
+                  child: Center(
+                    child: Text(
+                      emoji,
+                      style: const TextStyle(fontSize: 48),
+                    ),
+                  ),
+                ),
+              ),
+              // Confetti particles during explosion
+              if (showConfetti) ..._buildConfetti(value, emoji),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Build confetti particles for explosion effect
+  List<Widget> _buildConfetti(double animationValue, String emoji) {
+    final explodeProgress = (animationValue - 0.8) / 0.2; // 0.0 to 1.0
+    final particles = <Widget>[];
+
+    // Create 12 particles flying out in different directions
+    for (int i = 0; i < 12; i++) {
+      final angle = (i * 2 * math.pi / 12); // 30 degrees apart (full circle)
+      final distance = explodeProgress * 60; // Fly out 60 pixels
+      final dx = math.cos(angle) * distance;
+      final dy = math.sin(angle) * distance;
+      final particleOpacity = math.max(0.0, 1.0 - explodeProgress);
+
+      particles.add(
+        Positioned(
+          left: 35 + dx, // Center position (70/2 = 35) + offset
+          top: 35 + dy,  // Center position (70/2 = 35) + offset
+          child: Transform.rotate(
+            angle: angle + (explodeProgress * math.pi * 2), // Spin particles
+            child: Opacity(
+              opacity: particleOpacity,
+              child: Text(
+                emoji,
+                style: const TextStyle(fontSize: 16, shadows: [
+                  Shadow(color: Colors.white, blurRadius: 2),
+                ]),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return particles;
   }
 }

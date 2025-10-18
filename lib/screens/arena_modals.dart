@@ -1227,13 +1227,11 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
           const SizedBox(height: 24),
           _buildScoringGuidelines(),
           const SizedBox(height: 24),
-          ...ScoringCategory.values.map((category) => 
+          ...ScoringCategory.values.map((category) =>
             _buildCategoryScoring(speakerScore, category, index)
           ),
           const SizedBox(height: 24),
           _buildTotalScore(speakerScore),
-          const SizedBox(height: 24),
-          _buildCommentsSection(speakerScore, index),
         ],
       ),
     );
@@ -1477,6 +1475,8 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
     );
   }
 
+  // Reserved for future feedback feature
+  // ignore: unused_element
   Widget _buildCommentsSection(SpeakerScore speakerScore, int speakerIndex) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1530,8 +1530,6 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
           _buildTeamScoreSummary(),
           const SizedBox(height: 24),
           _buildWinnerSelection(calculatedWinner),
-          const SizedBox(height: 24),
-          _buildReasonForDecision(),
           const SizedBox(height: 24),
           _buildValidationWarnings(),
         ],
@@ -1774,6 +1772,8 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
     );
   }
 
+  // Reserved for future feedback feature
+  // ignore: unused_element
   Widget _buildReasonForDecision() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1811,13 +1811,13 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
 
   Widget _buildValidationWarnings() {
     final warnings = <String>[];
-    
+
     if (!_scorecard.isWinnerConsistentWithScores) {
       warnings.add('Warning: Winner selection does not match score totals.');
     }
-    
+
     if (!_scorecard.isComplete) {
-      warnings.add('Please complete all scores and provide a reason for decision.');
+      warnings.add('Please complete all scores to submit your decision.');
     }
 
     if (warnings.isEmpty) return Container();

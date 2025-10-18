@@ -6,8 +6,9 @@ import '../services/theme_service.dart';
 import '../features/arena/providers/arena_lobby_provider.dart';
 import '../widgets/challenge_bell.dart';
 import 'arena_screen.dart';
-import 'arena_playbacks_screen.dart';
-import 'arena_playback_screen.dart';
+// Playback screens reserved for future implementation
+// import 'arena_playbacks_screen.dart';
+// import 'arena_playback_screen.dart';
 import 'dart:async';
 import 'package:get_it/get_it.dart';
 import '../core/logging/app_logger.dart';
@@ -281,6 +282,8 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
     }
   }
 
+  // Reserved for future playback feature
+  // ignore: unused_element
   Future<void> _openPlayback(String roomId, String topic) async {
     try {
       // Navigate to playback screen
@@ -289,16 +292,16 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
       final playbacks = await appwriteService.getPlaybacksByRoomId(roomId);
 
       if (playbacks.isNotEmpty) {
-        final playback = playbacks.first;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ArenaPlaybackScreen(
-              playbackId: playback['\$id'],
-              initialTitle: playback['title'] ?? topic,
-            ),
-          ),
-        );
+        // final playback = playbacks.first;
+        // Navigator.push(
+        //   context,
+        //   MaterialPageRoute(
+        //     builder: (context) => ArenaPlaybackScreen(
+        //       playbackId: playback['\$id'],
+        //       initialTitle: playback['title'] ?? topic,
+        //     ),
+        //   ),
+        // );
       } else {
         // Show message that playback is not available yet
         ScaffoldMessenger.of(context).showSnackBar(
@@ -553,16 +556,6 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
           tooltip: 'Back to Home',
         ),
         actions: [
-          // Playback button
-          _buildNeumorphicIcon(
-            icon: Icons.play_circle_outline,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const ArenaPlaybacksScreen()),
-            ),
-            tooltip: 'Arena Playbacks',
-          ),
-          const SizedBox(width: 8),
           // Challenge notification bell
           ChallengeBell(
             iconColor: _themeService.isDarkMode ? Colors.white70 : deepPurple,

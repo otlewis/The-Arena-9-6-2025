@@ -4190,7 +4190,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       canPop: false, // Prevent immediate pop to show warning first
       onPopInvokedWithResult: (didPop, result) async {
         AppLogger().debug('🚪 PopScope triggered - didPop: $didPop, joined: $_isJoined, disposing: $_isDisposing');
-        AppLogger().debug('🚪 User role - moderator: $_isCurrentUserModerator, speaker: $_isCurrentUserSpeaker');
+        AppLogger().debug('🚪 User role - moderator: $_isCurrentUserModerator, speaker: $_isCurrentUserSpeaker, timed out: $_isCurrentUserTimedOut');
+
+        // Prevent leaving if user is timed out (trap them in the room)
+        if (_isCurrentUserTimedOut) {
+          AppLogger().debug('🚪 User is timed out - preventing navigation');
+          return;
+        }
 
         if (!didPop && _isJoined && _currentUser != null && !_isDisposing) {
           // Capture navigator before async operation
@@ -4253,16 +4259,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       child: Row(
         children: [
           GestureDetector(
-            onTap: () => Navigator.pop(context),
+            onTap: _isCurrentUserTimedOut ? null : () => Navigator.pop(context),
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
+                color: Colors.white.withOpacity(_isCurrentUserTimedOut ? 0.05 : 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Icon(
+              child: Icon(
                 LucideIcons.arrowLeft,
-                color: Colors.white,
+                color: _isCurrentUserTimedOut ? Colors.grey : Colors.white,
                 size: 20,
               ),
             ),
@@ -5066,15 +5072,18 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                           ),
                         ),
                       ],
-                      const SizedBox(width: 8),
-                      _buildControlButton(
-                        icon: LucideIcons.logOut,
-                        label: 'Leave',
-                        color: Colors.red,
-                        onTap: () {
-                          Navigator.pop(context);
-                        },
-                      ),
+                      // Hide Leave button if user is timed out
+                      if (!_isCurrentUserTimedOut) ...[
+                        const SizedBox(width: 8),
+                        _buildControlButton(
+                          icon: LucideIcons.logOut,
+                          label: 'Leave',
+                          color: Colors.red,
+                          onTap: () {
+                            Navigator.pop(context);
+                          },
+                        ),
+                      ],
         ], // End of Row children
       ), // End of Row
     ); // End of SingleChildScrollView
@@ -5170,14 +5179,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                           ),
                         ),
                       ),
-                    _buildControlButton(
-                      icon: LucideIcons.logOut,
-                      label: 'Leave',
-                      color: Colors.red,
-                      onTap: () {
-                        Navigator.pop(context);
-                      },
-                    ),
+                    // Hide Leave button if user is timed out
+                    if (!_isCurrentUserTimedOut)
+                      _buildControlButton(
+                        icon: LucideIcons.logOut,
+                        label: 'Leave',
+                        color: Colors.red,
+                        onTap: () {
+                          Navigator.pop(context);
+                        },
+                      ),
                   ],
                 );
               }
@@ -6976,19 +6987,20 @@ To join this debate:
               if (reaction.isGift) {
                 AppLogger().info('🎁 Received gift: ${reaction.emoji} (${reaction.giftName}) from ${reaction.senderName} to ${reaction.targetUserId}');
               } else {
-                AppLogger().info('✨ Received reaction: ${reaction.emoji} for ${reaction.targetUserId}');
+                AppLogger().info('✨ Received reaction: ${reaction.emoji} from ${reaction.senderUserId} to ${reaction.targetUserId}');
 
-                // Show emoji on recipient's avatar with confetti
-                if (mounted) {
+                // Show emoji on SENDER's avatar with confetti (avatar replacement) - only on OTHER devices
+                // Note: Sender already sees it locally from immediate feedback at line 7529
+                if (mounted && reaction.senderUserId != _currentUser?.id) {
                   setState(() {
-                    _avatarEmojiOverlays[reaction.targetUserId] = reaction.emoji;
+                    _avatarEmojiOverlays[reaction.senderUserId] = reaction.emoji;
                   });
 
-                  // Auto-clear recipient's emoji after 5 seconds (longer for confetti animation)
+                  // Auto-clear sender's emoji after 5 seconds (longer for confetti animation)
                   Future.delayed(const Duration(seconds: 5), () {
                     if (mounted) {
                       setState(() {
-                        _avatarEmojiOverlays.remove(reaction.targetUserId);
+                        _avatarEmojiOverlays.remove(reaction.senderUserId);
                       });
                     }
                   });
