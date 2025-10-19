@@ -167,7 +167,7 @@ class RoomRealtimeManager {
           handRaiseUpdates.add(message);
         } else if (event.contains('timers')) {
           timerUpdates.add(message);
-        } else if (event.contains('materials') || event.contains('shared_materials')) {
+        } else if (event.contains('materials') || event.contains('shared_materials') || event.contains('arena_judgments')) {
           materialUpdates.add(message);
         }
       }

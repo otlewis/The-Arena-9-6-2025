@@ -44,6 +44,7 @@ import '../services/disposal_tracking_system.dart';
 import '../services/recording_service.dart';
 import '../services/simple_audio_recording_service.dart';
 import '../services/super_moderator_service.dart';
+import '../widgets/all_votes_in_modal.dart';
 
 // Static helper methods for avatar system - accessible by all classes
 Widget buildAvatarText(UserProfile participant, double fontSize) {
@@ -1008,17 +1009,26 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       // Listen to judgment updates for voting
       _judgmentStreamListener = _roomSubscription!.materials.listen(
         (response) {
+          AppLogger().info('📨 Materials stream event received: ${response.events}');
+
           // Check if this is a judgment event
           if (response.events.any((e) => e.contains('arena_judgments'))) {
-            AppLogger().info('Judgment update received');
+            AppLogger().info('⚖️ Judgment update received - Events: ${response.events}');
 
             // Check if this is a new judge vote (create event)
             final isCreateEvent = response.events.any((e) => e.contains('.create'));
-            if (isCreateEvent && _userRole == 'moderator' && mounted) {
+            AppLogger().info('  - Is create event: $isCreateEvent');
+            AppLogger().info('  - Current user role: $_userRole');
+            AppLogger().info('  - Is moderator: $_isModerator');
+            AppLogger().info('  - Mounted: $mounted');
+
+            if (isCreateEvent && _isModerator && mounted) {
+              AppLogger().info('🔔 Processing judge vote notification...');
               // Extract judge information from the payload
               try {
                 final payload = response.payload;
                 final judgeId = payload['judgeId'];
+                AppLogger().info('  - Judge ID from payload: $judgeId');
 
                 // Determine which judge voted based on their role
                 String judgeLabel = 'A judge';
@@ -1040,15 +1050,19 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                     }
                   });
                 }
+                AppLogger().info('  - Judge label: $judgeLabel');
 
                 // Count how many judges have voted
                 _checkJudgeVoteProgress().then((voteCount) {
+                  AppLogger().info('  - Vote count: $voteCount');
                   // Show persistent notification for moderator
                   _showJudgeVoteNotification(judgeLabel, voteCount);
                 });
               } catch (e) {
                 AppLogger().error('Error processing judge vote notification: $e');
               }
+            } else {
+              AppLogger().info('⚠️ Skipping notification - Conditions not met');
             }
 
             // Refresh judgments when new votes come in
@@ -7520,39 +7534,48 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
     final votedCount = voteCount['voted'] ?? 0;
     final totalCount = voteCount['total'] ?? 0;
+    final allVotesIn = votedCount == totalCount && totalCount > 0;
 
-    // Create the message with vote progress
+    // If all votes are in, show prominent modal with bell sound
+    if (allVotesIn) {
+      // Play audio alert
+      _soundService.playBellSound().catchError((e) {
+        AppLogger().error('Error playing bell sound for all votes in: $e');
+      });
+
+      // Show animated modal
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AllVotesInModal(
+          totalJudges: totalCount,
+          onDismiss: () {
+            // Modal dismissed
+          },
+          onViewResults: () {
+            // Show the judging panel to view results
+            _showJudgingPanel();
+          },
+        ),
+      );
+      return;
+    }
+
+    // For individual judge votes, show snackbar notification
     String message = '🗳️ $judgeLabel has submitted their vote';
     if (totalCount > 0) {
       message += '\n📊 Progress: $votedCount/$totalCount judges have voted';
-
-      if (votedCount == totalCount) {
-        message += '\n✅ All judges have voted!';
-      }
     }
 
     // Show persistent snackbar with dismiss action
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              message,
-              style: const TextStyle(fontSize: 14),
-            ),
-            if (votedCount == totalCount)
-              const SizedBox(height: 4),
-            if (votedCount == totalCount)
-              const Text(
-                'You can now proceed to announce results',
-                style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-              ),
-          ],
+        content: Text(
+          message,
+          style: const TextStyle(fontSize: 14),
         ),
-        backgroundColor: votedCount == totalCount ? Colors.green : Colors.blue.shade700,
-        duration: const Duration(days: 365), // Essentially infinite until dismissed
+        backgroundColor: Colors.blue.shade700,
+        duration: const Duration(seconds: 5),
         action: SnackBarAction(
           label: 'DISMISS',
           textColor: Colors.white,
@@ -7567,16 +7590,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         ),
       ),
     );
-
-    // Play a notification sound if all judges have voted
-    if (votedCount == totalCount) {
-      try {
-        // You can add a sound effect here if desired
-        AppLogger().info('🔔 All judges have completed voting!');
-      } catch (e) {
-        AppLogger().debug('Could not play notification sound: $e');
-      }
-    }
   }
 
   /// Determine update type from realtime events
