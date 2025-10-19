@@ -4,6 +4,7 @@ import 'package:appwrite/appwrite.dart';
 import '../services/appwrite_service.dart';
 import '../services/challenge_messaging_service.dart';
 import '../services/sound_service.dart';
+import '../services/role_assignment_service.dart';
 import '../models/user_profile.dart';
 import '../models/message.dart';
 import '../models/judge_scorecard.dart';
@@ -381,6 +382,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   late final SpeakingDetectionService _speakingService;
   late final RecordingService _recordingService;
   final SimpleAudioRecordingService _simpleRecordingService = SimpleAudioRecordingService();
+  final RoleAssignmentService _roleAssignmentService = RoleAssignmentService();
   
   // Room data
   Map<String, dynamic>? _roomData;
@@ -394,6 +396,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   bool _hasCurrentUserSubmittedVote = false;
   bool _resultsModalShown = false; // Track if results modal has been shown
   bool _showResults = false; // Broadcast flag from n8n workflow to show results to all users
+  int _judgeVotedCount = 0; // Number of judges who have submitted votes
+  int _judgeTotalCount = 0; // Total number of judge slots filled
   bool _roomClosingModalShown = false; // Track if room closing modal has been shown
   bool _hasNavigated = false; // Track if we've already navigated to prevent duplicate navigation
   bool _isExiting = false; // Prevent state updates during exit
@@ -409,6 +413,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   StreamSubscription? _roomStatusStreamListener;
   StreamSubscription? _judgmentStreamListener;
   StreamSubscription? _timerStreamListener;
+  StreamSubscription<ArenaRoleEvent>? _roleEventsSubscription; // Role change events for sync
 
   // Legacy subscriptions
   StreamSubscription? _unreadMessagesSubscription; // Instant messages subscription
@@ -456,6 +461,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   // Connection stability monitoring
   Timer? _connectionHealthTimer;
   Timer? _reconnectionTimer;
+  Timer? _presenceHeartbeatTimer; // Updates lastSeen every 15 seconds
   bool _isReconnecting = false;
   int _connectionDropCount = 0;
   DateTime? _lastConnectionDrop;
@@ -603,7 +609,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     try {
       final stopwatch = Stopwatch()..start();
       AppLogger().info('Initializing arena with optimized ${_isIOSOptimizationEnabled ? 'iOS' : 'standard'} flow...');
-      
+
       if (_isIOSOptimizationEnabled) {
         // iOS-optimized initialization with parallel operations
         await _initializeArenaIOS();
@@ -611,11 +617,42 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         // Standard initialization
         await _initializeArenaStandard();
       }
-      
+
+      // Set up role events subscription for additional sync layer
+      _setupRoleEventsSubscription();
+
       stopwatch.stop();
       AppLogger().info('Arena initialization completed in ${stopwatch.elapsedMilliseconds}ms');
     } catch (e) {
       AppLogger().error('Error during arena initialization: $e');
+    }
+  }
+
+  /// Set up subscription to role change events for automatic synchronization
+  void _setupRoleEventsSubscription() {
+    try {
+      AppLogger().info('📡 Setting up role events subscription for room ${widget.roomId}');
+
+      _roleEventsSubscription = _roleAssignmentService
+          .subscribeToRoleEvents(widget.roomId)
+          .listen(
+        (event) {
+          AppLogger().info('📡 Role event received: ${event.userId} → ${event.role.value} (version: ${event.version})');
+
+          // Refresh participants to sync with server's authoritative state
+          if (mounted) {
+            _loadParticipants();
+          }
+        },
+        onError: (error) {
+          AppLogger().error('❌ Role events subscription error: $error');
+        },
+        cancelOnError: false, // Keep subscription alive on errors
+      );
+
+      AppLogger().info('✅ Role events subscription active');
+    } catch (e) {
+      AppLogger().error('❌ Failed to set up role events subscription: $e');
     }
   }
   
@@ -670,24 +707,27 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Future<void> _initializeArenaStandard() async {
     // Step 1: Load room data and authenticate user first
     await _loadRoomData();
-    
+
     // Step 2: Validate user authentication before proceeding
     if (_currentUserId == null) {
       AppLogger().error('Arena initialization failed: No authenticated user');
       return;
     }
-    
+
     AppLogger().info('User authenticated: $_currentUserId, proceeding with arena setup');
-    
+
     // Step 3: Setup real-time subscription now that user is confirmed
     _setupRealtimeSubscription();
-    
+
     // Step 4: Start room status checker
     _startRoomStatusChecker();
-    
+
     // Step 5: Load participants to get user role and connect WebRTC
     await _loadParticipants();
-    
+
+    // Step 6: Start presence heartbeat (updates lastSeen every 15 seconds)
+    _startPresenceHeartbeat();
+
     // Chat service removed - now handled by floating chat button
   }
 
@@ -757,6 +797,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     // Stop connection health monitoring
     _stopConnectionHealthMonitoring();
     _reconnectionTimer?.cancel();
+    _presenceHeartbeatTimer?.cancel();
     
     AppLogger().debug('🛑 DISPOSE: Cleaning up consolidated subscriptions...');
     _realtimeManager.unsubscribeFromRoom(widget.roomId);
@@ -764,6 +805,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _roomStatusStreamListener?.cancel();
     _judgmentStreamListener?.cancel();
     _timerStreamListener?.cancel();
+    _roleEventsSubscription?.cancel();
+    _roleEventsSubscription = null;
 
     AppLogger().debug('🛑 DISPOSE: Cancelling instant messaging subscription...');
     _unreadMessagesSubscription?.cancel();
@@ -1022,6 +1065,20 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             AppLogger().info('  - Is moderator: $_isModerator');
             AppLogger().info('  - Mounted: $mounted');
 
+            // Update vote indicators for ALL users (not just moderator)
+            if (isCreateEvent && mounted) {
+              _checkJudgeVoteProgress().then((voteCount) {
+                AppLogger().info('  - Vote count: $voteCount');
+                // Update vote indicators in app bar for everyone
+                if (mounted) {
+                  setState(() {
+                    _judgeVotedCount = voteCount['voted'] ?? 0;
+                    _judgeTotalCount = voteCount['total'] ?? 0;
+                  });
+                }
+              });
+            }
+
             if (isCreateEvent && _isModerator && mounted) {
               AppLogger().info('🔔 Processing judge vote notification...');
               // Extract judge information from the payload
@@ -1111,6 +1168,39 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _connectionHealthTimer?.cancel();
     _connectionHealthTimer = null;
     AppLogger().debug('🛑 Stopped connection health monitoring');
+  }
+
+  /// Start presence heartbeat timer
+  /// Updates lastSeen timestamp every 15 seconds to prevent cleanup
+  void _startPresenceHeartbeat() {
+    // Cancel existing timer if any
+    _presenceHeartbeatTimer?.cancel();
+
+    // Update immediately
+    _updatePresence();
+
+    // Set up periodic updates every 15 seconds
+    _presenceHeartbeatTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _updatePresence(),
+    );
+
+    AppLogger().debug('💓 Started presence heartbeat for Arena room');
+  }
+
+  /// Update participant's lastSeen timestamp
+  Future<void> _updatePresence() async {
+    if (_currentUserId == null || _isExiting || _hasNavigated) return;
+
+    try {
+      await _appwrite.updateArenaParticipantPresence(
+        roomId: widget.roomId,
+        userId: _currentUserId!,
+      );
+    } catch (e) {
+      AppLogger().debug('Failed to update presence: $e');
+      // Don't log as error - this is expected when network is unstable
+    }
   }
 
   /// Optimize Android performance to prevent WebRTC timeouts
@@ -2607,6 +2697,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           _autoConnectAudio(); // Fire and forget for speed
         }
       }
+
+      // Update vote indicators in app bar
+      final voteCount = await _checkJudgeVoteProgress();
+      if (mounted) {
+        setState(() {
+          _judgeVotedCount = voteCount['voted'] ?? 0;
+          _judgeTotalCount = voteCount['total'] ?? 0;
+        });
+      }
     } catch (e) {
       AppLogger().error('❌ CRITICAL: Error loading participants: $e');
       AppLogger().error('❌ CRITICAL: Exception type: ${e.runtimeType}');
@@ -3380,6 +3479,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           onEmergencyCloseRoom: _emergencyCloseRoom,
           roomId: widget.roomId,
           userId: _currentUserId ?? '',
+          votedCount: _judgeVotedCount,
+          totalCount: _judgeTotalCount,
         ),
         body: Stack(
           children: [
@@ -7125,114 +7226,127 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       return;
     }
 
+    if (_currentUserId == null) {
+      AppLogger().error('Cannot assign role: current user ID is null');
+      return;
+    }
+
+    // Save state for potential rollback
+    UserProfile? userProfile;
+    String? previousRole;
+    int? previousAudienceIndex;
+
+    // Find the user in current participants/audience
+    final audienceIndex = _audience.indexWhere((u) => u.id == userId);
+    if (audienceIndex >= 0) {
+      previousAudienceIndex = audienceIndex;
+      userProfile = _audience[audienceIndex];
+    }
+
+    _participants.forEach((role, user) {
+      if (user?.id == userId) {
+        previousRole = role;
+        userProfile = user;
+      }
+    });
+
     try {
-      // INSTANT UPDATE: Send LiveKit role change notification BEFORE database update
-      if (_liveKitService.isConnected) {
-        AppLogger().info('⚡ LIVEKIT: Sending instant role change notification to $userId -> $newRole');
-        await _sendRoleChangeNotification(userId, newRole);
-      }
-
-      // OPTIMISTIC UPDATE WITH ROLLBACK: Save state before update for potential rollback
-      UserProfile? userProfile;
-      String? previousRole;
-      int? previousAudienceIndex;
-
-      // OPTIMISTIC UPDATE: Update moderator's UI immediately
-      if (mounted) {
-        setState(() {
-          // Update participant in the correct slot
-          if (_participants.containsKey(newRole)) {
-            // Find the user in audience or other slots
-
-            // Check audience
-            final audienceIndex = _audience.indexWhere((u) => u.id == userId);
-            if (audienceIndex >= 0) {
-              previousAudienceIndex = audienceIndex;
-              userProfile = _audience[audienceIndex];
-              _audience.removeAt(audienceIndex);
-            }
-
-            // Check other role slots
-            _participants.forEach((role, user) {
-              if (user?.id == userId) {
-                previousRole = role;
-                userProfile = user;
-                _participants[role] = null;
-              }
-            });
-
-            // Assign to new role
-            if (userProfile != null) {
-              _participants[newRole] = userProfile;
-              AppLogger().info('⚡ OPTIMISTIC: Moderator UI updated instantly - assigned $userId to $newRole');
-            }
-          }
-        });
-      }
-
-      // Now update database via webhook (UI already updated)
-      final result = await _appwrite.assignArenaRole(
+      // Call the unified role assignment service
+      final result = await _roleAssignmentService.assignRole(
         roomId: widget.roomId,
         userId: userId,
-        role: newRole,
+        role: ArenaRole.fromString(newRole),
+        requesterId: _currentUserId!,
+        optimisticUpdate: () {
+          // Optimistic UI update
+          if (mounted && userProfile != null) {
+            setState(() {
+              // Remove from previous position
+              if (previousAudienceIndex != null && previousAudienceIndex >= 0) {
+                _audience.removeAt(previousAudienceIndex);
+              }
+              if (previousRole != null && previousRole!.isNotEmpty) {
+                _participants[previousRole!] = null;
+              }
+
+              // Add to new role slot
+              if (_participants.containsKey(newRole)) {
+                _participants[newRole] = userProfile;
+              } else {
+                // If not a known role slot, add back to audience
+                _audience.add(userProfile!);
+              }
+
+              AppLogger().info('⚡ OPTIMISTIC: UI updated - assigned $userId to $newRole');
+            });
+          }
+
+          // Send LiveKit notification for instant update
+          if (_liveKitService.isConnected) {
+            _sendRoleChangeNotification(userId, newRole);
+          }
+        },
+        rollback: () {
+          // Rollback UI on failure
+          if (mounted && userProfile != null) {
+            setState(() {
+              // Remove from new role
+              if (_participants[newRole]?.id == userId) {
+                _participants[newRole] = null;
+              }
+
+              // Restore to previous position
+              if (previousRole != null && previousRole!.isNotEmpty) {
+                _participants[previousRole!] = userProfile;
+                AppLogger().debug('🔄 Restored user to previous role: $previousRole');
+              } else if (previousAudienceIndex != null &&
+                         previousAudienceIndex >= 0 &&
+                         previousAudienceIndex <= _audience.length) {
+                _audience.insert(previousAudienceIndex, userProfile!);
+                AppLogger().debug('🔄 Restored user to audience at index: $previousAudienceIndex');
+              } else {
+                // Fallback: add to end of audience
+                _audience.add(userProfile!);
+              }
+            });
+          }
+        },
       );
 
-      // Check if assignment failed (empty string or error message)
-      final success = result.isNotEmpty && !result.toLowerCase().contains('error') && !result.toLowerCase().contains('failed');
+      // Handle result
+      if (result.success) {
+        AppLogger().info('✅ Role assigned successfully: ${result.assignedRole?.value} (version: ${result.version})');
 
-      if (!success) {
-        // ROLLBACK: Webhook failed, restore previous state
-        AppLogger().warning('🔄 ROLLBACK: Webhook failed ($result), restoring previous state');
-
-        if (mounted && userProfile != null) {
-          setState(() {
-            // Remove from new role slot
-            if (_participants[newRole]?.id == userId) {
-              _participants[newRole] = null;
-            }
-
-            // Restore to previous position
-            final role = previousRole;
-            final index = previousAudienceIndex;
-
-            if (role != null && role.isNotEmpty) {
-              _participants[role] = userProfile;
-              AppLogger().debug('🔄 Restored user to previous role: $role');
-            } else if (index != null && index >= 0 && index <= _audience.length) {
-              _audience.insert(index, userProfile!);
-              AppLogger().debug('🔄 Restored user to audience at index: $index');
-            }
-          });
-        }
+        // Refresh participants to sync with server
+        await _loadParticipants();
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('❌ Failed to assign role: $result'),
+              content: Text('✅ Assigned as ${result.assignedRole?.value ?? newRole}'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        AppLogger().warning('❌ Role assignment failed: ${result.error}');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ ${result.error ?? "Failed to assign role"}'),
               backgroundColor: Colors.red,
             ),
           );
         }
-        return;
       }
+    } catch (e, stackTrace) {
+      AppLogger().error('Exception assigning role: $e\n$stackTrace');
 
-      // Refresh participants list to sync with server
-      await _loadParticipants();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Role assigned successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      AppLogger().error('Error assigning role: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Error assigning role: $e'),
+            content: Text('❌ Error: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -7683,6 +7797,7 @@ class RoleManagerPanel extends StatefulWidget {
 
 class _RoleManagerPanelState extends State<RoleManagerPanel> {
   final AppwriteService _appwrite = AppwriteService();
+  final RoleAssignmentService _roleAssignmentService = RoleAssignmentService();
   List<Map<String, dynamic>> _participants = [];
   bool _isLoading = true;
 
@@ -8103,22 +8218,33 @@ class _RoleManagerPanelState extends State<RoleManagerPanel> {
 
   Future<void> _assignRole(String userId, String newRole) async {
     try {
-      final appwrite = AppwriteService();
-      await appwrite.assignArenaRole(
+      final result = await _roleAssignmentService.assignRole(
         roomId: widget.roomId,
         userId: userId,
-        role: newRole,
+        role: ArenaRole.fromString(newRole),
+        requesterId: widget.currentUserId,
       );
-      
-      widget.onRoleAssigned();
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Role assigned successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
+
+      if (result.success) {
+        widget.onRoleAssigned();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Assigned as ${result.assignedRole?.value ?? newRole}'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ ${result.error ?? "Failed to assign role"}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {

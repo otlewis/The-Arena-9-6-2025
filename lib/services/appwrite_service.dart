@@ -2410,11 +2410,49 @@ class AppwriteService {
     try {
       // Delete ALL entries for this user in this room to prevent duplicates
       await _cleanupDebateDiscussionParticipantDuplicates(roomId, userId);
-      
+
       AppLogger().debug('User $userId left debate discussion room $roomId (all entries deleted)');
     } catch (e) {
       AppLogger().error('Error leaving debate discussion room: $e');
       rethrow;
+    }
+  }
+
+  /// Update participant's lastSeen timestamp for presence tracking
+  Future<void> updateDebateDiscussionParticipantPresence({
+    required String roomId,
+    required String userId,
+  }) async {
+    try {
+      // Find the participant document
+      final participants = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('userId', userId),
+          Query.equal('status', 'joined'),
+          Query.limit(1),
+        ],
+      );
+
+      if (participants.documents.isEmpty) {
+        AppLogger().debug('No participant found to update presence for user $userId in room $roomId');
+        return;
+      }
+
+      // Update lastActiveAt timestamp
+      await databases.updateDocument(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+        documentId: participants.documents.first.$id,
+        data: {
+          'lastActiveAt': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      AppLogger().debug('Error updating participant presence: $e');
+      // Don't rethrow - presence updates should fail silently
     }
   }
 
@@ -3288,6 +3326,7 @@ class AppwriteService {
           'userId': userId,
           'role': finalRole,
           'assignedAt': DateTime.now().toIso8601String(),
+          'lastSeen': DateTime.now().toIso8601String(),
           'isActive': true,
         },
       );
@@ -5019,6 +5058,44 @@ class AppwriteService {
     } catch (e) {
       AppLogger().error('Error joining arena room: $e');
       rethrow;
+    }
+  }
+
+  /// Update arena participant's lastSeen timestamp for presence tracking
+  Future<void> updateArenaParticipantPresence({
+    required String roomId,
+    required String userId,
+  }) async {
+    try {
+      // Find the participant document
+      final participants = await databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'arena_participants',
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('userId', userId),
+          Query.equal('isActive', true),
+          Query.limit(1),
+        ],
+      );
+
+      if (participants.documents.isEmpty) {
+        AppLogger().debug('No participant found to update presence for user $userId in room $roomId');
+        return;
+      }
+
+      // Update lastSeen timestamp
+      await databases.updateDocument(
+        databaseId: 'arena_db',
+        collectionId: 'arena_participants',
+        documentId: participants.documents.first.$id,
+        data: {
+          'lastSeen': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      AppLogger().debug('Error updating arena participant presence: $e');
+      // Don't rethrow - presence updates should fail silently
     }
   }
 

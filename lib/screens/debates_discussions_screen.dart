@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:appwrite/appwrite.dart';
 import '../services/appwrite_service.dart';
+import '../services/dd_role_assignment_service.dart';
 import '../services/firebase_gift_service.dart';
 import '../widgets/simple_gift_bottom_sheet.dart';
 import '../services/livekit_service.dart';
@@ -129,6 +130,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   final AppwriteService _appwrite = AppwriteService();
   final FirebaseGiftService _giftService = FirebaseGiftService();
   final LiveKitService _webrtcService = LiveKitService();
+  late final DDRoleAssignmentService _roleAssignmentService;
   
   // Performance optimization instances
   final RiverpodPerformanceOptimizer _performanceOptimizer = RiverpodPerformanceOptimizer();
@@ -210,6 +212,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   Timer? _connectionHealthTimer;
   Timer? _reconnectionTimer;
   Timer? _participantSyncTimer;
+  Timer? _presenceHeartbeatTimer; // Updates lastSeen every 15 seconds
   bool _wasOffline = false;
   
   // Materials system
@@ -283,6 +286,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
     // Initialize audio preloader service
     _audioPreloader = getIt<AudioPreloaderService>();
+
+    // Initialize role assignment service
+    _roleAssignmentService = DDRoleAssignmentService(
+      functions: _appwrite.functions,
+      databases: _appwrite.databases,
+      realtime: _appwrite.realtime,
+    );
 
     // Add lifecycle observer for automatic refresh on app resume
     WidgetsBinding.instance.addObserver(this);
@@ -1178,6 +1188,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           await _loadParticipants();
         }
       });
+
+      // Start presence heartbeat (updates lastSeen every 15 seconds)
+      _startPresenceHeartbeat();
     } catch (e) {
       AppLogger().error('❌ Error joining room: $e');
 
@@ -1321,8 +1334,49 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     }
   }
 
+  /// Start presence heartbeat timer
+  /// Updates lastSeen timestamp every 15 seconds to prevent cleanup
+  void _startPresenceHeartbeat() {
+    // Cancel existing timer if any
+    _presenceHeartbeatTimer?.cancel();
+
+    // Update immediately
+    _updatePresence();
+
+    // Set up periodic updates every 15 seconds
+    _presenceHeartbeatTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _updatePresence(),
+    );
+
+    AppLogger().debug('💓 Started presence heartbeat for D&D room');
+  }
+
+  /// Update participant's lastSeen timestamp
+  Future<void> _updatePresence() async {
+    if (_currentUser == null || _isDisposing) return;
+
+    try {
+      await _appwrite.updateDebateDiscussionParticipantPresence(
+        roomId: widget.roomId,
+        userId: _currentUser!.id,
+      );
+    } catch (e) {
+      AppLogger().debug('Failed to update presence: $e');
+      // Don't log as error - this is expected when network is unstable
+    }
+  }
+
   /// Show timeout notification modal
   void _showTimeoutModal(int remainingMinutes) {
+    // Immediately mute the user when timeout modal appears
+    if (_isCurrentUserSpeaker || _isCurrentUserModerator) {
+      if (!_isMuted) {
+        _toggleMute();
+        AppLogger().debug('🔇 Auto-muted user due to timeout');
+      }
+    }
+
     showDialog(
       context: context,
       barrierDismissible: true,
@@ -1847,6 +1901,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     _stopConnectionHealthMonitoring();
     _reconnectionTimer?.cancel();
     _participantSyncTimer?.cancel();
+    _presenceHeartbeatTimer?.cancel();
     
     // Stop AI moderation
     _aiModerationService.stopRoomMonitoring(widget.roomId);
@@ -6074,37 +6129,117 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   }
 
   Future<void> _assignRole(UserProfile member, String role) async {
-    try {
-      AppLogger().info('Assigning role "$role" to ${member.name}');
-      
-      // Update the participant's role in the database
-      await _appwrite.updateDebateDiscussionParticipantRole(
-        roomId: widget.roomId,
-        userId: member.id,
-        newRole: role,
-      );
-      
-      if (mounted) {
+    if (_currentUser == null) {
+      AppLogger().error('Cannot assign role: current user is null');
+      return;
+    }
+
+    AppLogger().info('Assigning role "$role" to ${member.name}');
+
+    // Convert string role to DDRole enum
+    final ddRole = DDRoleExtension.fromString(role);
+
+    // Store old role for rollback (if available)
+    String? oldRole;
+    for (final speaker in _speakerPanelists) {
+      if (speaker.id == member.id) {
+        oldRole = 'speaker';
+        break;
+      }
+    }
+    if (oldRole == null && _moderator?.id == member.id) {
+      oldRole = 'moderator';
+    }
+    if (oldRole == null) {
+      for (final request in _speakerRequests) {
+        if (request.id == member.id) {
+          oldRole = 'pending';
+          break;
+        }
+      }
+    }
+    oldRole ??= 'audience';
+
+    // Use the role assignment service with optimistic update
+    final result = await _roleAssignmentService.assignRole(
+      roomId: widget.roomId,
+      userId: member.id,
+      role: ddRole,
+      requesterId: _currentUser!.id,
+      optimisticUpdate: () {
+        // Optimistic UI update (instant feedback)
+        if (mounted) {
+          setState(() {
+            // Move user immediately in UI
+            if (role == 'speaker') {
+              // Remove from audience/pending
+              _audienceMembers.removeWhere((u) => u.id == member.id);
+              _speakerRequests.removeWhere((u) => u.id == member.id);
+              // Add to speakers if not already there
+              if (!_speakerPanelists.any((u) => u.id == member.id)) {
+                _speakerPanelists.add(member);
+              }
+            } else if (role == 'audience') {
+              // Remove from speakers/pending
+              _speakerPanelists.removeWhere((u) => u.id == member.id);
+              _speakerRequests.removeWhere((u) => u.id == member.id);
+              // Add to audience if not already there
+              if (!_audienceMembers.any((u) => u.id == member.id)) {
+                _audienceMembers.add(member);
+              }
+            } else if (role == 'pending') {
+              // Remove from audience/speakers
+              _audienceMembers.removeWhere((u) => u.id == member.id);
+              _speakerPanelists.removeWhere((u) => u.id == member.id);
+              // Add to pending if not already there
+              if (!_speakerRequests.any((u) => u.id == member.id)) {
+                _speakerRequests.add(member);
+              }
+            }
+          });
+        }
+      },
+      rollback: () {
+        // Rollback on failure - move user back to original position
+        if (mounted) {
+          setState(() {
+            // Remove from all lists first
+            _speakerPanelists.removeWhere((u) => u.id == member.id);
+            _audienceMembers.removeWhere((u) => u.id == member.id);
+            _speakerRequests.removeWhere((u) => u.id == member.id);
+
+            // Restore to original role
+            if (oldRole == 'speaker' && !_speakerPanelists.any((u) => u.id == member.id)) {
+              _speakerPanelists.add(member);
+            } else if (oldRole == 'pending' && !_speakerRequests.any((u) => u.id == member.id)) {
+              _speakerRequests.add(member);
+            } else if (oldRole == 'audience' && !_audienceMembers.any((u) => u.id == member.id)) {
+              _audienceMembers.add(member);
+            }
+          });
+        }
+      },
+    );
+
+    if (mounted) {
+      if (result['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ ${member.name} assigned as $role'),
+            content: Text('✅ ${member.name} assigned as ${result['assignedRole']}'),
             backgroundColor: Colors.green,
           ),
         );
-      }
-      
-      // The real-time subscription will update the UI automatically
-    } catch (e) {
-      AppLogger().error('Error assigning role: $e');
-      if (mounted) {
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text('❌ Error: ${result['error']}'),
             backgroundColor: Colors.red,
           ),
         );
       }
     }
+
+    // The real-time subscription will update the UI automatically
   }
 
 

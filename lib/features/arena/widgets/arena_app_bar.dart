@@ -16,6 +16,8 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onEmergencyCloseRoom;
   final String roomId;
   final String userId;
+  final int votedCount; // Number of judges who have voted
+  final int totalCount; // Total number of judges
 
   const ArenaAppBar({
     super.key,
@@ -25,6 +27,8 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onEmergencyCloseRoom,
     required this.roomId,
     required this.userId,
+    this.votedCount = 0,
+    this.totalCount = 0,
   });
 
   @override
@@ -62,7 +66,7 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
                       width: isSmallScreen ? 24 : 28,
                       height: isSmallScreen ? 24 : 28,
                       decoration: BoxDecoration(
-                        color: Colors.purple.withValues(alpha: 0.2),
+                        color: Colors.purple.withOpacity(0.2),
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.purple, width: 1.5),
                       ),
@@ -92,10 +96,37 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ],
                 ),
               
-              // Simple Timer in header center
-              const Expanded(
+              // Simple Timer in header center with vote indicators
+              Expanded(
                 child: Center(
-                  child: SimpleTimer(),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Vote indicator bars (3 bars that turn green when votes come in)
+                      // Always show 3 bars for arena debates
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: List.generate(3, (index) {
+                          final hasVoted = index < votedCount;
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                            child: Container(
+                              width: 3,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: hasVoted ? Colors.green : Colors.red,
+                                borderRadius: BorderRadius.circular(1.5),
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                      const SizedBox(width: 6),
+                      // Timer
+                      const SimpleTimer(),
+                    ],
+                  ),
                 ),
               ),
             ],

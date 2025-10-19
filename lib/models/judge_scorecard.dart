@@ -197,6 +197,13 @@ class JudgeScorecard {
     return winningTeam == calculatedWinner;
   }
 
+  /// Check if the team scores are tied
+  bool get hasTiedScores {
+    final affirmativeTotal = getTotalScoreForTeam(TeamSide.affirmative);
+    final negativeTotal = getTotalScoreForTeam(TeamSide.negative);
+    return affirmativeTotal == negativeTotal;
+  }
+
   List<SpeakerScore> getSpeakersForTeam(TeamSide team) {
     return speakerScores.where((score) => score.teamSide == team).toList();
   }
@@ -218,7 +225,12 @@ class JudgeScorecard {
       }
     }
 
-    // Submit button is enabled once all scores are complete
+    // Prevent submission if scores are tied
+    if (hasTiedScores) {
+      return false;
+    }
+
+    // Submit button is enabled once all scores are complete and not tied
     // No longer requires reasonForDecision field
     return true;
   }

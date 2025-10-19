@@ -1,0 +1,13 @@
+{
+  "name": "cleanup-inactive-participants",
+  "version": "1.0.0",
+  "description": "Cleanup inactive participants from rooms",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "node-appwrite": "^13.0.0"
+  }
+}

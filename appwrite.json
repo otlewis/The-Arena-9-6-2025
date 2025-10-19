@@ -36,6 +36,12 @@
             "logging": true,
             "entrypoint": "index.js",
             "commands": "npm install",
+            "scopes": [
+                "documents.read",
+                "documents.write",
+                "databases.read",
+                "databases.write"
+            ],
             "ignore": [
                 "node_modules",
                 ".git",
@@ -57,6 +63,12 @@
             "logging": true,
             "entrypoint": "index.js",
             "commands": "npm install",
+            "scopes": [
+                "documents.read",
+                "documents.write",
+                "databases.read",
+                "databases.write"
+            ],
             "ignore": [
                 "node_modules",
                 ".git",
@@ -78,12 +90,19 @@
             "logging": true,
             "entrypoint": "index.js",
             "commands": "npm install",
+            "scopes": [
+                "documents.read",
+                "documents.write",
+                "databases.read",
+                "databases.write"
+            ],
             "ignore": [
                 "node_modules",
                 ".git",
                 ".appwrite"
             ],
-            "path": "appwrite-functions/timeout-user"
+            "path": "appwrite-functions/timeout-user",
+            "specification": "s-1vcpu-512mb"
         },
         {
             "$id": "lock-microphones",
@@ -147,6 +166,115 @@
                 ".appwrite"
             ],
             "path": "appwrite-functions/generate-upload-url"
+        },
+        {
+            "$id": "broadcast-arena-results",
+            "name": "Broadcast Arena Results",
+            "runtime": "node-18.0",
+            "execute": [
+                "users"
+            ],
+            "events": [],
+            "schedule": "",
+            "timeout": 15,
+            "enabled": true,
+            "logging": true,
+            "entrypoint": "index.js",
+            "commands": "npm install",
+            "scopes": [
+                "documents.read",
+                "documents.write",
+                "databases.read",
+                "databases.write"
+            ],
+            "ignore": [
+                "node_modules",
+                ".git",
+                ".appwrite"
+            ],
+            "path": "appwrite-functions/broadcast-arena-results"
+        },
+        {
+            "$id": "assign-arena-role",
+            "name": "Assign Arena Role",
+            "runtime": "node-18.0",
+            "execute": [
+                "users"
+            ],
+            "events": [],
+            "schedule": "",
+            "timeout": 15,
+            "enabled": true,
+            "logging": true,
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "scopes": [
+                "documents.read",
+                "documents.write",
+                "databases.read",
+                "databases.write"
+            ],
+            "ignore": [
+                "node_modules",
+                ".git",
+                ".appwrite"
+            ],
+            "path": "appwrite-functions/assign-arena-role",
+            "specification": "s-1vcpu-512mb"
+        },
+        {
+            "$id": "assign-dd-role",
+            "name": "Assign Debates & Discussions Role",
+            "runtime": "node-18.0",
+            "execute": [
+                "users"
+            ],
+            "events": [],
+            "schedule": "",
+            "timeout": 15,
+            "enabled": true,
+            "logging": true,
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "scopes": [
+                "documents.read",
+                "documents.write",
+                "databases.read",
+                "databases.write"
+            ],
+            "ignore": [
+                "node_modules",
+                ".git",
+                ".appwrite"
+            ],
+            "path": "appwrite-functions/assign-dd-role",
+            "specification": "s-1vcpu-512mb"
+        },
+        {
+            "$id": "cleanup-inactive-participants",
+            "name": "Cleanup Inactive Participants",
+            "runtime": "node-18.0",
+            "execute": [],
+            "events": [],
+            "schedule": "*/1 * * * *",
+            "timeout": 30,
+            "enabled": true,
+            "logging": true,
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "scopes": [
+                "documents.read",
+                "documents.write",
+                "databases.read",
+                "databases.write"
+            ],
+            "ignore": [
+                "node_modules",
+                ".git",
+                ".appwrite"
+            ],
+            "path": "appwrite-functions/cleanup-inactive-participants",
+            "specification": "s-1vcpu-512mb"
         }
     ]
 }

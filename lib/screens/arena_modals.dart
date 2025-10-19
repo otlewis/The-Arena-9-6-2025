@@ -1716,18 +1716,23 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
         ),
         const SizedBox(height: 8),
         Text(
-          'Based on scores, ${calculatedWinner.displayName} should win.',
+          _scorecard.hasTiedScores
+              ? 'Based on scores, it\'s a tie and cannot be submitted.'
+              : 'Based on scores, ${calculatedWinner.displayName} should win.',
           style: TextStyle(
             fontSize: 12,
-            color: Colors.grey[600],
+            color: _scorecard.hasTiedScores ? Colors.orange[700] : Colors.grey[600],
+            fontWeight: _scorecard.hasTiedScores ? FontWeight.w600 : FontWeight.normal,
           ),
         ),
         const SizedBox(height: 4),
         Text(
-          'You can change this selection below if you disagree.',
+          _scorecard.hasTiedScores
+              ? 'Please adjust your scoring by at least 1 point to determine a winner.'
+              : 'You can change this selection below if you disagree.',
           style: TextStyle(
             fontSize: 11,
-            color: Colors.grey[500],
+            color: _scorecard.hasTiedScores ? Colors.orange[600] : Colors.grey[500],
             fontStyle: FontStyle.italic,
           ),
         ),
@@ -1738,11 +1743,13 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
   }
 
   Widget _buildWinnerOption(TeamSide side) {
-    final isSelected = _scorecard.winningTeam == side;
+    // When scores are tied, visually show both teams as selected
+    final isTied = _scorecard.hasTiedScores;
+    final isSelected = isTied ? true : _scorecard.winningTeam == side;
     final color = side == TeamSide.affirmative ? Colors.green : ArenaModalColors.scarletRed;
 
     return GestureDetector(
-      onTap: () {
+      onTap: isTied ? null : () {
         setState(() {
           _scorecard = _scorecard.copyWith(winningTeam: side);
         });
@@ -1820,11 +1827,16 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
   Widget _buildValidationWarnings() {
     final warnings = <String>[];
 
-    if (!_scorecard.isWinnerConsistentWithScores) {
+    // Check for tied scores first - this is a hard blocker
+    if (_scorecard.hasTiedScores && _scorecard.speakerScores.length >= 2) {
+      warnings.add('⚠️ Tied scores detected! Scores cannot be tied. Please adjust your scoring by at least 1 point to determine a winner.');
+    }
+
+    if (!_scorecard.isWinnerConsistentWithScores && !_scorecard.hasTiedScores) {
       warnings.add('Warning: Winner selection does not match score totals.');
     }
 
-    if (!_scorecard.isComplete) {
+    if (!_scorecard.isComplete && !_scorecard.hasTiedScores) {
       warnings.add('Please complete all scores to submit your decision.');
     }
 
@@ -1902,15 +1914,22 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
           ],
           const SizedBox(width: 16),
           Expanded(
-            child: ElevatedButton(
-              onPressed: (_scorecard.isComplete && _hasVisitedDecisionTab)
-                ? () => _showSubmissionConfirmation()
-                : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: ArenaModalColors.accentPurple,
-                foregroundColor: Colors.white,
+            child: Tooltip(
+              message: _scorecard.hasTiedScores
+                ? 'Cannot submit - scores are tied'
+                : !_scorecard.isComplete
+                  ? 'Complete all scores to submit'
+                  : 'Submit your scorecard',
+              child: ElevatedButton(
+                onPressed: (_scorecard.isComplete && _hasVisitedDecisionTab)
+                  ? () => _showSubmissionConfirmation()
+                  : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: ArenaModalColors.accentPurple,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Submit Scorecard'),
               ),
-              child: const Text('Submit Scorecard'),
             ),
           ),
         ],
