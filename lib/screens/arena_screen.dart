@@ -392,6 +392,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   bool _judgingEnabled = true; // Voting is now always open for judges until closed by moderator
   bool _hasCurrentUserSubmittedVote = false;
   bool _resultsModalShown = false; // Track if results modal has been shown
+  bool _showResults = false; // Broadcast flag from n8n workflow to show results to all users
   bool _roomClosingModalShown = false; // Track if room closing modal has been shown
   bool _hasNavigated = false; // Track if we've already navigated to prevent duplicate navigation
   bool _isExiting = false; // Prevent state updates during exit
@@ -979,8 +980,16 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         (response) {
           AppLogger().info('Room status update: ${response.events}');
           // Handle room updates (closure, status changes, etc.)
-          if (response.payload.containsKey('roomId') && response.payload['roomId'] == widget.roomId) {
+          // Check both 'roomId' and '$id' fields since realtime messages use '$id'
+          final roomId = response.payload['roomId'] ?? response.payload['\$id'];
+          if (roomId == widget.roomId) {
             final roomData = response.payload;
+
+            // Reload room data to get ALL updated fields (including showResults)
+            AppLogger().info('🔄 Room update detected - reloading room data to capture all changes');
+            _loadRoomData();
+
+            // Also check for room closure
             if (roomData['status'] == 'ended' || roomData['status'] == 'closed') {
               AppLogger().info('🔴 Room ended/closed detected via realtime');
               if (mounted && !_hasNavigated) {
@@ -2164,18 +2173,36 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         }
         
         // Extract winner and judging status from room data
+        // DEBUG: Log raw room data to see what fields are actually present
+        AppLogger().debug('🔍 RAW ROOM DATA KEYS: ${roomData.keys.toList()}');
+        AppLogger().debug('🔍 showResults IN DATA: ${roomData.containsKey('showResults')}');
+        if (roomData.containsKey('showResults')) {
+          AppLogger().debug('🔍 showResults RAW VALUE: ${roomData['showResults']}');
+          AppLogger().debug('🔍 showResults TYPE: ${roomData['showResults'].runtimeType}');
+        }
+
         final newWinner = roomData['winner'];
         final newJudgingComplete = roomData['judgingComplete'] ?? false;
         final newJudgingEnabled = roomData['judgingEnabled'] ?? true;
         final newTeamSize = roomData['teamSize'] ?? 1; // Default to 1v1 if not specified
-        
+        final newShowResults = roomData['showResults'] ?? false;
+
         // Update state with setState to trigger UI rebuild
         if (mounted) {
           // Log if judging state changed
           if (_judgingEnabled != newJudgingEnabled) {
             AppLogger().info('🎯 JUDGING STATE CHANGED: $_judgingEnabled -> $newJudgingEnabled (realtime update)');
           }
-          
+
+          // Log if showResults changed (n8n broadcast)
+          if (_showResults != newShowResults) {
+            AppLogger().info('🏆 SHOW RESULTS BROADCAST RECEIVED!');
+            AppLogger().info('  Previous: showResults=$_showResults');
+            AppLogger().info('  New: showResults=$newShowResults');
+            AppLogger().info('  Winner: $newWinner');
+            AppLogger().info('  Trophy icon should ${newShowResults && newWinner != null ? "APPEAR" : "HIDE"}');
+          }
+
           // Check if judging just completed (winner was determined)
           final judgingJustCompleted = !_judgingComplete && newJudgingComplete && newWinner != null;
 
@@ -2190,16 +2217,18 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             _judgingComplete = newJudgingComplete;
             _judgingEnabled = newJudgingEnabled;
             _teamSize = newTeamSize;
+            _showResults = newShowResults;
           });
 
           // Show results modal to ALL users when voting is closed and winner is determined
-          if (judgingJustCompleted) {
-            AppLogger().info('🏆 REALTIME: Voting just completed with winner: $newWinner - showing results modal to all users (Role: $_userRole, Modal shown: $_resultsModalShown)');
+          if (judgingJustCompleted && !_resultsModalShown) {
+            AppLogger().info('🏆 REALTIME: Voting just completed with winner: $newWinner - auto-showing results modal to all users (Role: $_userRole)');
 
-            // Force show modal for all users regardless of flag to ensure it shows
+            // Auto-show modal for all users once
+            _resultsModalShown = true;
             Future.delayed(const Duration(milliseconds: 500), () {
               if (mounted) {
-                AppLogger().info('🏆 SHOWING RESULTS MODAL for user role: $_userRole');
+                AppLogger().info('🏆 AUTO-SHOWING RESULTS MODAL for user role: $_userRole');
                 _showResultsModal();
               }
             });
@@ -3051,114 +3080,83 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   Future<void> _determineWinnerAndShowResults() async {
     try {
-      AppLogger().debug('🏆 Determining winner and showing results...');
-      
-      // Get all judgments for this room
-      final judgments = await _appwrite.databases.listDocuments(
-        databaseId: 'arena_db',
-        collectionId: 'arena_judgments',
-        queries: [
-          Query.equal('roomId', widget.roomId),
-        ],
-      );
+      AppLogger().info('🎯 MODERATOR: Broadcasting arena results to all users via backend function');
+      AppLogger().info('  - Room ID: ${widget.roomId}');
 
-      if (judgments.documents.isEmpty) {
-        AppLogger().warning('No votes found, cannot determine winner');
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('⚠️ No votes submitted yet'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
+      // Verify we have a valid user session
+      final currentUser = await _appwrite.getCurrentUser();
+      if (currentUser == null) {
+        throw Exception('No user session found');
       }
+      AppLogger().info('✅ User session verified: ${currentUser.name}');
 
-      // Count votes and calculate scores (supports both old votes and new scorecards)
-      int affirmativeVotes = 0;
-      int negativeVotes = 0;
-      int totalAffirmativeScore = 0;
-      int totalNegativeScore = 0;
-      List<Map<String, dynamic>> scorecardDetails = [];
-      
-      for (var judgment in judgments.documents) {
-        final winner = judgment.data['winner'];
-        final affirmativeTotal = judgment.data['affirmativeTotal'] ?? 0;
-        final negativeTotal = judgment.data['negativeTotal'] ?? 0;
-        final judgeName = judgment.data['judgeName'] ?? 'Unknown Judge';
-        
-        // Count votes (compatible with old and new systems)
-        if (winner == 'affirmative') {
-          affirmativeVotes++;
-        } else if (winner == 'negative') {
-          negativeVotes++;
-        }
-        
-        // Accumulate scores for new scorecard system
-        totalAffirmativeScore += (affirmativeTotal as num).toInt();
-        totalNegativeScore += (negativeTotal as num).toInt();
-        
-        // Store detailed scorecard info for display
-        scorecardDetails.add({
-          'judgeName': judgeName,
-          'winner': winner,
-          'affirmativeScore': affirmativeTotal,
-          'negativeScore': negativeTotal,
-          'reasoning': judgment.data['reasonForDecision'] ?? '',
-        });
-      }
-      
-      // Determine winner (now with both vote count and score totals)
-      String winner;
-      if (affirmativeVotes > negativeVotes) {
-        winner = 'affirmative';
-      } else if (negativeVotes > affirmativeVotes) {
-        winner = 'negative';
-      } else if (totalAffirmativeScore > totalNegativeScore) {
-        // Use total scores as tiebreaker
-        winner = 'affirmative';
-      } else if (totalNegativeScore > totalAffirmativeScore) {
-        winner = 'negative';
-      } else {
-        winner = 'tie';
-      }
-      
-      AppLogger().debug('🏆 Winner determined: $winner');
-      AppLogger().debug('📊 Vote breakdown - Affirmative: $affirmativeVotes votes ($totalAffirmativeScore points), Negative: $negativeVotes votes ($totalNegativeScore points)');
-      
-      // Update room with winner and mark judging as complete
-      await _appwrite.databases.updateDocument(
-        databaseId: 'arena_db',
-        collectionId: 'arena_rooms',
-        documentId: widget.roomId,
-        data: {
-          'winner': winner,
-          'judgingComplete': true,
-          'judgingEnabled': false,
+      // Call backend Appwrite Function to broadcast results
+      // This ensures reliable server-side winner calculation and broadcast to ALL users
+      AppLogger().info('📞 Calling broadcast-arena-results-v3 function...');
+      final result = await _appwrite.functions.createExecution(
+        functionId: 'broadcast-arena-results-v3',
+        body: jsonEncode({
+          'roomId': widget.roomId,
+        }),
+        xasync: false, // Wait for response
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw Exception('Function execution timed out');
         },
       );
-      
-      // Update local state
-      setState(() {
-        _winner = winner;
-        _judgingComplete = true;
-        _judgingEnabled = false;
-      });
-      
-      // Show results modal after a short delay
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted && !_resultsModalShown) {
-          _showResultsModal();
+      AppLogger().info('✅ Function execution completed');
+      AppLogger().info('📄 Response status: ${result.responseStatusCode}');
+      AppLogger().info('📄 Response body: ${result.responseBody}');
+
+      // Parse response
+      final responseBody = jsonDecode(result.responseBody);
+      AppLogger().info('📄 Parsed response: $responseBody');
+
+      if (responseBody['success'] == true) {
+        final winner = responseBody['winner'];
+        final affirmativeVotes = responseBody['affirmativeVotes'];
+        final negativeVotes = responseBody['negativeVotes'];
+        final totalAffirmativeScore = responseBody['totalAffirmativeScore'];
+        final totalNegativeScore = responseBody['totalNegativeScore'];
+
+        AppLogger().info('✅ Results broadcast successfully!');
+        AppLogger().info('  - Winner: $winner');
+        AppLogger().info('  - Affirmative: $affirmativeVotes votes ($totalAffirmativeScore points)');
+        AppLogger().info('  - Negative: $negativeVotes votes ($totalNegativeScore points)');
+        AppLogger().info('  - ALL users will now see trophy icon!');
+
+        // Update local state (realtime will update too, but update immediately for responsiveness)
+        if (mounted) {
+          setState(() {
+            _winner = winner;
+            _judgingComplete = true;
+            _judgingEnabled = false;
+            _showResults = true;
+          });
+
+          // Show results modal after a short delay (auto-show once for moderator)
+          if (!_resultsModalShown) {
+            _resultsModalShown = true;
+            Future.delayed(const Duration(milliseconds: 500), () {
+              if (mounted) {
+                _showResultsModal();
+              }
+            });
+          }
         }
-      });
-      
+      } else {
+        throw Exception(responseBody['error'] ?? 'Unknown error from backend');
+      }
+
     } catch (e) {
-      AppLogger().error('Error determining winner: $e');
+      AppLogger().error('❌ Error broadcasting results: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('❌ Error calculating results: $e'),
+          content: Text('❌ Error broadcasting results: $e'),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
         ),
       );
     }
@@ -3431,9 +3429,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               _isExiting = true;
               
               AppLogger().debug('🚪 Starting exit process...');
-              
-              // If moderator is leaving, close the entire room
-              if (_isModerator) {
+
+              // Only close room if ACTUAL room moderator is leaving (not super moderator)
+              if (_userRole == 'moderator') {
                 await _handleModeratorExit();
               } else {
                 await _handleParticipantExit();
@@ -5084,15 +5082,23 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               }),
 
 
-              // View Results button (when judging is complete)
-              if (_judgingComplete && _winner != null)
+              // Trophy Results button (when judging is complete OR showResults broadcast received)
+              if ((_judgingComplete || _showResults) && _winner != null)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: _buildControlButton(
-                    icon: Icons.emoji_events,
-                    label: 'View Results',
-                    onPressed: _showResultsModal,
-                    color: Colors.amber,
+                  child: Builder(
+                    builder: (context) {
+                      AppLogger().info('🏆 TROPHY ICON RENDERING!');
+                      AppLogger().info('  showResults: $_showResults');
+                      AppLogger().info('  judgingComplete: $_judgingComplete');
+                      AppLogger().info('  winner: $_winner');
+                      return _buildControlButton(
+                        icon: Icons.emoji_events,
+                        label: 'Results',
+                        onPressed: _showResultsModal,
+                        color: Colors.amber.shade700,
+                      );
+                    }
                   ),
                 ),
 
@@ -5490,14 +5496,14 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       );
       
       AppLogger().info('📊 Scorecard saved to database successfully');
-      
+
       // Update local state
       setState(() {
         _hasCurrentUserSubmittedVote = true;
       });
-      
+
       // NOTE: Don't call Navigator.pop() here - the JudgingPanel already handles closing itself
-      
+
       // Show confirmation
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -5507,7 +5513,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           ),
         );
       }
-      
+
       // Send realtime update to other participants
       try {
         await _appwrite.databases.updateDocument(
@@ -6409,14 +6415,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   void _showResultsModal() async {
-    AppLogger().info('🏆 _showResultsModal called - Modal already shown: $_resultsModalShown, User role: $_userRole');
-
-    if (_resultsModalShown) {
-      AppLogger().warning('🏆 Results modal already shown, skipping...');
-      return;
-    }
-
-    _resultsModalShown = true;
+    AppLogger().info('🏆 _showResultsModal called - User role: $_userRole');
     
     // Get detailed voting results
     try {
@@ -6813,17 +6812,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Choose how to end this room:',
+                'Are you sure you want to close this room?',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
               ),
               SizedBox(height: 12),
               Text(
-                '🎬 Complete Room: Creates a playback recording that users can watch later in Arena Playbacks.',
-                style: TextStyle(fontSize: 13),
-              ),
-              SizedBox(height: 8),
-              Text(
-                '🗑️ Close Room: Permanently deletes the room without saving any recording.',
+                'This will permanently close the room for all participants.',
                 style: TextStyle(fontSize: 13),
               ),
             ],
@@ -6837,22 +6831,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           TextButton(
             onPressed: () {
               Navigator.pop(context); // Close dialog
-              _executeRoomCompletion();
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.blue,
-            ),
-            child: const Text('🎬 Complete Room'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Close dialog
               _executeEmergencyClose();
             },
             style: TextButton.styleFrom(
               foregroundColor: Colors.red,
             ),
-            child: const Text('🗑️ Close Room'),
+            child: const Text('Close Room'),
           ),
         ],
       ),
@@ -6957,6 +6941,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
+  // Reserved for future playback recording feature
+  // ignore: unused_element
   void _executeRoomCompletion() async {
     try {
       AppLogger().info('🎬 Room completion initiated by moderator');
@@ -7295,26 +7281,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
-  IconData _getRoleIcon(String role) {
-    switch (role) {
-      case 'affirmative':
-      case 'affirmative2':
-        return Icons.thumb_up;
-      case 'negative':
-      case 'negative2':
-        return Icons.thumb_down;
-      case 'moderator':
-        return Icons.admin_panel_settings;
-      case 'judge1':
-      case 'judge2':
-      case 'judge3':
-        return Icons.balance;
-      case 'audience':
-        return Icons.people;
-      default:
-        return Icons.person;
-    }
-  }
 
   /// Handle arena participant updates using optimized approach
   Future<void> _handleArenaParticipantUpdate(RealtimeMessage response) async {

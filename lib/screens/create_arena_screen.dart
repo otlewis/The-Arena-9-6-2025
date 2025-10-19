@@ -26,7 +26,6 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
   String? _currentUserId;
   bool _isCreating = false;
   DateTime? _lastCreateAttempt;
-  bool _enablePlayback = false; // Playback recording toggle
   
   // Moderator/Judge selection
   DebateCategory _selectedCategory = DebateCategory.any;
@@ -200,7 +199,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
         creatorId: _currentUserId!,
         topic: topic,
         description: description.isNotEmpty ? description : null,
-        enablePlayback: _enablePlayback,
+        enablePlayback: false, // Playback disabled
       );
 
       AppLogger().info('Successfully created arena room: $roomId');
@@ -419,7 +418,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: accentPurple.withValues(alpha: 0.3),
+            color: accentPurple.withOpacity(0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -460,7 +459,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -569,64 +568,6 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
             ),
 
             const SizedBox(height: 24),
-
-            // Playback Toggle
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: accentPurple.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: accentPurple.withValues(alpha: 0.2),
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.play_circle_outline,
-                    color: accentPurple,
-                    size: 28,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Enable Playback',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: deepPurple,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Record this debate for later viewing. Others can join the playback room to experience it like they were there.',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Switch(
-                    value: _enablePlayback,
-                    onChanged: _isCreating ? null : (value) {
-                      setState(() {
-                        _enablePlayback = value;
-                      });
-                    },
-                    activeColor: accentPurple,
-                    activeTrackColor: accentPurple.withValues(alpha: 0.3),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
@@ -640,7 +581,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: accentPurple.withValues(alpha: 0.3),
+            color: accentPurple.withOpacity(0.3),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -698,7 +639,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -779,7 +720,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
                     });
                     _loadModeratorsAndJudges();
                   },
-                  selectedColor: accentPurple.withValues(alpha: 0.2),
+                  selectedColor: accentPurple.withOpacity(0.2),
                   checkmarkColor: accentPurple,
                   labelStyle: TextStyle(
                     color: isSelected ? accentPurple : Colors.grey[700],
@@ -1110,7 +1051,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -1172,7 +1113,7 @@ class _CreateArenaScreenState extends ConsumerState<CreateArenaScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.2)),
+        side: BorderSide(color: scarletRed.withOpacity(0.2)),
       ),
       child: InkWell(
         onTap: () => _joinArenaAsAudience(roomId, challengeId, topic),

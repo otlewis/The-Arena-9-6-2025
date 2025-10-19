@@ -937,6 +937,7 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
   late JudgeScorecard _scorecard;
   final PageController _pageController = PageController();
   int _currentSpeakerIndex = 0;
+  bool _hasVisitedDecisionTab = false; // Track if judge has viewed the Decision tab
 
   @override
   void initState() {
@@ -947,6 +948,13 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
   }
 
   void _onTabChanged() {
+    // Check if user switched to Decision tab (index 1)
+    if (_tabController.index == 1 && !_hasVisitedDecisionTab) {
+      setState(() {
+        _hasVisitedDecisionTab = true;
+      });
+    }
+
     // Force rebuild when switching tabs to update auto-selected winner
     if (mounted) {
       setState(() {
@@ -1895,7 +1903,7 @@ class _JudgingPanelState extends State<JudgingPanel> with TickerProviderStateMix
           const SizedBox(width: 16),
           Expanded(
             child: ElevatedButton(
-              onPressed: _scorecard.isComplete 
+              onPressed: (_scorecard.isComplete && _hasVisitedDecisionTab)
                 ? () => _showSubmissionConfirmation()
                 : null,
               style: ElevatedButton.styleFrom(

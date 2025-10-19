@@ -1674,7 +1674,6 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
   bool _isCustomCategory = false;
   bool _isScheduled = false;
   bool _isPrivate = false;
-  bool _enablePlayback = false;
   DateTime? _scheduledTime;
 
   // Categories
@@ -2046,18 +2045,6 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
                       activeColor: accentPurple,
                     ),
 
-                    CheckboxListTile(
-                      title: const Text('Enable Playback'),
-                      subtitle: const Text('Record this debate for later viewing'),
-                      value: _enablePlayback,
-                      onChanged: (value) {
-                        setState(() {
-                          _enablePlayback = value ?? false;
-                        });
-                      },
-                      activeColor: accentPurple,
-                    ),
-
                     if (_isPrivate) ...[
                       const SizedBox(height: 8),
                       TextFormField(
@@ -2280,7 +2267,7 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
         'scheduledTime': _scheduledTime,
         'isPrivate': _isPrivate,
         'password': _isPrivate ? _passwordController.text.trim() : null,
-        'enablePlayback': _enablePlayback,
+        'enablePlayback': false, // Playback disabled
       });
     }
   }

@@ -159,7 +159,9 @@ class RoomRealtimeManager {
           participantUpdates.add(message);
         } else if (event.contains('chat_messages')) {
           chatUpdates.add(message);
-        } else if (event.contains('rooms.documents.$roomId')) {
+        } else if (event.contains('arena_rooms.documents.$roomId') ||
+                   event.contains('debate_discussion_rooms.documents.$roomId') ||
+                   event.contains('discussion_rooms.documents.$roomId')) {
           roomUpdates.add(message);
         } else if (event.contains('hand_raises')) {
           handRaiseUpdates.add(message);
