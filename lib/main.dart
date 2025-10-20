@@ -574,19 +574,116 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
       }
     });
     
-    // Listen for challenge updates (accepted challenges)
+    // Listen for arena navigation notifications (backend-driven navigation)
+    _setupArenaNavigationListener();
+
+    // Keep challenge updates listener as fallback
     _messagingService.challengeUpdates.listen((challenge) {
-      AppLogger().debug('📱 Challenge update: ${challenge.status}');
-      
+      AppLogger().info('📱 🔔 Challenge update received (fallback): status=${challenge.status}, arenaRoomId=${challenge.arenaRoomId}, challengeId=${challenge.id}');
+
       if (challenge.status == 'accepted' && challenge.arenaRoomId != null) {
+        AppLogger().info('📱 ✅ Accepted challenge with arena room - preparing to navigate (fallback)...');
         if (mounted) {
           // Navigate to arena room
           _navigateToArena(challenge.toModalFormat());
+        } else {
+          AppLogger().warning('📱 ⚠️ Cannot navigate - widget not mounted');
+        }
+      } else {
+        if (challenge.status == 'accepted') {
+          AppLogger().warning('📱 ⚠️ Challenge accepted but arenaRoomId is null!');
         }
       }
     });
-    
+
     AppLogger().debug('📱 ✅ UI message stream listening setup complete');
+  }
+
+  void _setupArenaNavigationListener() async {
+    try {
+      final appwriteService = getIt<AppwriteService>();
+      final user = await appwriteService.account.get();
+      final userId = user.$id;
+
+      AppLogger().info('🎯 Setting up arena navigation listener for user: $userId');
+
+      final subscription = getIt<AppwriteService>().realtime.subscribe([
+        'databases.arena_db.collections.arena_navigation_notifications.documents'
+      ]);
+
+      subscription.stream.listen((response) {
+        try {
+          final notification = response.payload;
+
+          AppLogger().debug('🎯 Navigation notification event: ${response.events.join(", ")}');
+
+          // Only process create events
+          if (!response.events.any((e) => e.contains('create'))) {
+            return;
+          }
+
+          // Only process notifications for current user
+          if (notification['userId'] != userId) {
+            AppLogger().debug('🎯 Skipping notification for different user: ${notification['userId']}');
+            return;
+          }
+
+          // Only process pending notifications
+          if (notification['status'] != 'pending') {
+            AppLogger().debug('🎯 Skipping non-pending notification: ${notification['status']}');
+            return;
+          }
+
+          final type = notification['type'];
+          final arenaRoomId = notification['arenaRoomId'];
+          final notificationId = notification['\$id'];
+
+          AppLogger().info('🎯 ✅ Navigation notification received: type=$type, arenaRoomId=$arenaRoomId');
+
+          if (type == 'arena_ready' && arenaRoomId != null) {
+            // Mark as processed first
+            _markNotificationProcessed(notificationId);
+
+            // Navigate to arena
+            if (mounted) {
+              _navigateToArena({
+                'arenaRoomId': arenaRoomId,
+                'id': notification['challengeId'],
+                'topic': notification['topic'] ?? 'Debate',
+                'description': notification['description'] ?? '',
+                'challengerId': notification['challengerId'],
+                'challengedId': notification['challengedId'],
+              });
+            } else {
+              AppLogger().warning('🎯 ⚠️ Cannot navigate - widget not mounted');
+            }
+          }
+        } catch (e) {
+          AppLogger().error('🎯 ❌ Error processing navigation notification: $e');
+        }
+      });
+
+      AppLogger().info('🎯 ✅ Arena navigation listener setup complete');
+    } catch (e) {
+      AppLogger().error('🎯 ❌ Error setting up navigation listener: $e');
+    }
+  }
+
+  Future<void> _markNotificationProcessed(String notificationId) async {
+    try {
+      await getIt<AppwriteService>().databases.updateDocument(
+        databaseId: 'arena_db',
+        collectionId: 'arena_navigation_notifications',
+        documentId: notificationId,
+        data: {
+          'status': 'processed',
+          'processedAt': DateTime.now().toIso8601String(),
+        },
+      );
+      AppLogger().debug('🎯 ✅ Notification marked as processed: $notificationId');
+    } catch (e) {
+      AppLogger().error('🎯 ❌ Failed to mark notification as processed: $e');
+    }
   }
 
   void _navigateToArena(Map<String, dynamic> challenge) async {
@@ -811,15 +908,15 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
         boxShadow: [
           BoxShadow(
             color: themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(0, -4),
             blurRadius: 12,
           ),
           BoxShadow(
             color: themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.6)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.6)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(0, 4),
             blurRadius: 12,
           ),
@@ -893,31 +990,31 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
         boxShadow: isSelected ? [
           BoxShadow(
             color: themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.05)
-                : Colors.white.withValues(alpha: 0.9),
+                ? Colors.white.withOpacity(0.05)
+                : Colors.white.withOpacity(0.9),
             offset: const Offset(-3, -3),
             blurRadius: 6,
           ),
           BoxShadow(
             color: themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.6)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.4),
+                ? Colors.black.withOpacity(0.6)
+                : const Color(0xFFA3B1C6).withOpacity(0.4),
             offset: const Offset(3, 3),
             blurRadius: 6,
           ),
         ] : [
           BoxShadow(
             color: themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.4)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                ? Colors.black.withOpacity(0.4)
+                : const Color(0xFFA3B1C6).withOpacity(0.3),
             offset: const Offset(2, 2),
             blurRadius: 4,
             spreadRadius: -1,
           ),
           BoxShadow(
             color: themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.02)
-                : Colors.white.withValues(alpha: 0.7),
+                ? Colors.white.withOpacity(0.02)
+                : Colors.white.withOpacity(0.7),
             offset: const Offset(-2, -2),
             blurRadius: 4,
             spreadRadius: -1,
@@ -945,7 +1042,7 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFFF2400).withValues(alpha: 0.4),
+                      color: const Color(0xFFFF2400).withOpacity(0.4),
                       blurRadius: 4,
                       offset: const Offset(1, 1),
                     ),

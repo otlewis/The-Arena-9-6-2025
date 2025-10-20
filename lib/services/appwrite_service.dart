@@ -3326,7 +3326,6 @@ class AppwriteService {
           'userId': userId,
           'role': finalRole,
           'assignedAt': DateTime.now().toIso8601String(),
-          'lastSeen': DateTime.now().toIso8601String(),
           'isActive': true,
         },
       );

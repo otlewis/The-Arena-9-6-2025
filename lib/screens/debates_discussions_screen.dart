@@ -8,6 +8,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:appwrite/appwrite.dart';
 import '../services/appwrite_service.dart';
 import '../services/dd_role_assignment_service.dart';
+import '../services/debate_voting_service.dart';
 import '../services/firebase_gift_service.dart';
 import '../widgets/simple_gift_bottom_sheet.dart';
 import '../services/livekit_service.dart';
@@ -21,6 +22,7 @@ import '../models/gift.dart';
 import '../features/arena/constants/arena_colors.dart';
 import '../widgets/animated_fade_in.dart';
 import '../widgets/user_profile_bottom_sheet.dart';
+import '../widgets/debate_voting_modal.dart';
 import '../widgets/challenge_bell.dart';
 import '../widgets/mattermost_chat_widget.dart';
 import '../widgets/real_time_coin_balance.dart';
@@ -131,6 +133,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   final FirebaseGiftService _giftService = FirebaseGiftService();
   final LiveKitService _webrtcService = LiveKitService();
   late final DDRoleAssignmentService _roleAssignmentService;
+  DebateVotingService? _votingService;
   
   // Performance optimization instances
   final RiverpodPerformanceOptimizer _performanceOptimizer = RiverpodPerformanceOptimizer();
@@ -181,6 +184,15 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
   // Avatar emoji overlays (userId -> emoji)
   final Map<String, String> _avatarEmojiOverlays = {};
+
+  // Gift sender indicators (userId -> bool) - shows gift icon on sender's avatar
+  final Map<String, bool> _avatarGiftIndicators = {};
+
+  // Receiver reaction animations (userId -> emoji) - shows emoji that explodes into confetti
+  final Map<String, String> _receiverReactionAnimations = {};
+
+  // Debate winners (userId -> true) - shows gold border on winner avatars
+  final Set<String> _debateWinners = {};
 
   // Participants
   final List<UserProfile> _speakerPanelists = []; // Max 6 speakers
@@ -237,6 +249,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   bool _isCurrentUserTimedOut = false;
   bool _hasRequestedSpeaker = false;
   bool _isDisposing = false;
+
+  // Voting state
+  VotingSession? _currentVotingSession;
+  int _currentVoteCount = 0;
+  VoteSide? _userCurrentVote;
+  StreamSubscription? _votingSessionSubscription;
+  StreamSubscription? _voteCountSubscription;
   
   // Video conference state removed - audio-only mode
   // Future update will restore video functionality
@@ -290,6 +309,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     // Initialize role assignment service
     _roleAssignmentService = DDRoleAssignmentService(
       functions: _appwrite.functions,
+      databases: _appwrite.databases,
+      realtime: _appwrite.realtime,
+    );
+
+    _votingService = DebateVotingService(
       databases: _appwrite.databases,
       realtime: _appwrite.realtime,
     );
@@ -1133,10 +1157,15 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         
         AppLogger().debug('✅ Room data loaded: ${roomData['name']}');
         AppLogger().info('📊 ROOM DATA LOADED - Room style: ${roomData['debateStyle']}');
-        
+
         // Initialize materials service now that we have room data
         AppLogger().info('📊 ROOM DATA LOADED - Attempting to initialize materials service');
         _initializeMaterialsService();
+
+        // Load voting session if this is a Debate room
+        if (roomData['debateStyle'] == 'Debate') {
+          _loadVotingSession();
+        }
       }
     } catch (e) {
       AppLogger().error('❌ Error loading room data: $e');
@@ -1750,15 +1779,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
               ],
             )
           : Center(
-              child: CircleAvatar(
+              child: _buildAvatarWithGiftIndicator(
+                participant: participant,
                 radius: isModerator ? 32 : 24,
-                backgroundColor: const Color(0xFF8B5CF6),
-                backgroundImage: participant.avatar != null && participant.avatar!.isNotEmpty
-                    ? NetworkImage(participant.avatar!)
-                    : null,
-                child: participant.avatar == null || participant.avatar!.isEmpty
-                    ? _buildAvatarText(participant, isModerator ? 18 : 14)
-                    : null,
+                isModerator: isModerator,
               ),
             ),
       ),
@@ -1875,6 +1899,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     _handRaiseStreamListener?.cancel();
     _timerStreamListener?.cancel();
     _materialStreamListener?.cancel();
+
+    // Voting subscriptions
+    _votingSessionSubscription?.cancel();
+    _voteCountSubscription?.cancel();
 
     // Legacy subscriptions
     _unreadMessagesSubscription?.cancel();
@@ -2210,6 +2238,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         
         // Add final operation to update all lists at once
         operations.add(() {
+          // Sort speakers by ID to maintain consistent ordering across updates
+          // This prevents random slot switching when participant list is refreshed
+          newSpeakers.sort((a, b) => a.id.compareTo(b.id));
+
           _speakerPanelists.addAll(newSpeakers);
           _audienceMembers.addAll(newAudience);
           _speakerRequests.addAll(newRequests);
@@ -2287,28 +2319,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         AppLogger().info('🎤 ROLE DEBUG: Current user database role: $currentUserRole');
         AppLogger().info('🎤 ROLE DEBUG: Current user in speaker panel: ${_speakerPanelists.any((s) => s.id == _currentUser!.id)}');
 
-        // CHECK: If current user is not in participants list, they were kicked/banned
-        if (currentUserRole == 'not found' && mounted && !_isDisposing) {
-          AppLogger().warning('🚪 Current user not found in participants - was removed (kicked/banned) - navigating to home screen');
-
-          // Clean up LiveKit connection before navigating
-          try {
-            await _liveKitService.disconnect();
-          } catch (e) {
-            AppLogger().error('Error disconnecting LiveKit after kick: $e');
-          }
-
-          // Show modal with kick/ban details
-          await _showRemovalModal();
-
-          // Navigate to home screen
-          if (mounted && !_isDisposing) {
-            Navigator.of(context).popUntil((route) => route.isFirst);
-          }
-
-          // Return early - don't continue with audio connection
-          return;
-        }
+        // REMOVED: Overly aggressive kick detection that caused false positives
+        // Kick detection is properly handled via the participant diff system in _applyParticipantDiff()
+        // where we check if the current user's ID is in diff.removedIds (lines 2627-2649)
       }
       
       // AUTO-CONNECT: Automatically connect to audio for all users
@@ -2464,11 +2477,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     try {
       // Extract update information
       String updateType = 'unknown';
-      if (response.events.any((e) => e.endsWith('.create'))) {
+      if (response.events.any((dynamic e) => e.toString().endsWith('.create'))) {
         updateType = 'create';
-      } else if (response.events.any((e) => e.endsWith('.delete'))) {
+      } else if (response.events.any((dynamic e) => e.toString().endsWith('.delete'))) {
         updateType = 'delete';
-      } else if (response.events.any((e) => e.endsWith('.update'))) {
+      } else if (response.events.any((dynamic e) => e.toString().endsWith('.update'))) {
         updateType = 'update';
       }
 
@@ -2499,6 +2512,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         currentParticipants: currentParticipants,
         updatePayload: response.payload,
         updateType: updateType,
+        currentRoles: _participantRoles, // Pass actual role mappings
       );
 
       if (diff.hasChanges) {
@@ -4413,7 +4427,44 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
               ),
             ),
           ],
+          if (_hasModeratorPowers && _votingService != null && _roomData?['debateStyle'] == 'Debate') ...[
+            // Voting button (only for moderators in Debate rooms)
+            SizedBox(width: isSmallScreen ? 8 : 16),
+            GestureDetector(
+              key: const ValueKey('debates_voting_button'),
+              onTap: _handleVotingButtonTap,
+              child: Container(
+                padding: EdgeInsets.all(isSmallScreen ? 6 : 8),
+                decoration: BoxDecoration(
+                  color: _getVotingButtonColor().withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      LucideIcons.scale,  // Gavel/scale icon
+                      color: _getVotingButtonColor(),
+                      size: isSmallScreen ? 16 : 20,
+                    ),
+                    if (_currentVotingSession?.status == VotingStatus.open && _currentVoteCount > 0) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        '$_currentVoteCount',
+                        style: TextStyle(
+                          color: _getVotingButtonColor(),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
           if (_hasModeratorPowers) ...[
+            // Moderator tools button (for all room types)
             SizedBox(width: isSmallScreen ? 8 : 16),
             GestureDetector(
                   key: const ValueKey('debates_moderator_tools'),
@@ -4717,13 +4768,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   /// Helper function to create avatar text content - just first letter
   Widget _buildAvatarText(UserProfile participant, double fontSize) {
     String letter;
-    
+
     if (participant.name.isEmpty) {
       letter = participant.email.isNotEmpty ? participant.email.substring(0, 1).toUpperCase() : 'U';
     } else {
       letter = participant.name.substring(0, 1).toUpperCase();
     }
-    
+
     return Center(
       child: Text(
         letter,
@@ -4734,6 +4785,130 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         ),
         textAlign: TextAlign.center,
       ),
+    );
+  }
+
+  /// Build avatar with optional gift indicator and reaction animations
+  Widget _buildAvatarWithGiftIndicator({
+    required UserProfile participant,
+    required double radius,
+    double? fontSize,
+    bool isModerator = false,
+  }) {
+    final hasGiftIndicator = _avatarGiftIndicators[participant.id] == true;
+    final receiverEmoji = _receiverReactionAnimations[participant.id];
+    final isWinner = _debateWinners.contains(participant.id);
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // Gold border for winners
+        if (isWinner)
+          Container(
+            width: (radius + 4) * 2,
+            height: (radius + 4) * 2,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFFD700).withOpacity(0.5),
+                  blurRadius: 12,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+          ),
+        // Avatar
+        Container(
+          width: radius * 2,
+          height: radius * 2,
+          decoration: isWinner
+              ? BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFF1E1E1E),
+                    width: 3,
+                  ),
+                )
+              : null,
+          child: CircleAvatar(
+            radius: radius,
+            backgroundColor: const Color(0xFF8B5CF6),
+            backgroundImage: participant.avatar != null && participant.avatar!.isNotEmpty
+                ? NetworkImage(participant.avatar!)
+                : null,
+            child: participant.avatar == null || participant.avatar!.isEmpty
+                ? _buildAvatarText(participant, fontSize ?? (isModerator ? 18 : 14))
+                : null,
+          ),
+        ),
+        // Gift indicator (small gift icon in top-right corner)
+        if (hasGiftIndicator)
+          Positioned(
+            top: -4,
+            right: -4,
+            child: Container(
+              width: radius * 0.5,
+              height: radius * 0.5,
+              decoration: BoxDecoration(
+                color: Colors.pink,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.card_giftcard,
+                  color: Colors.white,
+                  size: radius * 0.35,
+                ),
+              ),
+            ),
+          ),
+        // Receiver reaction animation (emoji that grows and explodes into confetti)
+        if (receiverEmoji != null)
+          Positioned.fill(
+            child: _buildReceiverReactionAnimation(receiverEmoji, radius),
+          ),
+      ],
+    );
+  }
+
+  /// Build the explosion animation for receiver
+  Widget _buildReceiverReactionAnimation(String emoji, double radius) {
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 800),
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        // First half: grow from small to large
+        // Second half: fade out and scatter (confetti effect)
+        final scale = value < 0.5
+            ? value * 4  // Grow quickly (0 -> 2.0 in first half)
+            : 2.0 + (value - 0.5) * 2; // Continue growing slowly
+
+        final opacity = value < 0.6
+            ? 1.0  // Fully visible during growth
+            : 1.0 - ((value - 0.6) / 0.4); // Fade out in last 40%
+
+        return Center(
+          child: Transform.scale(
+            scale: scale,
+            child: Opacity(
+              opacity: opacity,
+              child: Text(
+                emoji,
+                style: TextStyle(
+                  fontSize: radius * 0.6,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -4905,15 +5080,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         borderRadius: BorderRadius.circular(12),
         child: Center(
               // Fallback to avatar when no video
-              child: CircleAvatar(
+              child: _buildAvatarWithGiftIndicator(
+                participant: participant,
                 radius: isModerator ? 32 : 24,
-                backgroundColor: const Color(0xFF8B5CF6),
-                backgroundImage: participant.avatar != null && participant.avatar!.isNotEmpty
-                    ? NetworkImage(participant.avatar!)
-                    : null,
-                child: participant.avatar == null || participant.avatar!.isEmpty
-                    ? _buildAvatarText(participant, isModerator ? 20 : 16)
-                    : null,
+                fontSize: isModerator ? 20 : 16,
+                isModerator: isModerator,
               ),
             ),
       ),
@@ -4954,15 +5125,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           Stack(
             alignment: Alignment.center,
             children: [
-              CircleAvatar(
+              _buildAvatarWithGiftIndicator(
+                participant: member,
                 radius: avatarSize / 2,
-                backgroundColor: const Color(0xFF8B5CF6),
-                backgroundImage: member.avatar != null && member.avatar!.isNotEmpty
-                    ? NetworkImage(member.avatar!)
-                    : null,
-                child: member.avatar == null || member.avatar!.isEmpty
-                    ? _buildAvatarText(member, avatarSize * 0.35)
-                    : null,
+                fontSize: avatarSize * 0.35,
               ),
             ],
           ),
@@ -5064,6 +5230,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                       _buildReactionButton(),
                       const SizedBox(width: 8),
                       _buildGiftButton(),
+                      // Show gavel icon when voting is active
+                      if (_currentVotingSession != null) ...[
+                        const SizedBox(width: 8),
+                        _buildVotingControlButton(),
+                      ],
                       const SizedBox(width: 8),
                       _buildControlButton(
                         icon: _isAudioConnected 
@@ -5174,6 +5345,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                     ),
                     _buildReactionButton(),
                     _buildGiftButton(),
+                    // Show gavel icon when voting is active
+                    if (_currentVotingSession != null)
+                      _buildVotingControlButton(),
                     _buildControlButton(
                       icon: _isAudioConnected
                         ? (_isMuted ? Icons.volume_off : Icons.volume_up)
@@ -5541,6 +5715,316 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       ),
       onTap: onTap,
     );
+  }
+
+  //=============================================================================
+  // VOTING METHODS
+  //=============================================================================
+
+  /// Get button color based on voting status
+  Color _getVotingButtonColor() {
+    if (_currentVotingSession == null) {
+      return Colors.grey; // No session - grey
+    }
+
+    switch (_currentVotingSession!.status) {
+      case VotingStatus.open:
+        return Colors.green; // Voting open - green
+      case VotingStatus.closed:
+        return Colors.amber; // Voting closed - amber (results ready)
+      case VotingStatus.completed:
+        return Colors.blue; // Results shown - blue
+    }
+  }
+
+  /// Handle voting button tap - cycles through states
+  Future<void> _handleVotingButtonTap() async {
+    if (_currentUser == null) return;
+
+    if (_currentVotingSession == null) {
+      // No session - open voting
+      await _openVoting();
+    } else if (_currentVotingSession!.status == VotingStatus.open) {
+      // Voting open - close it
+      await _closeVoting();
+    } else if (_currentVotingSession!.status == VotingStatus.closed) {
+      // Voting closed - show results
+      await _showVotingResults();
+    } else if (_currentVotingSession!.status == VotingStatus.completed) {
+      // Results shown - can view again
+      await _showVotingResults();
+    }
+  }
+
+  /// Open voting session
+  Future<void> _openVoting() async {
+    if (_currentUser == null || _votingService == null) return;
+
+    AppLogger().info('🗳️ Opening voting session');
+
+    final session = await _votingService!.openVoting(
+      roomId: widget.roomId,
+      moderatorId: _currentUser!.id,
+    );
+
+    if (session != null && mounted) {
+      setState(() {
+        _currentVotingSession = session;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Voting opened! Audience can now vote.'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // Subscribe to vote count updates
+      _subscribeToVoteCount();
+
+      // Show voting modal to audience only (not moderators or speakers)
+      if (!_hasModeratorPowers && !_isCurrentUserSpeaker) {
+        _showAudienceVotingModal();
+      }
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Failed to open voting'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Close voting session
+  Future<void> _closeVoting() async {
+    if (_votingService == null) return;
+
+    AppLogger().info('🔒 Closing voting session');
+
+    final success = await _votingService!.closeVoting(roomId: widget.roomId);
+
+    if (success && mounted) {
+      // Refresh session
+      final session = await _votingService!.getCurrentSession(roomId: widget.roomId);
+      setState(() {
+        _currentVotingSession = session;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Voting closed! $_currentVoteCount votes received.'),
+          backgroundColor: Colors.amber,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Failed to close voting'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Show voting results
+  Future<void> _showVotingResults() async {
+    if (_votingService == null) return;
+
+    // Minimum 1 vote required
+    if (_currentVoteCount < 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Need at least 1 vote to show results'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    AppLogger().info('📊 Showing voting results');
+
+    final results = await _votingService!.getResults(roomId: widget.roomId);
+
+    if (results != null && mounted) {
+      // Mark winners with gold borders
+      setState(() {
+        _debateWinners.clear();
+        if (results.winner != null) {
+          // Find all speakers with the winning role
+          final winningRole = results.winner == VoteSide.affirmative ? 'affirmative' : 'negative';
+          for (final speaker in _speakerPanelists) {
+            if (_participantRoles[speaker.id] == winningRole) {
+              _debateWinners.add(speaker.id);
+            }
+          }
+          AppLogger().info('🏆 Winners: ${_debateWinners.length} speakers on $winningRole side');
+        }
+      });
+
+      // Only mark as completed if user is moderator
+      if (_hasModeratorPowers) {
+        await _votingService!.completeVoting(roomId: widget.roomId);
+
+        // Update session status
+        final session = await _votingService!.getCurrentSession(roomId: widget.roomId);
+        setState(() {
+          _currentVotingSession = session;
+        });
+      }
+
+      // Show results modal
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        isScrollControlled: true,
+        builder: (context) => DebateVotingResultsModal(results: results),
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Failed to load results'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Subscribe to vote count updates
+  void _subscribeToVoteCount() {
+    if (_votingService == null) return;
+
+    _voteCountSubscription?.cancel();
+
+    _votingService!.subscribeToVoteCount(widget.roomId).listen((count) {
+      if (mounted) {
+        setState(() {
+          _currentVoteCount = count;
+        });
+      }
+    }).onError((error) {
+      AppLogger().error('Vote count subscription error: $error');
+    });
+  }
+
+  /// Load current voting session on room join
+  Future<void> _loadVotingSession() async {
+    if (_votingService == null) return;
+
+    // Always subscribe to voting session changes, even if there's no active session yet
+    _subscribeToVotingSession();
+
+    final session = await _votingService!.getCurrentSession(roomId: widget.roomId);
+
+    if (session != null && mounted) {
+      setState(() {
+        _currentVotingSession = session;
+      });
+
+      // Load vote count
+      final count = await _votingService!.getVoteCount(roomId: widget.roomId);
+      setState(() {
+        _currentVoteCount = count;
+      });
+
+      // Subscribe to vote count updates
+      _subscribeToVoteCount();
+
+      // Load user's current vote if voting is open
+      if (session.status == VotingStatus.open && _currentUser != null) {
+        final userVote = await _votingService!.getUserVote(
+          roomId: widget.roomId,
+          userId: _currentUser!.id,
+        );
+        setState(() {
+          _userCurrentVote = userVote;
+        });
+
+        // Show voting modal to audience only (not moderators or speakers)
+        if (!_hasModeratorPowers && !_isCurrentUserSpeaker) {
+          _showAudienceVotingModal();
+        }
+      }
+    }
+  }
+
+  /// Show voting modal to audience members only (not moderators or speakers)
+  void _showAudienceVotingModal() {
+    if (_currentUser == null || _votingService == null) return;
+
+    // Don't show voting modal to moderators or speakers/debaters
+    if (_hasModeratorPowers || _isCurrentUserSpeaker) {
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      isDismissible: true,
+      builder: (context) => DebateVotingModal(
+        roomId: widget.roomId,
+        userId: _currentUser!.id,
+        votingService: _votingService!,
+        currentVote: _userCurrentVote,
+        onVoteSubmitted: () {
+          // Reload user's vote after submission
+          if (_votingService != null && _currentUser != null) {
+            _votingService!.getUserVote(
+              roomId: widget.roomId,
+              userId: _currentUser!.id,
+            ).then((vote) {
+              if (mounted) {
+                setState(() {
+                  _userCurrentVote = vote;
+                });
+              }
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  /// Subscribe to voting session changes (for audience members)
+  void _subscribeToVotingSession() {
+    if (_votingService == null) return;
+
+    _votingSessionSubscription?.cancel();
+
+    _votingService!.subscribeToSession(widget.roomId).listen((session) async {
+      if (mounted && !_isDisposing) {
+        final wasOpen = _currentVotingSession?.status == VotingStatus.open;
+        final isNowOpen = session.status == VotingStatus.open;
+
+        setState(() {
+          _currentVotingSession = session;
+        });
+
+        // Load current vote count whenever session changes
+        final count = await _votingService!.getVoteCount(roomId: widget.roomId);
+        if (mounted) {
+          setState(() {
+            _currentVoteCount = count;
+          });
+        }
+
+        // Subscribe to vote count updates if not already subscribed
+        if (_voteCountSubscription == null) {
+          _subscribeToVoteCount();
+        }
+
+        // If voting just opened and user is audience (not moderator or speaker), show modal
+        if (!wasOpen && isNowOpen && !_hasModeratorPowers && !_isCurrentUserSpeaker) {
+          AppLogger().info('🗳️ Voting opened by moderator - showing modal to audience');
+          _showAudienceVotingModal();
+        }
+      }
+    }).onError((error) {
+      AppLogger().error('Voting session subscription error: $error');
+    });
   }
 
   void _showSpeakerManagement() {
@@ -7121,6 +7605,22 @@ To join this debate:
 
               if (reaction.isGift) {
                 AppLogger().info('🎁 Received gift: ${reaction.emoji} (${reaction.giftName}) from ${reaction.senderName} to ${reaction.targetUserId}');
+
+                // Show gift icon on SENDER's avatar
+                if (mounted) {
+                  setState(() {
+                    _avatarGiftIndicators[reaction.senderUserId] = true;
+                  });
+
+                  // Auto-clear gift indicator after 5 seconds
+                  Future.delayed(const Duration(seconds: 5), () {
+                    if (mounted) {
+                      setState(() {
+                        _avatarGiftIndicators.remove(reaction.senderUserId);
+                      });
+                    }
+                  });
+                }
               } else {
                 AppLogger().info('✨ Received reaction: ${reaction.emoji} from ${reaction.senderUserId} to ${reaction.targetUserId}');
 
@@ -7136,6 +7636,22 @@ To join this debate:
                     if (mounted) {
                       setState(() {
                         _avatarEmojiOverlays.remove(reaction.senderUserId);
+                      });
+                    }
+                  });
+                }
+
+                // Show explosion animation on RECEIVER's avatar
+                if (mounted && reaction.targetUserId.isNotEmpty) {
+                  setState(() {
+                    _receiverReactionAnimations[reaction.targetUserId] = reaction.emoji;
+                  });
+
+                  // Auto-clear receiver's animation after 2 seconds (time for explosion)
+                  Future.delayed(const Duration(seconds: 2), () {
+                    if (mounted) {
+                      setState(() {
+                        _receiverReactionAnimations.remove(reaction.targetUserId);
                       });
                     }
                   });
@@ -7296,6 +7812,115 @@ To join this debate:
           color: Colors.white,
           size: 24,
         ),
+      ),
+    );
+  }
+
+  /// Build voting control button - shows when voting is active
+  Widget _buildVotingControlButton() {
+    // Determine color based on voting status
+    Color buttonColor;
+    if (_currentVotingSession == null) {
+      buttonColor = Colors.grey;
+    } else {
+      switch (_currentVotingSession!.status) {
+        case VotingStatus.open:
+          buttonColor = Colors.green;
+          break;
+        case VotingStatus.closed:
+          buttonColor = Colors.amber;
+          break;
+        case VotingStatus.completed:
+          buttonColor = Colors.blue;
+          break;
+      }
+    }
+
+    return GestureDetector(
+      onTap: () {
+        // For moderators: cycle through states
+        if (_hasModeratorPowers) {
+          _handleVotingButtonTap();
+        } else if (_isCurrentUserSpeaker) {
+          // Speakers/debaters can see results when voting is closed (blue gavel)
+          // but cannot vote when voting is open (green gavel)
+          if (_currentVotingSession?.status == VotingStatus.closed ||
+              _currentVotingSession?.status == VotingStatus.completed) {
+            _showVotingResults();
+          } else {
+            // Voting is still open - debaters cannot vote
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('⚠️ Debaters cannot vote'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        } else {
+          // For audience only: show voting modal or results
+          if (_currentVotingSession?.status == VotingStatus.open) {
+            _showAudienceVotingModal();
+          } else if (_currentVotingSession?.status == VotingStatus.closed ||
+                     _currentVotingSession?.status == VotingStatus.completed) {
+            _showVotingResults();
+          }
+        }
+      },
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: buttonColor.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(25),
+              border: Border.all(color: buttonColor, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: buttonColor.withOpacity(0.3),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: Icon(
+              Icons.gavel,
+              color: buttonColor,
+              size: 24,
+            ),
+          ),
+          // Show vote count badge for moderators when voting is open
+          if (_hasModeratorPowers &&
+              _currentVotingSession?.status == VotingStatus.open &&
+              _currentVoteCount > 0)
+            Positioned(
+              top: -4,
+              right: -4,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                constraints: const BoxConstraints(
+                  minWidth: 20,
+                  minHeight: 20,
+                ),
+                child: Text(
+                  '$_currentVoteCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -7752,6 +8377,22 @@ To join this debate:
       );
 
       AppLogger().info('✅ Gift sent to Appwrite: $emoji ($giftName) value=$giftValue to $targetUserId');
+
+      // Show gift indicator on sender's avatar immediately (local feedback)
+      if (mounted) {
+        setState(() {
+          _avatarGiftIndicators[_currentUser!.id] = true;
+        });
+
+        // Auto-clear after 5 seconds
+        Future.delayed(const Duration(seconds: 5), () {
+          if (mounted) {
+            setState(() {
+              _avatarGiftIndicators.remove(_currentUser!.id);
+            });
+          }
+        });
+      }
     } catch (e) {
       AppLogger().error('❌ Error broadcasting gift: $e');
     }
