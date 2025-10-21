@@ -549,7 +549,7 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
             Icon(
               Icons.picture_as_pdf,
               size: 48,
-              color: Colors.grey.withValues(alpha: 0.5),
+              color: Colors.grey.withOpacity(0.5),
             ),
             const SizedBox(height: 12),
             Text(
@@ -617,7 +617,7 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
                         icon: const Icon(Icons.delete_outline),
                         onPressed: _removeSlides,
                         style: IconButton.styleFrom(
-                          backgroundColor: Colors.red.withValues(alpha: 0.8),
+                          backgroundColor: Colors.red.withOpacity(0.8),
                           foregroundColor: Colors.white,
                         ),
                         tooltip: 'Remove Slides',
@@ -627,7 +627,7 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
                       icon: const Icon(Icons.present_to_all),
                       onPressed: _openPresentationMode,
                       style: IconButton.styleFrom(
-                        backgroundColor: Colors.blue.withValues(alpha: 0.8),
+                        backgroundColor: Colors.blue.withOpacity(0.8),
                         foregroundColor: Colors.white,
                       ),
                       tooltip: 'Open Presentation Mode',
@@ -654,7 +654,7 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
             color: theme.cardColor,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
+                color: Colors.black.withOpacity(0.1),
                 blurRadius: 4,
                 offset: const Offset(0, -2),
               ),

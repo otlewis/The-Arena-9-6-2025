@@ -1,0 +1,15 @@
+{
+  "name": "broadcast-arena-results",
+  "version": "1.0.0",
+  "description": "Server-side function to broadcast arena results to all users when voting is closed",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "node-appwrite": "^13.0.0"
+  },
+  "keywords": ["appwrite", "arena", "results", "broadcast"],
+  "author": "Arena Team",
+  "license": "MIT"
+}

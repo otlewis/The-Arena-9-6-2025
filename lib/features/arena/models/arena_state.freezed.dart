@@ -385,6 +385,8 @@ mixin _$ArenaState {
   bool get negativeCompletedSelection => throw _privateConstructorUsedError;
   bool get waitingForOtherDebater => throw _privateConstructorUsedError;
   bool get resultsModalShown => throw _privateConstructorUsedError;
+  bool get showResults =>
+      throw _privateConstructorUsedError; // Broadcast flag from n8n workflow
   bool get roomClosingModalShown => throw _privateConstructorUsedError;
   bool get hasNavigated => throw _privateConstructorUsedError;
   bool get isExiting => throw _privateConstructorUsedError; // User context
@@ -440,6 +442,7 @@ abstract class $ArenaStateCopyWith<$Res> {
       bool negativeCompletedSelection,
       bool waitingForOtherDebater,
       bool resultsModalShown,
+      bool showResults,
       bool roomClosingModalShown,
       bool hasNavigated,
       bool isExiting,
@@ -497,6 +500,7 @@ class _$ArenaStateCopyWithImpl<$Res, $Val extends ArenaState>
     Object? negativeCompletedSelection = null,
     Object? waitingForOtherDebater = null,
     Object? resultsModalShown = null,
+    Object? showResults = null,
     Object? roomClosingModalShown = null,
     Object? hasNavigated = null,
     Object? isExiting = null,
@@ -637,6 +641,10 @@ class _$ArenaStateCopyWithImpl<$Res, $Val extends ArenaState>
           ? _value.resultsModalShown
           : resultsModalShown // ignore: cast_nullable_to_non_nullable
               as bool,
+      showResults: null == showResults
+          ? _value.showResults
+          : showResults // ignore: cast_nullable_to_non_nullable
+              as bool,
       roomClosingModalShown: null == roomClosingModalShown
           ? _value.roomClosingModalShown
           : roomClosingModalShown // ignore: cast_nullable_to_non_nullable
@@ -722,6 +730,7 @@ abstract class _$$ArenaStateImplCopyWith<$Res>
       bool negativeCompletedSelection,
       bool waitingForOtherDebater,
       bool resultsModalShown,
+      bool showResults,
       bool roomClosingModalShown,
       bool hasNavigated,
       bool isExiting,
@@ -777,6 +786,7 @@ class __$$ArenaStateImplCopyWithImpl<$Res>
     Object? negativeCompletedSelection = null,
     Object? waitingForOtherDebater = null,
     Object? resultsModalShown = null,
+    Object? showResults = null,
     Object? roomClosingModalShown = null,
     Object? hasNavigated = null,
     Object? isExiting = null,
@@ -917,6 +927,10 @@ class __$$ArenaStateImplCopyWithImpl<$Res>
           ? _value.resultsModalShown
           : resultsModalShown // ignore: cast_nullable_to_non_nullable
               as bool,
+      showResults: null == showResults
+          ? _value.showResults
+          : showResults // ignore: cast_nullable_to_non_nullable
+              as bool,
       roomClosingModalShown: null == roomClosingModalShown
           ? _value.roomClosingModalShown
           : roomClosingModalShown // ignore: cast_nullable_to_non_nullable
@@ -997,6 +1011,7 @@ class _$ArenaStateImpl extends _ArenaState {
       this.negativeCompletedSelection = false,
       this.waitingForOtherDebater = false,
       this.resultsModalShown = false,
+      this.showResults = false,
       this.roomClosingModalShown = false,
       this.hasNavigated = false,
       this.isExiting = false,
@@ -1132,6 +1147,10 @@ class _$ArenaStateImpl extends _ArenaState {
   final bool resultsModalShown;
   @override
   @JsonKey()
+  final bool showResults;
+// Broadcast flag from n8n workflow
+  @override
+  @JsonKey()
   final bool roomClosingModalShown;
   @override
   @JsonKey()
@@ -1168,7 +1187,7 @@ class _$ArenaStateImpl extends _ArenaState {
 
   @override
   String toString() {
-    return 'ArenaState(roomId: $roomId, topic: $topic, description: $description, category: $category, challengeId: $challengeId, challengerId: $challengerId, challengedId: $challengedId, status: $status, currentPhase: $currentPhase, participants: $participants, audience: $audience, currentSpeaker: $currentSpeaker, remainingSeconds: $remainingSeconds, isTimerRunning: $isTimerRunning, isPaused: $isPaused, hasPlayed30SecWarning: $hasPlayed30SecWarning, speakingEnabled: $speakingEnabled, isRealtimeHealthy: $isRealtimeHealthy, reconnectAttempts: $reconnectAttempts, judgingEnabled: $judgingEnabled, judgingComplete: $judgingComplete, hasCurrentUserSubmittedVote: $hasCurrentUserSubmittedVote, winner: $winner, bothDebatersPresent: $bothDebatersPresent, invitationModalShown: $invitationModalShown, invitationsInProgress: $invitationsInProgress, affirmativeSelections: $affirmativeSelections, negativeSelections: $negativeSelections, affirmativeCompletedSelection: $affirmativeCompletedSelection, negativeCompletedSelection: $negativeCompletedSelection, waitingForOtherDebater: $waitingForOtherDebater, resultsModalShown: $resultsModalShown, roomClosingModalShown: $roomClosingModalShown, hasNavigated: $hasNavigated, isExiting: $isExiting, currentUserId: $currentUserId, userRole: $userRole, roomData: $roomData, startTime: $startTime, endTime: $endTime, isLoading: $isLoading, error: $error)';
+    return 'ArenaState(roomId: $roomId, topic: $topic, description: $description, category: $category, challengeId: $challengeId, challengerId: $challengerId, challengedId: $challengedId, status: $status, currentPhase: $currentPhase, participants: $participants, audience: $audience, currentSpeaker: $currentSpeaker, remainingSeconds: $remainingSeconds, isTimerRunning: $isTimerRunning, isPaused: $isPaused, hasPlayed30SecWarning: $hasPlayed30SecWarning, speakingEnabled: $speakingEnabled, isRealtimeHealthy: $isRealtimeHealthy, reconnectAttempts: $reconnectAttempts, judgingEnabled: $judgingEnabled, judgingComplete: $judgingComplete, hasCurrentUserSubmittedVote: $hasCurrentUserSubmittedVote, winner: $winner, bothDebatersPresent: $bothDebatersPresent, invitationModalShown: $invitationModalShown, invitationsInProgress: $invitationsInProgress, affirmativeSelections: $affirmativeSelections, negativeSelections: $negativeSelections, affirmativeCompletedSelection: $affirmativeCompletedSelection, negativeCompletedSelection: $negativeCompletedSelection, waitingForOtherDebater: $waitingForOtherDebater, resultsModalShown: $resultsModalShown, showResults: $showResults, roomClosingModalShown: $roomClosingModalShown, hasNavigated: $hasNavigated, isExiting: $isExiting, currentUserId: $currentUserId, userRole: $userRole, roomData: $roomData, startTime: $startTime, endTime: $endTime, isLoading: $isLoading, error: $error)';
   }
 
   @override
@@ -1239,6 +1258,8 @@ class _$ArenaStateImpl extends _ArenaState {
                 other.waitingForOtherDebater == waitingForOtherDebater) &&
             (identical(other.resultsModalShown, resultsModalShown) ||
                 other.resultsModalShown == resultsModalShown) &&
+            (identical(other.showResults, showResults) ||
+                other.showResults == showResults) &&
             (identical(other.roomClosingModalShown, roomClosingModalShown) ||
                 other.roomClosingModalShown == roomClosingModalShown) &&
             (identical(other.hasNavigated, hasNavigated) ||
@@ -1247,8 +1268,7 @@ class _$ArenaStateImpl extends _ArenaState {
                 other.isExiting == isExiting) &&
             (identical(other.currentUserId, currentUserId) ||
                 other.currentUserId == currentUserId) &&
-            (identical(other.userRole, userRole) ||
-                other.userRole == userRole) &&
+            (identical(other.userRole, userRole) || other.userRole == userRole) &&
             const DeepCollectionEquality().equals(other._roomData, _roomData) &&
             (identical(other.startTime, startTime) || other.startTime == startTime) &&
             (identical(other.endTime, endTime) || other.endTime == endTime) &&
@@ -1291,6 +1311,7 @@ class _$ArenaStateImpl extends _ArenaState {
         negativeCompletedSelection,
         waitingForOtherDebater,
         resultsModalShown,
+        showResults,
         roomClosingModalShown,
         hasNavigated,
         isExiting,
@@ -1344,6 +1365,7 @@ abstract class _ArenaState extends ArenaState {
       final bool negativeCompletedSelection,
       final bool waitingForOtherDebater,
       final bool resultsModalShown,
+      final bool showResults,
       final bool roomClosingModalShown,
       final bool hasNavigated,
       final bool isExiting,
@@ -1421,6 +1443,8 @@ abstract class _ArenaState extends ArenaState {
   @override
   bool get resultsModalShown;
   @override
+  bool get showResults;
+  @override // Broadcast flag from n8n workflow
   bool get roomClosingModalShown;
   @override
   bool get hasNavigated;

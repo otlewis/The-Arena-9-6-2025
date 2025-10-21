@@ -22,7 +22,7 @@ class RecordingService {
   String? _currentEgressId;
   String? _currentRoomId;
   bool _isRecording = false;
-  String? _localRecordingPath;
+  // UNUSED FIELD: String? _localRecordingPath;
 
   // Client-side recording fallback
   FlutterSoundRecorder? _localRecorder;
@@ -47,11 +47,11 @@ class RecordingService {
   }
 
   // IONOS S3 configuration for recordings
-  static const String _ionosAccessKey = String.fromEnvironment('IONOS_ACCESS_KEY', defaultValue: '');
-  static const String _ionosSecretKey = String.fromEnvironment('IONOS_SECRET_KEY', defaultValue: '');
-  static const String _ionosBucket = String.fromEnvironment('IONOS_BUCKET', defaultValue: 'arena-recordings');
-  static const String _ionosRegion = String.fromEnvironment('IONOS_REGION', defaultValue: 'eu-central-1');
-  static const String _ionosEndpoint = String.fromEnvironment('IONOS_ENDPOINT', defaultValue: 'https://s3.eu-central-1.ionoscloud.com');
+  // UNUSED FIELD: static const String _ionosAccessKey = String.fromEnvironment('IONOS_ACCESS_KEY', defaultValue: '');
+  // UNUSED FIELD: static const String _ionosSecretKey = String.fromEnvironment('IONOS_SECRET_KEY', defaultValue: '');
+  // UNUSED FIELD: static const String _ionosBucket = String.fromEnvironment('IONOS_BUCKET', defaultValue: 'arena-recordings');
+  // UNUSED FIELD: static const String _ionosRegion = String.fromEnvironment('IONOS_REGION', defaultValue: 'eu-central-1');
+  // UNUSED FIELD: static const String _ionosEndpoint = String.fromEnvironment('IONOS_ENDPOINT', defaultValue: 'https://s3.eu-central-1.ionoscloud.com');
 
   Future<bool> startRecording({
     required String roomId,
@@ -77,17 +77,11 @@ class RecordingService {
       final egressRequest = {
         'room_name': roomName,
         'file': {
-          'filepath': 'live/$filename',  // Store in live/ folder initially
-          's3': {
-            'access_key': _ionosAccessKey,
-            'secret': _ionosSecretKey,
-            'bucket': _ionosBucket,
-            'region': _ionosRegion,
-            'endpoint': _ionosEndpoint,
-          }
+          'filepath': '/tmp/livekit-recordings/$filename',  // Save locally, n8n will upload to Appwrite
         },
         'options': {
           'audio_only': true,
+          'file_type': 'MP3',  // MP3 format for better compatibility
           'advanced': {
             'audio_codec': 'OPUS',  // Optimal for voice
             'audio_bitrate': 64,    // 64 kbps for good quality
@@ -193,7 +187,6 @@ class RecordingService {
           AppLogger().info('✅ PLAYBACK CREATED - ID: $playbackId');
 
           // Clean up recording state
-          final roomToClose = _currentRoomId!;
           _isRecording = false;
           _currentRoomId = null;
           _currentEgressId = null;

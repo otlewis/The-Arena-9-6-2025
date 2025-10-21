@@ -38,7 +38,7 @@ class TournamentCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.purple.withValues(alpha: 0.3),
+              color: Colors.purple.withOpacity(0.3),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -55,7 +55,7 @@ class TournamentCard extends StatelessWidget {
                 height: 150,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.05),
+                  color: Colors.white.withOpacity(0.05),
                 ),
               ),
             ),
@@ -67,7 +67,7 @@ class TournamentCard extends StatelessWidget {
                 height: 200,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.03),
+                  color: Colors.white.withOpacity(0.03),
                 ),
               ),
             ),
@@ -86,7 +86,7 @@ class TournamentCard extends StatelessWidget {
                         height: 80,
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
+                          color: Colors.white.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Image.asset(
@@ -132,7 +132,7 @@ class TournamentCard extends StatelessWidget {
                             Text(
                               'Championship Bracket',
                               style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.8),
+                                color: Colors.white.withOpacity(0.8),
                                 fontSize: 14,
                               ),
                             ),
@@ -254,13 +254,13 @@ class TournamentCard extends StatelessWidget {
             Icon(
               icon,
               size: 16,
-              color: Colors.white.withValues(alpha: 0.7),
+              color: Colors.white.withOpacity(0.7),
             ),
             const SizedBox(width: 4),
             Text(
               label,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
+                color: Colors.white.withOpacity(0.7),
                 fontSize: 12,
               ),
             ),

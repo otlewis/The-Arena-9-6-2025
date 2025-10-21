@@ -13,7 +13,8 @@ class RealTimeCoinBalance extends StatefulWidget {
   final BorderRadius? borderRadius;
   final bool showCoinIcon;
   final double? iconSize;
-  
+  final Function(RealTimeCoinBalanceController)? onControllerCreated;
+
   const RealTimeCoinBalance({
     super.key,
     this.textStyle,
@@ -22,10 +23,29 @@ class RealTimeCoinBalance extends StatefulWidget {
     this.borderRadius,
     this.showCoinIcon = true,
     this.iconSize = 20,
+    this.onControllerCreated,
   });
 
   @override
   State<RealTimeCoinBalance> createState() => _RealTimeCoinBalanceState();
+}
+
+/// Controller for optimistic updates to the coin balance
+class RealTimeCoinBalanceController {
+  final _RealTimeCoinBalanceState _state;
+
+  RealTimeCoinBalanceController(this._state);
+
+  /// Optimistically deduct coins from the displayed balance
+  /// The real-time subscription will correct it if the deduction fails
+  void optimisticallyDeduct(int amount) {
+    _state._optimisticallyDeduct(amount);
+  }
+
+  /// Optimistically add coins to the displayed balance
+  void optimisticallyAdd(int amount) {
+    _state._optimisticallyAdd(amount);
+  }
 }
 
 class _RealTimeCoinBalanceState extends State<RealTimeCoinBalance> {
@@ -36,11 +56,69 @@ class _RealTimeCoinBalanceState extends State<RealTimeCoinBalance> {
   bool _isLoading = true;
   String? _userId;
   RealtimeSubscription? _subscription;
+  bool _hasOptimisticUpdate = false;
+  DateTime? _lastOptimisticUpdateTime;
   
   @override
   void initState() {
     super.initState();
     _initializeBalance();
+
+    // Notify parent about the controller
+    if (widget.onControllerCreated != null) {
+      // Schedule for next frame to ensure widget is fully initialized
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          widget.onControllerCreated!(RealTimeCoinBalanceController(this));
+        }
+      });
+    }
+  }
+
+  /// Optimistically deduct coins (called by controller)
+  void _optimisticallyDeduct(int amount) {
+    if (mounted) {
+      setState(() {
+        _coinBalance = (_coinBalance - amount).clamp(0, 999999999);
+        _hasOptimisticUpdate = true;
+        _lastOptimisticUpdateTime = DateTime.now();
+      });
+      AppLogger().debug('🪙 Optimistically deducted $amount coins. New balance: $_coinBalance');
+
+      // Clear the optimistic flag after 5 seconds to allow real-time sync
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted) {
+          setState(() {
+            _hasOptimisticUpdate = false;
+          });
+          // Reload balance from server after optimistic period expires
+          _loadBalance();
+        }
+      });
+    }
+  }
+
+  /// Optimistically add coins (called by controller)
+  void _optimisticallyAdd(int amount) {
+    if (mounted) {
+      setState(() {
+        _coinBalance += amount;
+        _hasOptimisticUpdate = true;
+        _lastOptimisticUpdateTime = DateTime.now();
+      });
+      AppLogger().debug('🪙 Optimistically added $amount coins. New balance: $_coinBalance');
+
+      // Clear the optimistic flag after 5 seconds to allow real-time sync
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted) {
+          setState(() {
+            _hasOptimisticUpdate = false;
+          });
+          // Reload balance from server after optimistic period expires
+          _loadBalance();
+        }
+      });
+    }
   }
   
   @override
@@ -118,6 +196,15 @@ class _RealTimeCoinBalanceState extends State<RealTimeCoinBalance> {
         );
 
         if (isUpdate) {
+          // Skip real-time updates during optimistic update period
+          if (_hasOptimisticUpdate) {
+            final timeSinceOptimistic = DateTime.now().difference(_lastOptimisticUpdateTime ?? DateTime.now());
+            if (timeSinceOptimistic.inSeconds < 3) {
+              AppLogger().debug('🪙 Skipping real-time update during optimistic period');
+              return;
+            }
+          }
+
           // Balance was updated, reload it
           _loadBalance();
           AppLogger().debug('🪙 Coin balance updated via real-time subscription');

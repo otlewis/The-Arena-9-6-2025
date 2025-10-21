@@ -456,7 +456,7 @@ class _EnhancedAppwriteTimerWidgetState extends State<EnhancedAppwriteTimerWidge
     final timerContainer = Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.3),
+        color: Colors.black.withOpacity(0.3),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isExpired ? Colors.red : (isWarning ? Colors.orange : Colors.white24),

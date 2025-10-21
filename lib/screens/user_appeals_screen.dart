@@ -172,15 +172,15 @@ class _UserAppealsScreenState extends State<UserAppealsScreen> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
@@ -220,15 +220,15 @@ class _UserAppealsScreenState extends State<UserAppealsScreen> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
@@ -273,7 +273,7 @@ class _UserAppealsScreenState extends State<UserAppealsScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.2),
+                      color: Colors.orange.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -332,15 +332,15 @@ class _UserAppealsScreenState extends State<UserAppealsScreen> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
@@ -425,8 +425,8 @@ class _UserAppealsScreenState extends State<UserAppealsScreen> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: _themeService.isDarkMode 
-                      ? const Color(0xFF2D2D2D).withValues(alpha: 0.5)
-                      : const Color(0xFFE8E8E8).withValues(alpha: 0.5),
+                      ? const Color(0xFF2D2D2D).withOpacity(0.5)
+                      : const Color(0xFFE8E8E8).withOpacity(0.5),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: _themeService.isDarkMode ? Colors.white12 : Colors.grey[300]!,
@@ -473,7 +473,7 @@ class _UserAppealsScreenState extends State<UserAppealsScreen> {
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.2),
+              color: Colors.orange.withOpacity(0.2),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.orange),
             ),
@@ -512,7 +512,7 @@ class _UserAppealsScreenState extends State<UserAppealsScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: accentPurple.withValues(alpha: 0.2),
+                color: accentPurple.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: accentPurple),
               ),
@@ -571,7 +571,7 @@ class _UserAppealsScreenState extends State<UserAppealsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
+        color: color.withOpacity(0.2),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color, width: 1),
       ),
@@ -605,7 +605,7 @@ class _UserAppealsScreenState extends State<UserAppealsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
+        color: color.withOpacity(0.2),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color, width: 1),
       ),

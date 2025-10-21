@@ -1,0 +1,161 @@
+{
+  "name": "Arena Winner Auto-Broadcast",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "appwrite-arena-rooms-update",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook - Appwrite Arena Rooms Update",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "appwrite-arena-rooms-update",
+      "notes": "Triggered by Appwrite when arena_rooms collection is updated"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the event data from Appwrite webhook\nconst payload = $input.first().json;\n\nconsole.log('🎯 Appwrite webhook received:', JSON.stringify(payload, null, 2));\n\n// Check if this is an UPDATE event for arena_rooms\nconst events = payload.events || [];\nconst isUpdate = events.some(e => e.includes('databases.arena_db.collections.arena_rooms.documents.*.update'));\n\nif (!isUpdate) {\n  console.log('⏭️ Not an update event, skipping');\n  return { json: { skip: true } };\n}\n\n// Extract room data\nconst roomData = payload;\nconst roomId = roomData.$id || roomData.documentId;\nconst winner = roomData.winner;\nconst judgingComplete = roomData.judgingComplete;\nconst judgingEnabled = roomData.judgingEnabled;\n\nconsole.log('📊 Room Update:', {\n  roomId,\n  winner,\n  judgingComplete,\n  judgingEnabled\n});\n\n// Only proceed if judging was just completed\nif (judgingComplete && winner && !judgingEnabled) {\n  console.log('🏆 Winner determined, broadcasting to all users');\n  return {\n    json: {\n      skip: false,\n      roomId,\n      winner,\n      judgingComplete,\n      judgingEnabled: false\n    }\n  };\n}\n\nconsole.log('⏭️ Judging not complete yet, skipping');\nreturn { json: { skip: true } };"
+      },
+      "name": "Check if Winner Determined",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.skip }}",
+              "value2": false
+            }
+          ]
+        }
+      },
+      "name": "Should Broadcast?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://cloud.appwrite.io/v1/databases/arena_db/collections/arena_rooms/documents/{{ $json.roomId }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "appwriteApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "={{ $env.APPWRITE_PROJECT_ID }}"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "={{ $env.APPWRITE_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"winner\": \"{{ $json.winner }}\",\n  \"judgingComplete\": true,\n  \"judgingEnabled\": false,\n  \"lastBroadcast\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "name": "Force Broadcast Winner Update",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 200],
+      "notes": "Force a database write to trigger realtime sync"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"Winner broadcasted to all users\",\n  \"winner\": \"{{ $json.winner }}\",\n  \"roomId\": \"{{ $json.roomId }}\"\n}",
+        "options": {}
+      },
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"message\": \"Skipped - not a winner determination event\"\n}",
+        "options": {}
+      },
+      "name": "Respond Skip",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 400]
+    }
+  ],
+  "connections": {
+    "Webhook - Appwrite Arena Rooms Update": {
+      "main": [
+        [
+          {
+            "node": "Check if Winner Determined",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if Winner Determined": {
+      "main": [
+        [
+          {
+            "node": "Should Broadcast?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Broadcast?": {
+      "main": [
+        [
+          {
+            "node": "Force Broadcast Winner Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Force Broadcast Winner Update": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-17T00:00:00.000Z",
+  "versionId": "1"
+}

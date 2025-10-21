@@ -453,15 +453,15 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
               boxShadow: [
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.white.withValues(alpha: 0.03)
-                      : Colors.white.withValues(alpha: 0.8),
+                      ? Colors.white.withOpacity(0.03)
+                      : Colors.white.withOpacity(0.8),
                   offset: const Offset(-8, -8),
                   blurRadius: 16,
                 ),
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.black.withValues(alpha: 0.5)
-                      : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                      ? Colors.black.withOpacity(0.5)
+                      : const Color(0xFFA3B1C6).withOpacity(0.5),
                   offset: const Offset(8, 8),
                   blurRadius: 16,
                 ),
@@ -557,15 +557,15 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.7),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.7),
             offset: const Offset(-4, -4),
             blurRadius: 8,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(4, 4),
             blurRadius: 8,
           ),
@@ -592,16 +592,16 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
           boxShadow: [
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.black.withValues(alpha: 0.6)
-                  : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                  ? Colors.black.withOpacity(0.6)
+                  : const Color(0xFFA3B1C6).withOpacity(0.3),
               offset: const Offset(3, 3),
               blurRadius: 6,
               spreadRadius: -2,
             ),
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.white.withValues(alpha: 0.02)
-                  : Colors.white.withValues(alpha: 0.8),
+                  ? Colors.white.withOpacity(0.02)
+                  : Colors.white.withOpacity(0.8),
               offset: const Offset(-3, -3),
               blurRadius: 6,
               spreadRadius: -2,
@@ -647,15 +647,15 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
               boxShadow: [
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.white.withValues(alpha: 0.03)
-                      : Colors.white.withValues(alpha: 0.7),
+                      ? Colors.white.withOpacity(0.03)
+                      : Colors.white.withOpacity(0.7),
                   offset: const Offset(-8, -8),
                   blurRadius: 16,
                 ),
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.black.withValues(alpha: 0.5)
-                      : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                      ? Colors.black.withOpacity(0.5)
+                      : const Color(0xFFA3B1C6).withOpacity(0.5),
                   offset: const Offset(8, 8),
                   blurRadius: 16,
                 ),
@@ -712,15 +712,15 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
@@ -742,10 +742,10 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: primaryPurple.withValues(alpha: 0.15),
+                        color: primaryPurple.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: primaryPurple.withValues(alpha: 0.3),
+                          color: primaryPurple.withOpacity(0.3),
                           width: 1,
                         ),
                       ),
@@ -770,16 +770,16 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
                         boxShadow: [
                           BoxShadow(
                             color: _themeService.isDarkMode 
-                                ? Colors.black.withValues(alpha: 0.6)
-                                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                                ? Colors.black.withOpacity(0.6)
+                                : const Color(0xFFA3B1C6).withOpacity(0.3),
                             offset: const Offset(2, 2),
                             blurRadius: 4,
                             spreadRadius: -1,
                           ),
                           BoxShadow(
                             color: _themeService.isDarkMode 
-                                ? Colors.white.withValues(alpha: 0.02)
-                                : Colors.white.withValues(alpha: 0.8),
+                                ? Colors.white.withOpacity(0.02)
+                                : Colors.white.withOpacity(0.8),
                             offset: const Offset(-2, -2),
                             blurRadius: 4,
                             spreadRadius: -1,
@@ -800,7 +800,7 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: primaryPurple.withValues(alpha: 0.1),
+                        color: primaryPurple.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
@@ -858,7 +858,7 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: primaryPurple.withValues(alpha: 0.3),
+                          color: primaryPurple.withOpacity(0.3),
                           width: 1,
                         ),
                       ),
@@ -874,7 +874,7 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
                                   width: 24,
                                   height: 24,
                                   decoration: BoxDecoration(
-                                    color: primaryPurple.withValues(alpha: 0.1),
+                                    color: primaryPurple.withOpacity(0.1),
                                     shape: BoxShape.circle,
                                   ),
                                   child: const Icon(
@@ -889,7 +889,7 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
                               width: 24,
                               height: 24,
                               decoration: BoxDecoration(
-                                color: primaryPurple.withValues(alpha: 0.1),
+                                color: primaryPurple.withOpacity(0.1),
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(

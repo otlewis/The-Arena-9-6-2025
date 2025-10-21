@@ -85,15 +85,15 @@ class _ArenaRoleNotificationModalState extends State<ArenaRoleNotificationModal>
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: _getRoleColor().withValues(alpha: 0.3), width: 2),
+              border: Border.all(color: _getRoleColor().withOpacity(0.3), width: 2),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
+                  color: Colors.black.withOpacity(0.1),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
                 BoxShadow(
-                  color: _getRoleColor().withValues(alpha: 0.1),
+                  color: _getRoleColor().withOpacity(0.1),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
@@ -108,7 +108,7 @@ class _ArenaRoleNotificationModalState extends State<ArenaRoleNotificationModal>
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: _isJudgeRole(role) ? Colors.amber.shade100 : accentPurple.withValues(alpha: 0.1),
+                        color: _isJudgeRole(role) ? Colors.amber.shade100 : accentPurple.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: _isJudgeRole(role) ? Colors.amber.shade700 : accentPurple,
@@ -170,7 +170,7 @@ class _ArenaRoleNotificationModalState extends State<ArenaRoleNotificationModal>
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: (isModerator ? accentPurple : Colors.amber.shade700).withValues(alpha: 0.1),
+              color: (isModerator ? accentPurple : Colors.amber.shade700).withOpacity(0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -245,9 +245,9 @@ class _ArenaRoleNotificationModalState extends State<ArenaRoleNotificationModal>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.1),
+              color: Colors.orange.withOpacity(0.1),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+              border: Border.all(color: Colors.orange.withOpacity(0.3)),
             ),
             child: const Row(
               mainAxisSize: MainAxisSize.min,

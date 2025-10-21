@@ -284,8 +284,8 @@ class _ArenaTimerWidgetState extends State<ArenaTimerWidget> with TickerProvider
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            ArenaColors.deepPurple.withValues(alpha: 0.9),
-            ArenaColors.accentPurple.withValues(alpha: 0.9),
+            ArenaColors.deepPurple.withOpacity(0.9),
+            ArenaColors.accentPurple.withOpacity(0.9),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -293,7 +293,7 @@ class _ArenaTimerWidgetState extends State<ArenaTimerWidget> with TickerProvider
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
+            color: Colors.black.withOpacity(0.3),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -305,7 +305,7 @@ class _ArenaTimerWidgetState extends State<ArenaTimerWidget> with TickerProvider
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
+              color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(

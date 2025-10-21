@@ -8,7 +8,6 @@ import '../core/logging/app_logger.dart';
 import '../constants/appwrite.dart';
 import 'package:appwrite/appwrite.dart' as appwrite;
 import 'dart:async';
-import 'floating_timer_pill.dart';
 
 class PresentationViewer extends StatefulWidget {
   final SlideData slideData;
@@ -357,14 +356,6 @@ class _PresentationViewerState extends State<PresentationViewer> {
             ),
           ],
         ),
-        
-        // Floating timer pill
-        FloatingTimerPill(
-          roomId: widget.roomId,
-          roomType: widget.roomType,
-          userRole: widget.isPresenter ? 'moderator' : 'audience',
-          userId: widget.userId,
-        ),
       ],
     );
   }
@@ -389,7 +380,7 @@ class _PresentationViewerState extends State<PresentationViewer> {
               icon: const Icon(Icons.close, color: Colors.white, size: 28),
               onPressed: () => Navigator.of(context).pop(),
               style: IconButton.styleFrom(
-                backgroundColor: Colors.black.withValues(alpha: 0.6),
+                backgroundColor: Colors.black.withOpacity(0.6),
                 padding: const EdgeInsets.all(12),
               ),
             ),
@@ -405,7 +396,7 @@ class _PresentationViewerState extends State<PresentationViewer> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.7),
+                  color: Colors.black.withOpacity(0.7),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
@@ -475,7 +466,7 @@ class _PresentationViewerState extends State<PresentationViewer> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.6),
+                  color: Colors.black.withOpacity(0.6),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
@@ -499,14 +490,6 @@ class _PresentationViewerState extends State<PresentationViewer> {
               child: _buildLandscapeViewerStatus(),
             ),
           ),
-        
-        // Floating timer pill
-        FloatingTimerPill(
-          roomId: widget.roomId,
-          roomType: widget.roomType,
-          userRole: widget.isPresenter ? 'moderator' : 'audience',
-          userId: widget.userId,
-        ),
       ],
     );
   }
@@ -575,7 +558,7 @@ class _PresentationViewerState extends State<PresentationViewer> {
           decoration: BoxDecoration(
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.5),
+                color: Colors.black.withOpacity(0.5),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -636,10 +619,10 @@ class _PresentationViewerState extends State<PresentationViewer> {
       width: 60,
       height: 60,
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: enabled ? 0.7 : 0.3),
+        color: Colors.black.withOpacity(enabled ? 0.7 : 0.3),
         borderRadius: BorderRadius.circular(30),
         border: Border.all(
-          color: Colors.white.withValues(alpha: enabled ? 0.3 : 0.1),
+          color: Colors.white.withOpacity(enabled ? 0.3 : 0.1),
           width: 1,
         ),
       ),
@@ -647,7 +630,7 @@ class _PresentationViewerState extends State<PresentationViewer> {
         onPressed: onPressed,
         icon: Icon(
           icon,
-          color: Colors.white.withValues(alpha: enabled ? 1.0 : 0.3),
+          color: Colors.white.withOpacity(enabled ? 1.0 : 0.3),
           size: 28,
         ),
         padding: EdgeInsets.zero,
@@ -660,7 +643,7 @@ class _PresentationViewerState extends State<PresentationViewer> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.7),
+        color: Colors.black.withOpacity(0.7),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.blue[400]!, width: 1),
       ),

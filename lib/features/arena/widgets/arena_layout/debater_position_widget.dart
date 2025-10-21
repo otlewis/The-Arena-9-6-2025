@@ -27,7 +27,7 @@ class DebaterPositionWidget extends StatelessWidget {
     
     return Container(
       decoration: BoxDecoration(
-        color: isAffirmative ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+        color: isAffirmative ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
         border: Border.all(
           color: isWinner 
               ? Colors.amber 
@@ -38,12 +38,12 @@ class DebaterPositionWidget extends StatelessWidget {
         // Add golden glow effect for winner
         boxShadow: isWinner ? [
           BoxShadow(
-            color: Colors.amber.withValues(alpha: 0.5),
+            color: Colors.amber.withOpacity(0.5),
             blurRadius: 12,
             spreadRadius: 2,
           ),
           BoxShadow(
-            color: Colors.orange.withValues(alpha: 0.3),
+            color: Colors.orange.withOpacity(0.3),
             blurRadius: 20,
             spreadRadius: 4,
           ),
@@ -125,7 +125,7 @@ class DebaterPositionWidget extends StatelessWidget {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.amber.withValues(alpha: 0.3),
+                  color: Colors.amber.withOpacity(0.3),
                   blurRadius: 6,
                   spreadRadius: 1,
                 ),
@@ -146,7 +146,7 @@ class DebaterPositionWidget extends StatelessWidget {
               fontSize: nameSize,
               shadows: isWinner ? [
                 Shadow(
-                  color: Colors.black.withValues(alpha: 0.3),
+                  color: Colors.black.withOpacity(0.3),
                   blurRadius: 2,
                 ),
               ] : null,

@@ -150,7 +150,7 @@ class _TimerSyncIndicatorState extends State<TimerSyncIndicator>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: _getStatusColor(status).withValues(alpha: 0.1),
+        color: _getStatusColor(status).withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: _getStatusColor(status),
@@ -223,7 +223,7 @@ class _TimerSyncIndicatorState extends State<TimerSyncIndicator>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
+                  color: Colors.orange.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(
@@ -310,7 +310,7 @@ class _TimerSyncIndicatorState extends State<TimerSyncIndicator>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.blue.withValues(alpha: 0.1),
+          color: Colors.blue.withOpacity(0.1),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: Colors.blue, width: 1),
         ),
@@ -413,7 +413,7 @@ class _ConnectionStatusBadgeState extends State<ConnectionStatusBadge> with Disp
       margin: const EdgeInsets.only(right: 8),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.red.withValues(alpha: 0.9),
+        color: Colors.red.withOpacity(0.9),
         borderRadius: BorderRadius.circular(12),
       ),
       child: const Row(

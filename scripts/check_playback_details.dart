@@ -1,0 +1,44 @@
+import 'dart:io';
+import 'dart:convert';
+
+Future<void> main() async {
+  const apiKey = 'standard_a2e04fb6446a4f68dd8bec1b65deb704e7dc116d73c4a1a5b8673756127962794f87c4b0baa22706a92b672766e5305273b43603f7dd7ebfb52e072dfa2549483104fe991b477913315bab26040dfe4880700b290759df3281af25e2a92b74728dfcf7486ede15ec03a424232a08c6af65bc140a0d2539a3afdf01335d7d0b77';
+  const projectId = '683a37a8003719978879';
+  const databaseId = 'arena_db';
+
+  final client = HttpClient();
+
+  print('🎬 Checking playback details...');
+
+  try {
+    // Get specific playback
+    final playbackRequest = await client.getUrl(
+      Uri.parse('https://cloud.appwrite.io/v1/databases/$databaseId/collections/arena_playbacks/documents/playback_test_12345')
+    );
+    playbackRequest.headers.set('X-Appwrite-Project', projectId);
+    playbackRequest.headers.set('X-Appwrite-Key', apiKey);
+
+    final playbackResponse = await playbackRequest.close();
+    final playbackBody = await utf8.decodeStream(playbackResponse);
+
+    if (playbackResponse.statusCode == 200) {
+      final playbackData = jsonDecode(playbackBody);
+      print('✅ PLAYBACK DATA:');
+      print('   - Title: ${playbackData['title']}');
+      print('   - Original Room ID: ${playbackData['originalRoomId']}');
+      print('   - Debater1 ID: ${playbackData['debater1Id']}');
+      print('   - Debater2 ID: ${playbackData['debater2Id']}');
+      print('   - Moderator ID: ${playbackData['moderatorId']}');
+      print('   - Status: ${playbackData['status']}');
+      print('   - Duration: ${playbackData['duration']}');
+      print('   - Audio URL: ${playbackData['audioUrl']}');
+    } else {
+      print('❌ Failed to get playback: $playbackBody');
+    }
+
+  } catch (e) {
+    print('❌ Error: $e');
+  }
+
+  client.close();
+}

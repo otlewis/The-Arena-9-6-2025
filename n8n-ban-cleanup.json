@@ -1,0 +1,217 @@
+{
+  "name": "Ban Cleanup & Expiry",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/room_bans/documents",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_9eb533155b87619154f399a46a8edcc321b0076b56a37767075b8b8b254edc6328abb380594edfab634ee531470e84773d6bf5951295ad1687c82e258da45758f3c4ff0101b4217cb828723f1b4acac507f092afe799f8548b2e1de14e1028dc8459fcd32387ef74b8de8a505f90cc03a2958d69b020ca74ab6481ec8411f3e3"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-active-bans",
+      "name": "Get Active Bans",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all ban documents\nconst documents = $input.all()[0].json.documents || [];\nconst now = new Date();\n\n// Filter for expired temporary bans that are still active\nconst expiredBans = documents.filter(doc => {\n  // Skip if not active\n  if (!doc.isActive) return false;\n  \n  // Skip permanent bans (no expiresAt)\n  if (!doc.expiresAt) return false;\n  \n  // Check if expired\n  const expiresAt = new Date(doc.expiresAt);\n  return expiresAt <= now;\n});\n\n// Map to simplified objects\nconst toDeactivate = expiredBans.map(doc => ({\n  documentId: doc.$id,\n  userId: doc.userId,\n  roomId: doc.roomId,\n  roomType: doc.roomType || 'unknown',\n  moderatorId: doc.moderatorId,\n  reason: doc.reason || 'N/A',\n  expiresAt: doc.expiresAt,\n  durationMinutes: doc.durationMinutes,\n  minutesOverdue: Math.floor((now - new Date(doc.expiresAt)) / 1000 / 60)\n}));\n\nreturn [\n  { json: { toDeactivate, count: toDeactivate.length, timestamp: now.toISOString() } }\n];"
+      },
+      "id": "code-filter-expired",
+      "name": "Filter Expired Bans",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-expired",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-has-expired",
+      "name": "Has Expired Bans?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "toDeactivate",
+        "options": {}
+      },
+      "id": "split-expired",
+      "name": "Split Expired Items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "url": "=https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/room_bans/documents/{{ $json.documentId }}",
+        "method": "PATCH",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_9eb533155b87619154f399a46a8edcc321b0076b56a37767075b8b8b254edc6328abb380594edfab634ee531470e84773d6bf5951295ad1687c82e258da45758f3c4ff0101b4217cb828723f1b4acac507f092afe799f8548b2e1de14e1028dc8459fcd32387ef74b8de8a505f90cc03a2958d69b020ca74ab6481ec8411f3e3"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"data\": {\n    \"isActive\": false\n  }\n}",
+        "options": {}
+      },
+      "id": "deactivate-ban",
+      "name": "Deactivate Ban",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log the deactivation for monitoring\nconst item = $input.item.json;\n\nconsole.log(`🔨 Deactivated ban for user ${item.userId} in ${item.roomType} room ${item.roomId}`);\nconsole.log(`   Duration: ${item.durationMinutes} minutes`);\nconsole.log(`   Reason: ${item.reason}`);\nconsole.log(`   Was ${item.minutesOverdue} minutes overdue`);\n\nreturn {\n  json: {\n    ...item,\n    deactivatedAt: new Date().toISOString()\n  }\n};"
+      },
+      "id": "log-deactivation",
+      "name": "Log Deactivation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Active Bans",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Bans": {
+      "main": [
+        [
+          {
+            "node": "Filter Expired Bans",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Expired Bans": {
+      "main": [
+        [
+          {
+            "node": "Has Expired Bans?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Expired Bans?": {
+      "main": [
+        [
+          {
+            "node": "Split Expired Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Expired Items": {
+      "main": [
+        [
+          {
+            "node": "Deactivate Ban",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deactivate Ban": {
+      "main": [
+        [
+          {
+            "node": "Log Deactivation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-09T21:15:00.000Z",
+  "versionId": "1"
+}

@@ -42,10 +42,10 @@ class ArenaMainView extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     margin: const EdgeInsets.only(bottom: 8),
                     decoration: BoxDecoration(
-                      color: ArenaColors.deepPurple.withValues(alpha: 0.1),
+                      color: ArenaColors.deepPurple.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color: ArenaColors.deepPurple.withValues(alpha: 0.3),
+                        color: ArenaColors.deepPurple.withOpacity(0.3),
                         width: 1,
                       ),
                     ),

@@ -24,7 +24,7 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
   
   // State variables
   String _selectedCategory = 'Religion';
-  String _selectedDebateStyle = 'Discussion';
+  String _selectedDebateStyle = 'Take';
   bool _showCustomCategory = false;
   bool _isCreating = false;
   bool _isPrivate = false;
@@ -54,22 +54,17 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
     'Custom'
   ];
   
-  // Debate styles
+  // Debate styles - Only Take and Discussion
   final List<Map<String, String>> _debateStyles = [
-    {
-      'id': 'Discussion',
-      'name': 'Discussion',
-      'description': 'Open conversation and exchange of ideas'
-    },
-    {
-      'id': 'Debate',
-      'name': 'Debate',
-      'description': 'Structured argument with opposing viewpoints'
-    },
     {
       'id': 'Take',
       'name': 'Take',
       'description': 'Share your perspective on a topic'
+    },
+    {
+      'id': 'Discussion',
+      'name': 'Discussion',
+      'description': 'Open conversation and exchange of ideas'
     },
   ];
 
@@ -309,7 +304,7 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: primaryPurple.withValues(alpha: 0.1),
+                    color: primaryPurple.withOpacity(0.1),
                     border: Border.all(
                       color: primaryPurple,
                       width: 2,
@@ -373,7 +368,7 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: isSelected ? primaryPurple.withValues(alpha: 0.1) : Colors.transparent,
+                            color: isSelected ? primaryPurple.withOpacity(0.1) : Colors.transparent,
                             border: Border.all(
                               color: isSelected ? primaryPurple : lightBorder,
                               width: 2,
@@ -570,7 +565,7 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             offset: const Offset(0, 2),
             blurRadius: 4,
           ),
@@ -680,7 +675,7 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
           value: value,
           onChanged: onChanged,
           activeThumbColor: primaryPurple,
-          activeTrackColor: primaryPurple.withValues(alpha: 0.5),
+          activeTrackColor: primaryPurple.withOpacity(0.5),
           inactiveThumbColor: const Color(0xFFF4F3F4),
           inactiveTrackColor: const Color(0xFF767577),
         ),

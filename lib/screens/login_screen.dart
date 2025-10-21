@@ -224,6 +224,8 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // Reserved for future Google Sign-In integration
+  // ignore: unused_element
   Future<void> _handleGoogleAuth() async {
     setState(() => _isLoading = true);
 
@@ -259,7 +261,9 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _handleAppleAuth() async {
+  // Reserved for future Apple Sign-In integration
+  // ignore: unused_element
+  Future<void> _handleAppleAuth() async{
     setState(() => _isLoading = true);
 
     // Capture ScaffoldMessenger reference before async operations

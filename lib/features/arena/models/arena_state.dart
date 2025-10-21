@@ -134,6 +134,7 @@ class ArenaState with _$ArenaState {
     @Default(false) bool negativeCompletedSelection,
     @Default(false) bool waitingForOtherDebater,
     @Default(false) bool resultsModalShown,
+    @Default(false) bool showResults, // Broadcast flag from n8n workflow
     @Default(false) bool roomClosingModalShown,
     @Default(false) bool hasNavigated,
     @Default(false) bool isExiting,

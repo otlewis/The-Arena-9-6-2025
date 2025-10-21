@@ -1,0 +1,17 @@
+{
+  "name": "assign-arena-role",
+  "version": "1.0.0",
+  "description": "Atomic role assignment with LiveKit sync and versioning",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "node-appwrite": "^13.0.0",
+    "livekit-server-sdk": "^2.6.1"
+  },
+  "devDependencies": {
+    "prettier": "^3.0.0"
+  }
+}

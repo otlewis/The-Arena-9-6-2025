@@ -409,7 +409,7 @@ class _ModernChatInterfaceState extends State<ModernChatInterface>
     }
     
     return Scaffold(
-      backgroundColor: Colors.black.withValues(alpha: 0.5),
+      backgroundColor: Colors.black.withOpacity(0.5),
       resizeToAvoidBottomInset: false, // Handle keyboard manually
       body: GestureDetector(
         onTap: () => _closeChat(),
@@ -470,7 +470,7 @@ class _ModernChatInterfaceState extends State<ModernChatInterface>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+            color: const Color(0xFF8B5CF6).withOpacity(0.3),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -502,7 +502,7 @@ class _ModernChatInterfaceState extends State<ModernChatInterface>
                   Text(
                     _newMessageContent!,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.9),
+                      color: Colors.white.withOpacity(0.9),
                       fontSize: 13,
                       fontWeight: FontWeight.w400,
                     ),
@@ -518,8 +518,8 @@ class _ModernChatInterfaceState extends State<ModernChatInterface>
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: _isOpeningOtherChat 
-                    ? Colors.white.withValues(alpha: 0.1)
-                    : Colors.white.withValues(alpha: 0.2),
+                    ? Colors.white.withOpacity(0.1)
+                    : Colors.white.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: _isOpeningOtherChat
@@ -833,7 +833,7 @@ class _ModernChatInterfaceState extends State<ModernChatInterface>
             width: 60,
             height: 60,
             decoration: BoxDecoration(
-              color: const Color(0xFF007AFF).withValues(alpha: 0.1),
+              color: const Color(0xFF007AFF).withOpacity(0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(

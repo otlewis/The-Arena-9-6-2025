@@ -99,7 +99,7 @@ class ModeratorControlModal extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.purple.withValues(alpha: 0.2),
+                    color: Colors.purple.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   
@@ -138,9 +138,9 @@ class ModeratorControlModal extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.2),
+                      color: Colors.orange.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -239,51 +239,8 @@ class ModeratorControlModal extends StatelessWidget {
                 ),
                 
                 const SizedBox(height: 12),
-                
+
                 // Note: Judges are automatically selected from audience
-                
-                // Speaker Assignment
-                if (affirmativeParticipant != null || negativeParticipant != null) ...[
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Assign Speaker',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      if (affirmativeParticipant != null)
-                        Expanded(
-                          child: _buildSpeakerButton(
-                            'Affirmative',
-                            'affirmative',
-                            currentSpeaker == 'affirmative',
-                            () {
-                              onSpeakerChange(currentSpeaker == 'affirmative' ? '' : 'affirmative');
-                              Navigator.pop(context);
-                            },
-                          ),
-                        ),
-                      if (affirmativeParticipant != null && negativeParticipant != null)
-                        const SizedBox(width: 12),
-                      if (negativeParticipant != null)
-                        Expanded(
-                          child: _buildSpeakerButton(
-                            'Negative',
-                            'negative',
-                            currentSpeaker == 'negative',
-                            () {
-                              onSpeakerChange(currentSpeaker == 'negative' ? '' : 'negative');
-                              Navigator.pop(context);
-                            },
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
 
                 // Additional Moderator Tools Section
                 const SizedBox(height: 20),
@@ -350,7 +307,7 @@ class ModeratorControlModal extends StatelessWidget {
 
                 const SizedBox(height: 16),
                 _buildSectionDivider('Debate Management'),
-                
+
                 Row(
                   children: [
                     Expanded(
@@ -367,13 +324,13 @@ class ModeratorControlModal extends StatelessWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: _buildControlButton(
-                        icon: Icons.pause_circle_outline,
-                        label: 'Pause Debate',
+                        icon: Icons.restart_alt,
+                        label: 'Reset Debate',
                         onPressed: () {
                           Navigator.pop(context);
-                          _showComingSoonSnackBar(context, 'Pause Debate');
+                          onEmergencyReset();
                         },
-                        color: Colors.amber,
+                        color: Colors.orange,
                       ),
                     ),
                   ],
@@ -430,28 +387,7 @@ class ModeratorControlModal extends StatelessWidget {
     );
   }
 
-  Widget _buildSpeakerButton(String label, String role, bool isActive, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-        decoration: BoxDecoration(
-          color: isActive ? Colors.green : Colors.grey[700],
-          borderRadius: BorderRadius.circular(6),
-          border: isActive ? Border.all(color: Colors.greenAccent, width: 2) : null,
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
+  // UNUSED METHOD: _buildSpeakerButton removed (not referenced anywhere)
 
   Widget _buildSectionDivider(String title) {
     return Padding(

@@ -44,7 +44,7 @@ class PremiumBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: badgeColor.withValues(alpha: 0.3),
+            color: badgeColor.withOpacity(0.3),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -159,7 +159,7 @@ class _GlowingPremiumBadgeState extends State<GlowingPremiumBadge> with TickerPr
           decoration: BoxDecoration(
             boxShadow: [
               BoxShadow(
-                color: badgeColor.withValues(alpha: _glowAnimation.value),
+                color: badgeColor.withOpacity(_glowAnimation.value),
                 blurRadius: 8,
                 spreadRadius: 2,
               ),

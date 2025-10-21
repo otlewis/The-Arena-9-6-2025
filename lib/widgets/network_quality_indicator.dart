@@ -63,9 +63,9 @@ class _NetworkQualityIndicatorState extends State<NetworkQualityIndicator> {
     return Container(
       padding: widget.padding ?? const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: config.color.withValues(alpha: 0.1),
+        color: config.color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: config.color.withValues(alpha: 0.3), width: 1),
+        border: Border.all(color: config.color.withOpacity(0.3), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -256,10 +256,10 @@ class _NetworkQualityBannerState extends State<NetworkQualityBanner> with Ticker
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: config.color.withValues(alpha: 0.9),
+              color: config.color.withOpacity(0.9),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
+                  color: Colors.black.withOpacity(0.1),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),

@@ -79,10 +79,10 @@ class ArenaWaitingRoom extends ConsumerWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF6B46C1).withValues(alpha: 0.1),
+                color: const Color(0xFF6B46C1).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: const Color(0xFF6B46C1).withValues(alpha: 0.3),
+                  color: const Color(0xFF6B46C1).withOpacity(0.3),
                 ),
               ),
               child: Column(
@@ -229,10 +229,10 @@ class ArenaWaitingRoom extends ConsumerWidget {
       width: isCompact ? 120 : null,
       padding: EdgeInsets.all(isCompact ? 12 : 16),
       decoration: BoxDecoration(
-        color: isEmpty ? Colors.grey.shade50 : color.withValues(alpha: 0.1),
+        color: isEmpty ? Colors.grey.shade50 : color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isEmpty ? Colors.grey.shade300 : color.withValues(alpha: 0.3),
+          color: isEmpty ? Colors.grey.shade300 : color.withOpacity(0.3),
           width: 1,
         ),
       ),

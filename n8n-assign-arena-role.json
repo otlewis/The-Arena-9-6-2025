@@ -1,0 +1,152 @@
+{
+  "name": "Assign Arena Role (LiveKit → Appwrite)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "assign-arena-role",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook - Arena Role Assignment",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "assign-arena-role"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate JWT for LiveKit API authentication\nconst jwt = require('jsonwebtoken');\n\nconst apiKey = 'APIwzQr7qFmXHcy';\nconst secretKey = '2gVhXTdGbSJ4bPSpomxfaHjCA8PBdmJ4N7h89dZAJT9';\n\n// Create JWT token with video grant\nconst token = jwt.sign(\n  {\n    video: {\n      roomAdmin: true,\n      room: '*'\n    }\n  },\n  secretKey,\n  {\n    issuer: apiKey,\n    expiresIn: '1h',\n    algorithm: 'HS256'\n  }\n);\n\nreturn {\n  json: {\n    ...input.all()[0].json,\n    token: token\n  }\n};"
+      },
+      "id": "generate-jwt",
+      "name": "Generate LiveKit JWT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://34.171.185.205:7879/twirp/livekit.RoomService/UpdateParticipant",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"room\": \"{{ $json.body.roomId }}\",\n  \"identity\": \"{{ $json.body.userId }}\",\n  \"permission\": {\n    \"canPublish\": true,\n    \"canSubscribe\": true,\n    \"canPublishData\": true\n  }\n}",
+        "options": {}
+      },
+      "id": "update-livekit",
+      "name": "Update LiveKit Permissions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "wait",
+      "name": "Wait for Permissions",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [900, 300],
+      "webhookId": "assign-arena-role-wait"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/arena_participants/documents",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"documentId\": \"unique()\",\n  \"data\": {\n    \"roomId\": \"{{ $('Webhook - Arena Role Assignment').item.json.body.roomId }}\",\n    \"userId\": \"{{ $('Webhook - Arena Role Assignment').item.json.body.userId }}\",\n    \"role\": \"{{ $('Webhook - Arena Role Assignment').item.json.body.role }}\",\n    \"assignedAt\": \"{{ $now.toISO() }}\",\n    \"isActive\": true\n  }\n}",
+        "options": {}
+      },
+      "id": "create-participant",
+      "name": "Create Arena Participant",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const webhookData = $input.first().json;\nconst appwriteResult = $input.last().json;\n\nreturn {\n  json: {\n    success: true,\n    message: 'Arena role assigned successfully',\n    userId: webhookData.body.userId,\n    roomId: webhookData.body.roomId,\n    role: webhookData.body.role,\n    livekitUpdated: true,\n    appwriteUpdated: true,\n    participantId: appwriteResult.$id,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "format-response",
+      "name": "Format Success Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "webhook-response",
+      "name": "Send Response to Flutter",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Webhook - Arena Role Assignment": {
+      "main": [[{ "node": "Generate LiveKit JWT", "type": "main", "index": 0 }]]
+    },
+    "Generate LiveKit JWT": {
+      "main": [[{ "node": "Update LiveKit Permissions", "type": "main", "index": 0 }]]
+    },
+    "Update LiveKit Permissions": {
+      "main": [[{ "node": "Wait for Permissions", "type": "main", "index": 0 }]]
+    },
+    "Wait for Permissions": {
+      "main": [[{ "node": "Create Arena Participant", "type": "main", "index": 0 }]]
+    },
+    "Create Arena Participant": {
+      "main": [[{ "node": "Format Success Response", "type": "main", "index": 0 }]]
+    },
+    "Format Success Response": {
+      "main": [[{ "node": "Send Response to Flutter", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-11T00:00:00.000Z",
+  "versionId": "1"
+}

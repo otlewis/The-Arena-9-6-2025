@@ -338,7 +338,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
+        side: BorderSide(color: scarletRed.withOpacity(0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -418,7 +418,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
+        side: BorderSide(color: scarletRed.withOpacity(0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -545,7 +545,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
+        side: BorderSide(color: scarletRed.withOpacity(0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -602,7 +602,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
+        side: BorderSide(color: scarletRed.withOpacity(0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),

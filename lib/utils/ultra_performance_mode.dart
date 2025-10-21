@@ -161,11 +161,11 @@ class UltraPerformanceMode {
   Color _getRoleColor(String role) {
     switch (role) {
       case 'moderator':
-        return Colors.red.withValues(alpha: 0.1);
+        return Colors.red.withOpacity(0.1);
       case 'speaker':
-        return Colors.blue.withValues(alpha: 0.1);
+        return Colors.blue.withOpacity(0.1);
       case 'pending':
-        return Colors.orange.withValues(alpha: 0.1);
+        return Colors.orange.withOpacity(0.1);
       default:
         return Colors.white;
     }
@@ -273,11 +273,11 @@ class _UltraFastParticipant extends StatelessWidget {
     // Pre-computed colors to avoid calculations
     switch (role) {
       case 'moderator':
-        return const Color(0x1AF44336); // Colors.red.withValues(alpha: 0.1)
+        return const Color(0x1AF44336); // Colors.red.withOpacity(0.1)
       case 'speaker':
-        return const Color(0x1A2196F3); // Colors.blue.withValues(alpha: 0.1)
+        return const Color(0x1A2196F3); // Colors.blue.withOpacity(0.1)
       case 'pending':
-        return const Color(0x1AFF9800); // Colors.orange.withValues(alpha: 0.1)
+        return const Color(0x1AFF9800); // Colors.orange.withOpacity(0.1)
       default:
         return const Color(0xFFFFFFFF); // Colors.white
     }

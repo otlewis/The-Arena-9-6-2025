@@ -147,7 +147,7 @@ class _WebViewerState extends State<WebViewer> {
         color: theme.cardColor,
         border: Border(
           bottom: BorderSide(
-            color: Colors.grey.withValues(alpha: 0.2),
+            color: Colors.grey.withOpacity(0.2),
             width: 1,
           ),
         ),
@@ -192,7 +192,7 @@ class _WebViewerState extends State<WebViewer> {
         color: theme.cardColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 4,
             offset: const Offset(0, -2),
           ),
@@ -320,7 +320,7 @@ class _WebViewerState extends State<WebViewer> {
                   ),
                 if (_isLoading && _loadingProgress < 1.0 && !_hasError)
                   Container(
-                    color: Colors.white.withValues(alpha: 0.8),
+                    color: Colors.white.withOpacity(0.8),
                     child: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,

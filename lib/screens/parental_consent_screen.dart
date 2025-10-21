@@ -65,7 +65,7 @@ class _ParentalConsentScreenState extends State<ParentalConsentScreen> {
                   gradient: LinearGradient(
                     colors: [
                       const Color(0xFF6B46C1),
-                      const Color(0xFF6B46C1).withValues(alpha: 0.8),
+                      const Color(0xFF6B46C1).withOpacity(0.8),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -73,7 +73,7 @@ class _ParentalConsentScreenState extends State<ParentalConsentScreen> {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF6B46C1).withValues(alpha: 0.3),
+                      color: const Color(0xFF6B46C1).withOpacity(0.3),
                       blurRadius: 15,
                       offset: const Offset(0, 8),
                     ),
@@ -101,7 +101,7 @@ class _ParentalConsentScreenState extends State<ParentalConsentScreen> {
                       'Because you are under 18',
                       style: TextStyle(
                         fontSize: 16,
-                        color: Colors.white.withValues(alpha: 0.9),
+                        color: Colors.white.withOpacity(0.9),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -120,7 +120,7 @@ class _ParentalConsentScreenState extends State<ParentalConsentScreen> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
+                      color: Colors.black.withOpacity(0.05),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -158,7 +158,7 @@ class _ParentalConsentScreenState extends State<ParentalConsentScreen> {
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: _hasParentalConsent 
-                      ? const Color(0xFF6B46C1).withValues(alpha: 0.1)
+                      ? const Color(0xFF6B46C1).withOpacity(0.1)
                       : Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
@@ -217,7 +217,7 @@ class _ParentalConsentScreenState extends State<ParentalConsentScreen> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
+                      color: Colors.black.withOpacity(0.05),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -441,7 +441,7 @@ class _ParentalConsentScreenState extends State<ParentalConsentScreen> {
                         ),
                         elevation: _hasParentalConsent ? 4 : 0,
                         shadowColor: _hasParentalConsent 
-                            ? const Color(0xFF6B46C1).withValues(alpha: 0.3)
+                            ? const Color(0xFF6B46C1).withOpacity(0.3)
                             : null,
                       ),
                       child: Text(

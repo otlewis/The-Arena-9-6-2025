@@ -346,7 +346,7 @@ class _SuperModManagementScreenState extends State<SuperModManagementScreen> {
                   decoration: BoxDecoration(
                     color: const Color(0xFF1A1A1A),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
+                    border: Border.all(color: Colors.purple.withOpacity(0.3)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -384,11 +384,11 @@ class _SuperModManagementScreenState extends State<SuperModManagementScreen> {
                           fillColor: Colors.black,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.purple.withValues(alpha: 0.3)),
+                            borderSide: BorderSide(color: Colors.purple.withOpacity(0.3)),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.purple.withValues(alpha: 0.3)),
+                            borderSide: BorderSide(color: Colors.purple.withOpacity(0.3)),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
@@ -412,7 +412,7 @@ class _SuperModManagementScreenState extends State<SuperModManagementScreen> {
                           decoration: BoxDecoration(
                             color: Colors.black,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
+                            border: Border.all(color: Colors.purple.withOpacity(0.3)),
                           ),
                           child: ListView.builder(
                             shrinkWrap: true,
@@ -483,7 +483,7 @@ class _SuperModManagementScreenState extends State<SuperModManagementScreen> {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.purple.withValues(alpha: 0.2),
+                                color: Colors.purple.withOpacity(0.2),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
@@ -569,8 +569,8 @@ class _SuperModManagementScreenState extends State<SuperModManagementScreen> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isFounder
-              ? Colors.yellow.withValues(alpha: 0.3)
-              : Colors.purple.withValues(alpha: 0.3),
+              ? Colors.yellow.withOpacity(0.3)
+              : Colors.purple.withOpacity(0.3),
         ),
       ),
       child: Row(
@@ -614,7 +614,7 @@ class _SuperModManagementScreenState extends State<SuperModManagementScreen> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.yellow.withValues(alpha: 0.2),
+                          color: Colors.yellow.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Text(

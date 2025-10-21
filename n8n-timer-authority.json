@@ -1,0 +1,156 @@
+{
+  "name": "Timer Authority - Get Timer State",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "timer/:roomId",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-timer-get",
+      "name": "Webhook - Get Timer",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "timer-get"
+    },
+    {
+      "parameters": {
+        "url": "=https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/timers/documents/{{ $json.params.roomId }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_9eb533155b87619154f399a46a8edcc321b0076b56a37767075b8b8b254edc6328abb380594edfab634ee531470e84773d6bf5951295ad1687c82e258da45758f3c4ff0101b4217cb828723f1b4acac507f092afe799f8548b2e1de14e1028dc8459fcd32387ef74b8de8a505f90cc03a2958d69b020ca74ab6481ec8411f3e3"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-timer-document",
+      "name": "Get Timer from Appwrite",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate canonical timer state with drift correction\nconst timerDoc = $input.all()[0].json;\n\n// Current server time (milliseconds)\nconst now = Date.now();\n\n// Parse timer document fields (matching Appwrite collection schema)\nconst state = timerDoc.status || 'stopped';\nconst duration = timerDoc.durationSeconds || 0;\nconst startedAt = timerDoc.startTime ? new Date(timerDoc.startTime).getTime() : null;\nconst currentPhase = timerDoc.currentPhase || 'waiting';\nconst currentSpeaker = timerDoc.currentSpeaker || null;\n\nlet elapsed = 0;\nlet remaining = duration;\n\nif (state === 'running' && startedAt) {\n  // Timer is actively running\n  // elapsed = (now - startedAt) in seconds\n  elapsed = Math.max(0, (now - startedAt) / 1000);\n  remaining = Math.max(0, duration - elapsed);\n  \n} else if (state === 'paused' && startedAt) {\n  // Timer is paused - use remainingSeconds from document\n  remaining = timerDoc.remainingSeconds || 0;\n  elapsed = duration - remaining;\n  \n} else if (state === 'completed') {\n  // Timer completed\n  elapsed = duration;\n  remaining = 0;\n  \n} else {\n  // Timer is stopped or waiting\n  elapsed = 0;\n  remaining = duration;\n}\n\n// Round to 2 decimal places for precision\nelapsed = Math.round(elapsed * 100) / 100;\nremaining = Math.round(remaining * 100) / 100;\n\n// Return canonical state\nreturn [{\n  json: {\n    room_id: timerDoc.roomId,\n    state: state,\n    elapsed: elapsed,\n    remaining: remaining,\n    duration: duration,\n    current_phase: currentPhase,\n    current_speaker: currentSpeaker,\n    server_timestamp: now,\n    started_at: startedAt,\n    paused_at: null\n  }\n}];"
+      },
+      "id": "calculate-timer-state",
+      "name": "Calculate Timer State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-cache, no-store, must-revalidate"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-timer-state",
+      "name": "Respond with Timer State",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 404,
+        "responseBody": "={{ { \"error\": \"Timer not found\", \"room_id\": $json.params.roomId } }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-not-found",
+      "name": "Respond Not Found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 480]
+    }
+  ],
+  "connections": {
+    "Webhook - Get Timer": {
+      "main": [
+        [
+          {
+            "node": "Get Timer from Appwrite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Timer from Appwrite": {
+      "main": [
+        [
+          {
+            "node": "Calculate Timer State",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Timer State": {
+      "main": [
+        [
+          {
+            "node": "Respond with Timer State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-09T22:00:00.000Z",
+  "versionId": "1"
+}

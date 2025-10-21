@@ -174,7 +174,7 @@ class _JudgeRegistrationScreenState extends State<JudgeRegistrationScreen> {
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.grey.withValues(alpha: 0.1),
+                    color: Colors.grey.withOpacity(0.1),
                     blurRadius: 10,
                     offset: const Offset(0, 2),
                   ),
@@ -326,7 +326,7 @@ class _JudgeRegistrationScreenState extends State<JudgeRegistrationScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.1),
+            color: Colors.grey.withOpacity(0.1),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -398,7 +398,7 @@ class _JudgeRegistrationScreenState extends State<JudgeRegistrationScreen> {
               }
             });
           },
-          selectedColor: const Color(0xFFFFC107).withValues(alpha: 0.2),
+          selectedColor: const Color(0xFFFFC107).withOpacity(0.2),
           checkmarkColor: const Color(0xFFFFC107),
           labelStyle: TextStyle(
             color: isSelected ? const Color(0xFFFFC107) : Colors.grey[700],

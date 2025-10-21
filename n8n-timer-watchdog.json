@@ -1,0 +1,294 @@
+{
+  "name": "Timer Watchdog - Monitor & Auto-Complete",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/timers/documents",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_9eb533155b87619154f399a46a8edcc321b0076b56a37767075b8b8b254edc6328abb380594edfab634ee531470e84773d6bf5951295ad1687c82e258da45758f3c4ff0101b4217cb828723f1b4acac507f092afe799f8548b2e1de14e1028dc8459fcd32387ef74b8de8a505f90cc03a2958d69b020ca74ab6481ec8411f3e3"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-all-timers",
+      "name": "Get All Running Timers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Find timers that need action\nconst documents = $input.all()[0].json.documents || [];\nconst now = Date.now();\n\nconst expiredTimers = [];\nconst stuckTimers = [];\n\nfor (const timer of documents) {\n  const state = timer.status;\n  const startedAt = timer.startedAt ? new Date(timer.startedAt).getTime() : null;\n  const pausedAt = timer.pausedAt ? new Date(timer.pausedAt).getTime() : null;\n  const pausedTime = timer.pausedTime || 0;\n  const duration = timer.durationSeconds || 0;\n  const updatedAt = timer.$updatedAt ? new Date(timer.$updatedAt).getTime() : null;\n  \n  // Check for expired timers (running and past duration)\n  if (state === 'running' && startedAt) {\n    const elapsed = ((now - startedAt) / 1000) - pausedTime;\n    const remaining = duration - elapsed;\n    \n    if (remaining <= 0) {\n      expiredTimers.push({\n        documentId: timer.$id,\n        roomId: timer.roomId,\n        elapsed: Math.round(elapsed),\n        duration: duration,\n        overdue: Math.round(Math.abs(remaining)),\n        currentPhase: timer.currentPhase,\n        currentSpeaker: timer.currentSpeaker\n      });\n    }\n  }\n  \n  // Check for stuck timers (no update in 2+ minutes while running)\n  if (state === 'running' && updatedAt) {\n    const timeSinceUpdate = (now - updatedAt) / 1000;\n    if (timeSinceUpdate > 120) {\n      stuckTimers.push({\n        documentId: timer.$id,\n        roomId: timer.roomId,\n        secondsSinceUpdate: Math.round(timeSinceUpdate),\n        status: state\n      });\n    }\n  }\n}\n\nreturn [\n  { json: { expiredTimers, stuckTimers, timestamp: new Date().toISOString() } }\n];"
+      },
+      "id": "code-analyze-timers",
+      "name": "Analyze Timers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-expired",
+              "leftValue": "={{ $json.expiredTimers.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-has-expired",
+      "name": "Has Expired Timers?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-stuck",
+              "leftValue": "={{ $json.stuckTimers.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-has-stuck",
+      "name": "Has Stuck Timers?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "expiredTimers",
+        "options": {}
+      },
+      "id": "split-expired",
+      "name": "Split Expired Timers",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [1120, 100]
+    },
+    {
+      "parameters": {
+        "url": "=https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/timers/documents/{{ $json.documentId }}",
+        "method": "PATCH",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_9eb533155b87619154f399a46a8edcc321b0076b56a37767075b8b8b254edc6328abb380594edfab634ee531470e84773d6bf5951295ad1687c82e258da45758f3c4ff0101b4217cb828723f1b4acac507f092afe799f8548b2e1de14e1028dc8459fcd32387ef74b8de8a505f90cc03a2958d69b020ca74ab6481ec8411f3e3"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"data\": {\n    \"status\": \"completed\"\n  }\n}",
+        "options": {}
+      },
+      "id": "complete-timer",
+      "name": "Mark Timer as Completed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log completion for monitoring\nconst item = $input.item.json;\n\nconsole.log(`⏱️ AUTO-COMPLETED expired timer in room ${item.roomId}`);\nconsole.log(`   Phase: ${item.currentPhase}`);\nconsole.log(`   Speaker: ${item.currentSpeaker || 'N/A'}`);\nconsole.log(`   Was ${item.overdue} seconds overdue`);\n\nreturn {\n  json: {\n    ...item,\n    completedAt: new Date().toISOString(),\n    completedBy: 'n8n-watchdog'\n  }\n};"
+      },
+      "id": "log-completion",
+      "name": "Log Timer Completion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 100]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "stuckTimers",
+        "options": {}
+      },
+      "id": "split-stuck",
+      "name": "Split Stuck Timers",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log stuck timers for alerting\nconst item = $input.item.json;\n\nconsole.error(`🚨 STUCK TIMER DETECTED in room ${item.roomId}`);\nconsole.error(`   No update for ${item.secondsSinceUpdate} seconds`);\nconsole.error(`   State: ${item.state}`);\nconsole.error(`   Consider manual intervention`);\n\n// Could trigger alerts, webhooks, or notifications here\n\nreturn {\n  json: {\n    ...item,\n    alertedAt: new Date().toISOString(),\n    severity: 'high'\n  }\n};"
+      },
+      "id": "alert-stuck-timer",
+      "name": "Alert Stuck Timer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 500]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get All Running Timers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Running Timers": {
+      "main": [
+        [
+          {
+            "node": "Analyze Timers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Timers": {
+      "main": [
+        [
+          {
+            "node": "Has Expired Timers?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Has Stuck Timers?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Expired Timers?": {
+      "main": [
+        [
+          {
+            "node": "Split Expired Timers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Stuck Timers?": {
+      "main": [
+        [
+          {
+            "node": "Split Stuck Timers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Expired Timers": {
+      "main": [
+        [
+          {
+            "node": "Mark Timer as Completed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Timer as Completed": {
+      "main": [
+        [
+          {
+            "node": "Log Timer Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Stuck Timers": {
+      "main": [
+        [
+          {
+            "node": "Alert Stuck Timer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-09T22:15:00.000Z",
+  "versionId": "1"
+}

@@ -1,0 +1,211 @@
+{
+  "name": "Arena Challenge Navigation Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "arena-challenge-accepted",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - Challenge Update",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "arena-challenge-accepted"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.events }}",
+              "rightValue": ".update",
+              "operator": {
+                "type": "array",
+                "operation": "contains",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "condition2",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "accepted",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "condition3",
+              "leftValue": "={{ $json.arenaRoomId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-accepted",
+      "name": "Filter: Challenge Accepted",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://cloud.appwrite.io/v1/databases/arena_db/collections/arena_navigation_notifications/documents",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "appwriteApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "documentId",
+              "value": "unique()"
+            },
+            {
+              "name": "data",
+              "value": "={{ JSON.stringify({\n  userId: $json.challengerId,\n  type: 'arena_ready',\n  arenaRoomId: $json.arenaRoomId,\n  challengeId: $json.$id,\n  status: 'pending',\n  topic: $json.topic,\n  description: $json.description || ''\n}) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "notify-challenger",
+      "name": "Create Notification for Challenger",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://cloud.appwrite.io/v1/databases/arena_db/collections/arena_navigation_notifications/documents",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "appwriteApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "documentId",
+              "value": "unique()"
+            },
+            {
+              "name": "data",
+              "value": "={{ JSON.stringify({\n  userId: $json.challengedId,\n  type: 'arena_ready',\n  arenaRoomId: $json.arenaRoomId,\n  challengeId: $json.$id,\n  status: 'pending',\n  topic: $json.topic,\n  description: $json.description || ''\n}) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "notify-challenged",
+      "name": "Create Notification for Challenged User",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  notificationsCreated: 2,\n  challengerId: $('Create Notification for Challenger').item.json.userId,\n  challengedId: $('Create Notification for Challenged User').item.json.userId,\n  arenaRoomId: $json.arenaRoomId\n}) }}",
+        "options": {}
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 300]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - Challenge Update": {
+      "main": [
+        [
+          {
+            "node": "Filter: Challenge Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: Challenge Accepted": {
+      "main": [
+        [
+          {
+            "node": "Create Notification for Challenger",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Notification for Challenged User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Notification for Challenger": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Notification for Challenged User": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "meta": {
+    "instanceId": "your_instance_id"
+  },
+  "id": "arena-challenge-navigation",
+  "tags": []
+}

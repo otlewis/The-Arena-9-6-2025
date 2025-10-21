@@ -16,6 +16,10 @@ class UserTimeoutService {
   static const String _databaseId = 'arena_db';
   static const String _collectionId = 'user_timeouts';
 
+  // Periodic timer to auto-expire timeouts
+  Timer? _cleanupTimer;
+  bool _isCleanupRunning = false;
+
   /// Check if a user is currently timed out in a room
   Future<bool> isUserTimedOut(String userId, String roomId) async {
     try {
@@ -175,8 +179,39 @@ class UserTimeoutService {
     }
   }
 
-  /// Clean up expired timeouts (optional - could run periodically)
+  /// Start periodic cleanup of expired timeouts (runs every 30 seconds)
+  void startPeriodicCleanup() {
+    if (_cleanupTimer != null) {
+      _logger.info('⏰ Periodic timeout cleanup already running');
+      return;
+    }
+
+    _logger.info('⏰ Starting periodic timeout cleanup (every 30 seconds)');
+
+    // Run cleanup immediately on start
+    cleanupExpiredTimeouts();
+
+    // Then run every 30 seconds
+    _cleanupTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      cleanupExpiredTimeouts();
+    });
+  }
+
+  /// Stop periodic cleanup
+  void stopPeriodicCleanup() {
+    if (_cleanupTimer != null) {
+      _logger.info('⏰ Stopping periodic timeout cleanup');
+      _cleanupTimer?.cancel();
+      _cleanupTimer = null;
+    }
+  }
+
+  /// Clean up expired timeouts
   Future<void> cleanupExpiredTimeouts() async {
+    // Prevent concurrent cleanup runs
+    if (_isCleanupRunning) return;
+
+    _isCleanupRunning = true;
     try {
       final now = DateTime.now().toIso8601String();
 
@@ -203,6 +238,13 @@ class UserTimeoutService {
       }
     } catch (e) {
       _logger.error('Failed to cleanup expired timeouts: $e');
+    } finally {
+      _isCleanupRunning = false;
     }
+  }
+
+  /// Dispose and cleanup resources
+  void dispose() {
+    stopPeriodicCleanup();
   }
 }

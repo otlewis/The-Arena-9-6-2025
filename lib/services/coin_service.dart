@@ -1,3 +1,4 @@
+// ignore_for_file: deprecated_member_use_from_same_package
 import '../services/appwrite_service.dart';
 import '../services/reputation_service.dart';
 import '../core/logging/app_logger.dart';

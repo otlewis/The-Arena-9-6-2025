@@ -88,7 +88,7 @@ class _MockPaymentDialogState extends State<MockPaymentDialog> {
               : const Color(0xFFE8E8E8),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: scarletRed.withValues(alpha: 0.2),
+            color: scarletRed.withOpacity(0.2),
             width: 1.5,
           ),
         ),
@@ -106,10 +106,10 @@ class _MockPaymentDialogState extends State<MockPaymentDialog> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.1),
+                      color: Colors.orange.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: Colors.orange.withValues(alpha: 0.3),
+                        color: Colors.orange.withOpacity(0.3),
                       ),
                     ),
                     child: Row(
@@ -195,7 +195,7 @@ class _MockPaymentDialogState extends State<MockPaymentDialog> {
                       Container(
                         padding: EdgeInsets.all(isSmallScreen ? 8 : 12),
                         decoration: BoxDecoration(
-                          color: Colors.blue.withValues(alpha: 0.05),
+                          color: Colors.blue.withOpacity(0.05),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Column(

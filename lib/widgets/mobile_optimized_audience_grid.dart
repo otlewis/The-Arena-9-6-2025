@@ -105,7 +105,7 @@ class _MobileOptimizedAudienceGridState extends State<MobileOptimizedAudienceGri
               ? null 
               : [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
+                    color: Colors.black.withOpacity(0.1),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),
@@ -219,11 +219,11 @@ class _MobileOptimizedAudienceGridState extends State<MobileOptimizedAudienceGri
   Color _getRoleColor(String role) {
     switch (role) {
       case 'moderator':
-        return Colors.red.withValues(alpha: 0.1);
+        return Colors.red.withOpacity(0.1);
       case 'speaker':
-        return Colors.blue.withValues(alpha: 0.1);
+        return Colors.blue.withOpacity(0.1);
       case 'pending':
-        return Colors.orange.withValues(alpha: 0.1);
+        return Colors.orange.withOpacity(0.1);
       default:
         return Colors.white;
     }
@@ -268,7 +268,7 @@ class MobileOptimizedSpeakersPanel extends StatelessWidget {
         margin: const EdgeInsets.all(8),
         padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.7),
+          color: Colors.black.withOpacity(0.7),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -287,7 +287,7 @@ class MobileOptimizedSpeakersPanel extends StatelessWidget {
         margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.3),
+            color: Colors.white.withOpacity(0.3),
             width: 1,
           ),
           borderRadius: BorderRadius.circular(8),
@@ -313,8 +313,8 @@ class MobileOptimizedSpeakersPanel extends StatelessWidget {
         margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           color: role == 'moderator' 
-            ? Colors.red.withValues(alpha: 0.2)
-            : Colors.blue.withValues(alpha: 0.2),
+            ? Colors.red.withOpacity(0.2)
+            : Colors.blue.withOpacity(0.2),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: role == 'moderator' ? Colors.red : Colors.blue,

@@ -354,11 +354,18 @@ class ChallengeMessagingService {
   
   /// Handle challenge status updates
   void _handleChallengeUpdate(ChallengeMessage challenge) {
+    AppLogger().debug('📱 _handleChallengeUpdate: status=${challenge.status}, arenaRoomId=${challenge.arenaRoomId}, challengerId=${challenge.challengerId}, currentUserId=$_currentUserId');
+
     // If the current user is the one who sent the challenge, and it was declined,
     // notify them via a special stream.
     if (challenge.challengerId == _currentUserId && challenge.status == 'declined') {
       AppLogger().info('📱 Challenge declined by user ${challenge.challengedId}. Notifying challenger.');
       _challengeDeclinedController.add(challenge);
+    }
+
+    // If the challenge was accepted, log it specifically
+    if (challenge.status == 'accepted') {
+      AppLogger().info('📱 ✅ Challenge ACCEPTED: id=${challenge.id}, arenaRoomId=${challenge.arenaRoomId}, challenger will be notified');
     }
 
     // Update in pending list
@@ -372,8 +379,9 @@ class ChallengeMessagingService {
       }
       _pendingChallengesController.add(_pendingChallenges);
     }
-    
+
     // Emit update event
+    AppLogger().debug('📱 Emitting challenge update to stream: status=${challenge.status}, arenaRoomId=${challenge.arenaRoomId}');
     _challengeUpdatesController.add(challenge);
   }
   

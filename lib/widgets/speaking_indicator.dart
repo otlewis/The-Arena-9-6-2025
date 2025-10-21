@@ -92,23 +92,23 @@ class _SpeakingIndicatorState extends State<SpeakingIndicator>
 
   Color _getBorderColor() {
     if (widget.isMuted) {
-      return Colors.red.withValues(alpha: 0.7);
+      return Colors.red.withOpacity(0.7);
     }
     
     switch (widget.userRole?.toLowerCase()) {
       case 'moderator':
-        return Colors.purple.withValues(alpha: 0.8);
+        return Colors.purple.withOpacity(0.8);
       case 'judge':
       case 'judge1':
       case 'judge2':
       case 'judge3':
-        return Colors.amber.withValues(alpha: 0.8);
+        return Colors.amber.withOpacity(0.8);
       case 'debater1':
       case 'debater2':
       case 'speaker':
-        return Colors.blue.withValues(alpha: 0.8);
+        return Colors.blue.withOpacity(0.8);
       default:
-        return Colors.green.withValues(alpha: 0.8);
+        return Colors.green.withOpacity(0.8);
     }
   }
 
@@ -133,12 +133,12 @@ class _SpeakingIndicatorState extends State<SpeakingIndicator>
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(
-              color: borderColor.withValues(alpha: borderColor.a * _borderAnimation.value),
+              color: borderColor.withOpacity(borderColor.opacity * _borderAnimation.value),
               width: widget.borderWidth * _borderAnimation.value,
             ),
             boxShadow: isAnimating ? [
               BoxShadow(
-                color: borderColor.withValues(alpha: 0.3 * _borderAnimation.value),
+                color: borderColor.withOpacity(0.3 * _borderAnimation.value),
                 blurRadius: 10.0 * _borderAnimation.value,
                 spreadRadius: 2.0 * _borderAnimation.value,
               ),

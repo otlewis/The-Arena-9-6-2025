@@ -87,13 +87,13 @@ class _NeonMicIconState extends State<NeonMicIcon>
               boxShadow: [
                 // Subtle outer glow
                 BoxShadow(
-                  color: color.withValues(alpha: glowIntensity * 0.3),
+                  color: color.withOpacity(glowIntensity * 0.3),
                   blurRadius: 8,
                   spreadRadius: 1,
                 ),
                 // Minimal inner glow
                 BoxShadow(
-                  color: color.withValues(alpha: glowIntensity * 0.4),
+                  color: color.withOpacity(glowIntensity * 0.4),
                   blurRadius: 4,
                   spreadRadius: 0,
                 ),
@@ -140,7 +140,7 @@ class NeonMicPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     final glowPaint = Paint()
-      ..color = color.withValues(alpha: glowIntensity * 0.2)
+      ..color = color.withOpacity(glowIntensity * 0.2)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3.0
       ..strokeCap = StrokeCap.round

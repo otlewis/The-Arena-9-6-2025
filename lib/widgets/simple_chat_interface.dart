@@ -258,7 +258,7 @@ class _SimpleChatInterfaceState extends State<SimpleChatInterface> {
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     
     return Scaffold(
-      backgroundColor: Colors.black.withValues(alpha: 0.5),
+      backgroundColor: Colors.black.withOpacity(0.5),
       resizeToAvoidBottomInset: false,
       body: GestureDetector(
         onTap: () => Navigator.pop(context),

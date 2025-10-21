@@ -250,7 +250,7 @@ class SimpleArenaParticipantsPanel extends ConsumerWidget {
     return Container(
       padding: EdgeInsets.all(isCompact ? 8 : 12),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         border: Border.all(
           color: isSpeaking ? Colors.green : color,
           width: isSpeaking ? 2 : 1,

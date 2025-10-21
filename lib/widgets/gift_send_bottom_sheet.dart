@@ -245,15 +245,15 @@ class _GiftSendBottomSheetState extends State<GiftSendBottomSheet> with TickerPr
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF8B5CF6).withValues(alpha: 0.1),
-            const Color(0xFF6B46C1).withValues(alpha: 0.1),
+            const Color(0xFF8B5CF6).withOpacity(0.1),
+            const Color(0xFF6B46C1).withOpacity(0.1),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+          color: const Color(0xFF8B5CF6).withOpacity(0.3),
         ),
       ),
       child: Row(
@@ -301,7 +301,7 @@ class _GiftSendBottomSheetState extends State<GiftSendBottomSheet> with TickerPr
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: badgeColor.withValues(alpha: 0.3),
+            color: badgeColor.withOpacity(0.3),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -425,17 +425,17 @@ class _GiftSendBottomSheetState extends State<GiftSendBottomSheet> with TickerPr
                     child: Container(
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? const Color(0xFF8B5CF6).withValues(alpha: 0.2)
+                            ? const Color(0xFF8B5CF6).withOpacity(0.2)
                             : canAfford
-                                ? Colors.grey.withValues(alpha: 0.1)
-                                : Colors.red.withValues(alpha: 0.1),
+                                ? Colors.grey.withOpacity(0.1)
+                                : Colors.red.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: isSelected
                               ? const Color(0xFF8B5CF6)
                               : canAfford
-                                  ? Colors.grey.withValues(alpha: 0.3)
-                                  : Colors.red.withValues(alpha: 0.3),
+                                  ? Colors.grey.withOpacity(0.3)
+                                  : Colors.red.withOpacity(0.3),
                           width: isSelected ? 2 : 1,
                         ),
                       ),
@@ -508,10 +508,10 @@ class _GiftSendBottomSheetState extends State<GiftSendBottomSheet> with TickerPr
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+        color: const Color(0xFF8B5CF6).withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+          color: const Color(0xFF8B5CF6).withOpacity(0.3),
         ),
       ),
       child: Row(

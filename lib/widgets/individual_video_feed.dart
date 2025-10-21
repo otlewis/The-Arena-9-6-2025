@@ -39,8 +39,8 @@ class _IndividualVideoFeedState extends State<IndividualVideoFeed> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: widget.isLocalUser 
-              ? Colors.blue.withValues(alpha: 0.8)
-              : Colors.grey.withValues(alpha: 0.3),
+              ? Colors.blue.withOpacity(0.8)
+              : Colors.grey.withOpacity(0.3),
           width: 2,
         ),
       ),
@@ -91,7 +91,7 @@ class _IndividualVideoFeedState extends State<IndividualVideoFeed> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.7),
+                color: Colors.black.withOpacity(0.7),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -125,8 +125,8 @@ class _IndividualVideoFeedState extends State<IndividualVideoFeed> {
                   height: 28,
                   decoration: BoxDecoration(
                     color: widget.hasVideo 
-                        ? Colors.green.withValues(alpha: 0.8)
-                        : Colors.red.withValues(alpha: 0.8),
+                        ? Colors.green.withOpacity(0.8)
+                        : Colors.red.withOpacity(0.8),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -146,7 +146,7 @@ class _IndividualVideoFeedState extends State<IndividualVideoFeed> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.8),
+                  color: Colors.blue.withOpacity(0.8),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: const Text(

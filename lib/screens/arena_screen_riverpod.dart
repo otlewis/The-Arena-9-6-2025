@@ -63,7 +63,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
               const SizedBox(height: 16),
               Text(
                 'Loading Arena...',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
+                style: TextStyle(color: Colors.white.withOpacity(0.8)),
               ),
             ],
           ),
@@ -161,8 +161,8 @@ class ArenaScreenRiverpod extends ConsumerWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF6B46C1).withValues(alpha: 0.9),
-            const Color(0xFF8B5CF6).withValues(alpha: 0.9),
+            const Color(0xFF6B46C1).withOpacity(0.9),
+            const Color(0xFF8B5CF6).withOpacity(0.9),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -203,7 +203,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
                     Text(
                       networkHealthy ? 'Connected' : 'Reconnecting...',
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.8),
+                        color: Colors.white.withOpacity(0.8),
                         fontSize: 12,
                       ),
                     ),
@@ -217,7 +217,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
+              color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -241,8 +241,8 @@ class ArenaScreenRiverpod extends ConsumerWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF6B46C1).withValues(alpha: 0.9),
-            const Color(0xFF8B5CF6).withValues(alpha: 0.9),
+            const Color(0xFF6B46C1).withOpacity(0.9),
+            const Color(0xFF8B5CF6).withOpacity(0.9),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -250,7 +250,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
+            color: Colors.black.withOpacity(0.3),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -262,7 +262,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
           Text(
             state.currentPhase.description,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.9),
+              color: Colors.white.withOpacity(0.9),
               fontSize: 14,
             ),
             textAlign: TextAlign.center,
@@ -401,9 +401,9 @@ class ArenaScreenRiverpod extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Row(
         children: [
@@ -465,9 +465,9 @@ class ArenaScreenRiverpod extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.2),
+                color: Colors.green.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
+                border: Border.all(color: Colors.green.withOpacity(0.5)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -490,7 +490,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.3),
+                color: Colors.black.withOpacity(0.3),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -697,7 +697,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.green.withValues(alpha: 0.2),
+              color: Colors.green.withOpacity(0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Row(
@@ -715,7 +715,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.grey.withValues(alpha: 0.2),
+              color: Colors.grey.withOpacity(0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
@@ -780,7 +780,7 @@ class ArenaScreenRiverpod extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.3),
+        color: Colors.black.withOpacity(0.3),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(

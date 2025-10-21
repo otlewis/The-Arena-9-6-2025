@@ -71,15 +71,15 @@ class _ModerationActionDialogState extends State<ModerationActionDialog> {
           boxShadow: [
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.white.withValues(alpha: 0.03)
-                  : Colors.white.withValues(alpha: 0.7),
+                  ? Colors.white.withOpacity(0.03)
+                  : Colors.white.withOpacity(0.7),
               offset: const Offset(-12, -12),
               blurRadius: 24,
             ),
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.black.withValues(alpha: 0.6)
-                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                  ? Colors.black.withOpacity(0.6)
+                  : const Color(0xFFA3B1C6).withOpacity(0.5),
               offset: const Offset(12, 12),
               blurRadius: 24,
             ),
@@ -126,15 +126,15 @@ class _ModerationActionDialogState extends State<ModerationActionDialog> {
             boxShadow: [
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.white.withValues(alpha: 0.03)
-                    : Colors.white.withValues(alpha: 0.7),
+                    ? Colors.white.withOpacity(0.03)
+                    : Colors.white.withOpacity(0.7),
                 offset: const Offset(-4, -4),
                 blurRadius: 8,
               ),
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.black.withValues(alpha: 0.5)
-                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                    ? Colors.black.withOpacity(0.5)
+                    : const Color(0xFFA3B1C6).withOpacity(0.5),
                 offset: const Offset(4, 4),
                 blurRadius: 8,
               ),
@@ -194,8 +194,8 @@ class _ModerationActionDialogState extends State<ModerationActionDialog> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.6)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                ? Colors.black.withOpacity(0.6)
+                : const Color(0xFFA3B1C6).withOpacity(0.3),
             offset: const Offset(4, 4),
             blurRadius: 8,
             spreadRadius: -2,
@@ -278,7 +278,7 @@ class _ModerationActionDialogState extends State<ModerationActionDialog> {
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? _actionColors[action]!.withValues(alpha: 0.1)
+                        ? _actionColors[action]!.withOpacity(0.1)
                         : (_themeService.isDarkMode 
                             ? const Color(0xFF3A3A3A)
                             : const Color(0xFFF0F0F3)),
@@ -348,8 +348,8 @@ class _ModerationActionDialogState extends State<ModerationActionDialog> {
             boxShadow: [
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.black.withValues(alpha: 0.6)
-                    : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                    ? Colors.black.withOpacity(0.6)
+                    : const Color(0xFFA3B1C6).withOpacity(0.3),
                 offset: const Offset(4, 4),
                 blurRadius: 8,
                 spreadRadius: -2,
@@ -399,8 +399,8 @@ class _ModerationActionDialogState extends State<ModerationActionDialog> {
             boxShadow: [
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.black.withValues(alpha: 0.6)
-                    : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                    ? Colors.black.withOpacity(0.6)
+                    : const Color(0xFFA3B1C6).withOpacity(0.3),
                 offset: const Offset(4, 4),
                 blurRadius: 8,
                 spreadRadius: -2,
@@ -473,19 +473,19 @@ class _ModerationActionDialogState extends State<ModerationActionDialog> {
             boxShadow: isDisabled ? null : [
               BoxShadow(
                 color: isPrimary
-                    ? scarletRed.withValues(alpha: 0.3)
+                    ? scarletRed.withOpacity(0.3)
                     : (_themeService.isDarkMode 
-                        ? Colors.white.withValues(alpha: 0.03)
-                        : Colors.white.withValues(alpha: 0.7)),
+                        ? Colors.white.withOpacity(0.03)
+                        : Colors.white.withOpacity(0.7)),
                 offset: const Offset(-6, -6),
                 blurRadius: 12,
               ),
               BoxShadow(
                 color: isPrimary
-                    ? scarletRed.withValues(alpha: 0.5)
+                    ? scarletRed.withOpacity(0.5)
                     : (_themeService.isDarkMode 
-                        ? Colors.black.withValues(alpha: 0.5)
-                        : const Color(0xFFA3B1C6).withValues(alpha: 0.5)),
+                        ? Colors.black.withOpacity(0.5)
+                        : const Color(0xFFA3B1C6).withOpacity(0.5)),
                 offset: const Offset(6, 6),
                 blurRadius: 12,
               ),

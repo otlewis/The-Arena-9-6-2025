@@ -136,8 +136,8 @@ class ArenaParticipantWidgets {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: isAffirmative
-                ? [Colors.green.withValues(alpha: 0.8), Colors.green.withValues(alpha: 0.6)]
-                : [ArenaParticipantColors.scarletRed.withValues(alpha: 0.8), ArenaParticipantColors.scarletRed.withValues(alpha: 0.6)],
+                ? [Colors.green.withOpacity(0.8), Colors.green.withOpacity(0.6)]
+                : [ArenaParticipantColors.scarletRed.withOpacity(0.8), ArenaParticipantColors.scarletRed.withOpacity(0.6)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -147,7 +147,7 @@ class ArenaParticipantWidgets {
               : null,
           boxShadow: [
             BoxShadow(
-              color: (isAffirmative ? Colors.green : ArenaParticipantColors.scarletRed).withValues(alpha: 0.3),
+              color: (isAffirmative ? Colors.green : ArenaParticipantColors.scarletRed).withOpacity(0.3),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
@@ -206,15 +206,15 @@ class ArenaParticipantWidgets {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: isPurple
-                ? [ArenaParticipantColors.accentPurple.withValues(alpha: 0.8), ArenaParticipantColors.deepPurple.withValues(alpha: 0.8)]
-                : [Colors.amber.withValues(alpha: 0.8), Colors.orange.withValues(alpha: 0.8)],
+                ? [ArenaParticipantColors.accentPurple.withOpacity(0.8), ArenaParticipantColors.deepPurple.withOpacity(0.8)]
+                : [Colors.amber.withOpacity(0.8), Colors.orange.withOpacity(0.8)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: (isPurple ? ArenaParticipantColors.accentPurple : Colors.amber).withValues(alpha: 0.3),
+              color: (isPurple ? ArenaParticipantColors.accentPurple : Colors.amber).withOpacity(0.3),
               blurRadius: 6,
               offset: const Offset(0, 3),
             ),
@@ -366,7 +366,7 @@ class ArenaParticipantWidgets {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.amber.withValues(alpha: 0.6),
+                  color: Colors.amber.withOpacity(0.6),
                   blurRadius: 20,
                   spreadRadius: 5,
                 ),
@@ -465,9 +465,9 @@ class ArenaParticipantWidgets {
       padding: const EdgeInsets.all(12),
       margin: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Row(
         children: [

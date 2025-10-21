@@ -253,7 +253,7 @@ class _ModeratorListScreenState extends State<ModeratorListScreen> {
                       });
                       _loadModerators();
                     },
-                    selectedColor: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                    selectedColor: const Color(0xFF8B5CF6).withOpacity(0.3),
                     checkmarkColor: const Color(0xFF8B5CF6),
                     labelStyle: TextStyle(
                       color: isSelected ? const Color(0xFF8B5CF6) : Colors.white70,
@@ -279,7 +279,7 @@ class _ModeratorListScreenState extends State<ModeratorListScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+        color: const Color(0xFF8B5CF6).withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFF8B5CF6), width: 1),
       ),
@@ -327,7 +327,7 @@ class _ModeratorListScreenState extends State<ModeratorListScreen> {
           Icon(
             Icons.gavel,
             size: 64,
-            color: Colors.white.withValues(alpha: 0.3),
+            color: Colors.white.withOpacity(0.3),
           ),
           const SizedBox(height: 16),
           const Text(
@@ -468,7 +468,7 @@ class _ModeratorListScreenState extends State<ModeratorListScreen> {
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                    color: const Color(0xFF8B5CF6).withOpacity(0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(

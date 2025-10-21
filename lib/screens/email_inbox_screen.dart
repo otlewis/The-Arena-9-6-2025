@@ -685,7 +685,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
         child: ListTile(
           onTap: () => _openEmail(email),
           leading: CircleAvatar(
-            backgroundColor: accentPurple.withValues(alpha: 0.2),
+            backgroundColor: accentPurple.withOpacity(0.2),
             child: Text(
               (isInbox ? email.senderUsername : email.recipientUsername)[0].toUpperCase(),
               style: TextStyle(
@@ -741,7 +741,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
                   margin: const EdgeInsets.only(top: 4),
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: _getTypeColor(email.emailType).withValues(alpha: 0.2),
+                    color: _getTypeColor(email.emailType).withOpacity(0.2),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
@@ -853,7 +853,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
             }
           },
           leading: CircleAvatar(
-            backgroundColor: Colors.orange.withValues(alpha: 0.2),
+            backgroundColor: Colors.orange.withOpacity(0.2),
             child: const Icon(
               Icons.drafts,
               color: Colors.orange,

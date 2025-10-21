@@ -1,0 +1,16 @@
+{
+  "name": "generate-livekit-token",
+  "version": "1.0.0",
+  "description": "Server-side function to generate LiveKit access tokens with proper authorization",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "node-appwrite": "^13.0.0",
+    "livekit-server-sdk": "^2.0.0"
+  },
+  "keywords": ["appwrite", "livekit", "security", "webrtc"],
+  "author": "Arena Team",
+  "license": "MIT"
+}

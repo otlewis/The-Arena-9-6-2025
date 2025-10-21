@@ -228,10 +228,10 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
       decoration: BoxDecoration(
         color: _chatBackground,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _primaryAccent.withValues(alpha: 0.3)),
+        border: Border.all(color: _primaryAccent.withOpacity(0.3)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
+            color: Colors.black.withOpacity(0.3),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -291,7 +291,7 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.2),
+        color: Colors.white.withOpacity(0.2),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -371,7 +371,7 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: _secondaryAccent.withValues(alpha: 0.2),
+        color: _secondaryAccent.withOpacity(0.2),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -488,7 +488,7 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
+        color: color.withOpacity(0.2),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(

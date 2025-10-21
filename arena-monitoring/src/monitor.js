@@ -9,12 +9,12 @@ import { DashboardServer } from './dashboard.js';
 
 /**
  * Arena Launch Monitoring System
- * 
+ *
  * Real-time monitoring for critical Arena metrics during launch
  * - Timer synchronization accuracy
  * - Room creation success rates
  * - Database performance
- * - Agora connection health
+ * - LiveKit connection health
  */
 
 class ArenaLaunchMonitor {
@@ -36,9 +36,9 @@ class ArenaLaunchMonitor {
     // Monitoring intervals
     this.intervals = {
       timers: 5000,      // Check timer sync every 5 seconds
-      rooms: 10000,      // Check room creation every 10 seconds  
+      rooms: 10000,      // Check room creation every 10 seconds
       database: 15000,   // Check DB performance every 15 seconds
-      agora: 30000,      // Check Agora health every 30 seconds
+      livekit: 30000,    // Check LiveKit health every 30 seconds
       summary: 60000     // Print summary every minute
     };
   }
@@ -65,9 +65,9 @@ class ArenaLaunchMonitor {
         errorRate: 0,
         connectionHealth: 100
       },
-      agora: {
+      livekit: {
         voiceConnections: 0,
-        chatConnections: 0,
+        videoConnections: 0,
         connectionSuccessRate: 100,
         avgConnectTime: 0
       },
@@ -100,8 +100,8 @@ class ArenaLaunchMonitor {
       // Database performance monitoring
       setInterval(() => this.monitorDatabasePerformance(), this.intervals.database);
       
-      // Agora connection monitoring
-      setInterval(() => this.monitorAgoraConnections(), this.intervals.agora);
+      // LiveKit connection monitoring
+      setInterval(() => this.monitorLiveKitConnections(), this.intervals.livekit);
       
       // Summary reporting
       setInterval(() => this.printSummary(), this.intervals.summary);
@@ -126,7 +126,7 @@ class ArenaLaunchMonitor {
       this.monitorTimerSync(),
       this.monitorRoomCreation(),
       this.monitorDatabasePerformance(),
-      this.monitorAgoraConnections()
+      this.monitorLiveKitConnections()
     ]);
     
     console.log(chalk.green('✅ Initial checks complete\n'));
@@ -296,11 +296,11 @@ class ArenaLaunchMonitor {
     }
   }
 
-  async monitorAgoraConnections() {
+  async monitorLiveKitConnections() {
     try {
-      // This is a simplified check - in production you'd integrate with Agora's monitoring APIs
-      // For now, we'll check for recent activity in rooms as a proxy for Agora health
-      
+      // This is a simplified check - in production you'd integrate with LiveKit's monitoring APIs
+      // For now, we'll check for recent activity in rooms as a proxy for LiveKit health
+
       const activeRooms = await this.databases.listDocuments(
         this.databaseId,
         'arena_rooms',
@@ -313,19 +313,19 @@ class ArenaLaunchMonitor {
       // Estimate connections based on active rooms
       const estimatedConnections = activeRooms.documents.length * 2; // Rough estimate
 
-      this.metrics.agora = {
+      this.metrics.livekit = {
         voiceConnections: estimatedConnections,
-        chatConnections: estimatedConnections,
-        connectionSuccessRate: 95, // Would need actual Agora API integration
+        videoConnections: estimatedConnections,
+        connectionSuccessRate: 95, // Would need actual LiveKit API integration
         avgConnectTime: 1200 // Estimated 1.2s average connect time
       };
 
-      this.logMetric('🎤 AGORA', 
-        `~${estimatedConnections} connections, ${this.metrics.agora.connectionSuccessRate}% success`);
+      this.logMetric('🎤 LIVEKIT',
+        `~${estimatedConnections} connections, ${this.metrics.livekit.connectionSuccessRate}% success`);
 
     } catch (error) {
-      this.alerts.error('Agora Monitor', error.message);
-      this.metrics.agora.connectionSuccessRate = 0;
+      this.alerts.error('LiveKit Monitor', error.message);
+      this.metrics.livekit.connectionSuccessRate = 0;
     }
   }
 
@@ -349,8 +349,8 @@ class ArenaLaunchMonitor {
     console.log(chalk.yellow('💾 Database:'), 
       `${this.metrics.database.avgResponseTime}ms avg, ${this.metrics.database.connectionHealth}% health`);
     
-    console.log(chalk.yellow('🎤 Agora:'), 
-      `~${this.metrics.agora.voiceConnections} connections, ${this.metrics.agora.connectionSuccessRate}% success`);
+    console.log(chalk.yellow('🎤 LiveKit:'),
+      `~${this.metrics.livekit.voiceConnections} connections, ${this.metrics.livekit.connectionSuccessRate}% success`);
     
     console.log('');
   }

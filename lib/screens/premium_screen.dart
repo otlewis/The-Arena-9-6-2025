@@ -213,10 +213,10 @@ class _PremiumScreenState extends State<PremiumScreen> {
                 margin: const EdgeInsets.only(bottom: 16),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
+                  color: Colors.orange.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: Colors.orange.withValues(alpha: 0.3),
+                    color: Colors.orange.withOpacity(0.3),
                     width: 1.5,
                   ),
                 ),
@@ -331,21 +331,21 @@ class _PremiumScreenState extends State<PremiumScreen> {
             : const Color(0xFFF0F0F3),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: scarletRed.withValues(alpha: 0.2),
+          color: scarletRed.withOpacity(0.2),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-8, -8),
             blurRadius: 16,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(8, 8),
             blurRadius: 16,
           ),
@@ -367,16 +367,16 @@ class _PremiumScreenState extends State<PremiumScreen> {
                   boxShadow: [
                     BoxShadow(
                       color: _themeService.isDarkMode 
-                          ? Colors.black.withValues(alpha: 0.6)
-                          : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                          ? Colors.black.withOpacity(0.6)
+                          : const Color(0xFFA3B1C6).withOpacity(0.3),
                       offset: const Offset(3, 3),
                       blurRadius: 6,
                       spreadRadius: -2,
                     ),
                     BoxShadow(
                       color: _themeService.isDarkMode 
-                          ? Colors.white.withValues(alpha: 0.02)
-                          : Colors.white.withValues(alpha: 0.8),
+                          ? Colors.white.withOpacity(0.02)
+                          : Colors.white.withOpacity(0.8),
                       offset: const Offset(-3, -3),
                       blurRadius: 6,
                       spreadRadius: -2,
@@ -423,21 +423,21 @@ class _PremiumScreenState extends State<PremiumScreen> {
                 : const Color(0xFFE8E8E8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: isPopular ? color.withValues(alpha: 0.6) : scarletRed.withValues(alpha: 0.2),
+              color: isPopular ? color.withOpacity(0.6) : scarletRed.withOpacity(0.2),
               width: isPopular ? 2 : 1.5,
             ),
             boxShadow: [
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.white.withValues(alpha: 0.03)
-                    : Colors.white.withValues(alpha: 0.8),
+                    ? Colors.white.withOpacity(0.03)
+                    : Colors.white.withOpacity(0.8),
                 offset: const Offset(-6, -6),
                 blurRadius: 12,
               ),
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.black.withValues(alpha: 0.5)
-                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                    ? Colors.black.withOpacity(0.5)
+                    : const Color(0xFFA3B1C6).withOpacity(0.5),
                 offset: const Offset(6, 6),
                 blurRadius: 12,
               ),
@@ -467,7 +467,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                           : const Color(0xFFF0F0F3),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: color.withValues(alpha: 0.3),
+                        color: color.withOpacity(0.3),
                         width: 1,
                       ),
                     ),
@@ -491,7 +491,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                       width: 20,
                       height: 20,
                       decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.1),
+                        color: color.withOpacity(0.1),
                         shape: BoxShape.circle,
                         border: Border.all(color: color, width: 1),
                       ),
@@ -530,7 +530,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: color.withValues(alpha: 0.3),
+                    color: color.withOpacity(0.3),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),
@@ -580,21 +580,21 @@ class _PremiumScreenState extends State<PremiumScreen> {
                   : const Color(0xFFE8E8E8),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: scarletRed.withValues(alpha: 0.2),
+                color: scarletRed.withOpacity(0.2),
                 width: 1.5,
               ),
               boxShadow: [
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.white.withValues(alpha: 0.03)
-                      : Colors.white.withValues(alpha: 0.8),
+                      ? Colors.white.withOpacity(0.03)
+                      : Colors.white.withOpacity(0.8),
                   offset: const Offset(-6, -6),
                   blurRadius: 12,
                 ),
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.black.withValues(alpha: 0.5)
-                      : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                      ? Colors.black.withOpacity(0.5)
+                      : const Color(0xFFA3B1C6).withOpacity(0.5),
                   offset: const Offset(6, 6),
                   blurRadius: 12,
                 ),
@@ -616,16 +616,16 @@ class _PremiumScreenState extends State<PremiumScreen> {
                       boxShadow: [
                         BoxShadow(
                           color: _themeService.isDarkMode 
-                              ? Colors.black.withValues(alpha: 0.6)
-                              : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                              ? Colors.black.withOpacity(0.6)
+                              : const Color(0xFFA3B1C6).withOpacity(0.3),
                           offset: const Offset(2, 2),
                           blurRadius: 4,
                           spreadRadius: -1,
                         ),
                         BoxShadow(
                           color: _themeService.isDarkMode 
-                              ? Colors.white.withValues(alpha: 0.02)
-                              : Colors.white.withValues(alpha: 0.8),
+                              ? Colors.white.withOpacity(0.02)
+                              : Colors.white.withOpacity(0.8),
                           offset: const Offset(-2, -2),
                           blurRadius: 4,
                           spreadRadius: -1,
@@ -709,21 +709,21 @@ class _PremiumScreenState extends State<PremiumScreen> {
                   : const Color(0xFFE8E8E8),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: scarletRed.withValues(alpha: 0.2),
+                color: scarletRed.withOpacity(0.2),
                 width: 1.5,
               ),
               boxShadow: [
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.white.withValues(alpha: 0.03)
-                      : Colors.white.withValues(alpha: 0.8),
+                      ? Colors.white.withOpacity(0.03)
+                      : Colors.white.withOpacity(0.8),
                   offset: const Offset(-6, -6),
                   blurRadius: 12,
                 ),
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.black.withValues(alpha: 0.5)
-                      : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                      ? Colors.black.withOpacity(0.5)
+                      : const Color(0xFFA3B1C6).withOpacity(0.5),
                   offset: const Offset(6, 6),
                   blurRadius: 12,
                 ),
@@ -745,16 +745,16 @@ class _PremiumScreenState extends State<PremiumScreen> {
                       boxShadow: [
                         BoxShadow(
                           color: _themeService.isDarkMode 
-                              ? Colors.black.withValues(alpha: 0.6)
-                              : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                              ? Colors.black.withOpacity(0.6)
+                              : const Color(0xFFA3B1C6).withOpacity(0.3),
                           offset: const Offset(3, 3),
                           blurRadius: 6,
                           spreadRadius: -2,
                         ),
                         BoxShadow(
                           color: _themeService.isDarkMode 
-                              ? Colors.white.withValues(alpha: 0.02)
-                              : Colors.white.withValues(alpha: 0.8),
+                              ? Colors.white.withOpacity(0.02)
+                              : Colors.white.withOpacity(0.8),
                           offset: const Offset(-3, -3),
                           blurRadius: 6,
                           spreadRadius: -2,
@@ -994,21 +994,21 @@ class _PremiumScreenState extends State<PremiumScreen> {
                 : const Color(0xFFE8E8E8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: scarletRed.withValues(alpha: 0.2),
+              color: scarletRed.withOpacity(0.2),
               width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.white.withValues(alpha: 0.03)
-                    : Colors.white.withValues(alpha: 0.8),
+                    ? Colors.white.withOpacity(0.03)
+                    : Colors.white.withOpacity(0.8),
                 offset: const Offset(-8, -8),
                 blurRadius: 16,
               ),
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.black.withValues(alpha: 0.5)
-                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                    ? Colors.black.withOpacity(0.5)
+                    : const Color(0xFFA3B1C6).withOpacity(0.5),
                 offset: const Offset(8, 8),
                 blurRadius: 16,
               ),
@@ -1061,21 +1061,21 @@ class _PremiumScreenState extends State<PremiumScreen> {
                 : const Color(0xFFE8E8E8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: scarletRed.withValues(alpha: 0.2),
+              color: scarletRed.withOpacity(0.2),
               width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.white.withValues(alpha: 0.03)
-                    : Colors.white.withValues(alpha: 0.8),
+                    ? Colors.white.withOpacity(0.03)
+                    : Colors.white.withOpacity(0.8),
                 offset: const Offset(-8, -8),
                 blurRadius: 16,
               ),
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.black.withValues(alpha: 0.5)
-                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                    ? Colors.black.withOpacity(0.5)
+                    : const Color(0xFFA3B1C6).withOpacity(0.5),
                 offset: const Offset(8, 8),
                 blurRadius: 16,
               ),
@@ -1095,16 +1095,16 @@ class _PremiumScreenState extends State<PremiumScreen> {
                   boxShadow: [
                     BoxShadow(
                       color: _themeService.isDarkMode 
-                          ? Colors.black.withValues(alpha: 0.6)
-                          : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                          ? Colors.black.withOpacity(0.6)
+                          : const Color(0xFFA3B1C6).withOpacity(0.3),
                       offset: const Offset(3, 3),
                       blurRadius: 6,
                       spreadRadius: -2,
                     ),
                     BoxShadow(
                       color: _themeService.isDarkMode 
-                          ? Colors.white.withValues(alpha: 0.02)
-                          : Colors.white.withValues(alpha: 0.8),
+                          ? Colors.white.withOpacity(0.02)
+                          : Colors.white.withOpacity(0.8),
                       offset: const Offset(-3, -3),
                       blurRadius: 6,
                       spreadRadius: -2,
@@ -1162,15 +1162,15 @@ class _PremiumScreenState extends State<PremiumScreen> {
           boxShadow: [
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.white.withValues(alpha: 0.03)
-                  : Colors.white.withValues(alpha: 0.7),
+                  ? Colors.white.withOpacity(0.03)
+                  : Colors.white.withOpacity(0.7),
               offset: const Offset(-3, -3),
               blurRadius: 6,
             ),
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.black.withValues(alpha: 0.5)
-                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                  ? Colors.black.withOpacity(0.5)
+                  : const Color(0xFFA3B1C6).withOpacity(0.5),
               offset: const Offset(3, 3),
               blurRadius: 6,
             ),
@@ -1201,21 +1201,21 @@ class _PremiumScreenState extends State<PremiumScreen> {
               : const Color(0xFFF0F0F3),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: color.withValues(alpha: 0.3),
+            color: color.withOpacity(0.3),
             width: 1.5,
           ),
           boxShadow: [
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.white.withValues(alpha: 0.03)
-                  : Colors.white.withValues(alpha: 0.7),
+                  ? Colors.white.withOpacity(0.03)
+                  : Colors.white.withOpacity(0.7),
               offset: const Offset(-4, -4),
               blurRadius: 8,
             ),
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.black.withValues(alpha: 0.5)
-                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                  ? Colors.black.withOpacity(0.5)
+                  : const Color(0xFFA3B1C6).withOpacity(0.5),
               offset: const Offset(4, 4),
               blurRadius: 8,
             ),

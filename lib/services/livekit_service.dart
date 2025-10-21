@@ -2000,8 +2000,9 @@ class LiveKitService extends ChangeNotifier {
       return false;
     }
   }
-  
+
   /// Set up speaking detection for remote participants
+  // ignore: unused_element
   void _setupSpeakingDetection(RemoteParticipant participant, RemoteTrackPublication publication) {
     if (publication.kind.name != 'audio') return;
     
@@ -2022,8 +2023,9 @@ class LiveKitService extends ChangeNotifier {
       }
     });
   }
-  
+
   /// Set up speaking detection for local participant
+  // ignore: unused_element
   void _setupLocalSpeakingDetection(LocalTrackPublication publication) {
     if (publication.kind.name != 'audio' || _localParticipant == null) return;
     

@@ -394,7 +394,7 @@ class _StreamingDestinationsModalState extends State<StreamingDestinationsModal>
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+              color: const Color(0xFF8B5CF6).withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -468,7 +468,7 @@ class _StreamingDestinationsModalState extends State<StreamingDestinationsModal>
                 child: Container(
                   decoration: BoxDecoration(
                     color: isSelected 
-                        ? (config['color'] as Color).withValues(alpha: 0.1)
+                        ? (config['color'] as Color).withOpacity(0.1)
                         : Colors.grey.shade100,
                     border: Border.all(
                       color: isSelected 

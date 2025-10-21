@@ -1,0 +1,112 @@
+{
+  "name": "Playback Status Monitor - Fixed",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 1 }]
+        }
+      },
+      "id": "schedule",
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/arena_rooms/documents",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Appwrite-Project", "value": "683a37a8003719978879" },
+            { "name": "X-Appwrite-Key", "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7" }
+          ]
+        }
+      },
+      "id": "get-rooms",
+      "name": "Get Arena Rooms",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "documents",
+        "options": {}
+      },
+      "id": "split-rooms",
+      "name": "Split Rooms",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.recordingStatus }}",
+              "operation": "equals",
+              "value2": "processing"
+            }
+          ]
+        }
+      },
+      "id": "check-processing",
+      "name": "Recording Processing?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "dateTime": [
+            {
+              "value1": "={{ $json.endedAt }}",
+              "operation": "before",
+              "value2": "={{ $now.minus({hours: 2}).toISO() }}"
+            }
+          ]
+        }
+      },
+      "id": "check-stuck",
+      "name": "Stuck 2+ Hours?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/arena_rooms/documents/{{$json.$id}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"data\": { \"recordingStatus\": \"ready\" } }",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Appwrite-Project", "value": "683a37a8003719978879" },
+            { "name": "X-Appwrite-Key", "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        }
+      },
+      "id": "fix-room",
+      "name": "Mark Recording Ready",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 300]
+    }
+  ],
+  "connections": {
+    "Every Hour": { "main": [[{ "node": "Get Arena Rooms", "type": "main", "index": 0 }]] },
+    "Get Arena Rooms": { "main": [[{ "node": "Split Rooms", "type": "main", "index": 0 }]] },
+    "Split Rooms": { "main": [[{ "node": "Recording Processing?", "type": "main", "index": 0 }]] },
+    "Recording Processing?": { "main": [[{ "node": "Stuck 2+ Hours?", "type": "main", "index": 0 }], []] },
+    "Stuck 2+ Hours?": { "main": [[{ "node": "Mark Recording Ready", "type": "main", "index": 0 }], []] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

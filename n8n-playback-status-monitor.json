@@ -1,0 +1,483 @@
+{
+  "name": "Playback Status Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/arena_rooms/documents",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "queries[]",
+              "value": "equal(\"status\", \"processing\")"
+            },
+            {
+              "name": "queries[]",
+              "value": "=`lessThan(\"endedAt\", \"${$now.minus({hours: 2}).toISO()}\")`"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7"
+            }
+          ]
+        }
+      },
+      "id": "query-stuck-processing",
+      "name": "Query Stuck Processing Rooms",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/playbacks/documents",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "queries[]",
+              "value": "equal(\"status\", \"processing\")"
+            },
+            {
+              "name": "queries[]",
+              "value": "=`lessThan(\"createdAt\", \"${$now.minus({hours: 1}).toISO()}\")`"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7"
+            }
+          ]
+        }
+      },
+      "id": "query-stuck-playbacks",
+      "name": "Query Stuck Playbacks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 400]
+    },
+    {
+      "parameters": {},
+      "id": "merge-results",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "documents",
+        "options": {}
+      },
+      "id": "split-items",
+      "name": "Split Items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.$collectionId}}",
+              "operation": "equals",
+              "value2": "arena_rooms"
+            }
+          ]
+        }
+      },
+      "id": "is-room",
+      "name": "Is Room?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/arena_rooms/documents/{{$json.$id}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "completed"
+            },
+            {
+              "name": "processingError",
+              "value": "Auto-marked complete after 2+ hours stuck in processing"
+            },
+            {
+              "name": "autoCompletedAt",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7"
+            }
+          ]
+        }
+      },
+      "id": "mark-room-complete",
+      "name": "Mark Room Complete",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/playbacks/documents/{{$json.$id}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "failed"
+            },
+            {
+              "name": "error",
+              "value": "Processing timeout - auto-marked failed after 1+ hour"
+            },
+            {
+              "name": "failedAt",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7"
+            }
+          ]
+        }
+      },
+      "id": "mark-playback-failed",
+      "name": "Mark Playback Failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/users/documents",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "queries[]",
+              "value": "=equal(\"userId\", \"{{$json.createdBy}}\")"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7"
+            }
+          ]
+        }
+      },
+      "id": "get-room-creator",
+      "name": "Get Room Creator",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1450, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/instant_messages/documents",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "senderId",
+              "value": "system"
+            },
+            {
+              "name": "receiverId",
+              "value": "={{$json.documents[0].$id}}"
+            },
+            {
+              "name": "message",
+              "value": "Your room recording took longer than expected to process. The room has been marked as complete. Contact support if you need assistance."
+            },
+            {
+              "name": "type",
+              "value": "system_notification"
+            },
+            {
+              "name": "status",
+              "value": "unread"
+            },
+            {
+              "name": "createdAt",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7"
+            }
+          ]
+        }
+      },
+      "id": "notify-user",
+      "name": "Notify User",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1650, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/cleanup_logs/documents",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "documentId",
+              "value": "=unique()"
+            },
+            {
+              "name": "workflowName",
+              "value": "playback-status-monitor"
+            },
+            {
+              "name": "action",
+              "value": "auto-remediate-stuck-processing"
+            },
+            {
+              "name": "itemId",
+              "value": "={{$json.$id}}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action (Optional)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1850, 300],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Query Stuck Processing Rooms",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Query Stuck Playbacks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Stuck Processing Rooms": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Stuck Playbacks": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Split Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Items": {
+      "main": [
+        [
+          {
+            "node": "Is Room?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Room?": {
+      "main": [
+        [
+          {
+            "node": "Mark Room Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Playback Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Room Complete": {
+      "main": [
+        [
+          {
+            "node": "Get Room Creator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Playback Failed": {
+      "main": [
+        [
+          {
+            "node": "Log Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Room Creator": {
+      "main": [
+        [
+          {
+            "node": "Notify User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify User": {
+      "main": [
+        [
+          {
+            "node": "Log Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

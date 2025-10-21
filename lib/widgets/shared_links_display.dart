@@ -174,7 +174,7 @@ class _SharedLinksDisplayState extends State<SharedLinksDisplay>
         color: Colors.grey[900],
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Colors.green.withValues(alpha: 0.3),
+          color: Colors.green.withOpacity(0.3),
           width: 2,
         ),
       ),
@@ -187,7 +187,7 @@ class _SharedLinksDisplayState extends State<SharedLinksDisplay>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.2),
+                  color: Colors.green.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(

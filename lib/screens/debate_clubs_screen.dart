@@ -617,7 +617,7 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
+        side: BorderSide(color: scarletRed.withOpacity(0.1)),
       ),
       child: InkWell(
         onTap: () {
@@ -717,7 +717,7 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
                         if (!isPresident)
                           Container(
                             decoration: BoxDecoration(
-                              color: isMember ? Colors.orange.withValues(alpha: 0.1) : scarletRed.withValues(alpha: 0.1),
+                              color: isMember ? Colors.orange.withOpacity(0.1) : scarletRed.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: TextButton.icon(
@@ -747,7 +747,7 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                                 decoration: BoxDecoration(
-                                  color: Colors.orange.withValues(alpha: 0.1),
+                                  color: Colors.orange.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: const Text(
@@ -796,7 +796,7 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: accentPurple.withValues(alpha: 0.1),
+                      color: accentPurple.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -813,7 +813,7 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.1),
+                        color: Colors.green.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: const Text(
@@ -876,7 +876,7 @@ class _DebateClubsScreenState extends State<DebateClubsScreen> {
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
+        side: BorderSide(color: scarletRed.withOpacity(0.1)),
       ),
       child: ExpansionTile(
         leading: const Icon(Icons.gavel, color: scarletRed),

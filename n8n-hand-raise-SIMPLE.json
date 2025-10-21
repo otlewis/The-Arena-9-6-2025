@@ -1,0 +1,73 @@
+{
+  "name": "Hand-Raise - SIMPLE (Just Create Document)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hand-raise",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "hand-raise"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/handraises/documents",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"documentId\": \"hr_{{ $now.toMillis() }}\",\n  \"data\": {\n    \"roomId\": \"{{ $json.body.roomId }}\",\n    \"userId\": \"{{ $json.body.userId }}\",\n    \"userName\": \"{{ $json.body.userName }}\",\n    \"status\": \"raised\",\n    \"raisedAt\": \"{{ $now.toISO() }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "create-handraise",
+      "name": "Create Hand-Raise Document",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Create Hand-Raise Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-11T00:00:00.000Z",
+  "versionId": "1"
+}

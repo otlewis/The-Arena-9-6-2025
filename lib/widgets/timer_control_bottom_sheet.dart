@@ -257,7 +257,7 @@ class _TimerControlBottomSheetState extends State<TimerControlBottomSheet> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.red.withValues(alpha: 0.1),
+                              color: Colors.red.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(color: Colors.red),
                             ),
@@ -590,7 +590,7 @@ class _TimerControlBottomSheetState extends State<TimerControlBottomSheet> {
                   style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
                 ),
                 style: TextButton.styleFrom(
-                  backgroundColor: Colors.white.withValues(alpha: 0.1),
+                  backgroundColor: Colors.white.withOpacity(0.1),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
@@ -642,7 +642,7 @@ class _TimerControlBottomSheetState extends State<TimerControlBottomSheet> {
     return Column(
       children: [
         CircleAvatar(
-          backgroundColor: color.withValues(alpha: 0.2),
+          backgroundColor: color.withOpacity(0.2),
           radius: 24,
           child: IconButton(
             onPressed: onPressed,
@@ -664,7 +664,7 @@ class _TimerControlBottomSheetState extends State<TimerControlBottomSheet> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: Colors.green.withValues(alpha: 0.2),
+          color: Colors.green.withOpacity(0.2),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(color: Colors.green, width: 1),
         ),

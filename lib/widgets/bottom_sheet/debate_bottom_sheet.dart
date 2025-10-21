@@ -164,7 +164,7 @@ class _DebateBottomSheetState extends State<DebateBottomSheet>
             borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
+                color: Colors.black.withOpacity(0.2),
                 blurRadius: 10,
                 offset: const Offset(0, -2),
               ),
@@ -233,7 +233,7 @@ class _DebateBottomSheetState extends State<DebateBottomSheet>
                 width: 50, // Wider handle
                 height: 5,  // Thicker handle
                 decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.6), // More visible
+                  color: Colors.grey.withOpacity(0.6), // More visible
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -242,7 +242,7 @@ class _DebateBottomSheetState extends State<DebateBottomSheet>
                 '⬆️ Drag to expand ⬇️',
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.grey.withValues(alpha: 0.7),
+                  color: Colors.grey.withOpacity(0.7),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -300,7 +300,7 @@ class _DebateBottomSheetState extends State<DebateBottomSheet>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: theme.primaryColor.withValues(alpha: 0.2),
+                color: theme.primaryColor.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -346,7 +346,7 @@ class _DebateBottomSheetState extends State<DebateBottomSheet>
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(
-            color: Colors.grey.withValues(alpha: 0.2),
+            color: Colors.grey.withOpacity(0.2),
             width: 1,
           ),
         ),

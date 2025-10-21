@@ -344,9 +344,9 @@ class _PaywallScreenState extends State<PaywallScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.1),
+                color: Colors.red.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                border: Border.all(color: Colors.red.withOpacity(0.3)),
               ),
               child: Text(
                 _errorMessage,
@@ -409,7 +409,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: accentPurple.withValues(alpha: 0.2)),
+        side: BorderSide(color: accentPurple.withOpacity(0.2)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -421,7 +421,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: accentPurple.withValues(alpha: 0.1),
+                    color: accentPurple.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(feature['icon'] as IconData, color: accentPurple),
@@ -484,7 +484,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
               side: BorderSide(
-                color: isPopular ? Colors.amber : accentPurple.withValues(alpha: 0.2),
+                color: isPopular ? Colors.amber : accentPurple.withOpacity(0.2),
                 width: isPopular ? 2 : 1,
               ),
             ),

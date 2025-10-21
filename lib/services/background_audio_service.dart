@@ -1,9 +1,11 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../core/logging/app_logger.dart';
+
+// Conditional import for Platform - stub for web
+import 'dart:io' if (dart.library.html) '../utils/platform_stub.dart';
 
 /// Service for managing background audio and battery optimizations
 class BackgroundAudioService {

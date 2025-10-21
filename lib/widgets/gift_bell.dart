@@ -320,10 +320,10 @@ class _GiftBellState extends State<GiftBell> with TickerProviderStateMixin {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: gift.isRead ? Colors.grey.withValues(alpha: 0.05) : const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+        color: gift.isRead ? Colors.grey.withOpacity(0.05) : const Color(0xFF8B5CF6).withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: gift.isRead ? Colors.grey.withValues(alpha: 0.2) : const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+          color: gift.isRead ? Colors.grey.withOpacity(0.2) : const Color(0xFF8B5CF6).withOpacity(0.3),
         ),
       ),
       child: Row(
@@ -333,7 +333,7 @@ class _GiftBellState extends State<GiftBell> with TickerProviderStateMixin {
             width: 50,
             height: 50,
             decoration: BoxDecoration(
-              color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+              color: const Color(0xFF8B5CF6).withOpacity(0.1),
               borderRadius: BorderRadius.circular(25),
             ),
             child: Center(
@@ -506,7 +506,7 @@ class GiftParticlesPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFF8B5CF6).withValues(alpha: 1.0 - progress)
+      ..color = const Color(0xFF8B5CF6).withOpacity(1.0 - progress)
       ..style = PaintingStyle.fill;
 
     // Draw small sparkle particles

@@ -71,7 +71,7 @@ class ThemeService extends ChangeNotifier {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: lightPrimary.withValues(alpha: 0.1)),
+        side: BorderSide(color: lightPrimary.withOpacity(0.1)),
       ),
     ),
   );
@@ -120,7 +120,7 @@ class ThemeService extends ChangeNotifier {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: darkPrimary.withValues(alpha: 0.1)),
+        side: BorderSide(color: darkPrimary.withOpacity(0.1)),
       ),
     ),
   );

@@ -61,7 +61,7 @@ class ResultsModal extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
+              color: Colors.black.withOpacity(0.3),
               blurRadius: 20,
               spreadRadius: 5,
             ),
@@ -119,7 +119,7 @@ class ResultsModal extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), // Reduced padding
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
+              color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -154,8 +154,8 @@ class ResultsModal extends StatelessWidget {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  Colors.amber.withValues(alpha: 0.1),
-                  Colors.orange.withValues(alpha: 0.1),
+                  Colors.amber.withOpacity(0.1),
+                  Colors.orange.withOpacity(0.1),
                 ],
               ),
               borderRadius: BorderRadius.circular(12),
@@ -225,9 +225,9 @@ class ResultsModal extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(12), // Reduced from 16
               decoration: BoxDecoration(
-                color: ArenaColors.accentPurple.withValues(alpha: 0.05),
+                color: ArenaColors.accentPurple.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: ArenaColors.accentPurple.withValues(alpha: 0.2)),
+                border: Border.all(color: ArenaColors.accentPurple.withOpacity(0.2)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -480,9 +480,9 @@ class ResultsModal extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.amber.withValues(alpha: 0.1),
+        color: Colors.amber.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+        border: Border.all(color: Colors.amber.withOpacity(0.3)),
       ),
       child: Column(
         children: [

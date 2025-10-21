@@ -207,10 +207,10 @@ class _RecruitmentModal extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+                color: const Color(0xFF8B5CF6).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                  color: const Color(0xFF8B5CF6).withOpacity(0.3),
                 ),
               ),
               child: Column(
@@ -279,10 +279,10 @@ class _RecruitmentModal extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.1),
+                color: Colors.green.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: Colors.green.withValues(alpha: 0.3),
+                  color: Colors.green.withOpacity(0.3),
                 ),
               ),
               child: const Column(
@@ -338,7 +338,7 @@ class _RecruitmentModal extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: platform.color.withValues(alpha: 0.1),
+                  color: platform.color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -422,7 +422,7 @@ class _RecruitmentModal extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.grey.withValues(alpha: 0.1),
+                    color: Colors.grey.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: SelectableText(

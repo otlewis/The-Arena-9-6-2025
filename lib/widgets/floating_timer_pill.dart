@@ -326,7 +326,7 @@ class _FloatingTimerPillState extends State<FloatingTimerPill> with SingleTicker
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.8),
+                  color: Colors.black.withOpacity(0.8),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: _getTimerColor(),
@@ -334,7 +334,7 @@ class _FloatingTimerPillState extends State<FloatingTimerPill> with SingleTicker
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: _getTimerColor().withValues(alpha: 0.3),
+                      color: _getTimerColor().withOpacity(0.3),
                       blurRadius: 8,
                       spreadRadius: 1,
                     ),

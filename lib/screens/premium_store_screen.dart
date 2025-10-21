@@ -429,11 +429,11 @@ class _PremiumStoreScreenState extends State<PremiumStoreScreen> {
         gradient: LinearGradient(
           colors: hasPremium
             ? [Colors.amber.shade200, Colors.amber.shade400]
-            : [Color(0xFF8B5CF6).withValues(alpha: 0.1), Color(0xFF6B46C1).withValues(alpha: 0.1)],
+            : [Color(0xFF8B5CF6).withOpacity(0.1), Color(0xFF6B46C1).withOpacity(0.1)],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: hasPremium ? Colors.amber : const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+          color: hasPremium ? Colors.amber : const Color(0xFF8B5CF6).withOpacity(0.3),
         ),
       ),
       child: Column(
@@ -530,14 +530,14 @@ class _PremiumStoreScreenState extends State<PremiumStoreScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isPopular ? Colors.amber.withValues(alpha: 0.4) :
-                 isTeenPlan ? Colors.blue.withValues(alpha: 0.4) :
-                 Colors.grey.withValues(alpha: 0.3),
+          color: isPopular ? Colors.amber.withOpacity(0.4) :
+                 isTeenPlan ? Colors.blue.withOpacity(0.4) :
+                 Colors.grey.withOpacity(0.3),
           width: isPopular ? 2 : 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: Colors.black.withOpacity(0.08),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -673,7 +673,7 @@ class _PremiumStoreScreenState extends State<PremiumStoreScreen> {
                         : const Color(0xFF8B5CF6),
                       foregroundColor: Colors.white,
                       elevation: _hasSubscription(subscription.rcProductId) ? 0 : 4,
-                      shadowColor: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                      shadowColor: const Color(0xFF8B5CF6).withOpacity(0.3),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(24),
                       ),
@@ -777,10 +777,10 @@ class _PremiumStoreScreenState extends State<PremiumStoreScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+        border: Border.all(color: Colors.amber.withOpacity(0.3)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -796,13 +796,13 @@ class _PremiumStoreScreenState extends State<PremiumStoreScreen> {
               margin: const EdgeInsets.only(bottom: 4),
               decoration: BoxDecoration(
                 color: coinConfig.badge!.toLowerCase().contains('popular')
-                    ? Colors.orange.withValues(alpha: 0.1)
-                    : Colors.green.withValues(alpha: 0.1),
+                    ? Colors.orange.withOpacity(0.1)
+                    : Colors.green.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: coinConfig.badge!.toLowerCase().contains('popular')
-                      ? Colors.orange.withValues(alpha: 0.3)
-                      : Colors.green.withValues(alpha: 0.3),
+                      ? Colors.orange.withOpacity(0.3)
+                      : Colors.green.withOpacity(0.3),
                 ),
               ),
               child: Text(
@@ -926,10 +926,10 @@ class _PremiumStoreScreenState extends State<PremiumStoreScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
+        border: Border.all(color: Colors.purple.withOpacity(0.3)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -941,7 +941,7 @@ class _PremiumStoreScreenState extends State<PremiumStoreScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.purple.withValues(alpha: 0.1),
+              color: Colors.purple.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
@@ -991,7 +991,7 @@ class _PremiumStoreScreenState extends State<PremiumStoreScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: Colors.grey.withValues(alpha: 0.1),
+                          color: Colors.grey.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(

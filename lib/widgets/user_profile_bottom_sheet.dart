@@ -1954,6 +1954,17 @@ Join Arena DTD to connect with debaters and participate in live discussions!
       final userProfile = await appwrite.getUserProfile(currentUser.$id);
       if (userProfile == null) return;
 
+      // FIRST: Mute the user's microphone BEFORE starting timeout
+      try {
+        final audioAdapter = RoomAudioAdapter();
+        await audioAdapter.muteParticipant(widget.user.id);
+        AppLogger().info('🔇 Muted user ${widget.user.id} before timeout');
+      } catch (e) {
+        AppLogger().error('Failed to mute user before timeout: $e');
+        // Continue with timeout even if mute fails
+      }
+
+      // THEN: Issue the timeout
       final timeoutService = UserTimeoutService();
       final success = await timeoutService.timeoutUser(
         userId: widget.user.id,
@@ -1963,18 +1974,6 @@ Join Arena DTD to connect with debaters and participate in live discussions!
         durationMinutes: durationMinutes,
         reason: reason.isNotEmpty ? reason : null,
       );
-
-      // If timeout successful, also mute the user's microphone
-      if (success) {
-        try {
-          final audioAdapter = RoomAudioAdapter();
-          await audioAdapter.muteParticipant(widget.user.id);
-          AppLogger().info('🔇 Auto-muted user ${widget.user.id} after timeout');
-        } catch (e) {
-          AppLogger().error('Failed to auto-mute timed out user: $e');
-          // Don't fail the timeout if mute fails
-        }
-      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

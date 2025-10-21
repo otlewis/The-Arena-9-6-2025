@@ -268,7 +268,7 @@ class _ClubDetailsScreenState extends State<ClubDetailsScreen> {
         children: [
           Container(
             padding: const EdgeInsets.all(16),
-            color: lightScarlet.withValues(alpha: 0.3),
+            color: lightScarlet.withOpacity(0.3),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -332,8 +332,8 @@ class _ClubDetailsScreenState extends State<ClubDetailsScreen> {
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide(
                             color: isPresident 
-                                ? Colors.orange.withValues(alpha: 0.3)
-                                : scarletRed.withValues(alpha: 0.1)
+                                ? Colors.orange.withOpacity(0.3)
+                                : scarletRed.withOpacity(0.1)
                           ),
                         ),
                         child: ListTile(
@@ -351,7 +351,7 @@ class _ClubDetailsScreenState extends State<ClubDetailsScreen> {
                           leading: CircleAvatar(
                             radius: 25,
                             backgroundColor: isPresident 
-                                ? Colors.orange.withValues(alpha: 0.2)
+                                ? Colors.orange.withOpacity(0.2)
                                 : lightScarlet,
                             child: profile?.avatar != null && profile!.avatar!.isNotEmpty
                                 ? ClipOval(
@@ -395,7 +395,7 @@ class _ClubDetailsScreenState extends State<ClubDetailsScreen> {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: Colors.orange.withValues(alpha: 0.2),
+                                    color: Colors.orange.withOpacity(0.2),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: const Row(
@@ -424,7 +424,7 @@ class _ClubDetailsScreenState extends State<ClubDetailsScreen> {
                                 Text(
                                   member['role'].toString().toUpperCase(),
                                   style: TextStyle(
-                                    color: accentPurple.withValues(alpha: 0.8),
+                                    color: accentPurple.withOpacity(0.8),
                                     fontSize: 12,
                                     fontWeight: FontWeight.w500,
                                   ),

@@ -598,7 +598,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
+        side: BorderSide(color: scarletRed.withOpacity(0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -664,7 +664,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       margin: const EdgeInsets.only(bottom: 24),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
+        side: BorderSide(color: scarletRed.withOpacity(0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -696,7 +696,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       margin: const EdgeInsets.only(bottom: 24),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
+        side: BorderSide(color: scarletRed.withOpacity(0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -720,7 +720,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                   interest,
                   style: const TextStyle(fontSize: 12),
                 ),
-                backgroundColor: accentPurple.withValues(alpha: 0.1),
+                backgroundColor: accentPurple.withOpacity(0.1),
                 side: BorderSide.none,
               )).toList(),
             ),
@@ -736,7 +736,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       margin: const EdgeInsets.only(bottom: 24),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
+        side: BorderSide(color: scarletRed.withOpacity(0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -813,7 +813,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       margin: const EdgeInsets.only(bottom: 24),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withValues(alpha: 0.1)),
+        side: BorderSide(color: scarletRed.withOpacity(0.1)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -921,9 +921,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.grey.withValues(alpha: 0.05),
+        color: Colors.grey.withOpacity(0.05),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+        border: Border.all(color: Colors.grey.withOpacity(0.2)),
       ),
       child: Column(
         children: [
@@ -959,9 +959,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Column(
         children: [
@@ -995,9 +995,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
           width: 50,
           height: 50,
           decoration: BoxDecoration(
-            color: accentPurple.withValues(alpha: 0.1),
+            color: accentPurple.withOpacity(0.1),
             borderRadius: BorderRadius.circular(25),
-            border: Border.all(color: accentPurple.withValues(alpha: 0.3)),
+            border: Border.all(color: accentPurple.withOpacity(0.3)),
           ),
           child: Center(
             child: Text(

@@ -1,0 +1,158 @@
+{
+  "name": "Arena Debate Tutor AI Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "debate-tutor",
+        "responseMode": "responseNode",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - Debate Tutor Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "debate-tutor"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "userId",
+              "name": "userId",
+              "value": "={{ $json.body.userId }}",
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "name": "sessionId",
+              "value": "={{ $json.body.sessionId || 'new_session' }}",
+              "type": "string"
+            },
+            {
+              "id": "tutorMode",
+              "name": "tutorMode",
+              "value": "={{ $json.body.tutorMode || 'practice' }}",
+              "type": "string"
+            },
+            {
+              "id": "topic",
+              "name": "topic",
+              "value": "={{ $json.body.topic || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "userMessage",
+              "name": "userMessage",
+              "value": "={{ $json.body.userMessage || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "position",
+              "name": "position",
+              "value": "={{ $json.body.position || 'affirmative' }}",
+              "type": "string"
+            },
+            {
+              "id": "skillLevel",
+              "name": "skillLevel",
+              "value": "={{ $json.body.skillLevel || 'intermediate' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract-parameters",
+      "name": "Extract Tutor Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build AI tutor prompt based on mode and context\nconst params = $input.first().json;\n\n// Define tutor personality and expertise\nconst systemPrompt = `You are an expert debate coach and tutor for the Arena debate platform. Your role is to help users improve their debating skills through practice, feedback, and guidance.\n\nYour expertise includes:\n- Constructing strong arguments\n- Finding logical fallacies\n- Researching and citing evidence\n- Effective rebuttal techniques\n- Public speaking and persuasion\n- Debate strategy and tactics\n\nYou are encouraging, patient, and provide constructive feedback. You adapt your teaching style to the user's skill level.`;\n\nlet userPrompt = '';\nlet conversationContext = '';\n\n// Build context based on skill level\nconst skillContext = {\n  beginner: 'Focus on basic concepts, simple explanations, and encouragement. Avoid jargon.',\n  intermediate: 'Provide moderate complexity with some technical terms. Challenge them to think deeper.',\n  advanced: 'Use advanced techniques, complex scenarios, and expect high-level analysis.'\n};\n\nconversationContext += `\\nUser Skill Level: ${params.skillLevel} - ${skillContext[params.skillLevel] || skillContext.intermediate}`;\n\n// Build prompt based on tutor mode\nswitch(params.tutorMode) {\n  case 'practice':\n    // Practice mode: AI acts as opponent\n    userPrompt = `You are helping a ${params.skillLevel} debater practice.\n\nTopic: ${params.topic || 'No topic specified yet'}\nUser's Position: ${params.position}\n\nUser says: \"${params.userMessage}\"\n\nProvide:\n1. A brief response as if you're debating against them (opposing position)\n2. Constructive feedback on their argument (strengths and areas to improve)\n3. A follow-up question or challenge to help them develop their thinking\n\nKeep responses concise (3-4 paragraphs max) to maintain conversation flow.`;\n    break;\n    \n  case 'critique':\n    // Critique mode: Analyze user's argument\n    userPrompt = `Analyze this ${params.skillLevel} debater's argument:\n\nTopic: ${params.topic}\nPosition: ${params.position}\nArgument: \"${params.userMessage}\"\n\nProvide detailed feedback on:\n1. **Strength of Logic** - Is the reasoning sound?\n2. **Evidence Quality** - Do they need better sources?\n3. **Persuasiveness** - How convincing is it?\n4. **Potential Weaknesses** - What could opponents attack?\n5. **Improvement Suggestions** - Specific ways to strengthen this argument\n\nBe honest but encouraging.`;\n    break;\n    \n  case 'research':\n    // Research mode: Help find arguments\n    userPrompt = `Help a ${params.skillLevel} debater research arguments.\n\nTopic: ${params.topic}\nPosition: ${params.position}\nUser's Question: \"${params.userMessage}\"\n\nProvide:\n1. 3-4 strong arguments for their position\n2. Key evidence points they should research\n3. Potential counterarguments they'll face\n4. Strategic advice for this topic\n\nFormat as a clear, actionable guide.`;\n    break;\n    \n  case 'strategy':\n    // Strategy mode: Debate tactics and approach\n    userPrompt = `Provide debate strategy coaching for a ${params.skillLevel} debater.\n\nTopic: ${params.topic}\nUser's Position: ${params.position}\nUser's Question: \"${params.userMessage}\"\n\nProvide strategic advice on:\n1. Opening strategy - How to frame the debate\n2. Key arguments to prioritize\n3. Opponent's likely tactics\n4. Rebuttal strategy\n5. Closing argument approach\n\nBe tactical and specific.`;\n    break;\n    \n  case 'tips':\n    // General tips and guidance\n    userPrompt = `Provide debate tips and guidance.\n\nUser's Skill Level: ${params.skillLevel}\nUser's Question: \"${params.userMessage || 'How can I improve my debating skills?'}\"\n\nProvide:\n1. Specific, actionable tips\n2. Common mistakes to avoid\n3. Practice exercises they can do\n4. Resources or techniques to study\n\nKeep it practical and encouraging.`;\n    break;\n    \n  case 'fallacies':\n    // Teach logical fallacies\n    userPrompt = `Help identify and explain logical fallacies.\n\nUser's Text: \"${params.userMessage}\"\n\nAnalyze this statement and:\n1. Identify any logical fallacies present\n2. Explain why they're fallacies\n3. Show how to fix or avoid them\n4. Provide a stronger version of the argument\n\nBe educational and clear for a ${params.skillLevel} level.`;\n    break;\n    \n  default:\n    // General conversation mode\n    userPrompt = `You are a debate tutor having a conversation with a ${params.skillLevel} student.\n\nTopic: ${params.topic || 'General debate coaching'}\nStudent says: \"${params.userMessage}\"\n\nRespond as a helpful, encouraging debate coach. Provide guidance, answer questions, and help them improve.`;\n}\n\nreturn {\n  json: {\n    systemPrompt: systemPrompt + conversationContext,\n    userPrompt: userPrompt,\n    userId: params.userId,\n    sessionId: params.sessionId,\n    tutorMode: params.tutorMode,\n    topic: params.topic,\n    position: params.position,\n    skillLevel: params.skillLevel\n  }\n};"
+      },
+      "id": "build-tutor-prompt",
+      "name": "Build Tutor Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11434/api/chat",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \n  {\n    \"model\": \"llama3.2:3b\",\n    \"messages\": [\n      {\n        \"role\": \"system\",\n        \"content\": $json.systemPrompt\n      },\n      {\n        \"role\": \"user\",\n        \"content\": $json.userPrompt\n      }\n    ],\n    \"stream\": false,\n    \"options\": {\n      \"temperature\": 0.8,\n      \"top_p\": 0.9,\n      \"num_predict\": 800\n    }\n  }\n}}",
+        "options": {}
+      },
+      "id": "ollama-tutor",
+      "name": "Ollama Debate Tutor (llama3.2:3b)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format tutor response for Flutter app\nconst ollamaResponse = $input.first().json;\nconst promptData = $('Build Tutor Prompt').item.json;\n\n// Extract AI tutor response\nconst tutorResponse = ollamaResponse.message?.content || 'I apologize, but I could not generate a response. Please try again.';\n\n// Format for Flutter\nreturn {\n  json: {\n    success: true,\n    tutorResponse: tutorResponse,\n    sessionId: promptData.sessionId,\n    userId: promptData.userId,\n    tutorMode: promptData.tutorMode,\n    topic: promptData.topic,\n    position: promptData.position,\n    skillLevel: promptData.skillLevel,\n    timestamp: new Date().toISOString(),\n    model: 'llama3.2:3b'\n  }\n};"
+      },
+      "id": "format-response",
+      "name": "Format Tutor Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "send-response",
+      "name": "Send Response to Flutter",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Webhook - Debate Tutor Request": {
+      "main": [[{ "node": "Extract Tutor Request", "type": "main", "index": 0 }]]
+    },
+    "Extract Tutor Request": {
+      "main": [[{ "node": "Build Tutor Prompt", "type": "main", "index": 0 }]]
+    },
+    "Build Tutor Prompt": {
+      "main": [[{ "node": "Ollama Debate Tutor (llama3.2:3b)", "type": "main", "index": 0 }]]
+    },
+    "Ollama Debate Tutor (llama3.2:3b)": {
+      "main": [[{ "node": "Format Tutor Response", "type": "main", "index": 0 }]]
+    },
+    "Format Tutor Response": {
+      "main": [[{ "node": "Send Response to Flutter", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-12T00:00:00.000Z",
+  "versionId": "1"
+}

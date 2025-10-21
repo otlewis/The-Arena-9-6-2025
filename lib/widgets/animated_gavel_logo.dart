@@ -196,7 +196,7 @@ class GavelStrikePainter extends CustomPainter {
   
   void _drawImpactEffect(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.6)
+      ..color = Colors.white.withOpacity(0.6)
       ..style = PaintingStyle.fill;
     
     // Small impact circles around the strike point

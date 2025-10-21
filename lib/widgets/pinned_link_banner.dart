@@ -59,10 +59,10 @@ class PinnedLinkBanner extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: theme.primaryColor.withValues(alpha: 0.1),
+        color: theme.primaryColor.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: theme.primaryColor.withValues(alpha: 0.3),
+          color: theme.primaryColor.withOpacity(0.3),
           width: 1,
         ),
       ),
@@ -81,7 +81,7 @@ class PinnedLinkBanner extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: theme.primaryColor.withValues(alpha: 0.2),
+                    color: theme.primaryColor.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(

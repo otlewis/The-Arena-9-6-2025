@@ -112,15 +112,15 @@ class _MessagesScreenState extends State<MessagesScreen>
               boxShadow: [
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.white.withValues(alpha: 0.03)
-                      : Colors.white.withValues(alpha: 0.8),
+                      ? Colors.white.withOpacity(0.03)
+                      : Colors.white.withOpacity(0.8),
                   offset: const Offset(-4, -4),
                   blurRadius: 8,
                 ),
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.black.withValues(alpha: 0.5)
-                      : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                      ? Colors.black.withOpacity(0.5)
+                      : const Color(0xFFA3B1C6).withOpacity(0.5),
                   offset: const Offset(4, 4),
                   blurRadius: 8,
                 ),
@@ -141,16 +141,16 @@ class _MessagesScreenState extends State<MessagesScreen>
                 boxShadow: [
                   BoxShadow(
                     color: _themeService.isDarkMode 
-                        ? Colors.black.withValues(alpha: 0.6)
-                        : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                        ? Colors.black.withOpacity(0.6)
+                        : const Color(0xFFA3B1C6).withOpacity(0.3),
                     offset: const Offset(2, 2),
                     blurRadius: 4,
                     spreadRadius: -1,
                   ),
                   BoxShadow(
                     color: _themeService.isDarkMode 
-                        ? Colors.white.withValues(alpha: 0.02)
-                        : Colors.white.withValues(alpha: 0.8),
+                        ? Colors.white.withOpacity(0.02)
+                        : Colors.white.withOpacity(0.8),
                     offset: const Offset(-2, -2),
                     blurRadius: 4,
                     spreadRadius: -1,
@@ -299,15 +299,15 @@ class _MessagesScreenState extends State<MessagesScreen>
               boxShadow: [
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.white.withValues(alpha: 0.03)
-                      : Colors.white.withValues(alpha: 0.7),
+                      ? Colors.white.withOpacity(0.03)
+                      : Colors.white.withOpacity(0.7),
                   offset: const Offset(-8, -8),
                   blurRadius: 16,
                 ),
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.black.withValues(alpha: 0.5)
-                      : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                      ? Colors.black.withOpacity(0.5)
+                      : const Color(0xFFA3B1C6).withOpacity(0.5),
                   offset: const Offset(8, 8),
                   blurRadius: 16,
                 ),
@@ -363,24 +363,24 @@ class _MessagesScreenState extends State<MessagesScreen>
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isDismissed 
-              ? Colors.grey.withValues(alpha: 0.2)
+              ? Colors.grey.withOpacity(0.2)
               : isExpiringSoon 
-                  ? Colors.orange.withValues(alpha: 0.3)
-                  : scarletRed.withValues(alpha: 0.2),
+                  ? Colors.orange.withOpacity(0.3)
+                  : scarletRed.withOpacity(0.2),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
@@ -490,16 +490,16 @@ class _MessagesScreenState extends State<MessagesScreen>
                   boxShadow: [
                     BoxShadow(
                       color: _themeService.isDarkMode 
-                          ? Colors.black.withValues(alpha: 0.6)
-                          : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                          ? Colors.black.withOpacity(0.6)
+                          : const Color(0xFFA3B1C6).withOpacity(0.3),
                       offset: const Offset(3, 3),
                       blurRadius: 6,
                       spreadRadius: -2,
                     ),
                     BoxShadow(
                       color: _themeService.isDarkMode 
-                          ? Colors.white.withValues(alpha: 0.02)
-                          : Colors.white.withValues(alpha: 0.8),
+                          ? Colors.white.withOpacity(0.02)
+                          : Colors.white.withOpacity(0.8),
                       offset: const Offset(-3, -3),
                       blurRadius: 6,
                       spreadRadius: -2,
@@ -548,8 +548,8 @@ class _MessagesScreenState extends State<MessagesScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: challenge.position == 'affirmative' 
-                      ? (isDismissed ? Colors.grey[100] : Colors.green.withValues(alpha: 0.1))
-                      : (isDismissed ? Colors.grey[100] : Colors.red.withValues(alpha: 0.1)),
+                      ? (isDismissed ? Colors.grey[100] : Colors.green.withOpacity(0.1))
+                      : (isDismissed ? Colors.grey[100] : Colors.red.withOpacity(0.1)),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: isDismissed 
@@ -639,7 +639,7 @@ class _MessagesScreenState extends State<MessagesScreen>
         elevation: 2,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: accentPurple.withValues(alpha: 0.2)),
+          side: BorderSide(color: accentPurple.withOpacity(0.2)),
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -700,9 +700,9 @@ class _MessagesScreenState extends State<MessagesScreen>
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: accentPurple.withValues(alpha: 0.1),
+                    color: accentPurple.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: accentPurple.withValues(alpha: 0.3)),
+                    border: Border.all(color: accentPurple.withOpacity(0.3)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -952,15 +952,15 @@ class _MessagesScreenState extends State<MessagesScreen>
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.7),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.7),
             offset: const Offset(-4, -4),
             blurRadius: 8,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(4, 4),
             blurRadius: 8,
           ),
@@ -1022,15 +1022,15 @@ class _MessagesScreenState extends State<MessagesScreen>
           boxShadow: [
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.white.withValues(alpha: 0.03)
-                  : Colors.white.withValues(alpha: 0.7),
+                  ? Colors.white.withOpacity(0.03)
+                  : Colors.white.withOpacity(0.7),
               offset: const Offset(-3, -3),
               blurRadius: 6,
             ),
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.black.withValues(alpha: 0.5)
-                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                  ? Colors.black.withOpacity(0.5)
+                  : const Color(0xFFA3B1C6).withOpacity(0.5),
               offset: const Offset(3, 3),
               blurRadius: 6,
             ),
@@ -1064,15 +1064,15 @@ class _MessagesScreenState extends State<MessagesScreen>
           boxShadow: isDisabled ? [] : [
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.white.withValues(alpha: 0.03)
-                  : Colors.white.withValues(alpha: 0.7),
+                  ? Colors.white.withOpacity(0.03)
+                  : Colors.white.withOpacity(0.7),
               offset: const Offset(-3, -3),
               blurRadius: 6,
             ),
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.black.withValues(alpha: 0.5)
-                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                  ? Colors.black.withOpacity(0.5)
+                  : const Color(0xFFA3B1C6).withOpacity(0.5),
               offset: const Offset(3, 3),
               blurRadius: 6,
             ),

@@ -1,0 +1,112 @@
+{
+  "name": "Room Cleanup - Simple",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 1 }]
+        }
+      },
+      "id": "schedule",
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/arena_rooms/documents",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Appwrite-Project", "value": "683a37a8003719978879" },
+            { "name": "X-Appwrite-Key", "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7" }
+          ]
+        }
+      },
+      "id": "get-active-rooms",
+      "name": "Get Active Rooms",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "documents",
+        "options": {}
+      },
+      "id": "split",
+      "name": "Split Rooms",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "operation": "equals",
+              "value2": "active"
+            }
+          ]
+        }
+      },
+      "id": "check-active",
+      "name": "Is Active?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "dateTime": [
+            {
+              "value1": "={{ $json.$createdAt }}",
+              "operation": "before",
+              "value2": "={{ $now.minus({hours: 24}).toISO() }}"
+            }
+          ]
+        }
+      },
+      "id": "check-old",
+      "name": "Older than 24hrs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/arena_rooms/documents/{{$json.$id}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"data\": { \"status\": \"ended\", \"endedAt\": \"{{ $now.toISO() }}\" } }",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Appwrite-Project", "value": "683a37a8003719978879" },
+            { "name": "X-Appwrite-Key", "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        }
+      },
+      "id": "close-room",
+      "name": "Close Old Room",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 300]
+    }
+  ],
+  "connections": {
+    "Every Hour": { "main": [[{ "node": "Get Active Rooms", "type": "main", "index": 0 }]] },
+    "Get Active Rooms": { "main": [[{ "node": "Split Rooms", "type": "main", "index": 0 }]] },
+    "Split Rooms": { "main": [[{ "node": "Is Active?", "type": "main", "index": 0 }]] },
+    "Is Active?": { "main": [[{ "node": "Older than 24hrs?", "type": "main", "index": 0 }], []] },
+    "Older than 24hrs?": { "main": [[{ "node": "Close Old Room", "type": "main", "index": 0 }], []] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

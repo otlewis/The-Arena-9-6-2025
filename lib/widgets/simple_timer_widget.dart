@@ -347,7 +347,7 @@ class _SimpleTimerWidgetState extends State<SimpleTimerWidget> {
           decoration: BoxDecoration(
             color: const Color(0xFF4A4A4A),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1),
+            border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -378,7 +378,7 @@ class _SimpleTimerWidgetState extends State<SimpleTimerWidget> {
         decoration: BoxDecoration(
           color: _getTimerColor(),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1),
+          border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

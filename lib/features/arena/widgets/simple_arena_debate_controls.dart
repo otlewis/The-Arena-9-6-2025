@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:appwrite/appwrite.dart';
 import '../models/arena_state.dart';
 import '../providers/arena_provider.dart';
+import '../dialogs/results_modal.dart';
+import '../../../core/logging/app_logger.dart';
+import '../../../core/providers/app_providers.dart';
+import '../../../models/user_profile.dart';
 
 class SimpleArenaDebateControls extends ConsumerWidget {
   const SimpleArenaDebateControls({super.key, required this.roomId});
@@ -169,6 +174,53 @@ class SimpleArenaDebateControls extends ConsumerWidget {
   }
 
   Widget _buildBottomNavigationBar(BuildContext context, WidgetRef ref, ArenaState state) {
+    // Debug logging for trophy visibility
+    AppLogger().debug('🏆 NAV BAR BUILD: showResults=${state.showResults}, winner=${state.winner}');
+
+    // Build list of control buttons
+    final List<Widget> buttons = [
+      // Gift button (simplified - no actual functionality)
+      _buildControlButton(
+        icon: Icons.card_giftcard,
+        label: 'Gift',
+        color: Colors.amber,
+        onTap: () => _showComingSoonDialog(context, 'Gifting'),
+      ),
+
+      // Info button
+      _buildControlButton(
+        icon: Icons.info_outline,
+        label: 'Info',
+        color: Colors.blue,
+        onTap: () => _showDebateInfo(context, state),
+      ),
+    ];
+
+    // Add trophy button if results are available
+    if (state.showResults && state.winner != null) {
+      AppLogger().info('🏆 TROPHY ICON APPEARING! showResults=${state.showResults}, winner=${state.winner}');
+      buttons.add(
+        _buildControlButton(
+          icon: Icons.emoji_events,
+          label: 'Results',
+          color: Colors.amber.shade700,
+          onTap: () => _showResultsModal(context, ref, state),
+        ),
+      );
+    } else {
+      AppLogger().debug('🏆 Trophy hidden: showResults=${state.showResults}, winner=${state.winner}');
+    }
+
+    // Always add leave button at the end
+    buttons.add(
+      _buildControlButton(
+        icon: Icons.exit_to_app,
+        label: 'Leave',
+        color: Colors.red.shade400,
+        onTap: () => _confirmLeaveArena(context),
+      ),
+    );
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       decoration: BoxDecoration(
@@ -176,7 +228,7 @@ class SimpleArenaDebateControls extends ConsumerWidget {
         borderRadius: BorderRadius.circular(25),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -186,31 +238,7 @@ class SimpleArenaDebateControls extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            // Gift button (simplified - no actual functionality)
-            _buildControlButton(
-              icon: Icons.card_giftcard,
-              label: 'Gift',
-              color: Colors.amber,
-              onTap: () => _showComingSoonDialog(context, 'Gifting'),
-            ),
-            
-            // Info button
-            _buildControlButton(
-              icon: Icons.info_outline,
-              label: 'Info',
-              color: Colors.blue,
-              onTap: () => _showDebateInfo(context, state),
-            ),
-            
-            // Leave arena
-            _buildControlButton(
-              icon: Icons.exit_to_app,
-              label: 'Leave',
-              color: Colors.red.shade400,
-              onTap: () => _confirmLeaveArena(context),
-            ),
-          ],
+          children: buttons,
         ),
       ),
     );
@@ -231,10 +259,10 @@ class SimpleArenaDebateControls extends ConsumerWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
+              color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: color.withValues(alpha: 0.3),
+                color: color.withOpacity(0.3),
                 width: 1,
               ),
             ),
@@ -280,6 +308,103 @@ class SimpleArenaDebateControls extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// Show results modal when trophy icon is tapped
+  Future<void> _showResultsModal(BuildContext context, WidgetRef ref, ArenaState state) async {
+    try {
+      AppLogger().info('🏆 Trophy tapped - Loading results for room: $roomId');
+
+      // Get detailed voting results
+      final appwriteService = ref.read(appwriteServiceProvider);
+      final judgments = await appwriteService.databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'arena_judgments',
+        queries: [
+          Query.equal('roomId', roomId),
+        ],
+      );
+
+      // Get participant profiles for the modal
+      final affirmativeDebater = state.getParticipantByRole(ArenaRole.affirmative);
+      final affirmative2Debater = state.participants.values
+          .where((p) => p.role == ArenaRole.affirmative)
+          .skip(1)
+          .firstOrNull;
+      final negativeDebater = state.getParticipantByRole(ArenaRole.negative);
+      final negative2Debater = state.participants.values
+          .where((p) => p.role == ArenaRole.negative)
+          .skip(1)
+          .firstOrNull;
+
+      if (!context.mounted) return;
+
+      // Play applause sound for winner celebration
+      final soundService = ref.read(soundServiceProvider);
+      soundService.playApplauseSound();
+
+      // Show the results modal
+      await showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => ResultsModal(
+          winner: state.winner ?? 'unknown',
+          affirmativeDebater: affirmativeDebater != null
+              ? _convertToUserProfile(affirmativeDebater)
+              : null,
+          affirmative2Debater: affirmative2Debater != null
+              ? _convertToUserProfile(affirmative2Debater)
+              : null,
+          negativeDebater: negativeDebater != null
+              ? _convertToUserProfile(negativeDebater)
+              : null,
+          negative2Debater: negative2Debater != null
+              ? _convertToUserProfile(negative2Debater)
+              : null,
+          judgments: judgments.documents,
+          topic: state.topic,
+          teamSize: 1, // Default to 1v1 for now
+        ),
+      );
+
+      AppLogger().info('🏆 Results modal closed');
+    } catch (e) {
+      AppLogger().error('Error showing results modal: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load results: $e')),
+        );
+      }
+    }
+  }
+
+  /// Helper to convert ArenaParticipant to UserProfile for the modal
+  UserProfile _convertToUserProfile(ArenaParticipant participant) {
+    return UserProfile(
+      id: participant.userId,
+      name: participant.name,
+      email: '', // Not needed for results display
+      avatar: participant.avatar,
+      preferences: {},
+      reputationPercentage: 50, // Default
+      totalDebates: 0,
+      totalWins: 0,
+      totalRoomsCreated: 0,
+      totalRoomsJoined: 0,
+      coinBalance: 0,
+      totalGiftsSent: 0,
+      totalGiftsReceived: 0,
+      interests: [],
+      joinedClubs: [],
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      isVerified: false,
+      isPublicProfile: true,
+      isAvailableAsModerator: false,
+      isAvailableAsJudge: false,
+      isPremium: false,
+      isTestSubscription: false,
     );
   }
 

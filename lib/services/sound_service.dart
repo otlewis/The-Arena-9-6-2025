@@ -88,6 +88,26 @@ class SoundService {
     await _playSound('email.mp3', 'email notification');
   }
 
+  /// Play cricket reaction sound
+  Future<void> playCricketSound() async {
+    await _playSound('cricket.mp3', 'cricket reaction');
+  }
+
+  /// Play bell reaction sound
+  Future<void> playBellSound() async {
+    await _playSound('ding.mp3', 'bell reaction');
+  }
+
+  /// Play applause/clap reaction sound
+  Future<void> playClapSound() async {
+    await playApplauseSound(); // Reuse existing applause sound
+  }
+
+  /// Play ping notification sound for room invitations
+  Future<void> playPing() async {
+    await _playSound('ping.mp3', 'ping notification');
+  }
+
   /// Play a custom sound file
   Future<void> playCustomSound(String fileName) async {
     if (!_soundEnabled) return;

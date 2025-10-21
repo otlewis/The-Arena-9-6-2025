@@ -21,6 +21,7 @@ class ParticipantDiffManager {
     required Map<String, UserProfile> currentParticipants,
     required Map<String, dynamic> updatePayload,
     required String updateType,
+    Map<String, String>? currentRoles, // Optional: current role mappings
   }) {
     // Get or create room state
     final state = _roomStates[roomId] ?? ParticipantState();
@@ -52,8 +53,8 @@ class ParticipantDiffManager {
       final newRole = updatePayload['role'] as String?;
 
       if (userId != null && newRole != null) {
-        final currentUser = currentParticipants[userId];
-        final currentRole = _getRoleFromUser(currentUser);
+        // Get current role from provided map or fall back to UserProfile
+        final currentRole = currentRoles?[userId] ?? _getRoleFromUser(currentParticipants[userId]);
 
         if (currentRole != newRole) {
           diff.roleChanges[userId] = RoleChange(
@@ -65,10 +66,53 @@ class ParticipantDiffManager {
       }
 
       // Check for other property changes (e.g., mute status)
-      if (updatePayload.containsKey('isMuted')) {
-        final isMuted = updatePayload['isMuted'] as bool;
-        diff.propertyChanges[userId!] = {'isMuted': isMuted};
-        _logger.debug('🔄 DIFF: User $userId mute status changed to $isMuted');
+      if (userId != null) {
+        final Map<String, dynamic> properties =
+            diff.propertyChanges[userId] ?? <String, dynamic>{};
+
+        if (updatePayload.containsKey('isMuted')) {
+          final isMuted = updatePayload['isMuted'];
+          if (isMuted is bool) {
+            properties['isMuted'] = isMuted;
+            _logger.debug('🔄 DIFF: User $userId mute status changed to $isMuted');
+          }
+        }
+
+        if (updatePayload.containsKey('videoReady')) {
+          final videoReady = updatePayload['videoReady'];
+          if (videoReady is bool) {
+            properties['videoReady'] = videoReady;
+            _logger.debug('🔄 DIFF: User $userId videoReady changed to $videoReady');
+          }
+        }
+
+        if (updatePayload.containsKey('audioReady')) {
+          final audioReady = updatePayload['audioReady'];
+          if (audioReady is bool) {
+            properties['audioReady'] = audioReady;
+            _logger.debug('🔄 DIFF: User $userId audioReady changed to $audioReady');
+          }
+        }
+
+        if (updatePayload.containsKey('videoTrackSid')) {
+          final videoTrackSid = updatePayload['videoTrackSid'];
+          if (videoTrackSid is String || videoTrackSid == null) {
+            properties['videoTrackSid'] = videoTrackSid;
+            _logger.debug('🔄 DIFF: User $userId videoTrackSid changed to $videoTrackSid');
+          }
+        }
+
+        if (updatePayload.containsKey('audioTrackSid')) {
+          final audioTrackSid = updatePayload['audioTrackSid'];
+          if (audioTrackSid is String || audioTrackSid == null) {
+            properties['audioTrackSid'] = audioTrackSid;
+            _logger.debug('🔄 DIFF: User $userId audioTrackSid changed to $audioTrackSid');
+          }
+        }
+
+        if (properties.isNotEmpty) {
+          diff.propertyChanges[userId] = properties;
+        }
       }
     }
 

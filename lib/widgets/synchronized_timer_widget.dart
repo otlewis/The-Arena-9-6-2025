@@ -413,7 +413,7 @@ class _SynchronizedTimerWidgetState extends State<SynchronizedTimerWidget>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color, width: 1),
       ),

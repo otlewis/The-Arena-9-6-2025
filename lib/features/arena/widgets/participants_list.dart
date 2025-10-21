@@ -94,9 +94,9 @@ class ParticipantsList extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        border: Border.all(color: teamColor.withValues(alpha: 0.3)),
+        border: Border.all(color: teamColor.withOpacity(0.3)),
         borderRadius: BorderRadius.circular(8),
-        color: teamColor.withValues(alpha: 0.05),
+        color: teamColor.withOpacity(0.05),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -241,7 +241,7 @@ class ParticipantsList extends ConsumerWidget {
         children: [
           CircleAvatar(
             radius: 12,
-            backgroundColor: color.withValues(alpha: 0.2),
+            backgroundColor: color.withOpacity(0.2),
             backgroundImage: participant.avatar != null 
               ? NetworkImage(participant.avatar!)
               : null,

@@ -1,0 +1,155 @@
+{
+  "name": "Hand-Raise Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hand-raise",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "hand-raise"
+    },
+    {
+      "parameters": {
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/handraises/documents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_a2e04fd5446a4f68ddb8ecth65da67b46dfc16d2c4a1a5b867375"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"documentId\": \"unique()\",\n  \"data\": {\n    \"roomId\": \"{{ $json.body.roomId }}\",\n    \"userId\": \"{{ $json.body.userId }}\",\n    \"userName\": \"{{ $json.body.userName }}\",\n    \"status\": \"raised\",\n    \"raisedAt\": \"{{ $now.toFormat('yyyy-MM-dd HH:mm:ss') }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "create-handraise",
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/debate_discussion_rooms/documents/{{ $json.body.roomId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_a2e04fd5446a4f68ddb8ecth65da67b46dfc16d2c4a1a5b867375"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-room-details",
+      "name": "HTTP Request3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/notifications/documents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_a2e04fd5446a4f68ddb8ecth65da67b46dfc16d2c4a1a5b867375"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"documentId\": \"unique()\",\n  \"data\": {\n    \"id\": \"handraise_{{ $now.toMillis() }}\",\n    \"type\": \"system_announcement\",\n    \"userId\": \"{{ $node['HTTP Request3'].json.moderatorId }}\",\n    \"title\": \"Hand Raise Request\",\n    \"message\": \"{{ $node['Webhook'].json.body.userName }} has raised their hand\",\n    \"payload\": {\n      \"roomId\": \"{{ $node['Webhook'].json.body.roomId }}\",\n      \"userId\": \"{{ $node['Webhook'].json.body.userId }}\",\n      \"userName\": \"{{ $node['Webhook'].json.body.userName }}\",\n      \"action\": \"hand_raise\"\n    },\n    \"priority\": 3,\n    \"createdAt\": \"{{ $now.toFormat('yyyy-MM-dd HH:mm:ss') }}\",\n    \"expiresAt\": null,\n    \"isRead\": false,\n    \"isDismissed\": false,\n    \"actions\": [],\n    \"imageUrl\": \"{{ $node['Webhook'].json.body.userAvatar || null }}\",\n    \"deepLink\": null,\n    \"soundFile\": \"ding.mp3\",\n    \"enableVibration\": false,\n    \"deliveryMethods\": [\"inApp\", \"banner\"]\n  }\n}",
+        "options": {}
+      },
+      "id": "notify-moderator",
+      "name": "HTTP Request4",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request3": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-08T22:00:00.000Z",
+  "versionId": "1"
+}

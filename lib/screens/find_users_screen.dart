@@ -197,15 +197,15 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
               boxShadow: [
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.white.withValues(alpha: 0.03)
-                      : Colors.white.withValues(alpha: 0.7),
+                      ? Colors.white.withOpacity(0.03)
+                      : Colors.white.withOpacity(0.7),
                   offset: const Offset(-8, -8),
                   blurRadius: 16,
                 ),
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.black.withValues(alpha: 0.5)
-                      : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                      ? Colors.black.withOpacity(0.5)
+                      : const Color(0xFFA3B1C6).withOpacity(0.5),
                   offset: const Offset(8, 8),
                   blurRadius: 16,
                 ),
@@ -263,15 +263,15 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.7),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.7),
             offset: const Offset(-4, -4),
             blurRadius: 8,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(4, 4),
             blurRadius: 8,
           ),
@@ -291,16 +291,16 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.6)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                ? Colors.black.withOpacity(0.6)
+                : const Color(0xFFA3B1C6).withOpacity(0.3),
             offset: const Offset(4, 4),
             blurRadius: 8,
             spreadRadius: -2,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.02)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.02)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-4, -4),
             blurRadius: 8,
             spreadRadius: -2,
@@ -340,15 +340,15 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
@@ -369,16 +369,16 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                     boxShadow: [
                       BoxShadow(
                         color: _themeService.isDarkMode 
-                            ? Colors.black.withValues(alpha: 0.4)
-                            : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                            ? Colors.black.withOpacity(0.4)
+                            : const Color(0xFFA3B1C6).withOpacity(0.3),
                         offset: const Offset(3, 3),
                         blurRadius: 6,
                         spreadRadius: -2,
                       ),
                       BoxShadow(
                         color: _themeService.isDarkMode 
-                            ? Colors.white.withValues(alpha: 0.02)
-                            : Colors.white.withValues(alpha: 0.7),
+                            ? Colors.white.withOpacity(0.02)
+                            : Colors.white.withOpacity(0.7),
                         offset: const Offset(-3, -3),
                         blurRadius: 6,
                         spreadRadius: -2,
@@ -389,7 +389,7 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                     avatarUrl: user.avatar,
                     initials: user.initials,
                     radius: 24,
-                    backgroundColor: accentPurple.withValues(alpha: 0.1),
+                    backgroundColor: accentPurple.withOpacity(0.1),
                     textColor: accentPurple,
                   ),
                 ),
@@ -470,16 +470,16 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                         boxShadow: [
                           BoxShadow(
                             color: _themeService.isDarkMode 
-                                ? Colors.black.withValues(alpha: 0.6)
-                                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                                ? Colors.black.withOpacity(0.6)
+                                : const Color(0xFFA3B1C6).withOpacity(0.3),
                             offset: const Offset(2, 2),
                             blurRadius: 4,
                             spreadRadius: -1,
                           ),
                           BoxShadow(
                             color: _themeService.isDarkMode 
-                                ? Colors.white.withValues(alpha: 0.02)
-                                : Colors.white.withValues(alpha: 0.8),
+                                ? Colors.white.withOpacity(0.02)
+                                : Colors.white.withOpacity(0.8),
                             offset: const Offset(-2, -2),
                             blurRadius: 4,
                             spreadRadius: -1,

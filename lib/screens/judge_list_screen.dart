@@ -253,7 +253,7 @@ class _JudgeListScreenState extends State<JudgeListScreen> {
                       });
                       _loadJudges();
                     },
-                    selectedColor: const Color(0xFFFFC107).withValues(alpha: 0.3),
+                    selectedColor: const Color(0xFFFFC107).withOpacity(0.3),
                     checkmarkColor: const Color(0xFFFFC107),
                     labelStyle: TextStyle(
                       color: isSelected ? const Color(0xFFFFC107) : Colors.white70,
@@ -279,7 +279,7 @@ class _JudgeListScreenState extends State<JudgeListScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFC107).withValues(alpha: 0.1),
+        color: const Color(0xFFFFC107).withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFFFC107), width: 1),
       ),
@@ -327,7 +327,7 @@ class _JudgeListScreenState extends State<JudgeListScreen> {
           Icon(
             Icons.balance,
             size: 64,
-            color: Colors.white.withValues(alpha: 0.3),
+            color: Colors.white.withOpacity(0.3),
           ),
           const SizedBox(height: 16),
           const Text(
@@ -468,7 +468,7 @@ class _JudgeListScreenState extends State<JudgeListScreen> {
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFC107).withValues(alpha: 0.2),
+                    color: const Color(0xFFFFC107).withOpacity(0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -492,7 +492,7 @@ class _JudgeListScreenState extends State<JudgeListScreen> {
                   return Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.2),
+                      color: Colors.amber.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(

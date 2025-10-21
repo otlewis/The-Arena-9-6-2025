@@ -77,15 +77,15 @@ class _ReportUserDialogState extends State<ReportUserDialog> {
           boxShadow: [
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.white.withValues(alpha: 0.03)
-                  : Colors.white.withValues(alpha: 0.7),
+                  ? Colors.white.withOpacity(0.03)
+                  : Colors.white.withOpacity(0.7),
               offset: const Offset(-12, -12),
               blurRadius: 24,
             ),
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.black.withValues(alpha: 0.6)
-                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                  ? Colors.black.withOpacity(0.6)
+                  : const Color(0xFFA3B1C6).withOpacity(0.5),
               offset: const Offset(12, 12),
               blurRadius: 24,
             ),
@@ -128,15 +128,15 @@ class _ReportUserDialogState extends State<ReportUserDialog> {
             boxShadow: [
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.white.withValues(alpha: 0.03)
-                    : Colors.white.withValues(alpha: 0.7),
+                    ? Colors.white.withOpacity(0.03)
+                    : Colors.white.withOpacity(0.7),
                 offset: const Offset(-4, -4),
                 blurRadius: 8,
               ),
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.black.withValues(alpha: 0.5)
-                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                    ? Colors.black.withOpacity(0.5)
+                    : const Color(0xFFA3B1C6).withOpacity(0.5),
                 offset: const Offset(4, 4),
                 blurRadius: 8,
               ),
@@ -193,16 +193,16 @@ class _ReportUserDialogState extends State<ReportUserDialog> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.6)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                ? Colors.black.withOpacity(0.6)
+                : const Color(0xFFA3B1C6).withOpacity(0.3),
             offset: const Offset(4, 4),
             blurRadius: 8,
             spreadRadius: -2,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.02)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.02)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-4, -4),
             blurRadius: 8,
             spreadRadius: -2,
@@ -213,7 +213,7 @@ class _ReportUserDialogState extends State<ReportUserDialog> {
         children: [
           CircleAvatar(
             radius: 24,
-            backgroundColor: accentPurple.withValues(alpha: 0.2),
+            backgroundColor: accentPurple.withOpacity(0.2),
             child: Text(
               widget.reportedUser.initials,
               style: const TextStyle(
@@ -282,7 +282,7 @@ class _ReportUserDialogState extends State<ReportUserDialog> {
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? accentPurple.withValues(alpha: 0.1)
+                            ? accentPurple.withOpacity(0.1)
                             : (_themeService.isDarkMode 
                                 ? const Color(0xFF3A3A3A)
                                 : const Color(0xFFF0F0F3)),
@@ -293,16 +293,16 @@ class _ReportUserDialogState extends State<ReportUserDialog> {
                         boxShadow: isSelected ? null : [
                           BoxShadow(
                             color: _themeService.isDarkMode 
-                                ? Colors.black.withValues(alpha: 0.4)
-                                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                                ? Colors.black.withOpacity(0.4)
+                                : const Color(0xFFA3B1C6).withOpacity(0.3),
                             offset: const Offset(2, 2),
                             blurRadius: 4,
                             spreadRadius: -1,
                           ),
                           BoxShadow(
                             color: _themeService.isDarkMode 
-                                ? Colors.white.withValues(alpha: 0.02)
-                                : Colors.white.withValues(alpha: 0.7),
+                                ? Colors.white.withOpacity(0.02)
+                                : Colors.white.withOpacity(0.7),
                             offset: const Offset(-2, -2),
                             blurRadius: 4,
                             spreadRadius: -1,
@@ -372,16 +372,16 @@ class _ReportUserDialogState extends State<ReportUserDialog> {
             boxShadow: [
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.black.withValues(alpha: 0.6)
-                    : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                    ? Colors.black.withOpacity(0.6)
+                    : const Color(0xFFA3B1C6).withOpacity(0.3),
                 offset: const Offset(4, 4),
                 blurRadius: 8,
                 spreadRadius: -2,
               ),
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.white.withValues(alpha: 0.02)
-                    : Colors.white.withValues(alpha: 0.8),
+                    ? Colors.white.withOpacity(0.02)
+                    : Colors.white.withOpacity(0.8),
                 offset: const Offset(-4, -4),
                 blurRadius: 8,
                 spreadRadius: -2,
@@ -455,19 +455,19 @@ class _ReportUserDialogState extends State<ReportUserDialog> {
             boxShadow: isDisabled ? null : [
               BoxShadow(
                 color: isPrimary
-                    ? accentPurple.withValues(alpha: 0.3)
+                    ? accentPurple.withOpacity(0.3)
                     : (_themeService.isDarkMode 
-                        ? Colors.white.withValues(alpha: 0.03)
-                        : Colors.white.withValues(alpha: 0.7)),
+                        ? Colors.white.withOpacity(0.03)
+                        : Colors.white.withOpacity(0.7)),
                 offset: const Offset(-6, -6),
                 blurRadius: 12,
               ),
               BoxShadow(
                 color: isPrimary
-                    ? accentPurple.withValues(alpha: 0.5)
+                    ? accentPurple.withOpacity(0.5)
                     : (_themeService.isDarkMode 
-                        ? Colors.black.withValues(alpha: 0.5)
-                        : const Color(0xFFA3B1C6).withValues(alpha: 0.5)),
+                        ? Colors.black.withOpacity(0.5)
+                        : const Color(0xFFA3B1C6).withOpacity(0.5)),
                 offset: const Offset(6, 6),
                 blurRadius: 12,
               ),

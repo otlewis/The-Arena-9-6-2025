@@ -425,6 +425,21 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
       ) as _i6.Future<_i3.Session>);
 
   @override
+  _i6.Future<_i3.Session> signInWithApple() => (super.noSuchMethod(
+        Invocation.method(
+          #signInWithApple,
+          [],
+        ),
+        returnValue: _i6.Future<_i3.Session>.value(_FakeSession_7(
+          this,
+          Invocation.method(
+            #signInWithApple,
+            [],
+          ),
+        )),
+      ) as _i6.Future<_i3.Session>);
+
+  @override
   _i6.Future<_i3.User?> getCurrentUser() => (super.noSuchMethod(
         Invocation.method(
           #getCurrentUser,
@@ -847,6 +862,23 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
         returnValue: _i6.Future<void>.value(),
         returnValueForMissingStub: _i6.Future<void>.value(),
       ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<bool> checkIfUserIsBanned({
+    required String? userId,
+    required String? roomId,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #checkIfUserIsBanned,
+          [],
+          {
+            #userId: userId,
+            #roomId: roomId,
+          },
+        ),
+        returnValue: _i6.Future<bool>.value(false),
+      ) as _i6.Future<bool>);
 
   @override
   _i6.Future<void> joinDebateDiscussionRoom({
@@ -1287,6 +1319,7 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
     required String? roomId,
     required String? userId,
     required String? newRole,
+    String? documentId,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1296,6 +1329,33 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
             #roomId: roomId,
             #userId: userId,
             #newRole: newRole,
+            #documentId: documentId,
+          },
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> updateDebateDiscussionParticipantMedia({
+    required String? roomId,
+    required String? userId,
+    bool? videoReady,
+    bool? audioReady,
+    String? videoTrackSid,
+    String? audioTrackSid,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updateDebateDiscussionParticipantMedia,
+          [],
+          {
+            #roomId: roomId,
+            #userId: userId,
+            #videoReady: videoReady,
+            #audioReady: audioReady,
+            #videoTrackSid: videoTrackSid,
+            #audioTrackSid: audioTrackSid,
           },
         ),
         returnValue: _i6.Future<void>.value(),

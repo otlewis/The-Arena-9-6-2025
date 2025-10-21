@@ -607,7 +607,7 @@ class _SuperModDashboardState extends State<SuperModDashboard>
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha: 0.2),
+          backgroundColor: color.withOpacity(0.2),
           child: Icon(icon, color: color),
         ),
         title: Text(
@@ -639,7 +639,7 @@ class _SuperModDashboardState extends State<SuperModDashboard>
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: color.withValues(alpha: 0.2),
+              backgroundColor: color.withOpacity(0.2),
               child: Icon(icon, color: color),
             ),
             const SizedBox(width: 16),
@@ -1088,7 +1088,7 @@ class _SuperModDashboardState extends State<SuperModDashboard>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.purple.withValues(alpha: 0.2),
+                      color: Colors.purple.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.purple),
                     ),
@@ -1342,7 +1342,7 @@ class _SuperModDashboardState extends State<SuperModDashboard>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.purple.withValues(alpha: 0.2),
+                      color: Colors.purple.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.purple),
                     ),
@@ -1635,7 +1635,7 @@ class _SuperModDashboardState extends State<SuperModDashboard>
                       spacing: 8,
                       children: exemptUsers.map((user) => Chip(
                         label: Text(user, style: const TextStyle(color: Colors.white)),
-                        backgroundColor: Colors.purple.withValues(alpha: 0.3),
+                        backgroundColor: Colors.purple.withOpacity(0.3),
                         deleteIcon: const Icon(LucideIcons.x, size: 16, color: Colors.white),
                         onDeleted: () => setState(() => exemptUsers.remove(user)),
                       )).toList(),
@@ -1753,7 +1753,7 @@ class _SuperModDashboardState extends State<SuperModDashboard>
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.2),
+                    color: Colors.red.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: Colors.red),
                   ),

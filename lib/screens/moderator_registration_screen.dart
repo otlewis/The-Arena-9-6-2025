@@ -173,7 +173,7 @@ class _ModeratorRegistrationScreenState extends State<ModeratorRegistrationScree
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.grey.withValues(alpha: 0.1),
+                    color: Colors.grey.withOpacity(0.1),
                     blurRadius: 10,
                     offset: const Offset(0, 2),
                   ),
@@ -325,7 +325,7 @@ class _ModeratorRegistrationScreenState extends State<ModeratorRegistrationScree
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.1),
+            color: Colors.grey.withOpacity(0.1),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -397,7 +397,7 @@ class _ModeratorRegistrationScreenState extends State<ModeratorRegistrationScree
               }
             });
           },
-          selectedColor: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+          selectedColor: const Color(0xFF8B5CF6).withOpacity(0.2),
           checkmarkColor: const Color(0xFF8B5CF6),
           labelStyle: TextStyle(
             color: isSelected ? const Color(0xFF8B5CF6) : Colors.grey[700],

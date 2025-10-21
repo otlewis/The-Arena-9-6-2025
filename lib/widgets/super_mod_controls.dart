@@ -55,7 +55,7 @@ class _SuperModControlsState extends State<SuperModControls> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+            color: const Color(0xFFFFD700).withOpacity(0.3),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -142,7 +142,7 @@ class _SuperModControlsState extends State<SuperModControls> {
     required Color color,
   }) {
     return Material(
-      color: Colors.white.withValues(alpha: 0.9),
+      color: Colors.white.withOpacity(0.9),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: onTap,

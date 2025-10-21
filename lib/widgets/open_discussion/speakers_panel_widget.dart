@@ -130,16 +130,16 @@ class SpeakersPanelWidget extends StatelessWidget {
     final isSpeaking = moderator.isSpeaking;
     final isMuted = moderator.isMuted;
     final isLocal = moderator.isLocal;
-    
+
     return GestureDetector(
       onTap: () => _handleParticipantTap(moderator),
       child: Container(
         height: 140,
         decoration: BoxDecoration(
-          color: const Color(0xFF6B46C1), // Purple for moderator
+          color: const Color(0xFFDC143C), // Scarlet red for moderator
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSpeaking ? Colors.green : const Color(0xFF6B46C1),
+            color: isSpeaking ? Colors.green : const Color(0xFFDC143C),
             width: 3,
           ),
         ),
@@ -313,10 +313,10 @@ class SpeakersPanelWidget extends StatelessWidget {
     return Container(
       height: 140,
       decoration: BoxDecoration(
-        color: const Color(0xFF6B46C1),
+        color: const Color(0xFFDC143C),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFF6B46C1),
+          color: const Color(0xFFDC143C),
           width: 2,
         ),
       ),
@@ -333,7 +333,7 @@ class SpeakersPanelWidget extends StatelessWidget {
             ),
             child: const Icon(
               Icons.person,
-              color: Color(0xFF6B46C1),
+              color: Color(0xFFDC143C),
               size: 35,
             ),
           ),

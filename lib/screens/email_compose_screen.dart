@@ -456,7 +456,7 @@ ${widget.forwardEmail!.body}''';
                             style: const TextStyle(fontSize: 12),
                           ),
                           onPressed: () => _applyTemplate(template),
-                          backgroundColor: accentPurple.withValues(alpha: 0.2),
+                          backgroundColor: accentPurple.withOpacity(0.2),
                           labelStyle: const TextStyle(color: accentPurple),
                         ),
                       ),

@@ -37,7 +37,7 @@ class SuperModBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFFD700).withValues(alpha: 0.4),
+            color: const Color(0xFFFFD700).withOpacity(0.4),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -61,7 +61,7 @@ class SuperModBadge extends StatelessWidget {
                 color: Colors.white,
                 shadows: [
                   Shadow(
-                    color: Colors.black.withValues(alpha: 0.3),
+                    color: Colors.black.withOpacity(0.3),
                     offset: const Offset(0.5, 0.5),
                   ),
                 ],

@@ -318,7 +318,7 @@ class _SimpleTimerState extends State<SimpleTimer> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.blue.withValues(alpha: 0.2),
+            color: Colors.blue.withOpacity(0.2),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.blue, width: 1),
           ),
@@ -339,7 +339,7 @@ class _SimpleTimerState extends State<SimpleTimer> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.7),
+          color: Colors.black.withOpacity(0.7),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: _isRunning ? Colors.green : (_seconds <= 30 ? Colors.red : Colors.white),

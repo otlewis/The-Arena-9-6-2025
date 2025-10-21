@@ -134,15 +134,15 @@ class _AppealsManagementScreenState extends State<AppealsManagementScreen> {
                 boxShadow: [
                   BoxShadow(
                     color: _themeService.isDarkMode 
-                        ? Colors.white.withValues(alpha: 0.03)
-                        : Colors.white.withValues(alpha: 0.7),
+                        ? Colors.white.withOpacity(0.03)
+                        : Colors.white.withOpacity(0.7),
                     offset: const Offset(-8, -8),
                     blurRadius: 16,
                   ),
                   BoxShadow(
                     color: _themeService.isDarkMode 
-                        ? Colors.black.withValues(alpha: 0.5)
-                        : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                        ? Colors.black.withOpacity(0.5)
+                        : const Color(0xFFA3B1C6).withOpacity(0.5),
                     offset: const Offset(8, 8),
                     blurRadius: 16,
                   ),
@@ -189,15 +189,15 @@ class _AppealsManagementScreenState extends State<AppealsManagementScreen> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-4, -4),
             blurRadius: 8,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(4, 4),
             blurRadius: 8,
           ),
@@ -267,15 +267,15 @@ class _AppealsManagementScreenState extends State<AppealsManagementScreen> {
               boxShadow: [
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.white.withValues(alpha: 0.03)
-                      : Colors.white.withValues(alpha: 0.7),
+                      ? Colors.white.withOpacity(0.03)
+                      : Colors.white.withOpacity(0.7),
                   offset: const Offset(-8, -8),
                   blurRadius: 16,
                 ),
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.black.withValues(alpha: 0.5)
-                      : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                      ? Colors.black.withOpacity(0.5)
+                      : const Color(0xFFA3B1C6).withOpacity(0.5),
                   offset: const Offset(8, 8),
                   blurRadius: 16,
                 ),
@@ -317,15 +317,15 @@ class _AppealsManagementScreenState extends State<AppealsManagementScreen> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
@@ -459,7 +459,7 @@ class _AppealsManagementScreenState extends State<AppealsManagementScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
+        color: color.withOpacity(0.2),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color, width: 1),
       ),
@@ -483,9 +483,9 @@ class _AppealsManagementScreenState extends State<AppealsManagementScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
+            color: color.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withValues(alpha: 0.3)),
+            border: Border.all(color: color.withOpacity(0.3)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

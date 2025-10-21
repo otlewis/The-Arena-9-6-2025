@@ -52,7 +52,7 @@ class _SetupReputationScreenState extends State<SetupReputationScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: _isComplete ? Colors.green.withValues(alpha: 0.1) : Colors.blue.withValues(alpha: 0.1),
+                  color: _isComplete ? Colors.green.withOpacity(0.1) : Colors.blue.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: _isComplete ? Colors.green : Colors.blue,

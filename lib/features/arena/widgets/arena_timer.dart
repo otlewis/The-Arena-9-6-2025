@@ -58,7 +58,7 @@ class ArenaTimer extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       decoration: BoxDecoration(
-        color: timerColor.withValues(alpha: 0.1),
+        color: timerColor.withOpacity(0.1),
         border: Border.all(color: timerColor, width: 2),
         borderRadius: BorderRadius.circular(12),
       ),
@@ -96,10 +96,10 @@ class ArenaTimer extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+        color: Theme.of(context).primaryColor.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Theme.of(context).primaryColor.withValues(alpha: 0.3),
+          color: Theme.of(context).primaryColor.withOpacity(0.3),
         ),
       ),
       child: Row(

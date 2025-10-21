@@ -324,21 +324,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             : const Color(0xFFF0F0F3),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: scarletRed.withValues(alpha: 0.2),
+          color: scarletRed.withOpacity(0.2),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-8, -8),
             blurRadius: 16,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(8, 8),
             blurRadius: 16,
           ),
@@ -359,16 +359,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   boxShadow: [
                     BoxShadow(
                       color: _themeService.isDarkMode 
-                          ? Colors.black.withValues(alpha: 0.6)
-                          : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                          ? Colors.black.withOpacity(0.6)
+                          : const Color(0xFFA3B1C6).withOpacity(0.3),
                       offset: const Offset(4, 4),
                       blurRadius: 8,
                       spreadRadius: -2,
                     ),
                     BoxShadow(
                       color: _themeService.isDarkMode 
-                          ? Colors.white.withValues(alpha: 0.02)
-                          : Colors.white.withValues(alpha: 0.8),
+                          ? Colors.white.withOpacity(0.02)
+                          : Colors.white.withOpacity(0.8),
                       offset: const Offset(-4, -4),
                       blurRadius: 8,
                       spreadRadius: -2,
@@ -407,7 +407,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.orange.withValues(alpha: 0.4),
+                          color: Colors.orange.withOpacity(0.4),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),
@@ -447,7 +447,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.orange.withValues(alpha: 0.3),
+                        color: Colors.orange.withOpacity(0.3),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
@@ -507,7 +507,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     : lightScarlet,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: scarletRed.withValues(alpha: 0.3),
+                  color: scarletRed.withOpacity(0.3),
                   width: 1,
                 ),
               ),
@@ -551,21 +551,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             : const Color(0xFFF0F0F3),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: scarletRed.withValues(alpha: 0.2),
+          color: scarletRed.withOpacity(0.2),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-8, -8),
             blurRadius: 16,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(8, 8),
             blurRadius: 16,
           ),
@@ -657,16 +657,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.6)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                ? Colors.black.withOpacity(0.6)
+                : const Color(0xFFA3B1C6).withOpacity(0.3),
             offset: const Offset(3, 3),
             blurRadius: 6,
             spreadRadius: -2,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.02)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.02)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-3, -3),
             blurRadius: 6,
             spreadRadius: -2,
@@ -712,21 +712,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             : const Color(0xFFF0F0F3),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: scarletRed.withValues(alpha: 0.2),
+          color: scarletRed.withOpacity(0.2),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
@@ -766,21 +766,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             : const Color(0xFFF0F0F3),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: scarletRed.withValues(alpha: 0.2),
+          color: scarletRed.withOpacity(0.2),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
@@ -810,7 +810,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       : lightScarlet,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: scarletRed.withValues(alpha: 0.3),
+                    color: scarletRed.withOpacity(0.3),
                     width: 1,
                   ),
                 ),
@@ -851,21 +851,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             : const Color(0xFFF0F0F3),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: scarletRed.withValues(alpha: 0.2),
+          color: scarletRed.withOpacity(0.2),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
@@ -953,21 +953,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             : const Color(0xFFF0F0F3),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: scarletRed.withValues(alpha: 0.2),
+                          color: scarletRed.withOpacity(0.2),
                           width: 1.5,
                         ),
                         boxShadow: [
                           BoxShadow(
                             color: _themeService.isDarkMode 
-                                ? Colors.white.withValues(alpha: 0.03)
-                                : Colors.white.withValues(alpha: 0.8),
+                                ? Colors.white.withOpacity(0.03)
+                                : Colors.white.withOpacity(0.8),
                             offset: const Offset(-6, -6),
                             blurRadius: 12,
                           ),
                           BoxShadow(
                             color: _themeService.isDarkMode 
-                                ? Colors.black.withValues(alpha: 0.5)
-                                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                                ? Colors.black.withOpacity(0.5)
+                                : const Color(0xFFA3B1C6).withOpacity(0.5),
                             offset: const Offset(6, 6),
                             blurRadius: 12,
                           ),
@@ -989,21 +989,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             : const Color(0xFFF0F0F3),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: scarletRed.withValues(alpha: 0.2),
+                          color: scarletRed.withOpacity(0.2),
                           width: 1.5,
                         ),
                         boxShadow: [
                           BoxShadow(
                             color: _themeService.isDarkMode 
-                                ? Colors.white.withValues(alpha: 0.03)
-                                : Colors.white.withValues(alpha: 0.8),
+                                ? Colors.white.withOpacity(0.03)
+                                : Colors.white.withOpacity(0.8),
                             offset: const Offset(-6, -6),
                             blurRadius: 12,
                           ),
                           BoxShadow(
                             color: _themeService.isDarkMode 
-                                ? Colors.black.withValues(alpha: 0.5)
-                                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                                ? Colors.black.withOpacity(0.5)
+                                : const Color(0xFFA3B1C6).withOpacity(0.5),
                             offset: const Offset(6, 6),
                             blurRadius: 12,
                           ),
@@ -1062,10 +1062,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isPresident ? Colors.orange.withValues(alpha: 0.1) : accentPurple.withValues(alpha: 0.1),
+          color: isPresident ? Colors.orange.withOpacity(0.1) : accentPurple.withOpacity(0.1),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isPresident ? Colors.orange.withValues(alpha: 0.3) : accentPurple.withValues(alpha: 0.3),
+            color: isPresident ? Colors.orange.withOpacity(0.3) : accentPurple.withOpacity(0.3),
           ),
         ),
         child: Row(
@@ -1105,21 +1105,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             : const Color(0xFFF0F0F3),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: scarletRed.withValues(alpha: 0.2),
+          color: scarletRed.withOpacity(0.2),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
@@ -1251,16 +1251,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           boxShadow: [
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.black.withValues(alpha: 0.6)
-                  : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                  ? Colors.black.withOpacity(0.6)
+                  : const Color(0xFFA3B1C6).withOpacity(0.3),
               offset: const Offset(3, 3),
               blurRadius: 6,
               spreadRadius: -2,
             ),
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.white.withValues(alpha: 0.02)
-                  : Colors.white.withValues(alpha: 0.8),
+                  ? Colors.white.withOpacity(0.02)
+                  : Colors.white.withOpacity(0.8),
               offset: const Offset(-3, -3),
               blurRadius: 6,
               spreadRadius: -2,
@@ -1299,21 +1299,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             : const Color(0xFFF0F0F3),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: accentPurple.withValues(alpha: 0.2),
+          color: accentPurple.withOpacity(0.2),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
@@ -1398,15 +1398,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
           boxShadow: [
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.white.withValues(alpha: 0.03)
-                  : Colors.white.withValues(alpha: 0.7),
+                  ? Colors.white.withOpacity(0.03)
+                  : Colors.white.withOpacity(0.7),
               offset: const Offset(-3, -3),
               blurRadius: 6,
             ),
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.black.withValues(alpha: 0.5)
-                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                  ? Colors.black.withOpacity(0.5)
+                  : const Color(0xFFA3B1C6).withOpacity(0.5),
               offset: const Offset(3, 3),
               blurRadius: 6,
             ),

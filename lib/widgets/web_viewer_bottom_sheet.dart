@@ -80,7 +80,7 @@ class _WebViewerBottomSheetState extends State<WebViewerBottomSheet> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
+            color: Colors.black.withOpacity(0.2),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),
@@ -97,7 +97,7 @@ class _WebViewerBottomSheetState extends State<WebViewerBottomSheet> {
                 width: 60,
                 height: 6,
                 decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.4),
+                  color: Colors.grey.withOpacity(0.4),
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -110,7 +110,7 @@ class _WebViewerBottomSheetState extends State<WebViewerBottomSheet> {
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                  color: Colors.grey.withValues(alpha: 0.2),
+                  color: Colors.grey.withOpacity(0.2),
                 ),
               ),
             ),

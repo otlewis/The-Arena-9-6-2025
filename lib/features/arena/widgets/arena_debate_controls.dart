@@ -456,7 +456,7 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: roleColor.withValues(alpha: 0.1),
+              color: roleColor.withOpacity(0.1),
               border: Border.all(
                 color: isCurrent ? Colors.green : roleColor,
                 width: isCurrent ? 2 : 1,
@@ -556,7 +556,7 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
         borderRadius: BorderRadius.circular(25),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -612,10 +612,10 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
+              color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: color.withValues(alpha: 0.3),
+                color: color.withOpacity(0.3),
                 width: 1,
               ),
             ),
@@ -801,7 +801,7 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.1),
+                    color: Colors.amber.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -869,7 +869,7 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: roleColor.withValues(alpha: 0.1),
+                          color: roleColor.withOpacity(0.1),
                           border: Border.all(color: roleColor),
                           borderRadius: BorderRadius.circular(20),
                         ),
@@ -962,7 +962,7 @@ class _ArenaDebateControlsState extends ConsumerState<ArenaDebateControls> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isSelected 
-            ? Colors.amber.withValues(alpha: 0.1)
+            ? Colors.amber.withOpacity(0.1)
             : (canAfford ? Colors.white : Colors.grey.shade100),
           border: Border.all(
             color: isSelected 

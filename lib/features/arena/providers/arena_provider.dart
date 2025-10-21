@@ -238,6 +238,22 @@ class ArenaNotifier extends StateNotifier<ArenaState> {
       final isTimerRunning = payload['isTimerRunning'] ?? false;
       final isPaused = payload['isPaused'] ?? false;
 
+      // Extract winner and broadcast flags
+      final winner = payload['winner'];
+      final showResults = payload['showResults'] ?? false;
+      final judgingComplete = payload['judgingComplete'] ?? false;
+
+      // Log detailed information about results state changes
+      final previousShowResults = state.showResults;
+      final previousWinner = state.winner;
+
+      if (showResults != previousShowResults || winner != previousWinner) {
+        logger.info('🏆 RESULTS STATE CHANGE DETECTED!');
+        logger.info('  Previous: showResults=$previousShowResults, winner=$previousWinner');
+        logger.info('  New: showResults=$showResults, winner=$winner');
+        logger.info('  Trophy should ${showResults && winner != null ? "APPEAR" : "HIDE"}');
+      }
+
       state = state.copyWith(
         status: newStatus,
         currentPhase: newPhase,
@@ -245,9 +261,13 @@ class ArenaNotifier extends StateNotifier<ArenaState> {
         remainingSeconds: remainingTime,
         isTimerRunning: isTimerRunning,
         isPaused: isPaused,
+        winner: winner,
+        showResults: showResults,
+        judgingComplete: judgingComplete,
       );
-      
+
       logger.debug('🔥 TIMER SYNC: Running: $isTimerRunning, Paused: $isPaused, Remaining: $remainingTime, Phase: ${payload['currentPhase']}');
+      logger.debug('🏆 WINNER BROADCAST: Winner: $winner, ShowResults: $showResults, JudgingComplete: $judgingComplete');
       logger.debug('🔥 PAYLOAD FULL: $payload');
     } catch (e) {
       logger.error('Error handling room update', e);
@@ -711,6 +731,10 @@ class ArenaNotifier extends StateNotifier<ArenaState> {
     }
   }
 
+  /// Mark results modal as shown
+  void markResultsModalShown() {
+    state = state.copyWith(resultsModalShown: true);
+  }
 
   @override
   void dispose() {

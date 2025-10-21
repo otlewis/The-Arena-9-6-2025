@@ -195,7 +195,7 @@ class _PingNotificationModalState extends State<PingNotificationModal>
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.black.withValues(alpha: 0.7),
+      color: Colors.black.withOpacity(0.7),
       child: Center(
         child: ScaleTransition(
           scale: _scaleAnimation,
@@ -209,7 +209,7 @@ class _PingNotificationModalState extends State<PingNotificationModal>
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
+                    color: Colors.black.withOpacity(0.3),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
@@ -225,7 +225,7 @@ class _PingNotificationModalState extends State<PingNotificationModal>
                         width: 60,
                         height: 60,
                         decoration: BoxDecoration(
-                          color: _primaryColor.withValues(alpha: 0.1),
+                          color: _primaryColor.withOpacity(0.1),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(

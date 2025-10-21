@@ -197,15 +197,15 @@ class _PaginatedDiscussionsRoomListScreenState extends ConsumerState<PaginatedDi
               boxShadow: [
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.black.withValues(alpha: 0.6)
-                      : const Color(0xFFA3B1C6).withValues(alpha: 0.4),
+                      ? Colors.black.withOpacity(0.6)
+                      : const Color(0xFFA3B1C6).withOpacity(0.4),
                   offset: const Offset(3, 3),
                   blurRadius: 8,
                 ),
                 BoxShadow(
                   color: _themeService.isDarkMode 
-                      ? Colors.white.withValues(alpha: 0.05)
-                      : Colors.white.withValues(alpha: 0.9),
+                      ? Colors.white.withOpacity(0.05)
+                      : Colors.white.withOpacity(0.9),
                   offset: const Offset(-3, -3),
                   blurRadius: 8,
                 ),
@@ -437,15 +437,15 @@ class _PaginatedDiscussionsRoomListScreenState extends ConsumerState<PaginatedDi
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.6)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.4),
+                ? Colors.black.withOpacity(0.6)
+                : const Color(0xFFA3B1C6).withOpacity(0.4),
             offset: const Offset(3, 3),
             blurRadius: 6,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.05)
-                : Colors.white.withValues(alpha: 0.9),
+                ? Colors.white.withOpacity(0.05)
+                : Colors.white.withOpacity(0.9),
             offset: const Offset(-3, -3),
             blurRadius: 6,
           ),
@@ -525,7 +525,7 @@ class _PaginatedDiscussionsRoomListScreenState extends ConsumerState<PaginatedDi
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: primaryPurple.withValues(alpha: 0.2),
+                      color: primaryPurple.withOpacity(0.2),
                       borderRadius: const BorderRadius.all(Radius.circular(8)),
                     ),
                     child: ExcludeSemantics(
@@ -561,15 +561,15 @@ class _PaginatedDiscussionsRoomListScreenState extends ConsumerState<PaginatedDi
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.6)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.4),
+                ? Colors.black.withOpacity(0.6)
+                : const Color(0xFFA3B1C6).withOpacity(0.4),
             offset: const Offset(2, 2),
             blurRadius: 4,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.05)
-                : Colors.white.withValues(alpha: 0.9),
+                ? Colors.white.withOpacity(0.05)
+                : Colors.white.withOpacity(0.9),
             offset: const Offset(-2, -2),
             blurRadius: 4,
           ),
@@ -593,15 +593,15 @@ class _PaginatedDiscussionsRoomListScreenState extends ConsumerState<PaginatedDi
           boxShadow: [
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.black.withValues(alpha: 0.6)
-                  : const Color(0xFFA3B1C6).withValues(alpha: 0.4),
+                  ? Colors.black.withOpacity(0.6)
+                  : const Color(0xFFA3B1C6).withOpacity(0.4),
               offset: const Offset(3, 3),
               blurRadius: 6,
             ),
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.white.withValues(alpha: 0.05)
-                  : Colors.white.withValues(alpha: 0.9),
+                  ? Colors.white.withOpacity(0.05)
+                  : Colors.white.withOpacity(0.9),
               offset: const Offset(-3, -3),
               blurRadius: 6,
             ),

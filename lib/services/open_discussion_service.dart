@@ -837,22 +837,38 @@ class OpenDiscussionService {
   Future<void> raiseHand(String roomName, String identity) async {
     try {
       AppLogger().debug('✋ Raising hand for $identity in room $roomName');
-      
+
       final appwriteService = AppwriteService();
-      
+
+      // Get user details for better notification
+      String userName = identity;
+      String? userAvatar;
+
+      try {
+        final userDoc = await appwriteService.databases.getDocument(
+          databaseId: AppwriteConstants.databaseId,
+          collectionId: AppwriteConstants.usersCollection,
+          documentId: identity,
+        );
+        userName = userDoc.data['displayName'] ?? userDoc.data['username'] ?? identity;
+        userAvatar = userDoc.data['profileImageUrl'];
+      } catch (e) {
+        AppLogger().debug('Could not fetch user details: $e');
+      }
+
       // Create or update hand raise document
       // Use a shorter document ID to avoid the 36 char limit
       final docId = '${identity.substring(0, 20)}_${roomName.hashCode.abs()}';
-      
+
       try {
         await appwriteService.databases.createDocument(
           databaseId: AppwriteConstants.databaseId,
-          collectionId: 'handraises',
+          collectionId: AppwriteConstants.roomHandRaisesCollection,
           documentId: docId,
           data: {
             'roomId': roomName,
             'userId': identity,
-            'userName': identity, // Can be updated with actual name
+            'userName': userName,
             'status': 'raised',
             'raisedAt': DateTime.now().toIso8601String(),
           },
@@ -862,7 +878,7 @@ class OpenDiscussionService {
         try {
           await appwriteService.databases.updateDocument(
             databaseId: AppwriteConstants.databaseId,
-            collectionId: 'handraises',
+            collectionId: AppwriteConstants.roomHandRaisesCollection,
             documentId: docId,
             data: {
               'status': 'raised',
@@ -874,8 +890,27 @@ class OpenDiscussionService {
           rethrow;
         }
       }
-      
+
       AppLogger().debug('✅ Hand raised successfully');
+
+      // Notify n8n webhook about the hand raise
+      try {
+        final webhookUrl = 'https://50.21.187.76/webhook-test/hand-raise';
+        await http.post(
+          Uri.parse(webhookUrl),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'roomId': roomName,
+            'userId': identity,
+            'userName': userName,
+            'userAvatar': userAvatar,
+          }),
+        );
+        AppLogger().debug('📢 Webhook notification sent to n8n');
+      } catch (webhookError) {
+        // Don't fail the hand raise if webhook fails
+        AppLogger().error('⚠️ Failed to notify webhook: $webhookError');
+      }
     } catch (e) {
       AppLogger().error('❌ Failed to raise hand: $e');
       rethrow;
@@ -896,7 +931,7 @@ class OpenDiscussionService {
       try {
         await appwriteService.databases.updateDocument(
           databaseId: AppwriteConstants.databaseId,
-          collectionId: 'handraises',
+          collectionId: AppwriteConstants.roomHandRaisesCollection,
           documentId: docId,
           data: {
             'status': 'lowered',
@@ -1463,6 +1498,7 @@ class OpenDiscussionService {
       AppLogger().error('❌ Error cleaning up participants stream: $e');
     }
   }
+
 
   /// Dispose streams and subscriptions
   void dispose() {

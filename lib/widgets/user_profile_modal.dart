@@ -165,7 +165,7 @@ class _UserProfileModalState extends State<UserProfileModal>
     return GestureDetector(
       onTap: _closeModal,
       child: Container(
-        color: Colors.black.withValues(alpha: 0.6),
+        color: Colors.black.withOpacity(0.6),
         child: Center(
           child: GestureDetector(
             onTap: () {}, // Prevent closing when tapping the modal content
@@ -197,7 +197,7 @@ class _UserProfileModalState extends State<UserProfileModal>
           color: const Color(0xFF1A1A1A),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: _getRoleColor(widget.userRole).withValues(alpha: 0.3),
+            color: _getRoleColor(widget.userRole).withOpacity(0.3),
             width: 2,
           ),
         ),
@@ -220,8 +220,8 @@ class _UserProfileModalState extends State<UserProfileModal>
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            _getRoleColor(widget.userRole).withValues(alpha: 0.8),
-            _getRoleColor(widget.userRole).withValues(alpha: 0.6),
+            _getRoleColor(widget.userRole).withOpacity(0.8),
+            _getRoleColor(widget.userRole).withOpacity(0.6),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -280,7 +280,7 @@ class _UserProfileModalState extends State<UserProfileModal>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
+                      color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -319,7 +319,7 @@ class _UserProfileModalState extends State<UserProfileModal>
             onPressed: _closeModal,
             icon: const Icon(Icons.close, color: Colors.white),
             style: IconButton.styleFrom(
-              backgroundColor: Colors.black.withValues(alpha: 0.3),
+              backgroundColor: Colors.black.withOpacity(0.3),
             ),
           ),
         ],
@@ -390,10 +390,10 @@ class _UserProfileModalState extends State<UserProfileModal>
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                    color: const Color(0xFF8B5CF6).withOpacity(0.2),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                      color: const Color(0xFF8B5CF6).withOpacity(0.3),
                     ),
                   ),
                   child: Text(

@@ -14,7 +14,7 @@ class AudioClipService {
   final AppwriteService _appwriteService = AppwriteService();
   
   // IONOS server configuration for audio storage
-  static const String ionosServerUrl = 'http://50.21.187.76/api/audio-clips';
+  static const String ionosServerUrl = 'https://50.21.187.76/api/audio-clips';
   
   // Recording state
   bool _isRecording = false;

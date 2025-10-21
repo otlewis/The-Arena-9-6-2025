@@ -1,0 +1,356 @@
+{
+  "name": "Challenge Expiration Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/challenges/documents",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "queries[]",
+              "value": "equal(\"status\", \"pending\")"
+            },
+            {
+              "name": "queries[]",
+              "value": "=`lessThan(\"expiresAt\", \"${$now.toISO()}\")`"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7"
+            }
+          ]
+        }
+      },
+      "id": "query-expired-challenges",
+      "name": "Query Expired Challenges",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "documents",
+        "options": {}
+      },
+      "id": "split-challenges",
+      "name": "Split Challenges",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/challenges/documents/{{$json.$id}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "expired"
+            },
+            {
+              "name": "expiredAt",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7"
+            }
+          ]
+        }
+      },
+      "id": "expire-challenge",
+      "name": "Expire Challenge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/challenge_messages/documents",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "challengeId",
+              "value": "={{$json.$id}}"
+            },
+            {
+              "name": "challengerId",
+              "value": "={{$json.challengerId}}"
+            },
+            {
+              "name": "challengedId",
+              "value": "={{$json.challengedId}}"
+            },
+            {
+              "name": "type",
+              "value": "challenge_expired"
+            },
+            {
+              "name": "status",
+              "value": "unread"
+            },
+            {
+              "name": "message",
+              "value": "Your debate challenge has expired without a response."
+            },
+            {
+              "name": "createdAt",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7"
+            }
+          ]
+        }
+      },
+      "id": "notify-challenger",
+      "name": "Notify Challenger",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/challenge_messages/documents",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "challengeId",
+              "value": "={{$json.$id}}"
+            },
+            {
+              "name": "challengerId",
+              "value": "={{$json.challengerId}}"
+            },
+            {
+              "name": "challengedId",
+              "value": "={{$json.challengedId}}"
+            },
+            {
+              "name": "type",
+              "value": "challenge_expired"
+            },
+            {
+              "name": "status",
+              "value": "unread"
+            },
+            {
+              "name": "message",
+              "value": "A debate challenge from {{$json.challengerUsername}} has expired."
+            },
+            {
+              "name": "createdAt",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7"
+            }
+          ]
+        }
+      },
+      "id": "notify-challenged",
+      "name": "Notify Challenged User",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1050, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/cleanup_logs/documents",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "documentId",
+              "value": "=unique()"
+            },
+            {
+              "name": "workflowName",
+              "value": "challenge-expiration"
+            },
+            {
+              "name": "action",
+              "value": "expire-challenge"
+            },
+            {
+              "name": "challengeId",
+              "value": "={{$json.$id}}"
+            },
+            {
+              "name": "notificationsSent",
+              "value": "2"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-expiration",
+      "name": "Log Expiration (Optional)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 300],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Query Expired Challenges",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Expired Challenges": {
+      "main": [
+        [
+          {
+            "node": "Split Challenges",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Challenges": {
+      "main": [
+        [
+          {
+            "node": "Expire Challenge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expire Challenge": {
+      "main": [
+        [
+          {
+            "node": "Notify Challenger",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Challenged User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Challenger": {
+      "main": [
+        [
+          {
+            "node": "Log Expiration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Challenged User": {
+      "main": [
+        [
+          {
+            "node": "Log Expiration",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

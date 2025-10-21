@@ -16,16 +16,18 @@ import 'judge_agreement_screen.dart';
 import '../services/appwrite_service.dart';
 import '../services/challenge_messaging_service.dart';
 import '../services/theme_service.dart';
+import '../services/sound_service.dart';
 import '../constants/appwrite.dart';
 import 'package:appwrite/appwrite.dart';
 import '../widgets/arena_role_notification_modal.dart';
 import '../widgets/animated_fade_in.dart';
-import '../widgets/simple_message_bell.dart';
 import '../widgets/challenge_bell.dart';
 import '../widgets/audio_status_indicator.dart';
 import 'package:get_it/get_it.dart';
 import '../core/logging/app_logger.dart';
 import '../widgets/ping_notification_modal.dart';
+import '../widgets/room_invitation_bell.dart';
+import '../widgets/room_invitation_modal.dart';
 import '../models/moderator_judge.dart';
 import 'super_mod_dashboard.dart';
 import '../services/super_moderator_service.dart';
@@ -44,6 +46,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final AppwriteService _appwrite = AppwriteService();
   final ThemeService _themeService = ThemeService();
+  final SoundService _soundService = SoundService();
   late final ChallengeMessagingService _messagingService;
   final GamifiedRankingService _rankingService = GetIt.instance<GamifiedRankingService>();
   final RankingSyncService _syncService = RankingSyncService();
@@ -52,9 +55,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _arenaRoleInvitations = 0;
   bool _isLoading = true;
   RealtimeSubscription? _pingSubscription;
+  RealtimeSubscription? _roomInvitationSubscription;
   Timer? _roleCheckTimer;
   bool _isCurrentUserModerator = false;
   bool _isCurrentUserJudge = false;
+  OverlayEntry? _currentInvitationOverlay;
 
   @override
   void initState() {
@@ -66,6 +71,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _setupArenaRoleInvitationListener();
     _setupChallengeDeclinedListener();
     _setupPingRequestListener();
+    _setupRoomInvitationListener();
     _checkUserRoles();
     
     // Periodic role check for debugging (every 30 seconds)
@@ -83,6 +89,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _pingSubscription?.close();
+    _roomInvitationSubscription?.close();
+    _currentInvitationOverlay?.remove();
+    _currentInvitationOverlay = null;
     _roleCheckTimer?.cancel();
     super.dispose();
   }
@@ -194,9 +203,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _handlePingRequest(Map<String, dynamic> data) {
     try {
       final pingRequest = PingRequest.fromJson(data);
-      
+
       AppLogger().info('Received ping request: ${pingRequest.id}');
-      
+
       // Show the ping notification modal
       if (mounted) {
         showDialog(
@@ -213,6 +222,65 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     } catch (e) {
       AppLogger().error('Error handling ping request: $e');
     }
+  }
+
+  void _setupRoomInvitationListener() async {
+    final currentUser = await _appwrite.getCurrentUser();
+    if (currentUser == null) return;
+
+    try {
+      final realtime = _appwrite.realtime;
+
+      _roomInvitationSubscription = realtime.subscribe([
+        'databases.arena_db.collections.room_invitations.documents'
+      ]);
+
+      _roomInvitationSubscription!.stream.listen((response) {
+        if (!mounted) return;
+
+        final payload = response.payload;
+
+        // Check if this invitation is for current user and is new
+        if (payload['inviteeId'] == currentUser.$id &&
+            payload['status'] == 'pending' &&
+            response.events.contains('databases.*.collections.*.documents.*.create')) {
+
+          AppLogger().info('📨 New room invitation received!');
+
+          // Show auto-popup modal
+          _showRoomInvitationModal(payload);
+        }
+      });
+
+      AppLogger().info('📨 Subscribed to room invitations for user ${currentUser.$id}');
+    } catch (e) {
+      AppLogger().error('Failed to subscribe to room invitations: $e');
+    }
+  }
+
+  void _showRoomInvitationModal(Map<String, dynamic> invitation) {
+    if (!mounted) return;
+
+    // Play ping sound
+    _soundService.playPing();
+
+    // Remove any existing overlay
+    _currentInvitationOverlay?.remove();
+    _currentInvitationOverlay = null;
+
+    // Create overlay entry
+    _currentInvitationOverlay = OverlayEntry(
+      builder: (context) => RoomInvitationModal(
+        invitation: invitation,
+        onDismiss: () {
+          _currentInvitationOverlay?.remove();
+          _currentInvitationOverlay = null;
+        },
+      ),
+    );
+
+    // Insert overlay
+    Overlay.of(context).insert(_currentInvitationOverlay!);
   }
 
   @override
@@ -317,20 +385,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         width: 36, // Reduced from 44
                         height: 36, // Reduced from 44
                         decoration: BoxDecoration(
-                          color: _themeService.isDarkMode 
+                          color: _themeService.isDarkMode
                               ? const Color(0xFF3A3A3A)
                               : const Color(0xFFF0F0F3),
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: _themeService.isDarkMode 
+                              color: _themeService.isDarkMode
                                   ? Colors.white.withOpacity(0.03)
                                   : Colors.white.withOpacity(0.7),
                               offset: const Offset(-4, -4),
                               blurRadius: 8,
                             ),
                             BoxShadow(
-                              color: _themeService.isDarkMode 
+                              color: _themeService.isDarkMode
                                   ? Colors.black.withOpacity(0.5)
                                   : const Color(0xFFA3B1C6).withOpacity(0.5),
                               offset: const Offset(4, 4),
@@ -346,6 +414,42 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
+                    const SizedBox(width: 4), // Reduced from 8
+                    if (_currentUserProfile != null)
+                      AnimatedScaleIn(
+                        delay: const Duration(milliseconds: 325),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: _themeService.isDarkMode
+                                ? const Color(0xFF3A3A3A)
+                                : const Color(0xFFF0F0F3),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: _themeService.isDarkMode
+                                    ? Colors.white.withOpacity(0.03)
+                                    : Colors.white.withOpacity(0.7),
+                                offset: const Offset(-4, -4),
+                                blurRadius: 8,
+                              ),
+                              BoxShadow(
+                                color: _themeService.isDarkMode
+                                    ? Colors.black.withOpacity(0.5)
+                                    : const Color(0xFFA3B1C6).withOpacity(0.5),
+                                offset: const Offset(4, 4),
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: RoomInvitationBell(
+                              userId: _currentUserProfile!.id,
+                            ),
+                          ),
+                        ),
+                      ),
                     const SizedBox(width: 4), // Reduced from 8
                     AnimatedScaleIn(
                       delay: const Duration(milliseconds: 375),

@@ -22,8 +22,8 @@ class ArenaHeader extends ConsumerWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            theme.primaryColor.withValues(alpha: 0.8),
-            theme.primaryColor.withValues(alpha: 0.6),
+            theme.primaryColor.withOpacity(0.8),
+            theme.primaryColor.withOpacity(0.6),
           ],
         ),
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
@@ -75,7 +75,7 @@ class ArenaHeader extends ConsumerWidget {
               Text(
                 arenaState.description!,
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.9),
+                  color: Colors.white.withOpacity(0.9),
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -158,8 +158,8 @@ class ArenaHeader extends ConsumerWidget {
               color: isActive 
                 ? Colors.white
                 : isCompleted 
-                  ? Colors.white.withValues(alpha: 0.7)
-                  : Colors.white.withValues(alpha: 0.3),
+                  ? Colors.white.withOpacity(0.7)
+                  : Colors.white.withOpacity(0.3),
               borderRadius: BorderRadius.circular(2),
             ),
           ),

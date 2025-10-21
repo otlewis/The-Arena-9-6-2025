@@ -133,7 +133,7 @@ class _ArenaTimerWithControlsState extends ConsumerState<ArenaTimerWithControls>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       decoration: BoxDecoration(
-        color: timerColor.withValues(alpha: 0.1),
+        color: timerColor.withOpacity(0.1),
         border: Border.all(color: timerColor, width: 2),
         borderRadius: BorderRadius.circular(12),
       ),
@@ -165,10 +165,10 @@ class _ArenaTimerWithControlsState extends ConsumerState<ArenaTimerWithControls>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+        color: Theme.of(context).primaryColor.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Theme.of(context).primaryColor.withValues(alpha: 0.3),
+          color: Theme.of(context).primaryColor.withOpacity(0.3),
         ),
       ),
       child: Row(
@@ -199,9 +199,9 @@ class _ArenaTimerWithControlsState extends ConsumerState<ArenaTimerWithControls>
           width: constraints.maxWidth,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.blue.withValues(alpha: 0.05),
+            color: Colors.blue.withOpacity(0.05),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+            border: Border.all(color: Colors.blue.withOpacity(0.2)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -279,7 +279,7 @@ class _ArenaTimerWithControlsState extends ConsumerState<ArenaTimerWithControls>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.grey.withValues(alpha: 0.1),
+        color: Colors.grey.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(

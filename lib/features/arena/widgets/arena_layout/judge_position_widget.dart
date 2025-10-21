@@ -23,7 +23,7 @@ class JudgePositionWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: isPurple ? ArenaColors.accentPurple.withValues(alpha: 0.1) : Colors.amber.withValues(alpha: 0.1),
+        color: isPurple ? ArenaColors.accentPurple.withOpacity(0.1) : Colors.amber.withOpacity(0.1),
         border: Border.all(color: isPurple ? ArenaColors.accentPurple : Colors.amber, width: 2),
         borderRadius: BorderRadius.circular(12),
       ),
@@ -88,7 +88,7 @@ class JudgePositionWidget extends StatelessWidget {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.amber.withValues(alpha: 0.3),
+                  color: Colors.amber.withOpacity(0.3),
                   blurRadius: 6,
                   spreadRadius: 1,
                 ),
@@ -109,7 +109,7 @@ class JudgePositionWidget extends StatelessWidget {
               fontSize: nameSize,
               shadows: isWinner ? [
                 Shadow(
-                  color: Colors.black.withValues(alpha: 0.3),
+                  color: Colors.black.withOpacity(0.3),
                   blurRadius: 2,
                 ),
               ] : null,

@@ -104,15 +104,15 @@ class _AppealReviewDialogState extends State<AppealReviewDialog> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
@@ -123,7 +123,7 @@ class _AppealReviewDialogState extends State<AppealReviewDialog> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: accentPurple.withValues(alpha: 0.2),
+              color: accentPurple.withOpacity(0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
@@ -179,15 +179,15 @@ class _AppealReviewDialogState extends State<AppealReviewDialog> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-4, -4),
             blurRadius: 8,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(4, 4),
             blurRadius: 8,
           ),
@@ -285,15 +285,15 @@ class _AppealReviewDialogState extends State<AppealReviewDialog> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.03)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-4, -4),
             blurRadius: 8,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.5)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                ? Colors.black.withOpacity(0.5)
+                : const Color(0xFFA3B1C6).withOpacity(0.5),
             offset: const Offset(4, 4),
             blurRadius: 8,
           ),
@@ -332,7 +332,7 @@ class _AppealReviewDialogState extends State<AppealReviewDialog> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.2),
+                    color: Colors.orange.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -390,15 +390,15 @@ class _AppealReviewDialogState extends State<AppealReviewDialog> {
             boxShadow: [
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.white.withValues(alpha: 0.03)
-                    : Colors.white.withValues(alpha: 0.8),
+                    ? Colors.white.withOpacity(0.03)
+                    : Colors.white.withOpacity(0.8),
                 offset: const Offset(-4, -4),
                 blurRadius: 8,
               ),
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.black.withValues(alpha: 0.5)
-                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                    ? Colors.black.withOpacity(0.5)
+                    : const Color(0xFFA3B1C6).withOpacity(0.5),
                 offset: const Offset(4, 4),
                 blurRadius: 8,
               ),
@@ -457,11 +457,11 @@ class _AppealReviewDialogState extends State<AppealReviewDialog> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
-            color: _isProcessing ? Colors.grey.withValues(alpha: 0.3) : color,
+            color: _isProcessing ? Colors.grey.withOpacity(0.3) : color,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                color: (_isProcessing ? Colors.grey : color).withValues(alpha: 0.3),
+                color: (_isProcessing ? Colors.grey : color).withOpacity(0.3),
                 offset: const Offset(0, 4),
                 blurRadius: 8,
               ),

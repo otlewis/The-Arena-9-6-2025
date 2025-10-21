@@ -1,0 +1,190 @@
+{
+  "name": "Arena Debate Analysis AI Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "analyze-debate",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - Debate Analysis Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "analyze-debate"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "roomId",
+              "name": "roomId",
+              "value": "={{ $json.body.roomId }}",
+              "type": "string"
+            },
+            {
+              "id": "debateData",
+              "name": "debateData",
+              "value": "={{ $json.body.debateData }}",
+              "type": "object"
+            },
+            {
+              "id": "analysisType",
+              "name": "analysisType",
+              "value": "={{ $json.body.analysisType || 'full' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract-parameters",
+      "name": "Extract Request Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://fra.cloud.appwrite.io/v1/databases/arena_db/collections/arena_rooms/documents/{{ $('Extract Request Parameters').item.json.roomId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            },
+            {
+              "name": "X-Appwrite-Key",
+              "value": "standard_6d896996b3c32b3c53063b3ef46a391c774d85a76feed98007c6ba3e7d1272f4c4818ebeab5467c56fbb7584a382b4aa7ad5b154160a1bc40278538f897f716e14c548095acf76424fa23908e3695f306cff9b8a2ebbd69d9e7f6bfa4ed0eb713373731bb49990f45330bd13ce74bb70403f825c4ead593848bdcf7e8156f7a7"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-room-data",
+      "name": "Fetch Room Data from Appwrite",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build comprehensive debate context for AI analysis\nconst roomData = $input.first().json;\nconst requestParams = $('Extract Request Parameters').item.json;\n\n// Extract debate information\nconst debateContext = {\n  topic: roomData.topic || 'Unknown Topic',\n  status: roomData.status,\n  createdAt: roomData.createdAt,\n  completedAt: roomData.completedAt,\n  winner: roomData.winner,\n  affirmativeScore: roomData.affirmativeScore || 0,\n  negativeScore: roomData.negativeScore || 0,\n  judgingComplete: roomData.judgingComplete || false,\n  // Add debate data from request if provided\n  additionalData: requestParams.debateData || {}\n};\n\n// Create AI prompt based on analysis type\nlet systemPrompt = `You are an expert debate analyst for the Arena debate platform. Your role is to provide insightful, balanced analysis of debates.`;\n\nlet userPrompt = '';\n\nswitch(requestParams.analysisType) {\n  case 'summary':\n    userPrompt = `Provide a concise summary of this debate:\n\nTopic: ${debateContext.topic}\nWinner: ${debateContext.winner || 'No winner yet'}\nAffirmative Score: ${debateContext.affirmativeScore}\nNegative Score: ${debateContext.negativeScore}\nStatus: ${debateContext.status}\n\nProvide a 2-3 sentence summary highlighting the key outcome and any notable aspects.`;\n    break;\n    \n  case 'strengths':\n    userPrompt = `Analyze the strengths and weaknesses of both sides in this debate:\n\nTopic: ${debateContext.topic}\nAffirmative Score: ${debateContext.affirmativeScore}\nNegative Score: ${debateContext.negativeScore}\n\nProvide:\n1. Top 3 strengths of the affirmative side\n2. Top 3 strengths of the negative side\n3. Key weaknesses for each side\n4. Areas for improvement`;\n    break;\n    \n  case 'recommendations':\n    userPrompt = `Based on this debate, provide recommendations for future debaters:\n\nTopic: ${debateContext.topic}\nWinner: ${debateContext.winner || 'No winner yet'}\nScores - Affirmative: ${debateContext.affirmativeScore}, Negative: ${debateContext.negativeScore}\n\nProvide:\n1. Key lessons learned\n2. Best practices demonstrated\n3. Common pitfalls to avoid\n4. Tips for arguing this topic`;\n    break;\n    \n  default: // 'full' analysis\n    userPrompt = `Provide a comprehensive analysis of this debate:\n\nTopic: ${debateContext.topic}\nWinner: ${debateContext.winner || 'No winner yet'}\nAffirmative Score: ${debateContext.affirmativeScore}\nNegative Score: ${debateContext.negativeScore}\nStatus: ${debateContext.status}\nJudging Complete: ${debateContext.judgingComplete}\n\nProvide:\n1. Overview of the debate outcome\n2. Analysis of why one side won (if applicable)\n3. Key arguments and counter-arguments\n4. Quality of evidence and reasoning\n5. Speaking and persuasion effectiveness\n6. Recommendations for participants\n7. Overall assessment (rate out of 10)\n\nFormat your response in clear sections with markdown.`;\n}\n\nreturn {\n  json: {\n    systemPrompt: systemPrompt,\n    userPrompt: userPrompt,\n    debateContext: debateContext,\n    roomId: requestParams.roomId\n  }\n};"
+      },
+      "id": "build-ai-prompt",
+      "name": "Build AI Analysis Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11434/api/chat",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"qwen3:30b\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"{{ $json.systemPrompt }}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.userPrompt }}\"\n    }\n  ],\n  \"stream\": false,\n  \"options\": {\n    \"temperature\": 0.7,\n    \"top_p\": 0.9\n  }\n}",
+        "options": {}
+      },
+      "id": "ollama-analysis",
+      "name": "Ollama AI Analysis (qwen3:30b)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Ollama response and format for Flutter\nconst ollamaResponse = $input.first().json;\nconst promptData = $('Build AI Analysis Prompt').item.json;\n\n// Extract AI-generated content\nconst aiAnalysis = ollamaResponse.message?.content || 'Analysis could not be generated.';\n\n// Format response for Flutter app\nreturn {\n  json: {\n    success: true,\n    roomId: promptData.roomId,\n    analysis: aiAnalysis,\n    debateContext: promptData.debateContext,\n    generatedAt: new Date().toISOString(),\n    model: 'qwen3:30b',\n    analysisType: $('Extract Request Parameters').item.json.analysisType || 'full'\n  }\n};"
+      },
+      "id": "format-response",
+      "name": "Format Analysis Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "send-response",
+      "name": "Send Response to Flutter",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $('Fetch Room Data from Appwrite').item.json.status }}",
+              "operation": "exists"
+            }
+          ]
+        }
+      },
+      "id": "check-room-exists",
+      "name": "Check Room Exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 480]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"error\": \"Room not found\",\n  \"roomId\": \"{{ $('Extract Request Parameters').item.json.roomId }}\"\n}",
+        "options": {}
+      },
+      "id": "error-room-not-found",
+      "name": "Error - Room Not Found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 480]
+    }
+  ],
+  "connections": {
+    "Webhook - Debate Analysis Request": {
+      "main": [[{ "node": "Extract Request Parameters", "type": "main", "index": 0 }]]
+    },
+    "Extract Request Parameters": {
+      "main": [[{ "node": "Fetch Room Data from Appwrite", "type": "main", "index": 0 }]]
+    },
+    "Fetch Room Data from Appwrite": {
+      "main": [[{ "node": "Build AI Analysis Prompt", "type": "main", "index": 0 }]]
+    },
+    "Build AI Analysis Prompt": {
+      "main": [[{ "node": "Ollama AI Analysis (qwen3:30b)", "type": "main", "index": 0 }]]
+    },
+    "Ollama AI Analysis (qwen3:30b)": {
+      "main": [[{ "node": "Format Analysis Response", "type": "main", "index": 0 }]]
+    },
+    "Format Analysis Response": {
+      "main": [[{ "node": "Send Response to Flutter", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-12T00:00:00.000Z",
+  "versionId": "1"
+}

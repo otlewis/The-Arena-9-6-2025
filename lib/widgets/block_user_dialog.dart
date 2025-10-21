@@ -49,15 +49,15 @@ class _BlockUserDialogState extends State<BlockUserDialog> {
           boxShadow: [
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.white.withValues(alpha: 0.03)
-                  : Colors.white.withValues(alpha: 0.7),
+                  ? Colors.white.withOpacity(0.03)
+                  : Colors.white.withOpacity(0.7),
               offset: const Offset(-12, -12),
               blurRadius: 24,
             ),
             BoxShadow(
               color: _themeService.isDarkMode 
-                  ? Colors.black.withValues(alpha: 0.6)
-                  : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                  ? Colors.black.withOpacity(0.6)
+                  : const Color(0xFFA3B1C6).withOpacity(0.5),
               offset: const Offset(12, 12),
               blurRadius: 24,
             ),
@@ -98,15 +98,15 @@ class _BlockUserDialogState extends State<BlockUserDialog> {
             boxShadow: [
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.white.withValues(alpha: 0.03)
-                    : Colors.white.withValues(alpha: 0.7),
+                    ? Colors.white.withOpacity(0.03)
+                    : Colors.white.withOpacity(0.7),
                 offset: const Offset(-4, -4),
                 blurRadius: 8,
               ),
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.black.withValues(alpha: 0.5)
-                    : const Color(0xFFA3B1C6).withValues(alpha: 0.5),
+                    ? Colors.black.withOpacity(0.5)
+                    : const Color(0xFFA3B1C6).withOpacity(0.5),
                 offset: const Offset(4, 4),
                 blurRadius: 8,
               ),
@@ -163,16 +163,16 @@ class _BlockUserDialogState extends State<BlockUserDialog> {
         boxShadow: [
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.black.withValues(alpha: 0.6)
-                : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                ? Colors.black.withOpacity(0.6)
+                : const Color(0xFFA3B1C6).withOpacity(0.3),
             offset: const Offset(4, 4),
             blurRadius: 8,
             spreadRadius: -2,
           ),
           BoxShadow(
             color: _themeService.isDarkMode 
-                ? Colors.white.withValues(alpha: 0.02)
-                : Colors.white.withValues(alpha: 0.8),
+                ? Colors.white.withOpacity(0.02)
+                : Colors.white.withOpacity(0.8),
             offset: const Offset(-4, -4),
             blurRadius: 8,
             spreadRadius: -2,
@@ -183,7 +183,7 @@ class _BlockUserDialogState extends State<BlockUserDialog> {
         children: [
           CircleAvatar(
             radius: 24,
-            backgroundColor: scarletRed.withValues(alpha: 0.2),
+            backgroundColor: scarletRed.withOpacity(0.2),
             child: Text(
               widget.userToBlock.initials,
               style: const TextStyle(
@@ -224,10 +224,10 @@ class _BlockUserDialogState extends State<BlockUserDialog> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: scarletRed.withValues(alpha: 0.1),
+        color: scarletRed.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: scarletRed.withValues(alpha: 0.3),
+          color: scarletRed.withOpacity(0.3),
           width: 1,
         ),
       ),
@@ -291,16 +291,16 @@ class _BlockUserDialogState extends State<BlockUserDialog> {
             boxShadow: [
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.black.withValues(alpha: 0.6)
-                    : const Color(0xFFA3B1C6).withValues(alpha: 0.3),
+                    ? Colors.black.withOpacity(0.6)
+                    : const Color(0xFFA3B1C6).withOpacity(0.3),
                 offset: const Offset(4, 4),
                 blurRadius: 8,
                 spreadRadius: -2,
               ),
               BoxShadow(
                 color: _themeService.isDarkMode 
-                    ? Colors.white.withValues(alpha: 0.02)
-                    : Colors.white.withValues(alpha: 0.8),
+                    ? Colors.white.withOpacity(0.02)
+                    : Colors.white.withOpacity(0.8),
                 offset: const Offset(-4, -4),
                 blurRadius: 8,
                 spreadRadius: -2,
@@ -375,19 +375,19 @@ class _BlockUserDialogState extends State<BlockUserDialog> {
             boxShadow: isDisabled ? null : [
               BoxShadow(
                 color: isPrimary
-                    ? buttonColor.withValues(alpha: 0.3)
+                    ? buttonColor.withOpacity(0.3)
                     : (_themeService.isDarkMode 
-                        ? Colors.white.withValues(alpha: 0.03)
-                        : Colors.white.withValues(alpha: 0.7)),
+                        ? Colors.white.withOpacity(0.03)
+                        : Colors.white.withOpacity(0.7)),
                 offset: const Offset(-6, -6),
                 blurRadius: 12,
               ),
               BoxShadow(
                 color: isPrimary
-                    ? buttonColor.withValues(alpha: 0.5)
+                    ? buttonColor.withOpacity(0.5)
                     : (_themeService.isDarkMode 
-                        ? Colors.black.withValues(alpha: 0.5)
-                        : const Color(0xFFA3B1C6).withValues(alpha: 0.5)),
+                        ? Colors.black.withOpacity(0.5)
+                        : const Color(0xFFA3B1C6).withOpacity(0.5)),
                 offset: const Offset(6, 6),
                 blurRadius: 12,
               ),

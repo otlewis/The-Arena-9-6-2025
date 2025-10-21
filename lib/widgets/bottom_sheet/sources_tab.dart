@@ -196,8 +196,8 @@ class _SourcesTabState extends State<SourcesTab> with AutomaticKeepAliveClientMi
                 height: 40,
                 decoration: BoxDecoration(
                   color: source.isPinned
-                      ? theme.primaryColor.withValues(alpha: 0.2)
-                      : theme.primaryColor.withValues(alpha: 0.1),
+                      ? theme.primaryColor.withOpacity(0.2)
+                      : theme.primaryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                   border: source.isPinned
                       ? Border.all(color: theme.primaryColor, width: 2)
@@ -345,9 +345,9 @@ class _SourcesTabState extends State<SourcesTab> with AutomaticKeepAliveClientMi
                 margin: const EdgeInsets.only(top: 8),
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: theme.primaryColor.withValues(alpha: 0.1),
+                  color: theme.primaryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: theme.primaryColor.withValues(alpha: 0.3)),
+                  border: Border.all(color: theme.primaryColor.withOpacity(0.3)),
                 ),
                 child: Row(
                   children: [
@@ -427,7 +427,7 @@ class _SourcesTabState extends State<SourcesTab> with AutomaticKeepAliveClientMi
             Icon(
               Icons.link_off,
               size: 48,
-              color: Colors.grey.withValues(alpha: 0.5),
+              color: Colors.grey.withOpacity(0.5),
             ),
             const SizedBox(height: 12),
             Text(

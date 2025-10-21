@@ -63,7 +63,7 @@ class SharedLinkPopup extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
+              color: Colors.black.withOpacity(0.3),
               blurRadius: 20,
               spreadRadius: 2,
             ),
@@ -79,7 +79,7 @@ class SharedLinkPopup extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    theme.primaryColor.withValues(alpha: 0.8),
+                    theme.primaryColor.withOpacity(0.8),
                     theme.primaryColor,
                   ],
                   begin: Alignment.topLeft,
@@ -95,7 +95,7 @@ class SharedLinkPopup extends StatelessWidget {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
+                      color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
@@ -121,7 +121,7 @@ class SharedLinkPopup extends StatelessWidget {
                           Text(
                             'by ${sharedLink.sharedByName}',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.9),
+                              color: Colors.white.withOpacity(0.9),
                               fontSize: 14,
                             ),
                           ),
@@ -154,10 +154,10 @@ class SharedLinkPopup extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: theme.primaryColor.withValues(alpha: 0.1),
+                      color: theme.primaryColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: theme.primaryColor.withValues(alpha: 0.3),
+                        color: theme.primaryColor.withOpacity(0.3),
                         width: 1,
                       ),
                     ),

@@ -496,7 +496,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: Colors.orange.withValues(alpha: 0.1),
+        color: Colors.orange.withOpacity(0.1),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.orange, width: 1),
       ),
@@ -543,7 +543,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
               color: _getTimerColor(),
               borderRadius: BorderRadius.circular(isSmallScreen ? 10 : 12),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.3),
+                color: Colors.white.withOpacity(0.3),
                 width: 1,
               ),
             ),
@@ -587,7 +587,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
               color: const Color(0xFF4A4A4A), // Arena purple
               borderRadius: BorderRadius.circular(isSmallScreen ? 10 : 12),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.3),
+                color: Colors.white.withOpacity(0.3),
                 width: 1,
               ),
             ),
@@ -688,7 +688,7 @@ class _AppwriteTimerWidgetState extends State<AppwriteTimerWidget>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color, width: 1),
       ),
@@ -1205,7 +1205,7 @@ class _CreateTimerDialogState extends State<_CreateTimerDialog> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.green.withValues(alpha: 0.1),
+              color: Colors.green.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Wrap(
@@ -1235,9 +1235,9 @@ class _CreateTimerDialogState extends State<_CreateTimerDialog> {
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
             margin: const EdgeInsets.only(bottom: 8),
             decoration: BoxDecoration(
-              color: Colors.blue.withValues(alpha: 0.1),
+              color: Colors.blue.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+              border: Border.all(color: Colors.blue.withOpacity(0.3)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,

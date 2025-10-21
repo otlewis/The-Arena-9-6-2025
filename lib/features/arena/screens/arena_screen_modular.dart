@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:appwrite/appwrite.dart';
 import '../widgets/arena_header.dart';
 import '../widgets/arena_timer_with_controls.dart';
 import '../widgets/simple_arena_debate_controls.dart';
@@ -8,8 +9,12 @@ import '../widgets/simple_arena_participants_panel.dart';
 import '../widgets/arena_chat_panel.dart';
 import '../providers/arena_provider.dart';
 import '../models/arena_state.dart';
+import '../dialogs/results_modal.dart';
 import '../../../core/error/app_error.dart';
+import '../../../core/logging/app_logger.dart';
+import '../../../core/providers/app_providers.dart';
 import '../../../services/sound_service.dart';
+import '../../../models/user_profile.dart';
 
 /// A completely modular Arena Screen that replaces the massive 6,521-line original
 /// 
@@ -53,10 +58,11 @@ class _ArenaScreenModularState extends ConsumerState<ArenaScreenModular>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _soundService = SoundService();
-    
+
     // Initialize arena and start listening to state changes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeArena();
+      _setupResultsListener();
     });
   }
 
@@ -213,7 +219,7 @@ class _ArenaScreenModularState extends ConsumerState<ArenaScreenModular>
                     color: Colors.white,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
+                        color: Colors.black.withOpacity(0.05),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
@@ -400,6 +406,123 @@ class _ArenaScreenModularState extends ConsumerState<ArenaScreenModular>
     ) ?? false;
   }
 
+  /// Setup listener for showResults broadcast from n8n workflow
+  void _setupResultsListener() {
+    ref.listen<ArenaState>(
+      arenaProvider(widget.roomId),
+      (previous, current) {
+        // Check if showResults flag was just set to true
+        if (previous != null && !previous.showResults && current.showResults) {
+          // Winner broadcast received - show results modal to all users
+          AppLogger().info('🏆 BROADCAST RECEIVED: Showing results modal to all users');
+          _showResultsModal(current);
+        }
+      },
+    );
+  }
+
+  /// Show results modal when broadcast is received
+  Future<void> _showResultsModal(ArenaState arenaState) async {
+    if (_isExiting || !mounted) return;
+
+    // Prevent showing multiple times
+    if (arenaState.resultsModalShown) {
+      AppLogger().warning('🏆 Results modal already shown, skipping...');
+      return;
+    }
+
+    try {
+      AppLogger().info('🏆 Loading results for room: ${widget.roomId}');
+
+      // Get detailed voting results
+      final appwriteService = ref.read(appwriteServiceProvider);
+      final judgments = await appwriteService.databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'arena_judgments',
+        queries: [
+          Query.equal('roomId', widget.roomId),
+        ],
+      );
+
+      // Get participant profiles for the modal
+      final affirmativeDebater = arenaState.getParticipantByRole(ArenaRole.affirmative);
+      final affirmative2Debater = arenaState.participants.values
+          .where((p) => p.role == ArenaRole.affirmative)
+          .skip(1)
+          .firstOrNull;
+      final negativeDebater = arenaState.getParticipantByRole(ArenaRole.negative);
+      final negative2Debater = arenaState.participants.values
+          .where((p) => p.role == ArenaRole.negative)
+          .skip(1)
+          .firstOrNull;
+
+      if (!mounted) return;
+
+      // Play applause sound for winner celebration
+      _soundService.playApplauseSound();
+
+      // Mark modal as shown before displaying to prevent multiple shows
+      ref.read(arenaProvider(widget.roomId).notifier).markResultsModalShown();
+
+      // Show the results modal
+      await showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => ResultsModal(
+          winner: arenaState.winner ?? 'unknown',
+          affirmativeDebater: affirmativeDebater != null
+              ? _convertToUserProfile(affirmativeDebater)
+              : null,
+          affirmative2Debater: affirmative2Debater != null
+              ? _convertToUserProfile(affirmative2Debater)
+              : null,
+          negativeDebater: negativeDebater != null
+              ? _convertToUserProfile(negativeDebater)
+              : null,
+          negative2Debater: negative2Debater != null
+              ? _convertToUserProfile(negative2Debater)
+              : null,
+          judgments: judgments.documents,
+          topic: widget.topic,
+          teamSize: 1, // Default to 1v1 for now
+        ),
+      );
+
+      AppLogger().info('🏆 Results modal closed');
+    } catch (e) {
+      AppLogger().error('Error showing results modal: $e');
+    }
+  }
+
+  /// Helper to convert ArenaParticipant to UserProfile for the modal
+  UserProfile _convertToUserProfile(ArenaParticipant participant) {
+    return UserProfile(
+      id: participant.userId,
+      name: participant.name,
+      email: '', // Not needed for results display
+      avatar: participant.avatar,
+      preferences: {},
+      reputationPercentage: 50, // Default
+      totalDebates: 0,
+      totalWins: 0,
+      totalRoomsCreated: 0,
+      totalRoomsJoined: 0,
+      coinBalance: 0,
+      totalGiftsSent: 0,
+      totalGiftsReceived: 0,
+      interests: [],
+      joinedClubs: [],
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      isVerified: false,
+      isPublicProfile: true,
+      isAvailableAsModerator: false,
+      isAvailableAsJudge: false,
+      isPremium: false,
+      isTestSubscription: false,
+    );
+  }
+
   Future<void> _exitArena() async {
     if (_isExiting) return;
     _isExiting = true;
@@ -407,10 +530,10 @@ class _ArenaScreenModularState extends ConsumerState<ArenaScreenModular>
     try {
       // Notify provider that user is leaving
       await ref.read(arenaProvider(widget.roomId).notifier).leaveArena();
-      
+
       // Provide haptic feedback
       HapticFeedback.lightImpact();
-      
+
       // Navigate back
       if (mounted) {
         Navigator.of(context).pop();

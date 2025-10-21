@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:device_info_plus/device_info_plus.dart';
 import '../core/logging/app_logger.dart';
 import 'package:flutter/services.dart';
@@ -41,7 +41,8 @@ class ManufacturerWorkaroundsService {
 
   /// Initialize and detect manufacturer
   Future<void> initialize() async {
-    if (!Platform.isAndroid) return;
+    // Only run on Android - skip web, iOS, macOS, etc.
+    if (kIsWeb) return;
     
     try {
       final androidInfo = await _deviceInfo.androidInfo;

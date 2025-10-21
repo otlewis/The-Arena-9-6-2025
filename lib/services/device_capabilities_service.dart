@@ -1,7 +1,9 @@
-import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import '../core/logging/app_logger.dart';
+
+// Conditional import for Platform - stub for web
+import 'dart:io' if (dart.library.html) '../utils/platform_stub.dart';
 
 /// Service for detecting device capabilities and determining optimal audio configuration
 class DeviceCapabilitiesService {
@@ -105,19 +107,22 @@ class DeviceCapabilitiesService {
   
   /// Estimate Android RAM (fallback method)
   int _estimateAndroidRAM(AndroidDeviceInfo info) {
-    // Try to get actual memory info
-    try {
-      final memInfo = Process.runSync('cat', ['/proc/meminfo']);
-      if (memInfo.exitCode == 0) {
-        final output = memInfo.stdout.toString();
-        final match = RegExp(r'MemTotal:\s+(\d+)').firstMatch(output);
-        if (match != null) {
-          final kb = int.parse(match.group(1)!);
-          return kb ~/ 1024; // Convert to MB
+    // Skip Process calls on web
+    if (!kIsWeb) {
+      // Try to get actual memory info
+      try {
+        final memInfo = Process.runSync('cat', ['/proc/meminfo']);
+        if (memInfo.exitCode == 0) {
+          final output = memInfo.stdout.toString();
+          final match = RegExp(r'MemTotal:\s+(\d+)').firstMatch(output);
+          if (match != null) {
+            final kb = int.parse(match.group(1)!);
+            return kb ~/ 1024; // Convert to MB
+          }
         }
+      } catch (e) {
+        _logger.debug('Could not read memory info: $e');
       }
-    } catch (e) {
-      _logger.debug('Could not read memory info: $e');
     }
     
     // Fallback: estimate based on Android version and device age
@@ -130,6 +135,11 @@ class DeviceCapabilitiesService {
   
   /// Get CPU core count
   int _getCPUCores() {
+    if (kIsWeb) {
+      // Web: Use navigator.hardwareConcurrency if available
+      return 4; // Default for web
+    }
+
     try {
       if (Platform.numberOfProcessors > 0) {
         return Platform.numberOfProcessors;
@@ -276,7 +286,7 @@ class DeviceCapabilitiesService {
           red: true,
           noiseSuppression: false,
           echoCancellation: false,
-          autoGainControl: true,
+          autoGainControl: false, // Disabled to start audio at full volume
           preferredCodec: 'g711', // Most compatible for 2G
           jitterBufferSize: 300,
           audioFrameDuration: 60,
@@ -292,7 +302,7 @@ class DeviceCapabilitiesService {
           red: true,
           noiseSuppression: false,
           echoCancellation: true,
-          autoGainControl: true,
+          autoGainControl: false, // Disabled to start audio at full volume
           preferredCodec: profile.supportedCodecs.contains(AudioCodecSupport.amrWB) ? 'amr-wb' : 'g711',
           jitterBufferSize: 200,
           audioFrameDuration: 40,
@@ -463,7 +473,7 @@ class AudioConfiguration {
     this.red = false,
     this.noiseSuppression = true,
     this.echoCancellation = true,
-    this.autoGainControl = true,
+    this.autoGainControl = false, // Disabled to start audio at full volume
     this.preferredCodec = 'opus',
     this.jitterBufferSize = 50,
     this.audioFrameDuration = 20,
@@ -477,11 +487,11 @@ class AudioConfiguration {
     red: true,
     noiseSuppression: false,
     echoCancellation: false,
-    autoGainControl: true,
+    autoGainControl: false, // Disabled to start audio at full volume
     jitterBufferSize: 200,
     audioFrameDuration: 40,
   );
-  
+
   factory AudioConfiguration.lowEnd() => AudioConfiguration(
     bitrate: 16000,
     sampleRate: 16000,
@@ -490,11 +500,11 @@ class AudioConfiguration {
     red: true,
     noiseSuppression: false,
     echoCancellation: true,
-    autoGainControl: true,
+    autoGainControl: false, // Disabled to start audio at full volume
     jitterBufferSize: 100,
     audioFrameDuration: 20,
   );
-  
+
   factory AudioConfiguration.medium() => AudioConfiguration(
     bitrate: 32000,
     sampleRate: 24000,
@@ -503,11 +513,11 @@ class AudioConfiguration {
     red: false,
     noiseSuppression: true,
     echoCancellation: true,
-    autoGainControl: true,
+    autoGainControl: false, // Disabled to start audio at full volume
     jitterBufferSize: 50,
     audioFrameDuration: 20,
   );
-  
+
   factory AudioConfiguration.highEnd() => AudioConfiguration(
     bitrate: 64000,
     sampleRate: 48000,
@@ -516,7 +526,7 @@ class AudioConfiguration {
     red: false,
     noiseSuppression: true,
     echoCancellation: true,
-    autoGainControl: true,
+    autoGainControl: false, // Disabled to start audio at full volume
     jitterBufferSize: 20,
     audioFrameDuration: 10,
   );

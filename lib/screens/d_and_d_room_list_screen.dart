@@ -377,7 +377,7 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: accentPurple.withValues(alpha: 0.3),
+                                  color: accentPurple.withOpacity(0.3),
                                   width: 1,
                                 ),
                               ),
@@ -393,7 +393,7 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
                                           width: 20,
                                           height: 20,
                                           decoration: BoxDecoration(
-                                            color: accentPurple.withValues(alpha: 0.1),
+                                            color: accentPurple.withOpacity(0.1),
                                             shape: BoxShape.circle,
                                           ),
                                           child: const Icon(
@@ -408,7 +408,7 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
                                       width: 20,
                                       height: 20,
                                       decoration: BoxDecoration(
-                                        color: accentPurple.withValues(alpha: 0.1),
+                                        color: accentPurple.withOpacity(0.1),
                                         shape: BoxShape.circle,
                                       ),
                                       child: const Icon(
@@ -472,7 +472,7 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: accentPurple.withValues(alpha: 0.3),
+                              color: accentPurple.withOpacity(0.3),
                               width: 1,
                             ),
                           ),
@@ -488,7 +488,7 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
                                       width: 20,
                                       height: 20,
                                       decoration: BoxDecoration(
-                                        color: accentPurple.withValues(alpha: 0.1),
+                                        color: accentPurple.withOpacity(0.1),
                                         shape: BoxShape.circle,
                                       ),
                                       child: const Icon(
@@ -503,7 +503,7 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
                                   width: 20,
                                   height: 20,
                                   decoration: BoxDecoration(
-                                    color: accentPurple.withValues(alpha: 0.1),
+                                    color: accentPurple.withOpacity(0.1),
                                     shape: BoxShape.circle,
                                   ),
                                   child: const Icon(
@@ -579,9 +579,9 @@ class _DAndDRoomListScreenState extends State<DAndDRoomListScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Text(
         roomType.toUpperCase(),

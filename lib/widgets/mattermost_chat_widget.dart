@@ -268,7 +268,7 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.15),
+                color: Colors.black.withOpacity(0.15),
                 blurRadius: 20,
                 spreadRadius: 2,
                 offset: const Offset(0, -4),
@@ -322,7 +322,7 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6B46C1).withValues(alpha: 0.3),
+            color: const Color(0xFF6B46C1).withOpacity(0.3),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -509,14 +509,14 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
                         bottomRight: isOwn ? const Radius.circular(4) : const Radius.circular(18),
                       ),
                       border: isOwn ? null : Border.all(
-                        color: Colors.grey.withValues(alpha: 0.2),
+                        color: Colors.grey.withOpacity(0.2),
                         width: 1,
                       ),
                       boxShadow: [
                         BoxShadow(
                           color: isOwn 
-                            ? const Color(0xFF6B46C1).withValues(alpha: 0.3)
-                            : Colors.grey.withValues(alpha: 0.1),
+                            ? const Color(0xFF6B46C1).withOpacity(0.3)
+                            : Colors.grey.withOpacity(0.1),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
@@ -590,18 +590,18 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            const Color(0xFF6B46C1).withValues(alpha: 0.1),
-            const Color(0xFFDC2626).withValues(alpha: 0.1),
+            const Color(0xFF6B46C1).withOpacity(0.1),
+            const Color(0xFFDC2626).withOpacity(0.1),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFF6B46C1).withValues(alpha: 0.3),
+          color: const Color(0xFF6B46C1).withOpacity(0.3),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6B46C1).withValues(alpha: 0.1),
+            color: const Color(0xFF6B46C1).withOpacity(0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -662,7 +662,7 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
               color: Colors.white,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: const Color(0xFF6B46C1).withValues(alpha: 0.2),
+                color: const Color(0xFF6B46C1).withOpacity(0.2),
                 width: 1,
               ),
             ),
@@ -686,10 +686,10 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
+        color: Colors.white.withOpacity(0.1),
         borderRadius: BorderRadius.circular(4),
         border: Border(
-          left: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 2),
+          left: BorderSide(color: Colors.white.withOpacity(0.5), width: 2),
         ),
       ),
       child: Column(
@@ -731,7 +731,7 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
                   end: Alignment.centerRight,
                   colors: [
                     Colors.transparent,
-                    const Color(0xFF6B46C1).withValues(alpha: 0.3),
+                    const Color(0xFF6B46C1).withOpacity(0.3),
                   ],
                 ),
               ),
@@ -752,7 +752,7 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF6B46C1).withValues(alpha: 0.3),
+                  color: const Color(0xFF6B46C1).withOpacity(0.3),
                   blurRadius: 6,
                   offset: const Offset(0, 2),
                 ),
@@ -776,7 +776,7 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                   colors: [
-                    const Color(0xFF6B46C1).withValues(alpha: 0.3),
+                    const Color(0xFF6B46C1).withOpacity(0.3),
                     Colors.transparent,
                   ],
                 ),
@@ -800,8 +800,8 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  const Color(0xFF6B46C1).withValues(alpha: 0.1),
-                  const Color(0xFFDC2626).withValues(alpha: 0.1),
+                  const Color(0xFF6B46C1).withOpacity(0.1),
+                  const Color(0xFFDC2626).withOpacity(0.1),
                 ],
               ),
               shape: BoxShape.circle,
@@ -809,7 +809,7 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
             child: Icon(
               Icons.chat_bubble_outline,
               size: 48,
-              color: const Color(0xFF6B46C1).withValues(alpha: 0.6),
+              color: const Color(0xFF6B46C1).withOpacity(0.6),
             ),
           ),
           const SizedBox(height: 20),
@@ -850,13 +850,13 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
         ),
         border: Border(
           top: BorderSide(
-            color: const Color(0xFF6B46C1).withValues(alpha: 0.2),
+            color: const Color(0xFF6B46C1).withOpacity(0.2),
             width: 1,
           ),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),
@@ -875,12 +875,12 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(28),
                 border: Border.all(
-                  color: const Color(0xFF6B46C1).withValues(alpha: 0.2),
+                  color: const Color(0xFF6B46C1).withOpacity(0.2),
                   width: 1.5,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF6B46C1).withValues(alpha: 0.1),
+                    color: const Color(0xFF6B46C1).withOpacity(0.1),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -942,7 +942,7 @@ class _MattermostChatWidgetState extends State<MattermostChatWidget>
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF6B46C1).withValues(alpha: 0.4),
+                  color: const Color(0xFF6B46C1).withOpacity(0.4),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
