@@ -45,7 +45,10 @@ import '../services/disposal_tracking_system.dart';
 import '../services/recording_service.dart';
 import '../services/simple_audio_recording_service.dart';
 import '../services/super_moderator_service.dart';
+import '../services/user_timeout_service.dart';
 import '../widgets/all_votes_in_modal.dart';
+import '../widgets/simple_gift_bottom_sheet.dart';
+import '../widgets/timeout_countdown_widget.dart';
 
 // Static helper methods for avatar system - accessible by all classes
 Widget buildAvatarText(UserProfile participant, double fontSize) {
@@ -88,6 +91,106 @@ Widget buildAvatarTextFromMap(Map<String, dynamic> participantData, double fontS
       ),
       textAlign: TextAlign.center,
     ),
+  );
+}
+
+/// Build avatar with gift emoji overlay and gold border
+/// This is a static method that can be called from anywhere
+Widget buildAvatarWithGiftOverlay({
+  required UserProfile participant,
+  required double radius,
+  required String role,
+  required Map<String, String> avatarEmojiOverlays,
+  required Map<String, bool> avatarGiftIndicators,
+  Map<String, String>? senderAvatarTransformations,
+  double? fontSize,
+}) {
+  final hasGiftIndicator = avatarGiftIndicators[participant.id] == true;
+  final senderEmoji = avatarEmojiOverlays[participant.id];
+  final transformEmoji = senderAvatarTransformations?[participant.id];
+
+  return Stack(
+    clipBehavior: Clip.none,
+    children: [
+      // Avatar or Emoji Transformation/Overlay (no gold border)
+      Container(
+        width: radius * 2,
+        height: radius * 2,
+        child: transformEmoji != null
+            ? buildTransformedAvatar(transformEmoji, radius)
+            : senderEmoji != null
+            ? CircleAvatar(
+                radius: radius,
+                backgroundColor: getAvatarColorForRole(role),
+                child: Center(
+                  child: Text(
+                    senderEmoji,
+                    style: TextStyle(
+                      fontSize: radius * 1.5, // Larger emoji to fill avatar better
+                    ),
+                  ),
+                ),
+              )
+            : CircleAvatar(
+                radius: radius,
+                backgroundColor: getAvatarColorForRole(role),
+                backgroundImage: participant.avatar != null && participant.avatar!.isNotEmpty
+                    ? NetworkImage(participant.avatar!)
+                    : null,
+                child: participant.avatar == null || participant.avatar!.isEmpty
+                    ? buildAvatarText(participant, fontSize ?? 14)
+                    : null,
+              ),
+      ),
+      // Gift indicator badge (gift icon in top-right corner) - ONLY for senders
+      if (hasGiftIndicator && transformEmoji == null)
+        Positioned(
+          top: -6,
+          right: -6,
+          child: Container(
+            width: radius * 0.8,
+            height: radius * 0.8,
+            decoration: BoxDecoration(
+              color: Colors.pink,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+            child: Center(
+              child: Icon(
+                Icons.card_giftcard,
+                color: Colors.white,
+                size: radius * 0.6,
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
+}
+
+/// Build transformed avatar - sender's avatar becomes the gift/reaction emoji with pulse animation
+Widget buildTransformedAvatar(String emoji, double radius) {
+  return TweenAnimationBuilder<double>(
+    duration: const Duration(milliseconds: 500),
+    tween: Tween(begin: 0.0, end: 1.0),
+    builder: (context, value, child) {
+      // Pulse animation - scale in and out
+      final scale = 1.0 + (0.2 * (1.0 - (value - 0.5).abs() * 2));
+
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: Colors.white.withValues(alpha: 0.9),
+        child: Transform.scale(
+          scale: scale,
+          child: Text(
+            emoji,
+            style: TextStyle(
+              fontSize: radius * 1.5, // Larger emoji to fill entire circle
+            ),
+          ),
+        ),
+      );
+    },
   );
 }
 
@@ -352,6 +455,58 @@ enum DebatePhase {
   }
 }
 
+/// Data class for reactions and gifts
+class ReactionData {
+  final String emoji;
+  final String targetUserId;
+  final String senderUserId;
+  final String? senderName;
+  final DateTime timestamp;
+  final String id;
+  final bool isGift;
+  final int? giftValue;
+  final String? giftName;
+
+  ReactionData({
+    required this.emoji,
+    required this.targetUserId,
+    required this.senderUserId,
+    this.senderName,
+    required this.timestamp,
+    String? id,
+    this.isGift = false,
+    this.giftValue,
+    this.giftName,
+  }) : id = id ?? '${DateTime.now().millisecondsSinceEpoch}_${targetUserId}_${senderUserId}';
+
+  Map<String, dynamic> toMap() {
+    return {
+      'emoji': emoji,
+      'targetUserId': targetUserId,
+      'senderUserId': senderUserId,
+      'senderName': senderName,
+      'timestamp': timestamp.toIso8601String(),
+      'isGift': isGift,
+      'giftValue': giftValue,
+      'giftName': giftName,
+    };
+  }
+
+  factory ReactionData.fromMap(Map<String, dynamic> map, String id) {
+    return ReactionData(
+      id: id,
+      emoji: map['emoji'] ?? '👍',
+      targetUserId: map['targetUserId'] ?? '',
+      senderUserId: map['senderUserId'] ?? '',
+      senderName: map['senderName'],
+      timestamp: DateTime.parse(map['timestamp'] ?? DateTime.now().toIso8601String()),
+      isGift: map['isGift'] ?? false,
+      giftValue: map['giftValue'],
+      giftName: map['giftName'],
+    );
+  }
+}
+
 class ArenaScreen extends StatefulWidget {
   final String roomId;
   final String challengeId;
@@ -404,6 +559,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Timer? _roomStatusChecker; // Periodic room status checker
   Timer? _roomCompletionTimer; // Timer for room completion after closure
   Timer? _muteStateSyncTimer; // Periodic mute state sync to prevent stuck states
+  Timer? _liveKitStateDebounce; // Debounce rapid LiveKit state changes (AGC can trigger many events)
   // Consolidated real-time subscription manager
   final RoomRealtimeManager _realtimeManager = RoomRealtimeManager();
   RoomSubscription? _roomSubscription;
@@ -420,6 +576,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   StreamSubscription? _sharedLinkSubscription; // Shared link notifications
   StreamSubscription? _sourceAddedSubscription; // Material source additions
   StreamSubscription? _materialUpdatesSubscription; // Material updates
+  RealtimeSubscription? _reactionsSubscription; // Room reactions and gifts subscription
   int _roomStatusCheckerIterations = 0; // Track iterations to prevent infinite loops
   int _reconnectAttempts = 0; // Track reconnection attempts
   static const int _maxReconnectAttempts = 5; // Maximum reconnection attempts
@@ -501,6 +658,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   
   final List<UserProfile> _audience = [];
 
+  // Reactions and gifts
+  final List<ReactionData> _activeReactions = [];
+  final Map<String, String> _avatarEmojiOverlays = {}; // userId -> emoji for avatar overlays (sender)
+  final Map<String, bool> _avatarGiftIndicators = {}; // userId -> true for gift indicator on sender
+  final Map<String, String> _senderAvatarTransformations = {}; // userId -> emoji - transforms sender's avatar
+  final Map<String, String> _receiverReactionAnimations = {}; // userId -> emoji for receiver explosion
+
   // Diff-based participant management
   final ParticipantDiffManager _diffManager = ParticipantDiffManager();
 
@@ -545,6 +709,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _liveKitService = getIt<LiveKitService>();
     _initializeInstantMessaging();
     _initializeWebRTC();
+    _initializeReactionsSync();
     
     // Set up speaking detection listener
     _speakingService.addListener(_onSpeakingStateChanged);
@@ -743,7 +908,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     // Set BOTH navigation and exit flags to stop all background processes immediately
     _hasNavigated = true;
     _isExiting = true;
-    
+
+    // CRITICAL: Remove user from room database if they didn't go through normal exit
+    // This handles crashes, force-closes, and other abnormal exits
+    _removeCurrentUserFromRoom().catchError((e) {
+      AppLogger().error('❌ Failed to remove user from room in dispose: $e');
+    });
+
     // Stop recording if still active
     if (_recordingService.isRecording && _userRole == 'moderator') {
       AppLogger().info('🎬 Stopping recording in dispose');
@@ -760,6 +931,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _pinnedLinkService = null;
     _sharedLinkSubscription?.cancel();
     _sharedLinkSubscription = null;
+
+    // Dispose reactions subscription
+    _reactionsSubscription?.close();
+    _reactionsSubscription = null;
     
     AppLogger().debug('🛑 DISPOSE: Cancelling room status checker...');
     if (_roomStatusChecker != null) {
@@ -787,6 +962,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     } else {
       AppLogger().debug('🛑 DISPOSE: Mute sync timer was already null');
     }
+
+    AppLogger().debug('🛑 DISPOSE: Cancelling LiveKit state debounce timer...');
+    _liveKitStateDebounce?.cancel();
+    _liveKitStateDebounce = null;
 
     AppLogger().debug('🛑 DISPOSE: Removing LiveKit service listener...');
     _liveKitService.removeListener(_onLiveKitStateChanged);
@@ -914,17 +1093,45 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             
             // Check for participant deletion events
             final isDeleteEvent = response.events.any((event) => event.contains('.delete'));
-            if (isDeleteEvent) {
+            final isParticipantUpdate = response.events.any((event) => event.contains('arena_participants'));
+
+            if (isDeleteEvent && isParticipantUpdate) {
               AppLogger().debug('🗑️ PARTICIPANT DELETION EVENT detected: ${response.events}');
+              // For deletion events, immediately refresh participants since payload might be incomplete
+              if (mounted && !_hasNavigated) {
+                AppLogger().info('🔄 Refreshing participants due to deletion event');
+                await _loadParticipants();
+                return; // Skip further processing for delete events
+              }
             }
-            
+
+            // Check for participant_removed broadcast events from function
+            final isParticipantRemovedEvent = response.events.any((event) =>
+              event.contains('arena_events') && event.contains('.create'));
+
+            if (isParticipantRemovedEvent) {
+              try {
+                final eventPayload = Map<String, dynamic>.from(response.payload);
+                if (eventPayload['type'] == 'participant_removed' &&
+                    eventPayload['roomId'] == widget.roomId) {
+                  AppLogger().info('📢 BROADCAST: Participant removed event received - refreshing');
+                  if (mounted && !_hasNavigated) {
+                    await _loadParticipants();
+                    return;
+                  }
+                }
+              } catch (e) {
+                AppLogger().debug('Error processing participant_removed event: $e');
+              }
+            }
+
             // Note: response.payload is guaranteed to be non-null by the API
-            
+
             // Ensure payload is a valid Map with enhanced safety
             Map<String, dynamic> payload;
             try {
               payload = Map<String, dynamic>.from(response.payload);
-              
+
               // Additional null safety check
               if (payload.isEmpty) {
                 AppLogger().warning('Received empty payload - skipping');
@@ -934,11 +1141,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               AppLogger().warning('Error converting payload to Map: $e - skipping');
               return;
             }
-          
+
           // Check if this update is for our room
-            final isParticipantUpdate = response.events.any((event) => event.contains('arena_participants'));
             final isRoomUpdate = response.events.any((event) => event.contains('arena_rooms'));
-            
+
             if (isParticipantUpdate && payload.containsKey('roomId') &&
                 payload['roomId'] == widget.roomId) {
               if (mounted && !_hasNavigated) {
@@ -1480,17 +1686,152 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
+  /// Initialize real-time reactions and gifts sync
+  Future<void> _initializeReactionsSync() async {
+    if (!mounted) return;
+
+    try {
+      // Subscribe to reactions for this room
+      final realtime = _appwrite.realtime;
+
+      _reactionsSubscription = realtime.subscribe([
+        'databases.arena_db.collections.room_reactions.documents'
+      ]);
+
+      _reactionsSubscription!.stream.listen((response) {
+        if (!mounted) return;
+
+        try {
+          final payload = response.payload;
+
+          // Validate payload is a Map (runtime check for safety)
+          // ignore: unnecessary_type_check
+          if (payload is! Map<String, dynamic>) {
+            AppLogger().warning('Invalid reaction payload type: ${payload.runtimeType}');
+            return;
+          }
+
+          // Only process create events
+          if (response.events.any((event) => event.contains('.create'))) {
+            final roomId = payload['roomId'];
+
+            // Only process reactions for this room
+            if (roomId == widget.roomId) {
+              final reaction = ReactionData.fromMap(payload, payload['\$id']);
+
+              // Add to active reactions
+              setState(() {
+                _activeReactions.add(reaction);
+              });
+
+              // Remove after duration (gifts stay longer)
+              final duration = reaction.isGift
+                  ? const Duration(seconds: 7)  // Gifts stay 7 seconds
+                  : const Duration(seconds: 3); // Reactions stay 3 seconds
+
+              Future.delayed(duration, () {
+                if (mounted) {
+                  setState(() {
+                    _activeReactions.removeWhere((r) => r.id == reaction.id);
+                  });
+                }
+              });
+
+              if (reaction.isGift) {
+                AppLogger().info('🎁 Arena gift received: ${reaction.emoji} (${reaction.giftName}) from ${reaction.senderName} to ${reaction.targetUserId}');
+                AppLogger().debug('Current user: $_currentUserId, Receiver: ${reaction.targetUserId}, Sender: ${reaction.senderUserId}');
+
+                // RECEIVER gets transformation only, SENDER gets small badge only
+                if (mounted) {
+                  setState(() {
+                    // Receiver: transformation only (no badge, no gold border)
+                    _senderAvatarTransformations[reaction.targetUserId] = reaction.emoji;
+                    // Sender: badge only (no transformation)
+                    _avatarGiftIndicators[reaction.senderUserId] = true;
+
+                    AppLogger().debug('Set transformation for ${reaction.targetUserId}, badge for ${reaction.senderUserId}');
+                    AppLogger().debug('Current transformations: $_senderAvatarTransformations');
+                    AppLogger().debug('Current indicators: $_avatarGiftIndicators');
+                  });
+
+                  // Auto-clear after 3 seconds
+                  Future.delayed(const Duration(seconds: 3), () {
+                    if (mounted) {
+                      setState(() {
+                        _senderAvatarTransformations.remove(reaction.targetUserId);
+                        _avatarGiftIndicators.remove(reaction.senderUserId);
+                      });
+                    }
+                  });
+                }
+              } else {
+                AppLogger().info('✨ Arena reaction received: ${reaction.emoji} from ${reaction.senderUserId} to ${reaction.targetUserId}');
+
+                // Transform SENDER's avatar into the reaction emoji
+                if (mounted) {
+                  setState(() {
+                    _senderAvatarTransformations[reaction.senderUserId] = reaction.emoji;
+                    _avatarEmojiOverlays[reaction.senderUserId] = reaction.emoji;
+                  });
+
+                  // Auto-clear transformation after 3 seconds
+                  Future.delayed(const Duration(seconds: 3), () {
+                    if (mounted) {
+                      setState(() {
+                        _senderAvatarTransformations.remove(reaction.senderUserId);
+                        _avatarEmojiOverlays.remove(reaction.senderUserId);
+                      });
+                    }
+                  });
+                }
+
+                // Show explosion animation on RECEIVER's avatar
+                if (mounted && reaction.targetUserId.isNotEmpty) {
+                  setState(() {
+                    _receiverReactionAnimations[reaction.targetUserId] = reaction.emoji;
+                  });
+
+                  // Auto-clear receiver's animation after 2 seconds
+                  Future.delayed(const Duration(seconds: 2), () {
+                    if (mounted) {
+                      setState(() {
+                        _receiverReactionAnimations.remove(reaction.targetUserId);
+                      });
+                    }
+                  });
+                }
+              }
+            }
+          }
+        } catch (e) {
+          AppLogger().error('❌ Error processing reaction: $e');
+        }
+      });
+
+      AppLogger().info('🎁 Arena reactions sync initialized');
+    } catch (e) {
+      AppLogger().error('❌ Failed to initialize reactions sync: $e');
+    }
+  }
+
   // _connectWithRetry method removed - unused
 
   /// Callback for LiveKit service state changes (including mute state changes)
+  /// Debounced to prevent rapid UI updates from AGC adjustments on Android
   void _onLiveKitStateChanged() {
-    if (mounted) {
-      setState(() {
-        // Sync local mute state with LiveKit service
-        _isMuted = _liveKitService.isMuted;
-        AppLogger().debug('🔄 LiveKit state changed - UI refreshed, muted: $_isMuted');
-      });
-    }
+    // Cancel existing debounce timer
+    _liveKitStateDebounce?.cancel();
+
+    // Set a short debounce delay to batch rapid state changes
+    _liveKitStateDebounce = Timer(const Duration(milliseconds: 150), () {
+      if (mounted) {
+        setState(() {
+          // Sync local mute state with LiveKit service
+          _isMuted = _liveKitService.isMuted;
+          AppLogger().debug('🔄 LiveKit state changed - UI refreshed, muted: $_isMuted');
+        });
+      }
+    });
   }
 
   /// Connect to WebRTC server for Arena audio using LiveKit - OPTIMIZED FOR SPEED
@@ -1575,18 +1916,31 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         webrtcRole = 'judge';
       }
       
-      // ROBUST AUDIO SYSTEM: Safety check - if user should have audio permissions but is computed as audience, 
-      // this indicates a timing/state sync issue
+      // ROBUST AUDIO SYSTEM: Safety check - if user should have audio permissions but is computed as audience,
+      // this indicates a timing/state sync issue OR user is a Super Moderator
+      AppLogger().debug('🔍 ROLE CHECK BEFORE OVERRIDE: webrtcRole=$webrtcRole, _shouldUserPublishMedia()=${_shouldUserPublishMedia()}, _isSuperModerator=$_isSuperModerator, _userRole=$_userRole');
+
       if (webrtcRole == 'audience' && _shouldUserPublishMedia()) {
         AppLogger().warning('🚨 ARENA ROLE OVERRIDE: User should have media permissions but computed as audience - checking for role correction');
-        
-        // If user is a room creator, force moderator role
-        if (_roomData != null && _currentUser?.id != null && _roomData!['createdBy'] == _currentUser!.id) {
+
+        // If user is a Super Moderator, grant moderator-level LiveKit permissions
+        // but keep them in audience role for database/UI purposes
+        if (_isSuperModerator) {
+          AppLogger().warning('🔑 SUPER MODERATOR DETECTED: Granting moderator LiveKit permissions while keeping audience role');
+          AppLogger().info('  Before: webrtcRole=$webrtcRole, _userRole=$_userRole');
+          webrtcRole = 'moderator'; // Use moderator role for LiveKit (has audio permissions)
+          AppLogger().info('  After: webrtcRole=$webrtcRole, _userRole=$_userRole (kept as audience)');
+          // Keep _userRole as 'audience' so they stay in audience slot visually
+        }
+        // If user is a room creator, force moderator role everywhere
+        else if (_roomData != null && _currentUser?.id != null && _roomData!['createdBy'] == _currentUser!.id) {
           AppLogger().warning('🚨 ARENA: Room creator detected as audience - forcing moderator role');
           webrtcRole = 'moderator';
           _userRole = 'moderator';
         }
       }
+
+      AppLogger().debug('🔍 FINAL ROLES: webrtcRole=$webrtcRole, _userRole=$_userRole, will connect with these credentials');
       
       AppLogger().debug('🎥 LiveKit Role: $webrtcRole (User Role: $_userRole)');
       
@@ -1806,7 +2160,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       if (_liveKitService.room != null) {
         audioVolumeService.configureLiveKitAudio(_liveKitService.room!);
       }
-      AppLogger().info('🔊 Audio volume boosted for speaker output');
+
+      // ANDROID VOLUME BOOST: Maintain maximum volume throughout the session
+      await audioVolumeService.maintainMaximumVolume();
+      AppLogger().info('🔊 Audio volume boosted to maximum with active monitoring');
 
       // Start AI moderation for hostile speech detection
       final aiModeration = RealtimeAIModerationService();
@@ -1938,7 +2295,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   /// Determine if current user should publish media (video/audio)
   bool _shouldUserPublishMedia() {
     // Moderator, debaters and judges publish audio
-    // Audience members are view-only (listen-only)
+    // Super Moderators can ALWAYS publish audio, even from audience
+    // Regular audience members are view-only (listen-only)
+
+    // Super Moderators can speak from anywhere
+    if (_isSuperModerator) {
+      return true;
+    }
+
+    // Regular role-based permissions
     return _userRole == 'moderator' ||
            _userRole == 'affirmative' ||
            _userRole == 'negative' ||
@@ -2000,10 +2365,14 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
       // Connect to audio first if not connected
       if (!_isWebRTCConnected) {
+        AppLogger().debug('🎤 Not connected to WebRTC - connecting now');
         await _connectToWebRTC();
         return;
       }
-      
+
+      // Super Moderators should always have mic access due to initial connection permissions
+      AppLogger().debug('🔍 Mic access check: _isSuperModerator=$_isSuperModerator, _userRole=$_userRole, _shouldUserPublishMedia()=${_shouldUserPublishMedia()}');
+
       // ANDROID CRASH PROTECTION: Wrap audio operations
       try {
         // Double-check mount state before audio operations
@@ -3065,6 +3434,17 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
     return false;
   }
+
+  bool get _isSuperModerator {
+    if (_currentUserId == null) return false;
+    final superModService = SuperModeratorService();
+    final isSuperMod = superModService.isSuperModerator(_currentUserId!);
+    if (isSuperMod) {
+      AppLogger().debug('✅ Current user $_currentUserId IS a super moderator');
+    }
+    return isSuperMod;
+  }
+
   bool get _isJudge => _userRole?.startsWith('judge') == true;
 
   void _forceSpeakerChange(String newSpeaker) {
@@ -3508,7 +3888,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   },
                 ),
               ),
-            
           ],
         ),
       ), // Close PopScope
@@ -3566,16 +3945,23 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Future<void> _handleModeratorExit() async {
     try {
       AppLogger().debug('👑 Moderator leaving - closing entire room');
-      
+
       // 1. Cancel all timers and subscriptions immediately
       _cancelAllTimersAndSubscriptions();
-      
-      // 2. Close the room and remove all participants
+
+      // 2. Disconnect from LiveKit (microphone/audio) BEFORE closing room
+      if (_liveKitService.isConnected) {
+        AppLogger().info('🎤 Moderator disconnecting microphone from arena room...');
+        await _liveKitService.disconnect();
+        AppLogger().info('✅ Moderator microphone disconnected from arena');
+      }
+
+      // 3. Close the room and remove all participants
       await _closeRoomDueToModeratorExit();
-      
-      // 3. Navigate home
+
+      // 4. Navigate home
       _forceNavigationHomeSync();
-      
+
     } catch (e) {
       AppLogger().error('Error in moderator exit: $e');
       _forceNavigationHomeSync(); // Still navigate even if cleanup fails
@@ -3585,16 +3971,23 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Future<void> _handleParticipantExit() async {
     try {
       AppLogger().debug('👤 Participant leaving arena');
-      
+
       // 1. Cancel all timers and subscriptions immediately
       _cancelAllTimersAndSubscriptions();
-      
-      // 2. Remove only this participant
+
+      // 2. Disconnect from LiveKit (microphone/audio) BEFORE database cleanup
+      if (_liveKitService.isConnected) {
+        AppLogger().info('🎤 Disconnecting microphone from arena room...');
+        await _liveKitService.disconnect();
+        AppLogger().info('✅ Microphone disconnected from arena');
+      }
+
+      // 3. Remove only this participant from database
       await _removeCurrentUserFromRoom();
-      
-      // 3. Navigate home
+
+      // 4. Navigate home
       _forceNavigationHomeSync();
-      
+
     } catch (e) {
       AppLogger().error('Error in participant exit: $e');
       _forceNavigationHomeSync(); // Still navigate even if cleanup fails
@@ -3730,6 +4123,34 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Future<void> _removeCurrentUserFromRoom() async {
     try {
       if (_currentUserId != null) {
+        AppLogger().info('🚪 Removing user $_currentUserId from room ${widget.roomId} via function');
+
+        // Call Appwrite function for reliable participant removal with broadcasting
+        final functions = Functions(_appwrite.client);
+
+        final execution = await functions.createExecution(
+          functionId: 'remove-arena-participant',
+          body: jsonEncode({
+            'roomId': widget.roomId,
+            'userId': _currentUserId!,
+          }),
+        );
+
+        if (execution.responseStatusCode == 200) {
+          final response = jsonDecode(execution.responseBody);
+          if (response['success'] == true) {
+            AppLogger().info('✅ Participant removed successfully: ${response['removed']} document(s)');
+          } else {
+            AppLogger().warning('⚠️ Participant removal failed: ${response['error']}');
+          }
+        } else {
+          AppLogger().error('❌ Function returned non-200 status: ${execution.responseStatusCode}');
+        }
+      }
+    } catch (e) {
+      AppLogger().warning('Error in participant removal: $e');
+      // Fallback to direct deletion if function fails
+      try {
         final participants = await _appwrite.databases.listDocuments(
           databaseId: 'arena_db',
           collectionId: 'arena_participants',
@@ -3739,8 +4160,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             Query.equal('isActive', true),
           ],
         );
-        
-        // Delete participant record entirely to trigger real-time updates
+
         for (final participant in participants.documents) {
           await _appwrite.databases.deleteDocument(
             databaseId: 'arena_db',
@@ -3748,11 +4168,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             documentId: participant.$id,
           );
         }
-        
-        AppLogger().info('User $_currentUserId participant record deleted');
+        AppLogger().info('User $_currentUserId participant record deleted (fallback)');
+      } catch (fallbackError) {
+        AppLogger().error('Fallback deletion also failed: $fallbackError');
       }
-    } catch (e) {
-      AppLogger().warning('Error in database cleanup: $e');
     }
   }
 
@@ -3898,9 +4317,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                           ? Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Expanded(child: _buildDebaterPosition('affirmative', 'Affirmative')),
+                                Expanded(child: _buildDebaterPosition('affirmative', 'Affirmative', isSmall: false)),
                                 const SizedBox(width: 1),
-                                Expanded(child: _buildDebaterPosition('negative', 'Negative')),
+                                Expanded(child: _buildDebaterPosition('negative', 'Negative', isSmall: false)),
                               ],
                             )
                           : Row(
@@ -4170,11 +4589,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
 
-  Widget _buildDebaterPosition(String role, String title, {bool? isWinner}) {
+  Widget _buildDebaterPosition(String role, String title, {bool? isWinner, bool isSmall = true}) {
     final participant = _participants[role];
     final isAffirmative = role.startsWith('affirmative');
     final finalIsWinner = isWinner ?? (_judgingComplete && _winner == role);
-    
+
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: finalIsWinner ? Colors.amber : (isAffirmative ? Colors.green : Colors.red), width: 2),
@@ -4184,9 +4603,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: EdgeInsets.symmetric(vertical: isSmall ? 4 : 6), // Reduced padding for 2v2
             decoration: BoxDecoration(
-              color: finalIsWinner 
+              color: finalIsWinner
                   ? Colors.amber
                   : getAvatarColorForRole(role),
               borderRadius: const BorderRadius.only(
@@ -4229,25 +4648,25 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   Widget _buildTeamPosition(String baseRole, String title) {
     final isAffirmative = baseRole == 'affirmative';
-    
+
     // Check if this team won (for 2v2, winner is still 'affirmative' or 'negative')
     final teamWon = _judgingComplete && _winner == baseRole;
-    
+
     return Column(
       children: [
         // First team member slot (top)
         Expanded(
           child: _buildDebaterPosition(
-            baseRole, 
+            baseRole,
             isAffirmative ? 'Affirmative 1' : 'Negative 1',
             isWinner: teamWon,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 2), // Reduced from 4 to 2 to prevent overflow
         // Second team member slot (bottom)
         Expanded(
           child: _buildDebaterPosition(
-            '${baseRole}2', 
+            '${baseRole}2',
             isAffirmative ? 'Affirmative 2' : 'Negative 2',
             isWinner: teamWon,
           ),
@@ -4544,15 +4963,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Normal-sized circular avatar
+              // Avatar with gift transformation support
               Container(
-                width: 70,
-                height: 70,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: Colors.white.withOpacity(0.9),
-                    width: 3,
+                    width: isSmall ? 2 : 3, // Thinner border for 2v2
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -4562,75 +4979,43 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                     ),
                   ],
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(35),
-                  child: participant.avatar != null && participant.avatar!.isNotEmpty
-                      ? Image.network(
-                          participant.avatar!,
-                          width: 70,
-                          height: 70,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                            width: 70,
-                            height: 70,
-                            decoration: BoxDecoration(
-                              color: getAvatarColorForRole(role).withOpacity(0.3),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Center(
-                              child: Text(
-                                participant.name.isNotEmpty ? participant.name[0].toUpperCase() : 'U',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        )
-                      : Container(
-                          width: 70,
-                          height: 70,
-                          decoration: BoxDecoration(
-                            color: getAvatarColorForRole(role).withOpacity(0.3),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Text(
-                              participant.name.isNotEmpty ? participant.name[0].toUpperCase() : 'U',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
+                child: buildAvatarWithGiftOverlay(
+                  participant: participant,
+                  radius: isSmall ? 24 : 35,
+                  role: role,
+                  avatarEmojiOverlays: _avatarEmojiOverlays,
+                  avatarGiftIndicators: _avatarGiftIndicators,
+                  senderAvatarTransformations: _senderAvatarTransformations,
+                  fontSize: isSmall ? 18 : 24,
                 ),
               ),
               
-              const SizedBox(height: 8),
-              
-              // User name
-              Text(
-                participant.name.length > 12 
-                    ? '${participant.name.substring(0, 12)}...' 
-                    : participant.name,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  shadows: [
-                    Shadow(
-                      offset: Offset(0, 1),
-                      blurRadius: 2,
-                      color: Colors.black54,
+              const SizedBox(height: 6),
+
+              // User name constrained to prevent overflow
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 120),
+                  child: Text(
+                    participant.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      shadows: [
+                        Shadow(
+                          offset: Offset(0, 1),
+                          blurRadius: 2,
+                          color: Colors.black54,
+                        ),
+                      ],
                     ),
-                  ],
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                 ),
-                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -4707,8 +5092,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         // Moderator controls for other participants (mute/unmute buttons)
         if (_isModerator && !isLocalUser)
           Positioned(
-            bottom: 6,
-            right: 6,
+            bottom: isSmall ? 2 : 6, // Reduced bottom spacing for small mode
+            right: isSmall ? 2 : 6,  // Reduced right spacing for small mode
             child: Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
@@ -4771,8 +5156,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   /// Build audio-only tile for judge with microphone status
   Widget _buildJudgeTile(UserProfile participant, String role, {bool isSmall = false}) {
-    final nameSize = isSmall ? 9.0 : 10.0;
-
     // Check if this is the local user
     final isLocalUser = participant.id == _currentUserId;
 
@@ -4896,10 +5279,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              // Responsive circular avatar based on container size
+                              // Avatar with gift transformation support
                               Container(
-                                width: isSmall ? 55 : 70,
-                                height: isSmall ? 55 : 70,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   border: Border.all(
@@ -4914,75 +5295,43 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                     ),
                                   ],
                                 ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(isSmall ? 27.5 : 35),
-                                  child: participant.avatar != null && participant.avatar!.isNotEmpty
-                                      ? Image.network(
-                                          participant.avatar!,
-                                          width: isSmall ? 55 : 70,
-                                          height: isSmall ? 55 : 70,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (context, error, stackTrace) =>
-                                              Container(
-                                            width: 70,
-                                            height: 70,
-                                            decoration: BoxDecoration(
-                                              color: getAvatarColorForRole(role).withOpacity(0.3),
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: Center(
-                                              child: Text(
-                                                participant.name.isNotEmpty ? participant.name[0].toUpperCase() : 'J',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: isSmall ? 18 : 24,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        )
-                                      : Container(
-                                          width: isSmall ? 55 : 70,
-                                          height: isSmall ? 55 : 70,
-                                          decoration: BoxDecoration(
-                                            color: getAvatarColorForRole(role).withOpacity(0.3),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: Center(
-                                            child: Text(
-                                              participant.name.isNotEmpty ? participant.name[0].toUpperCase() : 'J',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: isSmall ? 18 : 24,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
+                                child: buildAvatarWithGiftOverlay(
+                                  participant: participant,
+                                  radius: isSmall ? 27.5 : 35,
+                                  role: role,
+                                  avatarEmojiOverlays: _avatarEmojiOverlays,
+                                  avatarGiftIndicators: _avatarGiftIndicators,
+                                  senderAvatarTransformations: _senderAvatarTransformations,
+                                  fontSize: isSmall ? 18 : 24,
                                 ),
                               ),
                               
-                              SizedBox(height: isSmall ? 4 : 8),
-                              
-                              // User name
-                              Text(
-                                participant.name.length > (isSmall ? 8 : 12)
-                                    ? '${participant.name.substring(0, isSmall ? 8 : 12)}...' 
-                                    : participant.name,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: isSmall ? nameSize : 14,
-                                  fontWeight: FontWeight.w600,
-                                  shadows: [
-                                    Shadow(
-                                      offset: Offset(0, 1),
-                                      blurRadius: 2,
-                                      color: Colors.black54,
+                              SizedBox(height: isSmall ? 2 : 6),
+
+                              // User name constrained to prevent overflow
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(maxWidth: isSmall ? 70 : 100),
+                                  child: Text(
+                                    participant.name,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: isSmall ? 8 : 12,
+                                      fontWeight: FontWeight.w600,
+                                      shadows: [
+                                        Shadow(
+                                          offset: Offset(0, 1),
+                                          blurRadius: 2,
+                                          color: Colors.black54,
+                                        ),
+                                      ],
                                     ),
-                                  ],
+                                    textAlign: TextAlign.center,
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
                                 ),
-                                textAlign: TextAlign.center,
                               ),
                             ],
                           ),
@@ -5272,7 +5621,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 child: _buildControlButton(
                   icon: Icons.card_giftcard,
                   label: 'Gift',
-                  onPressed: _showGiftComingSoon,
+                  onPressed: _showGiftModal,
                   color: Colors.amber,
                 ),
               ),
@@ -5410,69 +5759,202 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
 
 
-  void _showGiftComingSoon() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.workspace_premium, color: Colors.amber),
-            SizedBox(width: 8),
-            Text('Premium Feature'),
-          ],
+  void _showGiftModal() {
+    AppLogger().debug('🎁 DEBUG: Gift modal button pressed');
+
+    // Get eligible recipients (debaters, judges, and moderator, excluding self)
+    final eligibleRecipients = <UserProfile>[];
+
+    // Add affirmative debaters
+    final affirmative = _participants['affirmative'];
+    if (affirmative != null && affirmative.id != _currentUserId) {
+      eligibleRecipients.add(affirmative);
+    }
+    final affirmative2 = _participants['affirmative2'];
+    if (affirmative2 != null && affirmative2.id != _currentUserId) {
+      eligibleRecipients.add(affirmative2);
+    }
+
+    // Add negative debaters
+    final negative = _participants['negative'];
+    if (negative != null && negative.id != _currentUserId) {
+      eligibleRecipients.add(negative);
+    }
+    final negative2 = _participants['negative2'];
+    if (negative2 != null && negative2.id != _currentUserId) {
+      eligibleRecipients.add(negative2);
+    }
+
+    // Add judges (judge1, judge2, judge3)
+    final judge1 = _participants['judge1'];
+    if (judge1 != null && judge1.id != _currentUserId && !eligibleRecipients.any((r) => r.id == judge1.id)) {
+      eligibleRecipients.add(judge1);
+    }
+    final judge2 = _participants['judge2'];
+    if (judge2 != null && judge2.id != _currentUserId && !eligibleRecipients.any((r) => r.id == judge2.id)) {
+      eligibleRecipients.add(judge2);
+    }
+    final judge3 = _participants['judge3'];
+    if (judge3 != null && judge3.id != _currentUserId && !eligibleRecipients.any((r) => r.id == judge3.id)) {
+      eligibleRecipients.add(judge3);
+    }
+
+    // Add moderator
+    final moderator = _participants['moderator'];
+    if (moderator != null && moderator.id != _currentUserId) {
+      eligibleRecipients.add(moderator);
+    }
+
+    if (eligibleRecipients.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No eligible recipients. Only debaters, judges, and moderators can receive gifts.'),
+          backgroundColor: Colors.orange,
         ),
-        content: const Column(
+      );
+      return;
+    }
+
+    // Simple recipient selection modal that opens working gift bottom sheet
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'Send virtual gifts to debaters to show your appreciation! This premium feature includes:',
-              style: TextStyle(fontSize: 16),
+            const Text(
+              'Select Gift Recipient',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.check, color: Colors.green),
-                SizedBox(width: 8),
-                Text('45+ unique virtual gifts'),
-              ],
-            ),
-            SizedBox(height: 6),
-            Row(
-              children: [
-                Icon(Icons.check, color: Colors.green),
-                SizedBox(width: 8),
-                Text('Support your favorite debaters'),
-              ],
-            ),
-            SizedBox(height: 6),
-            Row(
-              children: [
-                Icon(Icons.check, color: Colors.green),
-                SizedBox(width: 8),
-                Text('Premium coin system'),
-              ],
-            ),
+            const SizedBox(height: 20),
+            ...eligibleRecipients.map((recipient) {
+              // Determine recipient role
+              String role = 'Participant';
+              if (_participants['moderator']?.id == recipient.id) {
+                role = 'Moderator';
+              } else if (_participants['judge1']?.id == recipient.id ||
+                         _participants['judge2']?.id == recipient.id ||
+                         _participants['judge3']?.id == recipient.id) {
+                role = 'Judge';
+              } else if (_participants['affirmative']?.id == recipient.id ||
+                         _participants['affirmative2']?.id == recipient.id) {
+                role = 'Affirmative';
+              } else if (_participants['negative']?.id == recipient.id ||
+                         _participants['negative2']?.id == recipient.id) {
+                role = 'Negative';
+              }
+
+              return ListTile(
+                leading: CircleAvatar(
+                  child: Text(recipient.initials),
+                ),
+                title: Text(recipient.displayName),
+                subtitle: Text(role),
+                onTap: () {
+                  Navigator.pop(context);
+                  showSimpleGiftBottomSheet(
+                    context,
+                    recipient: recipient,
+                    roomId: widget.roomId,
+                    onGiftSent: (emoji, giftName, giftValue, senderName) {
+                      _broadcastGift(emoji, giftName, giftValue, senderName, recipient.id);
+                    },
+                  );
+                },
+              );
+            }).toList(),
+            const SizedBox(height: 10),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Maybe Later'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pushNamed('/premium');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.amber,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Upgrade Now'),
-          ),
-        ],
       ),
     );
+  }
+
+  /// Broadcast gift to Appwrite for real-time display
+  Future<void> _broadcastGift(
+    String emoji,
+    String giftName,
+    int giftValue,
+    String senderName,
+    String targetUserId,
+  ) async {
+    AppLogger().debug('🎁 _broadcastGift called: $emoji ($giftName) value=$giftValue from=$senderName to=$targetUserId');
+
+    if (!mounted || _currentUserId == null) {
+      AppLogger().warning('⚠️ Cannot broadcast gift - mounted=$mounted, currentUser=${_currentUserId != null}');
+      return;
+    }
+
+    try {
+      // Create gift reaction data
+      final giftReaction = ReactionData(
+        emoji: emoji,
+        targetUserId: targetUserId,
+        senderUserId: _currentUserId!,
+        senderName: senderName,
+        timestamp: DateTime.now(),
+        isGift: true,
+        giftValue: giftValue,
+        giftName: giftName,
+      );
+
+      AppLogger().debug('🎁 Creating Appwrite document for gift...');
+
+      // Save to Appwrite to broadcast to all users
+      await _appwrite.databases.createDocument(
+        databaseId: 'arena_db',
+        collectionId: 'room_reactions',
+        documentId: ID.unique(),
+        data: {
+          ...giftReaction.toMap(),
+          'roomId': widget.roomId,
+        },
+      );
+
+      AppLogger().info('✅ Gift sent to Appwrite: $emoji ($giftName) value=$giftValue to $targetUserId');
+
+      // RECEIVER gets transformation only, SENDER gets small badge only
+      AppLogger().info('🎁 Broadcasting gift locally: $emoji to $targetUserId from $_currentUserId');
+      if (mounted) {
+        setState(() {
+          // Receiver: transformation only (no badge, no gold border)
+          _senderAvatarTransformations[targetUserId] = emoji;
+          // Sender: badge only (no transformation)
+          _avatarGiftIndicators[_currentUserId!] = true;
+
+          AppLogger().debug('Local - Set transformation for $targetUserId, badge for $_currentUserId');
+          AppLogger().debug('Local - Current transformations: $_senderAvatarTransformations');
+          AppLogger().debug('Local - Current indicators: $_avatarGiftIndicators');
+        });
+
+        // Auto-clear after 3 seconds
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() {
+              _senderAvatarTransformations.remove(targetUserId);
+              _avatarGiftIndicators.remove(_currentUserId!);
+            });
+          }
+        });
+      }
+    } catch (e) {
+      AppLogger().error('❌ Failed to broadcast gift: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send gift: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
 
@@ -5769,7 +6251,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   void _showRoleManager() {
     final isModerator = _userRole == 'moderator';
     final isRoomCreator = _roomData != null && _currentUser?.id != null && _roomData!['createdBy'] == _currentUser!.id;
-    final hasModeratorPrivileges = isModerator || isRoomCreator;
+    final hasModeratorPrivileges = isModerator || isRoomCreator || _isSuperModerator;
     
     AppLogger().debug('🎭 ROLES: User role: $_userRole, isModerator: $isModerator');
     AppLogger().debug('🎭 ROLES: Current user ID: ${_currentUser?.id}');
@@ -5946,10 +6428,20 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                         final isCurrentUser = participant['userId'] == _currentUserId;
                         final isCurrentlyModerator = currentRole == 'moderator';
 
+                        // Only moderators and super moderators can change roles
                         // Super moderators can change any role, including their own
-                        final superModService = SuperModeratorService();
-                        final isSuperMod = _currentUserId != null && superModService.isSuperModerator(_currentUserId!);
-                        final canChangeRole = isSuperMod || !(isCurrentUser && isCurrentlyModerator);
+                        // Regular moderators can change other users' roles, but not their own
+                        // Exception: Regular moderators CANNOT move the room moderator (only super mods can)
+                        final isTargetModerator = currentRole == 'moderator';
+                        final canChangeModerator = _isSuperModerator; // Only super mods can reassign moderator
+                        final canChangeRole = isTargetModerator
+                            ? canChangeModerator
+                            : (_isSuperModerator || (_isModerator && !isCurrentUser));
+
+                        // Debug logging for role assignment permissions
+                        if (index == 0) {
+                          AppLogger().debug('🔍 Role assignment check: isSuperMod=$_isSuperModerator, isModerator=$_isModerator, canChangeRole=$canChangeRole');
+                        }
                         
                         return Container(
                           margin: const EdgeInsets.only(bottom: 20),
@@ -6119,6 +6611,33 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                         ],
                                       ],
                                     ),
+                                    // Show timeout countdown if user is timed out (visible to moderators/super mods)
+                                    if ((_isModerator || _isSuperModerator)) ...[
+                                      const SizedBox(height: 8),
+                                      FutureBuilder<Map<String, dynamic>?>(
+                                        future: UserTimeoutService().getActiveTimeout(
+                                          participant['userId'],
+                                          widget.roomId,
+                                        ),
+                                        builder: (context, snapshot) {
+                                          if (snapshot.hasData && snapshot.data != null) {
+                                            final expiresAt = DateTime.parse(snapshot.data!['expiresAt']);
+                                            return TimeoutCountdownWidget(
+                                              expiresAt: expiresAt,
+                                              onExpired: () {
+                                                // Refresh participants when timeout expires
+                                                if (mounted) {
+                                                  setState(() {
+                                                    _loadParticipants();
+                                                  });
+                                                }
+                                              },
+                                            );
+                                          }
+                                          return const SizedBox.shrink();
+                                        },
+                                      ),
+                                    ],
                                   ],
                                 ),
 
@@ -6223,7 +6742,21 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                         'judge2',
                                         'judge3',
                                         'audience'
-                                      ].map((role) {
+                                      ].where((role) {
+                                        // Always show current role
+                                        if (role == currentRole) return true;
+
+                                        // Always show audience (unlimited)
+                                        if (role == 'audience') return true;
+
+                                        // Check if this role is already occupied by another user
+                                        final isOccupied = allParticipants.any((p) =>
+                                          p['currentRole'] == role && p['userId'] != participant['userId']
+                                        );
+
+                                        // Only show if not occupied (empty slot)
+                                        return !isOccupied;
+                                      }).map((role) {
                                         return DropdownMenuItem<String>(
                                           value: role,
                                           child: Container(
@@ -6496,15 +7029,14 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         },
         child: Row(
           children: [
-            CircleAvatar(
+            buildAvatarWithGiftOverlay(
+              participant: user,
               radius: 16,
-              backgroundColor: role.isNotEmpty ? getAvatarColorForRole(role) : getAvatarColorForRole('audience'),
-              backgroundImage: user.avatar != null && user.avatar!.isNotEmpty
-                  ? NetworkImage(user.avatar!)
-                  : null,
-              child: user.avatar == null || user.avatar!.isEmpty
-                  ? buildAvatarText(user, 12)
-                  : null,
+              role: role.isNotEmpty ? role : 'audience',
+              avatarEmojiOverlays: _avatarEmojiOverlays,
+              avatarGiftIndicators: _avatarGiftIndicators,
+              senderAvatarTransformations: _senderAvatarTransformations,
+              fontSize: 12,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -6759,11 +7291,21 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   void _forceNavigationHomeSync() {
     AppLogger().info('FORCE NAVIGATION HOME - SYNCHRONOUS approach');
-    
+
     // CRITICAL: Set exit flag FIRST to stop timer immediately
     _isExiting = true;
     AppLogger().debug('🛑 Set _isExiting=true to stop timer');
-    
+
+    // CRITICAL: Disconnect from LiveKit BEFORE navigation
+    if (_liveKitService.isConnected) {
+      AppLogger().info('🎤 Disconnecting microphone before forced navigation...');
+      _liveKitService.disconnect().then((_) {
+        AppLogger().info('✅ Microphone disconnected before navigation');
+      }).catchError((e) {
+        AppLogger().warning('⚠️ Error disconnecting microphone: $e');
+      });
+    }
+
     // AGGRESSIVE timer cancellation with verification
     AppLogger().debug('🛑 Attempting to cancel room status checker...');
     if (_roomStatusChecker != null) {
@@ -6774,7 +7316,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     } else {
       AppLogger().debug('🛑 Timer was already null');
     }
-    
+
     AppLogger().debug('🛑 Cancelling realtime subscription...');
     // Cancel consolidated subscriptions
     _realtimeManager.unsubscribeFromRoom(widget.roomId);
@@ -7588,14 +8130,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             _userRole = newRole;
             AppLogger().info('🔄 SELF ROLE UPDATE: Updated own role from $oldRole to $_userRole');
 
-            // If role changed to/from a speaking role, reconnect WebRTC with proper permissions
+            // If role changed to/from a speaking role, update LiveKit permissions immediately
             final wasPublishingRole = ['moderator', 'affirmative', 'negative', 'affirmative2', 'negative2', 'judge1', 'judge2', 'judge3']
                 .contains(oldRole);
             final isPublishingRole = _shouldUserPublishMedia();
 
             if (wasPublishingRole != isPublishingRole) {
-              AppLogger().info('🎤 Role change affects media permissions - reconnecting WebRTC');
-              _connectToWebRTC();
+              AppLogger().info('🎤 Role change affects media permissions - updating LiveKit role immediately');
+              // Use forceUpdateRole for instant permission granting (much faster than reconnecting)
+              _liveKitService.forceUpdateRole(newRole, 'arena');
             }
           }
         });
