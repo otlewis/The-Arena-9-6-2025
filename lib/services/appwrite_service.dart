@@ -2418,6 +2418,44 @@ class AppwriteService {
     }
   }
 
+  /// Exit ALL debate/discussion rooms for a user (used when migrating to arena)
+  Future<void> exitAllDebateDiscussionRooms({required String userId}) async {
+    try {
+      AppLogger().info('🚪 Exiting all debate/discussion rooms for user $userId...');
+
+      // Find all rooms this user is currently in
+      final participantEntries = await databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.debateDiscussionParticipantsCollection,
+        queries: [
+          Query.equal('userId', userId),
+          Query.equal('status', 'joined'),
+        ],
+      );
+
+      if (participantEntries.documents.isEmpty) {
+        AppLogger().debug('No active debate/discussion rooms to exit');
+        return;
+      }
+
+      // Exit each room the user is in
+      for (var entry in participantEntries.documents) {
+        final roomId = entry.data['roomId'] as String;
+        try {
+          await leaveDebateDiscussionRoom(roomId: roomId, userId: userId);
+          AppLogger().info('✅ Exited debate/discussion room: $roomId');
+        } catch (e) {
+          AppLogger().warning('⚠️ Failed to exit room $roomId: $e');
+        }
+      }
+
+      AppLogger().info('✅ Successfully exited ${participantEntries.documents.length} debate/discussion room(s)');
+    } catch (e) {
+      AppLogger().error('Error exiting all debate/discussion rooms: $e');
+      rethrow;
+    }
+  }
+
   /// Update participant's lastSeen timestamp for presence tracking
   Future<void> updateDebateDiscussionParticipantPresence({
     required String roomId,
@@ -2731,6 +2769,7 @@ class AppwriteService {
     bool? audioReady,
     String? videoTrackSid,
     String? audioTrackSid,
+    bool? isOnPhoneCall,
   }) async {
     try {
       // Query for participant document
@@ -2755,6 +2794,7 @@ class AppwriteService {
       if (audioReady != null) updateData['audioReady'] = audioReady;
       if (videoTrackSid != null) updateData['videoTrackSid'] = videoTrackSid;
       if (audioTrackSid != null) updateData['audioTrackSid'] = audioTrackSid;
+      if (isOnPhoneCall != null) updateData['isOnPhoneCall'] = isOnPhoneCall;
       updateData['lastActiveAt'] = DateTime.now().toIso8601String();
 
       await databases.updateDocument(
@@ -3354,13 +3394,13 @@ class AppwriteService {
       for (var doc in response.documents) {
         final participantData = Map<String, dynamic>.from(doc.data);
         participantData['id'] = doc.$id;
-        
+
         // Get user profile for each participant
         final userProfile = await getUserProfile(participantData['userId']);
         if (userProfile != null) {
           participantData['userProfile'] = userProfile.toMap();
         }
-        
+
         participants.add(participantData);
       }
 
@@ -3368,6 +3408,91 @@ class AppwriteService {
     } catch (e) {
       AppLogger().error('Error getting Arena participants: $e');
       return [];
+    }
+  }
+
+  /// CHALLENGE FIX: Verify and repair missing debaters in challenge arena rooms
+  /// This function checks if both debaters from a challenge are present in the arena
+  /// and adds them if they're missing. This fixes the issue where only one debater shows up.
+  Future<void> verifyAndRepairChallengeDebaters({
+    required String roomId,
+    required String challengerId,
+    required String challengedId,
+  }) async {
+    try {
+      AppLogger().info('🔍 CHALLENGE FIX: Verifying debaters for room $roomId');
+
+      // Get arena room to find positions
+      final roomDoc = await databases.getDocument(
+        databaseId: 'arena_db',
+        collectionId: 'arena_rooms',
+        documentId: roomId,
+      );
+
+      final challengeId = roomDoc.data['challengeId'] as String?;
+      if (challengeId == null || challengeId.isEmpty) {
+        AppLogger().debug('Not a challenge room, skipping repair');
+        return;
+      }
+
+      // Get the challenge to determine positions
+      final challengeDoc = await databases.getDocument(
+        databaseId: 'arena_db',
+        collectionId: 'challenge_messages',
+        documentId: challengeId,
+      );
+
+      final challengerPosition = challengeDoc.data['position'] as String? ?? 'affirmative';
+      final challengedPosition = challengerPosition == 'affirmative' ? 'negative' : 'affirmative';
+
+      AppLogger().info('🔍 CHALLENGE FIX: Challenger should be $challengerPosition, Challenged should be $challengedPosition');
+
+      // Get existing participants
+      final participantsResponse = await databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'arena_participants',
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('isActive', true),
+        ],
+      );
+
+      final existingParticipants = participantsResponse.documents;
+      final existingUserIds = existingParticipants.map((p) => p.data['userId'] as String).toSet();
+
+      AppLogger().info('🔍 CHALLENGE FIX: Found ${existingParticipants.length} existing participants');
+      AppLogger().info('🔍 CHALLENGE FIX: Existing user IDs: $existingUserIds');
+
+      // Check if challenger is missing
+      if (!existingUserIds.contains(challengerId)) {
+        AppLogger().warning('⚠️ CHALLENGE FIX: Challenger $challengerId is MISSING - adding them now');
+        await assignArenaRole(
+          roomId: roomId,
+          userId: challengerId,
+          role: challengerPosition,
+        );
+        AppLogger().info('✅ CHALLENGE FIX: Added missing challenger as $challengerPosition');
+      } else {
+        AppLogger().info('✅ CHALLENGE FIX: Challenger $challengerId is present');
+      }
+
+      // Check if challenged user is missing
+      if (!existingUserIds.contains(challengedId)) {
+        AppLogger().warning('⚠️ CHALLENGE FIX: Challenged user $challengedId is MISSING - adding them now');
+        await assignArenaRole(
+          roomId: roomId,
+          userId: challengedId,
+          role: challengedPosition,
+        );
+        AppLogger().info('✅ CHALLENGE FIX: Added missing challenged user as $challengedPosition');
+      } else {
+        AppLogger().info('✅ CHALLENGE FIX: Challenged user $challengedId is present');
+      }
+
+      AppLogger().info('✅ CHALLENGE FIX: Debater verification complete');
+    } catch (e) {
+      AppLogger().error('❌ CHALLENGE FIX: Error verifying debaters: $e');
+      // Don't rethrow - this is a repair function and shouldn't break the arena
     }
   }
 
@@ -3418,6 +3543,48 @@ class AppwriteService {
       AppLogger().info('Updated arena participant status for user $userId in room $roomId');
     } catch (e) {
       AppLogger().error('Error updating arena participant status: $e');
+      rethrow;
+    }
+  }
+
+  /// DEBATER MODERATOR: Update arena participant role
+  Future<void> updateArenaParticipantRole({
+    required String roomId,
+    required String userId,
+    required String newRole,
+  }) async {
+    try {
+      // Find the participant document
+      final response = await databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'arena_participants',
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.equal('userId', userId),
+          Query.equal('isActive', true),
+        ],
+      );
+
+      if (response.documents.isEmpty) {
+        AppLogger().warning('No active participant found for user $userId in room $roomId');
+        return;
+      }
+
+      final participantDoc = response.documents.first;
+
+      // Update role
+      await databases.updateDocument(
+        databaseId: 'arena_db',
+        collectionId: 'arena_participants',
+        documentId: participantDoc.$id,
+        data: {
+          'role': newRole,
+        },
+      );
+
+      AppLogger().info('👨‍⚖️ Updated arena participant role to $newRole for user $userId in room $roomId');
+    } catch (e) {
+      AppLogger().error('❌ Error updating arena participant role: $e');
       rethrow;
     }
   }

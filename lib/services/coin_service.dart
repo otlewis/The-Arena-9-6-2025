@@ -85,14 +85,14 @@ class CoinService {
   Future<bool> deductCoins(String userId, int amount) async {
     try {
       final currentCoins = await getUserCoins(userId);
-      
+
       if (currentCoins < amount) {
         AppLogger().warning('Insufficient coins for user $userId. Has: $currentCoins, needs: $amount');
         return false;
       }
-      
+
       final newBalance = currentCoins - amount;
-      
+
       // Update the user's coin balance
       await _appwrite.databases.updateDocument(
         databaseId: 'arena_db',
@@ -103,11 +103,111 @@ class CoinService {
           // Appwrite automatically updates $updatedAt
         },
       );
-      
+
       AppLogger().info('Deducted $amount coins from user $userId. New balance: $newBalance');
       return true;
     } catch (e) {
       AppLogger().error('Error deducting coins: $e');
+      return false;
+    }
+  }
+
+  /// INSTANT DEDUCTION: Deduct coins with immediate database update (no balance check delay)
+  /// This method directly updates the database without fetching current balance first.
+  /// Use this for instant deductions where you've already verified the balance locally.
+  ///
+  /// Parameters:
+  /// - userId: The user's ID
+  /// - amount: Amount to deduct
+  /// - currentBalance: The current balance (already known/verified)
+  ///
+  /// Returns: true if successful, false if insufficient funds or error
+  Future<bool> deductCoinsInstant(String userId, int amount, int currentBalance) async {
+    try {
+      // Quick validation
+      if (currentBalance < amount) {
+        AppLogger().warning('⚡ INSTANT DEDUCT: Insufficient coins for user $userId. Has: $currentBalance, needs: $amount');
+        return false;
+      }
+
+      if (amount <= 0) {
+        AppLogger().warning('⚡ INSTANT DEDUCT: Invalid amount: $amount');
+        return false;
+      }
+
+      final newBalance = currentBalance - amount;
+
+      AppLogger().info('⚡ INSTANT DEDUCT: Deducting $amount coins from user $userId. New balance: $newBalance');
+
+      // Directly update the database without fetching balance first
+      await _appwrite.databases.updateDocument(
+        databaseId: 'arena_db',
+        collectionId: 'users',
+        documentId: userId,
+        data: {
+          'coinBalance': newBalance,
+          // Appwrite automatically updates $updatedAt
+        },
+      );
+
+      AppLogger().info('✅ INSTANT DEDUCT: Successfully deducted $amount coins from user $userId');
+      return true;
+    } catch (e) {
+      AppLogger().error('❌ INSTANT DEDUCT: Error deducting coins: $e');
+      return false;
+    }
+  }
+
+  /// INSTANT DEDUCTION WITH MINIMUM BALANCE: Deduct coins ensuring balance doesn't go below minimum
+  /// This is useful for premium features where you want to keep a minimum balance
+  ///
+  /// Parameters:
+  /// - userId: The user's ID
+  /// - amount: Amount to deduct
+  /// - currentBalance: The current balance (already known/verified)
+  /// - minimumBalance: Minimum balance to maintain (default: 0)
+  ///
+  /// Returns: true if successful, false if would go below minimum or error
+  Future<bool> deductCoinsInstantWithMinimum({
+    required String userId,
+    required int amount,
+    required int currentBalance,
+    int minimumBalance = 0,
+  }) async {
+    try {
+      final newBalance = currentBalance - amount;
+
+      // Check if deduction would go below minimum
+      if (newBalance < minimumBalance) {
+        AppLogger().warning(
+          '⚡ INSTANT DEDUCT: Would go below minimum balance. '
+          'Current: $currentBalance, Deduct: $amount, Minimum: $minimumBalance'
+        );
+        return false;
+      }
+
+      if (amount <= 0) {
+        AppLogger().warning('⚡ INSTANT DEDUCT: Invalid amount: $amount');
+        return false;
+      }
+
+      AppLogger().info('⚡ INSTANT DEDUCT: Deducting $amount coins from user $userId (min: $minimumBalance). New balance: $newBalance');
+
+      // Directly update the database
+      await _appwrite.databases.updateDocument(
+        databaseId: 'arena_db',
+        collectionId: 'users',
+        documentId: userId,
+        data: {
+          'coinBalance': newBalance,
+          // Appwrite automatically updates $updatedAt
+        },
+      );
+
+      AppLogger().info('✅ INSTANT DEDUCT: Successfully deducted $amount coins from user $userId');
+      return true;
+    } catch (e) {
+      AppLogger().error('❌ INSTANT DEDUCT: Error deducting coins: $e');
       return false;
     }
   }

@@ -577,6 +577,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   StreamSubscription? _sourceAddedSubscription; // Material source additions
   StreamSubscription? _materialUpdatesSubscription; // Material updates
   RealtimeSubscription? _reactionsSubscription; // Room reactions and gifts subscription
+  RealtimeSubscription? _participantsSubscription; // Participant role changes subscription
   int _roomStatusCheckerIterations = 0; // Track iterations to prevent infinite loops
   int _reconnectAttempts = 0; // Track reconnection attempts
   static const int _maxReconnectAttempts = 5; // Maximum reconnection attempts
@@ -655,6 +656,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     'judge2': null,
     'judge3': null,
   };
+
+  // Realtime role change tracking (race condition prevention + deduplication)
+  final Map<String, DateTime> _lastRoleChangeTimestamps = {}; // userId -> timestamp
+  final Map<String, String> _lastProcessedRoleChanges = {}; // userId -> "${role}_${timestamp}"
+  static const Duration _roleChangeIdempotencyWindow = Duration(seconds: 2); // Ignore duplicate changes within 2 seconds
   
   final List<UserProfile> _audience = [];
 
@@ -710,7 +716,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _initializeInstantMessaging();
     _initializeWebRTC();
     _initializeReactionsSync();
-    
+    _initializeParticipantsSync(); // Initialize hybrid realtime role change listeners
+
     // Set up speaking detection listener
     _speakingService.addListener(_onSpeakingStateChanged);
     
@@ -850,14 +857,24 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
     
     AppLogger().info('iOS User authenticated: $_currentUserId, proceeding with optimized setup');
-    
-    // Step 4: Load participants in parallel with other setup
+
+    // Step 4: CHALLENGE FIX - Verify both debaters are present if this is a challenge room
+    if (widget.challengeId.isNotEmpty && widget.challengerId != null && widget.challengedId != null) {
+      AppLogger().info('🔍 CHALLENGE FIX: Verifying debaters before loading participants (iOS)');
+      await _appwrite.verifyAndRepairChallengeDebaters(
+        roomId: widget.roomId,
+        challengerId: widget.challengerId!,
+        challengedId: widget.challengedId!,
+      );
+    }
+
+    // Step 5: Load participants in parallel with other setup
     final setupFutures = <Future>[
       _loadParticipantsOptimized(),
       Future.microtask(() => _setupRealtimeSubscription()),
       Future.microtask(() => _startRoomStatusChecker()),
     ];
-    
+
     await Future.wait(setupFutures);
     
     // Step 5: Update iOS cache for future fast loading
@@ -887,10 +904,20 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     // Step 4: Start room status checker
     _startRoomStatusChecker();
 
-    // Step 5: Load participants to get user role and connect WebRTC
+    // Step 5: CHALLENGE FIX - Verify both debaters are present if this is a challenge room
+    if (widget.challengeId.isNotEmpty && widget.challengerId != null && widget.challengedId != null) {
+      AppLogger().info('🔍 CHALLENGE FIX: Verifying debaters before loading participants');
+      await _appwrite.verifyAndRepairChallengeDebaters(
+        roomId: widget.roomId,
+        challengerId: widget.challengerId!,
+        challengedId: widget.challengedId!,
+      );
+    }
+
+    // Step 6: Load participants to get user role and connect WebRTC
     await _loadParticipants();
 
-    // Step 6: Start presence heartbeat (updates lastSeen every 15 seconds)
+    // Step 7: Start presence heartbeat (updates lastSeen every 15 seconds)
     _startPresenceHeartbeat();
 
     // Chat service removed - now handled by floating chat button
@@ -935,7 +962,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     // Dispose reactions subscription
     _reactionsSubscription?.close();
     _reactionsSubscription = null;
-    
+
+    // Dispose participants subscription
+    _participantsSubscription?.close();
+    _participantsSubscription = null;
+
     AppLogger().debug('🛑 DISPOSE: Cancelling room status checker...');
     if (_roomStatusChecker != null) {
       _roomStatusChecker!.cancel();
@@ -1643,12 +1674,25 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         }
       };
       
-      _liveKitService.onParticipantConnected = (participant) {
-          AppLogger().debug('👤 Participant joined Arena: ${participant.identity}');
-          if (mounted) {
-            setState(() {
-              // Update UI for new participant
-            });
+      _liveKitService.onParticipantConnected = (participant) async {
+          AppLogger().info('👤 CHALLENGE FIX: Participant joined Arena - ${participant.identity}');
+
+          // CRITICAL FIX: When participants join from challenge transitions, they may arrive
+          // before their Appwrite participant data is fully propagated. This causes the
+          // "invisible debater" bug where audio works but video doesn't render.
+
+          if (mounted && !_isExiting) {
+            AppLogger().info('🔄 CHALLENGE FIX: Refreshing participant data after LiveKit connection');
+
+            // Step 1: Reload participants from database to ensure we have latest data
+            await _loadParticipants();
+
+            // Step 2: Force UI rebuild to pick up the new participant's video stream
+            if (mounted) {
+              setState(() {
+                AppLogger().debug('✅ CHALLENGE FIX: UI refreshed for new participant');
+              });
+            }
           }
         };
 
@@ -1673,7 +1717,25 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             });
           }
         };
-      
+
+        // Set up metadata change listener for role changes (LiveKit)
+        _liveKitService.onMetadataChanged = (String userId, Map<String, dynamic> metadata) {
+          AppLogger().debug('📝 LiveKit metadata changed for $userId: $metadata');
+
+          if (metadata['role'] != null && mounted && !_isExiting) {
+            final newRole = metadata['role'] as String;
+            AppLogger().info('📡 LIVEKIT: Participant role update - User $userId → $newRole');
+
+            // Handle role change via unified handler
+            _handleParticipantRoleChange(
+              userId: userId,
+              newRole: newRole,
+              timestamp: DateTime.now(), // LiveKit doesn't provide server timestamp, use local
+              source: 'livekit',
+            );
+          }
+        };
+
       // Legacy callback setup - now handled by audio adapter
       // _webrtcService.onTrackSubscribed, onError, onDisconnected are managed by the adapter
 
@@ -1811,6 +1873,110 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       AppLogger().info('🎁 Arena reactions sync initialized');
     } catch (e) {
       AppLogger().error('❌ Failed to initialize reactions sync: $e');
+    }
+  }
+
+  /// Initialize real-time participant role changes sync (Appwrite)
+  Future<void> _initializeParticipantsSync() async {
+    if (!mounted) return;
+
+    try {
+      // Subscribe to participant changes for this room
+      final realtime = _appwrite.realtime;
+
+      _participantsSubscription = realtime.subscribe([
+        'databases.arena_db.collections.arena_participants.documents'
+      ]);
+
+      AppLogger().info('✅ REALTIME: Subscribed to arena_participants (Appwrite)');
+
+      _participantsSubscription!.stream.listen((response) async {
+        if (!mounted || _isExiting) return;
+
+        try {
+          final payload = response.payload;
+          final roomId = payload['roomId'];
+
+          // Only process events for this room
+          if (roomId != widget.roomId) {
+            return;
+          }
+
+          // Process update events (role changes)
+          if (response.events.any((event) => event.contains('.update'))) {
+            final userId = payload['userId'];
+            final newRole = payload['role'];
+            final updatedAt = payload['\$updatedAt'];
+
+            if (userId != null && newRole != null) {
+              AppLogger().info('📡 APPWRITE: Participant role update - User $userId → $newRole');
+
+              // Parse timestamp from Appwrite
+              DateTime? timestamp;
+              if (updatedAt != null) {
+                try {
+                  timestamp = DateTime.parse(updatedAt);
+                } catch (e) {
+                  AppLogger().warning('Failed to parse timestamp: $updatedAt');
+                }
+              }
+
+              // Handle role change via unified handler
+              _handleParticipantRoleChange(
+                userId: userId,
+                newRole: newRole,
+                timestamp: timestamp,
+                source: 'appwrite',
+              );
+            }
+          }
+
+          // Process create events (new participants joining)
+          if (response.events.any((event) => event.contains('.create'))) {
+            final userId = payload['userId'];
+            final newRole = payload['role'];
+
+            if (userId != null && newRole != null) {
+              AppLogger().info('📡 APPWRITE: New participant joined - User $userId as $newRole');
+              AppLogger().info('🎯 2v2 FIX: New ${newRole} joined - triggering full participant refresh');
+
+              // CRITICAL FIX FOR 2v2: When new participants join (especially affirmative2/negative2),
+              // existing users need to see them immediately without leaving/rejoining
+              if (mounted && !_isExiting) {
+                // Step 1: Refresh participant list to get new user data
+                await _loadParticipants();
+
+                // Step 2: Force UI rebuild to show new participants
+                // LiveKit will automatically detect the new participant via room events
+                // and the UI rebuild will pick up their audio/video streams
+                if (mounted) {
+                  setState(() {
+                    AppLogger().debug('🔄 2v2 FIX: UI refreshed to show new participant in $newRole slot');
+                  });
+                }
+              }
+            }
+          }
+
+          // Process delete events (participants leaving)
+          if (response.events.any((event) => event.contains('.delete'))) {
+            final userId = payload['userId'];
+
+            if (userId != null) {
+              AppLogger().info('📡 APPWRITE: Participant left - User $userId');
+
+              // Refresh participant list for departures
+              _loadParticipants();
+            }
+          }
+
+        } catch (e) {
+          AppLogger().error('Error processing participant realtime event: $e');
+        }
+      });
+
+    } catch (e) {
+      AppLogger().error('❌ Failed to initialize participants sync: $e');
     }
   }
 
@@ -2238,25 +2404,39 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         AppLogger().debug('🚀 INSTANT: User role $_userRole does not need auto-connect');
         return;
       }
-      
+
       // Prevent repeated auto-connect if already connected and audio is initialized
       if (_isWebRTCConnected && !_liveKitService.isMuted) {
         AppLogger().debug('🚀 INSTANT: Already connected and audio enabled, skipping auto-connect');
         return;
       }
-      
+
       // Only auto-connect if not already connected to LiveKit
       if (!_isWebRTCConnected) {
-        AppLogger().debug('🚀 INSTANT: Parallel WebRTC connection...');
+        AppLogger().info('🚀 MODERATOR FIX: Starting LiveKit connection for role: $_userRole');
         await _connectToWebRTC();
-        
-        // Minimal wait for connection establishment
-        await Future.delayed(const Duration(milliseconds: 100));
-        
-        if (!_isWebRTCConnected) {
-          AppLogger().error('🚀 INSTANT: Connection pending, retrying...');
-          // Don't give up, try once more immediately
-          await Future.delayed(const Duration(milliseconds: 200));
+
+        // Wait for connection with retries (important for moderators joining in-progress arenas)
+        int retries = 0;
+        const maxRetries = 3;
+        const retryDelay = Duration(milliseconds: 500);
+
+        while (!_isWebRTCConnected && retries < maxRetries && mounted) {
+          retries++;
+          AppLogger().warning('🚀 MODERATOR FIX: Connection attempt $retries/$maxRetries - waiting...');
+          await Future.delayed(retryDelay);
+
+          // Check if connection succeeded during the delay
+          if (!_isWebRTCConnected && mounted) {
+            AppLogger().info('🚀 MODERATOR FIX: Retry connection attempt $retries/$maxRetries');
+            await _connectToWebRTC();
+          }
+        }
+
+        if (_isWebRTCConnected) {
+          AppLogger().info('✅ MODERATOR FIX: Successfully connected after ${retries > 0 ? retries : 1} attempt(s)');
+        } else {
+          AppLogger().error('❌ MODERATOR FIX: Failed to connect after $maxRetries attempts');
         }
       }
       
@@ -2365,8 +2545,28 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
       // Connect to audio first if not connected
       if (!_isWebRTCConnected) {
-        AppLogger().debug('🎤 Not connected to WebRTC - connecting now');
+        AppLogger().info('🎤 MODERATOR FIX: Not connected to WebRTC - initiating connection for $_userRole');
+
+        // Force reload participant data to ensure we have the correct role
+        await _loadParticipants();
+        AppLogger().info('🎤 MODERATOR FIX: Role verified: $_userRole, can publish: ${_shouldUserPublishMedia()}');
+
+        // Now attempt connection
         await _connectToWebRTC();
+
+        // Wait a bit for connection to establish
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        // Check if connection succeeded
+        if (!_isWebRTCConnected && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⏳ Connecting to audio... Please try again in a moment'),
+              backgroundColor: Colors.blue,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
         return;
       }
 
@@ -3114,6 +3314,152 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
+  /// Handle participant role change from realtime events (Appwrite or LiveKit)
+  /// Implements:
+  /// - Server timestamps & idempotency (prevents race conditions)
+  /// - "First arrival wins" pattern (minimizes perceived latency)
+  /// - Fallback fetch for edge cases (defensive programming)
+  Future<void> _handleParticipantRoleChange({
+    required String userId,
+    required String newRole,
+    DateTime? timestamp,
+    String? source, // 'appwrite' or 'livekit'
+  }) async {
+    if (!mounted || _isExiting) return;
+
+    try {
+      final now = DateTime.now();
+      final eventTimestamp = timestamp ?? now;
+
+      AppLogger().info('🔄 REALTIME ROLE CHANGE: User $userId → $newRole (source: ${source ?? "unknown"}, timestamp: $eventTimestamp)');
+
+      // Step 1: Idempotency check - prevent duplicate processing
+      final changeKey = '${newRole}_${eventTimestamp.millisecondsSinceEpoch}';
+      final lastProcessed = _lastProcessedRoleChanges[userId];
+
+      if (lastProcessed == changeKey) {
+        AppLogger().debug('⏭️ DUPLICATE: Already processed this exact role change for $userId');
+        return;
+      }
+
+      // Step 2: Race condition prevention - only process if newer than last change
+      final lastTimestamp = _lastRoleChangeTimestamps[userId];
+      if (lastTimestamp != null && eventTimestamp.isBefore(lastTimestamp)) {
+        AppLogger().debug('⏭️ STALE: Ignoring older role change event for $userId (last: $lastTimestamp, received: $eventTimestamp)');
+        return;
+      }
+
+      // Step 3: Idempotency window check - prevent rapid duplicate changes
+      if (lastTimestamp != null &&
+          eventTimestamp.difference(lastTimestamp) < _roleChangeIdempotencyWindow) {
+        AppLogger().debug('⏭️ THROTTLE: Ignoring rapid duplicate role change within ${_roleChangeIdempotencyWindow.inSeconds}s window');
+        return;
+      }
+
+      // Step 4: Record this change
+      _lastRoleChangeTimestamps[userId] = eventTimestamp;
+      _lastProcessedRoleChanges[userId] = changeKey;
+
+      AppLogger().info('✅ PROCESSING: Role change for $userId → $newRole (${source ?? "unknown"})');
+
+      // Step 5: Optimistic UI update - "first arrival wins"
+      bool needsFullRefresh = false;
+
+      if (userId == _currentUserId) {
+        // Current user's role changed
+        final oldRole = _userRole;
+        _userRole = newRole;
+        AppLogger().info('🎭 CURRENT USER ROLE CHANGED: $oldRole → $newRole');
+        needsFullRefresh = true; // Full refresh needed for permissions
+      } else {
+        // Another participant's role changed
+        // Try to update locally if we have their profile
+        UserProfile? userProfile;
+
+        // Check if user is in participants
+        for (final entry in _participants.entries) {
+          if (entry.value?.id == userId) {
+            userProfile = entry.value;
+            break;
+          }
+        }
+
+        // Check if user is in audience
+        if (userProfile == null) {
+          userProfile = _audience.firstWhere(
+            (u) => u.id == userId,
+            orElse: () => UserProfile(
+              id: userId,
+              name: 'Unknown',
+              email: '',
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ),
+          );
+        }
+
+        if (userProfile.name != 'Unknown') {
+          // We have the profile - update locally (optimistic)
+          if (newRole == 'audience') {
+            // Move to audience
+            _participants.forEach((role, participant) {
+              if (participant?.id == userId) {
+                _participants[role] = null;
+              }
+            });
+            if (!_audience.any((u) => u.id == userId)) {
+              _audience.add(userProfile);
+            }
+          } else {
+            // Move from audience or reassign role
+            _audience.removeWhere((u) => u.id == userId);
+            _participants.forEach((role, participant) {
+              if (participant?.id == userId) {
+                _participants[role] = null;
+              }
+            });
+            _participants[newRole] = userProfile;
+          }
+
+          AppLogger().info('🎭 LOCAL UPDATE: Moved $userId to $newRole (optimistic)');
+        } else {
+          // Don't have profile - need full refresh
+          needsFullRefresh = true;
+        }
+      }
+
+      // Step 6: UI update
+      if (mounted) {
+        setState(() {
+          // UI will reflect the optimistic changes above
+        });
+      }
+
+      // Step 7: Defensive programming - full refresh if needed or periodically
+      if (needsFullRefresh) {
+        AppLogger().info('🔄 FULL REFRESH: Fetching complete participant list from database');
+        await _loadParticipants();
+      } else {
+        // Even if optimistic update succeeded, verify with server after a short delay
+        // This catches edge cases where local state diverged from server truth
+        Future.delayed(const Duration(seconds: 3), () async {
+          if (!mounted || _isExiting) return;
+          AppLogger().debug('🔍 VERIFY: Checking server state for consistency');
+          await _loadParticipants();
+        });
+      }
+
+    } catch (e, stackTrace) {
+      AppLogger().error('Error handling realtime role change: $e');
+      AppLogger().error('Stack trace: $stackTrace');
+
+      // Fallback: Full refresh on any error
+      if (mounted && !_isExiting) {
+        await _loadParticipants();
+      }
+    }
+  }
+
   // iOS-specific optimized loading methods
   
   /// Optimized user data loading for iOS with caching
@@ -3728,6 +4074,167 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     );
   }
 
+  /// DEBATER MODERATOR SELECTION: Allow debaters to choose moderator from audience
+  void _showDebaterModeratorSelection() {
+    // Check if there's already a moderator
+    final hasModerator = _participants['moderator'] != null;
+
+    if (hasModerator) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ A moderator has already been assigned'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    // All audience members are eligible (they're already filtered - not judges or debaters)
+    final availableModerators = List<UserProfile>.from(_audience);
+
+    if (availableModerators.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ No audience members available to select as moderator'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        maxChildSize: 0.8,
+        minChildSize: 0.4,
+        builder: (context, scrollController) => Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              // Header
+              const Text(
+                'Select Moderator',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Choose an audience member to moderate this debate',
+                style: TextStyle(
+                  color: Colors.grey[400],
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+
+              // Audience list
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  itemCount: availableModerators.length,
+                  itemBuilder: (context, index) {
+                    final user = availableModerators[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: const Color(0xFF8B5CF6),
+                        child: Text(
+                          user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                      ),
+                      title: Text(
+                        user.name,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      subtitle: Text(
+                        'Audience Member',
+                        style: TextStyle(color: Colors.grey[400]),
+                      ),
+                      trailing: ElevatedButton(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          await _assignModeratorRole(user);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF8B5CF6),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        ),
+                        child: const Text('Select'),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Assign moderator role to a user from the audience
+  Future<void> _assignModeratorRole(UserProfile user) async {
+    try {
+      AppLogger().info('👨‍⚖️ DEBATER MODERATOR: Assigning ${user.name} as moderator');
+
+      // Update participant role in database
+      await _appwrite.updateArenaParticipantRole(
+        roomId: widget.roomId,
+        userId: user.id,
+        newRole: 'moderator',
+      );
+
+      // Update local state
+      setState(() {
+        _participants['moderator'] = user;
+
+        // Remove from audience
+        _audience.removeWhere((u) => u.id == user.id);
+      });
+
+      AppLogger().info('✅ DEBATER MODERATOR: ${user.name} assigned as moderator successfully');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ ${user.name} is now the moderator'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+
+      // Reload participants to ensure consistency
+      await _loadParticipants();
+
+    } catch (e) {
+      AppLogger().error('❌ DEBATER MODERATOR: Error assigning moderator: $e');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to assign moderator: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
 
   void _showUserProfile(UserProfile userProfile, String? userRole) {
     showModalBottomSheet(
@@ -3854,7 +4361,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         backgroundColor: Colors.black,
         appBar: ArenaAppBar(
           isModerator: _isModerator,
+          isDebater: _isDebater, // DEBATER MODERATOR: Pass debater status
           onShowModeratorControls: _showModeratorControlModal,
+          onShowDebaterControls: _isDebater && !_isModerator
+              ? _showDebaterModeratorSelection
+              : null, // DEBATER MODERATOR: Only show if debater and no moderator
           onExitArena: _exitArena,
           onEmergencyCloseRoom: _emergencyCloseRoom,
           roomId: widget.roomId,
@@ -4903,9 +5414,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     // Check if we have video stream
     bool hasVideo = false;
     RTCVideoRenderer? renderer;
-    
+
     AppLogger().debug('📹 Building video feed for ${participant.name} (isLocal: $isLocalUser, role: $role)');
-    
+
     if (isLocalUser && _localStream != null) {
       // Local user - show their own video if available
       final videoTracks = _localStream!.getVideoTracks();
@@ -4928,13 +5439,17 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           renderer = _remoteRenderers[peerId];
           AppLogger().debug('📹 Using remote renderer for ${participant.name}');
         } else {
-          AppLogger().debug('📹 No renderer found for ${participant.name} (peerId: $peerId)');
+          AppLogger().warning('⚠️ CHALLENGE FIX: No renderer found for ${participant.name}!');
+          AppLogger().warning('   - peerId: $peerId');
+          AppLogger().warning('   - _userToPeerMapping keys: ${_userToPeerMapping.keys.toList()}');
+          AppLogger().warning('   - _remoteRenderers keys: ${_remoteRenderers.keys.toList()}');
+          AppLogger().warning('   - This causes the "invisible but audible" bug!');
         }
       }
     } else {
       AppLogger().debug('📹 No stream available for ${participant.name}');
     }
-    
+
     AppLogger().debug('📹 Final decision for ${participant.name}: hasVideo=$hasVideo, renderer=${renderer != null}');
     
     if (hasVideo && renderer != null) {

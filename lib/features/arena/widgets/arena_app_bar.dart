@@ -11,7 +11,9 @@ import '../../../widgets/simple_timer.dart';
 /// This is the exact app bar from the original arena with timer and moderator controls
 class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool isModerator;
+  final bool isDebater; // DEBATER MODERATOR: Track if user is a debater
   final VoidCallback onShowModeratorControls;
+  final VoidCallback? onShowDebaterControls; // DEBATER MODERATOR: Optional debater controls
   final VoidCallback onExitArena;
   final VoidCallback onEmergencyCloseRoom;
   final String roomId;
@@ -22,7 +24,9 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
   const ArenaAppBar({
     super.key,
     required this.isModerator,
+    this.isDebater = false, // DEBATER MODERATOR: Default to false
     required this.onShowModeratorControls,
+    this.onShowDebaterControls, // DEBATER MODERATOR: Optional callback
     required this.onExitArena,
     required this.onEmergencyCloseRoom,
     required this.roomId,
@@ -73,8 +77,8 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
                       child: IconButton(
                         padding: EdgeInsets.zero,
                         onPressed: onShowModeratorControls,
-                        icon: Icon(Icons.admin_panel_settings, 
-                               color: Colors.purple, 
+                        icon: Icon(Icons.admin_panel_settings,
+                               color: Colors.purple,
                                size: isSmallScreen ? 14 : 16),
                         tooltip: 'Moderator Controls',
                       ),
@@ -86,10 +90,36 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
                       child: IconButton(
                         padding: EdgeInsets.zero,
                         onPressed: onEmergencyCloseRoom,
-                        icon: Icon(Icons.close, 
-                               color: Colors.red, 
+                        icon: Icon(Icons.close,
+                               color: Colors.red,
                                size: isSmallScreen ? 12 : 14),
                         tooltip: 'Emergency Close Room',
+                      ),
+                    ),
+                    SizedBox(width: isSmallScreen ? 2 : 4),
+                  ],
+                ),
+
+              // DEBATER MODERATOR: Debater Controls Icon (visible to debaters when no moderator)
+              if (!isModerator && isDebater && onShowDebaterControls != null)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: isSmallScreen ? 24 : 28,
+                      height: isSmallScreen ? 24 : 28,
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.blue, width: 1.5),
+                      ),
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        onPressed: onShowDebaterControls,
+                        icon: Icon(Icons.person_add,
+                               color: Colors.blue,
+                               size: isSmallScreen ? 14 : 16),
+                        tooltip: 'Select Moderator',
                       ),
                     ),
                     SizedBox(width: isSmallScreen ? 2 : 4),

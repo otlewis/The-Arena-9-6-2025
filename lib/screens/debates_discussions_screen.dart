@@ -16,8 +16,10 @@ import '../services/livekit_token_service.dart';
 import '../services/livekit_config_service.dart';
 import '../services/super_moderator_service.dart';
 import '../services/user_timeout_service.dart';
+import '../services/phone_call_detection_service.dart';
 // import '../services/chat_service.dart'; // Removed with new chat system
 import '../models/user_profile.dart';
+import '../widgets/timeout_countdown_widget.dart';
 import '../models/gift.dart';
 import '../features/arena/constants/arena_colors.dart';
 import '../widgets/animated_fade_in.dart';
@@ -116,6 +118,10 @@ class DebatesDiscussionsScreen extends StatefulWidget {
   final String? roomName;
   final String? moderatorName;
 
+  // Static flag to prevent "kicked from room" modal when navigating to arena for a challenge
+  // This is set by optimized_navigation.dart before cleaning up participants
+  static bool isNavigatingToArena = false;
+
   const DebatesDiscussionsScreen({
     super.key,
     required this.roomId,
@@ -129,6 +135,7 @@ class DebatesDiscussionsScreen extends StatefulWidget {
 
 class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     with NetworkOptimizationMixin, ListOptimizationMixin, WidgetsBindingObserver, AutomaticKeepAliveClientMixin, DisposalTrackingMixin, WeakReferenceMixin {
+
   final AppwriteService _appwrite = AppwriteService();
   final FirebaseGiftService _giftService = FirebaseGiftService();
   final LiveKitService _webrtcService = LiveKitService();
@@ -168,6 +175,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   // AI Moderation and Audio Volume services
   final RealtimeAIModerationService _aiModerationService = RealtimeAIModerationService();
   final AudioVolumeService _audioVolumeService = AudioVolumeService();
+  final PhoneCallDetectionService _phoneCallService = PhoneCallDetectionService();
   
   
   // Room data
@@ -188,6 +196,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   // Gift sender indicators (userId -> bool) - shows gift icon on sender's avatar
   final Map<String, bool> _avatarGiftIndicators = {};
 
+  // Sender avatar transformations (userId -> emoji) - transforms sender's avatar into gift/reaction
+  final Map<String, String> _senderAvatarTransformations = {};
+
   // Receiver reaction animations (userId -> emoji) - shows emoji that explodes into confetti
   final Map<String, String> _receiverReactionAnimations = {};
 
@@ -195,7 +206,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   final Set<String> _debateWinners = {};
 
   // Participants
-  final List<UserProfile> _speakerPanelists = []; // Max 6 speakers
+  final List<UserProfile> _speakerPanelists = []; // Max 9 total (1 moderator + 8 speakers)
   final List<UserProfile> _audienceMembers = [];
   final List<UserProfile> _speakerRequests = []; // Pending speaker requests
 
@@ -210,8 +221,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   // Real-time reactions sync
   RealtimeSubscription? _reactionsSubscription;
 
+  // Real-time participant role changes sync
+  RealtimeSubscription? _participantsSubscription;
+
   // Role mapping for participants (userId -> role)
   final Map<String, String> _participantRoles = {};
+
+  // Realtime role change tracking (race condition prevention + deduplication)
+  final Map<String, DateTime> _lastRoleChangeTimestamps = {}; // userId -> timestamp
+  final Map<String, String> _lastProcessedRoleChanges = {}; // userId -> "${role}_${timestamp}"
+  static const Duration _roleChangeIdempotencyWindow = Duration(seconds: 2); // Ignore duplicate changes within 2 seconds
 
   // In-flight fetch tracking to prevent redundant database calls
   final Set<String> _inFlightFetches = {};
@@ -225,6 +244,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   Timer? _reconnectionTimer;
   Timer? _participantSyncTimer;
   Timer? _presenceHeartbeatTimer; // Updates lastSeen every 15 seconds
+  Timer? _timeoutCheckTimer; // Checks timeout status every 10 seconds
   bool _wasOffline = false;
   
   // Materials system
@@ -289,6 +309,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   StreamSubscription? _firebaseParticipantSubscription; // Firebase participant sync
   StreamSubscription? _materialUpdatesSubscription; // Material updates subscription
   StreamSubscription? _sourceAddedSubscription; // Source added subscription
+  StreamSubscription? _timeoutSubscription; // User timeout real-time updates
 
   @override
   bool get wantKeepAlive => true; // Keep widget alive to prevent recreation
@@ -335,6 +356,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     _initializeWebRTC();
     _initializeSpeakerQueueSync();
     _initializeReactionsSync();
+    _initializeParticipantsSync(); // Initialize hybrid realtime role change listeners
 
     // Add LiveKit service listener to sync mute state changes from data messages
     _liveKitService.addListener(_onLiveKitStateChanged);
@@ -349,11 +371,64 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       }
     };
 
+    // Set up metadata change listener for role changes (LiveKit)
+    _liveKitService.onMetadataChanged = (String userId, Map<String, dynamic> metadata) {
+      AppLogger().debug('📝 LiveKit metadata changed for $userId: $metadata');
+
+      if (metadata['role'] != null && mounted && !_isDisposing) {
+        final newRole = metadata['role'] as String;
+        AppLogger().info('📡 LIVEKIT: Participant role update - User $userId → $newRole');
+
+        // Handle role change via unified handler
+        _handleParticipantRoleChange(
+          userId: userId,
+          newRole: newRole,
+          timestamp: DateTime.now(), // LiveKit doesn't provide server timestamp, use local
+          source: 'livekit',
+        );
+      }
+    };
+
+    // Initialize phone call detection and broadcast state
+    _initializePhoneCallDetection();
+
     // Configure audio for maximum volume
     _configureAudio();
 
     // Start connection health monitoring to prevent user drops
     _startConnectionHealthMonitoring();
+  }
+
+  /// Initialize phone call detection and broadcast state to other participants
+  Future<void> _initializePhoneCallDetection() async {
+    try {
+      await _phoneCallService.initialize();
+
+      // Listen for phone call state changes
+      _phoneCallService.addListener(() {
+        if (!mounted || _currentUser == null) return;
+
+        // Broadcast phone call state to other participants
+        _appwrite.updateDebateDiscussionParticipantMedia(
+          roomId: widget.roomId,
+          userId: _currentUser!.id,
+          isOnPhoneCall: _phoneCallService.isOnPhoneCall,
+        ).catchError((e) {
+          AppLogger().error('Failed to broadcast phone call state: $e');
+        });
+
+        // Update UI
+        if (mounted) {
+          setState(() {
+            // Trigger rebuild to show/hide phone icon
+          });
+        }
+
+        AppLogger().info('📞 Phone call state updated: ${_phoneCallService.isOnPhoneCall}');
+      });
+    } catch (e) {
+      AppLogger().error('Failed to initialize phone call detection: $e');
+    }
   }
 
   /// Handle LiveKit service state changes (especially mute state from data messages)
@@ -522,23 +597,20 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         return;
       }
 
-      // Check if user is timed out
+      // Check if user is timed out - show modal each time they try to unmute
       if (_currentUser?.id != null) {
         final timeoutService = UserTimeoutService();
         final isTimedOut = await timeoutService.isUserTimedOut(_currentUser!.id, widget.roomId);
 
         if (isTimedOut) {
-          final remainingMinutes = await timeoutService.getRemainingTimeoutMinutes(_currentUser!.id, widget.roomId);
-          AppLogger().debug('⏰ User is timed out - cannot unmute (${remainingMinutes ?? 0} minutes remaining)');
+          final timeout = await timeoutService.getActiveTimeout(_currentUser!.id, widget.roomId);
 
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('⏰ You are timed out and cannot speak for ${remainingMinutes ?? 0} more minute(s)'),
-                backgroundColor: Colors.red,
-                duration: const Duration(seconds: 3),
-              ),
-            );
+          if (timeout != null && mounted) {
+            final expiresAt = DateTime.parse(timeout['expiresAt']);
+            AppLogger().debug('⏰ User is timed out - showing timeout modal');
+
+            // Show the timeout modal with countdown timer
+            _showTimeoutModal(expiresAt);
           }
           return;
         }
@@ -1220,6 +1292,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
       // Start presence heartbeat (updates lastSeen every 15 seconds)
       _startPresenceHeartbeat();
+
+      // Start periodic timeout status check (checks every 10 seconds)
+      _startTimeoutCheck();
     } catch (e) {
       AppLogger().error('❌ Error joining room: $e');
 
@@ -1341,25 +1416,81 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       final timeoutService = UserTimeoutService();
       final isTimedOut = await timeoutService.isUserTimedOut(_currentUser!.id, widget.roomId);
 
-      // If status changed from not timed out to timed out, show modal
-      if (mounted && !_isCurrentUserTimedOut && isTimedOut) {
-        final remainingMinutes = await timeoutService.getRemainingTimeoutMinutes(_currentUser!.id, widget.roomId);
-
+      // Always update the state if it changed
+      if (mounted && _isCurrentUserTimedOut != isTimedOut) {
         setState(() {
           _isCurrentUserTimedOut = isTimedOut;
         });
 
-        // Show timeout modal
-        if (mounted) {
-          _showTimeoutModal(remainingMinutes ?? 0);
+        // CRITICAL FIX: Show timeout modal when user is FIRST timed out
+        if (isTimedOut && mounted) {
+          AppLogger().warning('⏰ User just timed out - showing timeout modal');
+
+          // Get timeout details to show expiration time
+          final timeout = await timeoutService.getActiveTimeout(_currentUser!.id, widget.roomId);
+          if (timeout != null && mounted) {
+            final expiresAt = DateTime.parse(timeout['expiresAt']);
+            _showTimeoutModal(expiresAt);
+          }
         }
-      } else if (mounted && _isCurrentUserTimedOut != isTimedOut) {
-        setState(() {
-          _isCurrentUserTimedOut = isTimedOut;
-        });
+
+        // If user was just released from timeout, refresh their permissions
+        if (!isTimedOut && mounted) {
+          AppLogger().info('✅ Timeout expired - permissions restored for ${_currentUser!.id}');
+
+          // Dismiss timeout overlay if it's showing
+          if (_timeoutExpiresAt != null) {
+            setState(() {
+              _timeoutExpiresAt = null;
+            });
+          }
+
+          // Show success message to user
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Timeout expired - you can now unmute, chat, and leave the room'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+
+          // Force a complete UI rebuild to ensure all buttons are enabled
+          setState(() {
+            // Trigger rebuild
+          });
+        }
       }
     } catch (e) {
       AppLogger().error('Error checking timeout status: $e');
+    }
+  }
+
+  /// Set up real-time subscription for user timeout changes
+  void _setupTimeoutSubscription() {
+    if (_currentUser == null) return;
+
+    try {
+      final realtime = _appwrite.realtime;
+
+      // Subscribe to user_timeouts collection for this user and room
+      _timeoutSubscription = realtime.subscribe([
+        'databases.arena_db.collections.user_timeouts.documents',
+      ]).stream.listen((response) async {
+        AppLogger().debug('⏰ Timeout subscription event: ${response.events}');
+
+        // Check if this timeout event is for the current user in this room
+        final payload = response.payload;
+        if (payload['userId'] == _currentUser!.id && payload['roomId'] == widget.roomId) {
+          AppLogger().info('⏰ REAL-TIME: Timeout event for current user');
+
+          // Immediately check timeout status to show modal
+          await _checkTimeoutStatus();
+        }
+      });
+
+      AppLogger().info('✅ User timeout real-time subscription established');
+    } catch (e) {
+      AppLogger().error('Failed to set up timeout subscription: $e');
     }
   }
 
@@ -1396,9 +1527,29 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     }
   }
 
-  /// Show timeout notification modal
-  void _showTimeoutModal(int remainingMinutes) {
-    // Immediately mute the user when timeout modal appears
+  /// Start periodic timeout status check
+  /// Checks every 10 seconds to automatically restore permissions when timeout expires
+  void _startTimeoutCheck() {
+    // Cancel existing timer if any
+    _timeoutCheckTimer?.cancel();
+
+    // Check immediately
+    _checkTimeoutStatus();
+
+    // Set up periodic checks every 10 seconds
+    _timeoutCheckTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _checkTimeoutStatus(),
+    );
+
+    AppLogger().debug('⏰ Started periodic timeout status check');
+  }
+
+  /// Show timeout notification overlay - stores expiration time
+  DateTime? _timeoutExpiresAt;
+
+  void _showTimeoutModal(DateTime expiresAt) {
+    // Immediately mute the user when timeout appears
     if (_isCurrentUserSpeaker || _isCurrentUserModerator) {
       if (!_isMuted) {
         _toggleMute();
@@ -1406,141 +1557,37 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       }
     }
 
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.timer,
-                color: Colors.orange,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Flexible(
-              child: Text(
-                'You\'ve Been Timed Out',
-                style: TextStyle(
-                  color: Colors.black87,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.orange.withOpacity(0.3),
-                    width: 1,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.access_time, color: Colors.orange, size: 18),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            '$remainingMinutes minute${remainingMinutes != 1 ? 's' : ''}',
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'You cannot:',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Row(
-                      children: [
-                        Icon(Icons.mic_off, size: 14, color: Colors.black54),
-                        SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            'Speak or unmute',
-                            style: TextStyle(fontSize: 13, color: Colors.black54),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    const Row(
-                      children: [
-                        Icon(Icons.chat_bubble_outline, size: 14, color: Colors.black54),
-                        SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            'Send messages',
-                            style: TextStyle(fontSize: 13, color: Colors.black54),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'You can still listen. Privileges will be restored when timeout expires.',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.black54,
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Understood'),
-          ),
-        ],
-      ),
-    );
+    // Store expiration time to show in UI
+    setState(() {
+      _timeoutExpiresAt = expiresAt;
+    });
+  }
+
+  /// Dismiss timeout overlay and mark as acknowledged in database
+  Future<void> _dismissTimeoutOverlay() async {
+    if (_currentUser == null) return;
+
+    // CRITICAL: Dismiss overlay UI IMMEDIATELY for responsive UX
+    if (mounted) {
+      setState(() {
+        _timeoutExpiresAt = null;
+        _isCurrentUserTimedOut = false;
+      });
+    }
+
+    // Then update database in background
+    try {
+      final timeoutService = UserTimeoutService();
+      final success = await timeoutService.removeTimeout(_currentUser!.id, widget.roomId);
+
+      if (success) {
+        AppLogger().info('✅ Timeout dismissed and marked inactive in database');
+      } else {
+        AppLogger().error('Failed to mark timeout as inactive in database');
+      }
+    } catch (e) {
+      AppLogger().error('Failed to update timeout in database: $e');
+    }
   }
 
   void _showDebateParticipantOptions(UserProfile user) {
@@ -1904,6 +1951,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     _votingSessionSubscription?.cancel();
     _voteCountSubscription?.cancel();
 
+    // Timeout subscription
+    _timeoutSubscription?.cancel();
+
     // Legacy subscriptions
     _unreadMessagesSubscription?.cancel();
     _firebaseParticipantSubscription?.cancel();
@@ -1915,6 +1965,12 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
     // Reactions subscription
     _reactionsSubscription?.close();
+
+    // Participants subscription
+    _participantsSubscription?.close();
+
+    // Phone call detection
+    _phoneCallService.dispose();
 
     // Clean up Firebase when leaving room (temporarily disabled)
     // _firebaseSync.clearRoom(widget.roomId);
@@ -1930,6 +1986,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     _reconnectionTimer?.cancel();
     _participantSyncTimer?.cancel();
     _presenceHeartbeatTimer?.cancel();
+    _timeoutCheckTimer?.cancel();
     
     // Stop AI moderation
     _aiModerationService.stopRoomMonitoring(widget.roomId);
@@ -2246,7 +2303,21 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           _audienceMembers.addAll(newAudience);
           _speakerRequests.addAll(newRequests);
         });
-        
+
+        // CRITICAL FIX: Ensure moderator status is preserved even if not in participants list
+        // This prevents moderators from losing their powers when participants change
+        if (_roomData != null && _currentUser != null) {
+          final isRoomCreator = _roomData!['createdBy'] == _currentUser!.id;
+          final isModeratorById = _roomData!['moderatorId'] == _currentUser!.id;
+
+          if ((isRoomCreator || isModeratorById) && !_isCurrentUserModerator) {
+            AppLogger().warning('🔧 MODERATOR FIX: Restoring moderator status from room data (not found in participants)');
+            operations.add(() {
+              _isCurrentUserModerator = true;
+            });
+          }
+        }
+
         // RACE CONDITION FIX: Execute role operations immediately instead of batching
         // This ensures role flags are set before _autoConnectAudio() is called
         AppLogger().debug('🔍 IMMEDIATE OPERATIONS: About to execute ${operations.length} operations immediately');
@@ -2409,6 +2480,151 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   // Mock participants method removed - we now handle errors properly
   // instead of showing fake data that misleads users
 
+  /// Handle participant role change from realtime events (Appwrite or LiveKit)
+  /// Implements:
+  /// - Server timestamps & idempotency (prevents race conditions)
+  /// - "First arrival wins" pattern (minimizes perceived latency)
+  /// - Fallback fetch for edge cases (defensive programming)
+  Future<void> _handleParticipantRoleChange({
+    required String userId,
+    required String newRole,
+    DateTime? timestamp,
+    String? source, // 'appwrite' or 'livekit'
+  }) async {
+    if (!mounted || _isDisposing) return;
+
+    try {
+      final now = DateTime.now();
+      final eventTimestamp = timestamp ?? now;
+
+      AppLogger().info('🔄 REALTIME ROLE CHANGE: User $userId → $newRole (source: ${source ?? "unknown"}, timestamp: $eventTimestamp)');
+
+      // Step 1: Idempotency check - prevent duplicate processing
+      final changeKey = '${newRole}_${eventTimestamp.millisecondsSinceEpoch}';
+      final lastProcessed = _lastProcessedRoleChanges[userId];
+
+      if (lastProcessed == changeKey) {
+        AppLogger().debug('⏭️ DUPLICATE: Already processed this exact role change for $userId');
+        return;
+      }
+
+      // Step 2: Race condition prevention - only process if newer than last change
+      final lastTimestamp = _lastRoleChangeTimestamps[userId];
+      if (lastTimestamp != null && eventTimestamp.isBefore(lastTimestamp)) {
+        AppLogger().debug('⏭️ STALE: Ignoring older role change event for $userId (last: $lastTimestamp, received: $eventTimestamp)');
+        return;
+      }
+
+      // Step 3: Idempotency window check - prevent rapid duplicate changes
+      if (lastTimestamp != null &&
+          eventTimestamp.difference(lastTimestamp) < _roleChangeIdempotencyWindow) {
+        AppLogger().debug('⏭️ THROTTLE: Ignoring rapid duplicate role change within ${_roleChangeIdempotencyWindow.inSeconds}s window');
+        return;
+      }
+
+      // Step 4: Record this change
+      _lastRoleChangeTimestamps[userId] = eventTimestamp;
+      _lastProcessedRoleChanges[userId] = changeKey;
+
+      AppLogger().info('✅ PROCESSING: Role change for $userId → $newRole (${source ?? "unknown"})');
+
+      // Step 5: Optimistic UI update - "first arrival wins"
+      bool needsFullRefresh = false;
+
+      if (userId == _currentUser?.id) {
+        // Current user's role changed
+        AppLogger().info('🎭 CURRENT USER ROLE CHANGED → $newRole');
+
+        // Update role flags
+        _isCurrentUserModerator = (newRole == 'moderator');
+        _isCurrentUserSpeaker = (newRole == 'speaker');
+
+        needsFullRefresh = true; // Full refresh needed for permissions
+      } else {
+        // Another participant's role changed
+        // Try to find their profile and update locally
+        UserProfile? userProfile;
+
+        // Check speakers
+        userProfile = _speakerPanelists.firstWhere(
+          (p) => p.id == userId,
+          orElse: () => UserProfile(id: '', name: '', email: '', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        );
+
+        // Check audience
+        if (userProfile.id.isEmpty) {
+          userProfile = _audienceMembers.firstWhere(
+            (p) => p.id == userId,
+            orElse: () => UserProfile(id: '', name: '', email: '', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+          );
+        }
+
+        // Check pending requests
+        if (userProfile.id.isEmpty) {
+          userProfile = _speakerRequests.firstWhere(
+            (p) => p.id == userId,
+            orElse: () => UserProfile(id: '', name: '', email: '', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+          );
+        }
+
+        if (userProfile.id.isNotEmpty) {
+          // We have the profile - update locally (optimistic)
+          _speakerPanelists.removeWhere((p) => p.id == userId);
+          _audienceMembers.removeWhere((p) => p.id == userId);
+          _speakerRequests.removeWhere((p) => p.id == userId);
+
+          switch (newRole) {
+            case 'speaker':
+            case 'moderator':
+              _speakerPanelists.add(userProfile);
+              break;
+            case 'pending':
+              _speakerRequests.add(userProfile);
+              break;
+            case 'audience':
+            default:
+              _audienceMembers.add(userProfile);
+              break;
+          }
+
+          AppLogger().info('🎭 LOCAL UPDATE: Moved $userId to $newRole (optimistic)');
+        } else {
+          // Don't have profile - need full refresh
+          needsFullRefresh = true;
+        }
+      }
+
+      // Step 6: UI update
+      if (mounted) {
+        setState(() {
+          // UI will reflect the optimistic changes above
+        });
+      }
+
+      // Step 7: Defensive programming - full refresh if needed or periodically
+      if (needsFullRefresh) {
+        AppLogger().info('🔄 FULL REFRESH: Fetching complete participant list from database');
+        await _loadParticipants();
+      } else {
+        // Even if optimistic update succeeded, verify with server after a short delay
+        Future.delayed(const Duration(seconds: 3), () async {
+          if (!mounted || _isDisposing) return;
+          AppLogger().debug('🔍 VERIFY: Checking server state for consistency');
+          await _loadParticipants();
+        });
+      }
+
+    } catch (e, stackTrace) {
+      AppLogger().error('Error handling realtime role change: $e');
+      AppLogger().error('Stack trace: $stackTrace');
+
+      // Fallback: Full refresh on any error
+      if (mounted && !_isDisposing) {
+        await _loadParticipants();
+      }
+    }
+  }
+
   void _setupRealTimeUpdates() async {
     try {
       AppLogger().info('📡 Setting up consolidated real-time subscriptions for room: ${widget.roomId}');
@@ -2463,7 +2679,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       );
       // Track room status subscription
       trackSubscription('room_status_stream', _roomStatusStreamListener!);
-      
+
+      // Subscribe to user timeout changes for instant modal display
+      _setupTimeoutSubscription();
+
     } catch (e) {
       AppLogger().error('Error setting up real-time updates: $e');
     }
@@ -2617,6 +2836,14 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       // CHECK: If the removed user is the current user, they were kicked/banned - navigate to home
       final isCurrentUser = userId == _currentUser?.id;
       if (isCurrentUser && mounted && !_isDisposing) {
+        // CRITICAL: Don't show kicked modal if user is navigating to arena for a challenge
+        if (DebatesDiscussionsScreen.isNavigatingToArena) {
+          AppLogger().info('🏛️ Current user removed from room (navigating to arena) - skipping kick modal');
+          // Reset the flag after using it
+          DebatesDiscussionsScreen.isNavigatingToArena = false;
+          return;
+        }
+
         AppLogger().warning('🚪 Current user was removed from room (kicked/banned) - navigating to home screen');
 
         // Clean up LiveKit connection before navigating
@@ -2823,6 +3050,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       case 'negative':
         if (!_speakerPanelists.any((p) => p.id == user.id)) {
           _speakerPanelists.add(user);
+          // CRITICAL: Sort to maintain consistent slot ordering (same as _loadParticipants)
+          // This prevents visual "jumping" when participants are added via real-time updates
+          _speakerPanelists.sort((a, b) => a.id.compareTo(b.id));
         }
         break;
       case 'pending':
@@ -2971,7 +3201,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                       if (event.endsWith('.update')) {
                         final newRole = response.payload['role'];
                         final userId = response.payload['userId'];
-                        
+
+                        // Update LiveKit role if this is the current user
+                        if (userId == _currentUser?.id && newRole != null) {
+                          AppLogger().info('🎭 ROLE CHANGE: Current user role changed to: $newRole');
+                          _liveKitService.forceUpdateRole(newRole, 'debate_discussion');
+                        }
+
                         if (newRole == 'pending') {
                           AppLogger().info('Hand-raise detected after reconnect: $userId');
                           isHandRaiseEvent = true;
@@ -3174,89 +3410,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       }
     } catch (e) {
       AppLogger().error('Error showing hand-raise notification: $e');
-      // Fallback to the old method
-      _showNewSpeakerRequestNotification();
+      // Fallback removed - only use the new "Hand Raised!" modal
+      // _showNewSpeakerRequestNotification();
     }
-  }
-
-  void _showNewSpeakerRequestNotification() {
-    // Get the latest speaker request
-    if (_speakerRequests.isEmpty) return;
-    
-    final latestRequest = _speakerRequests.last;
-    
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: Colors.grey[900],
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF8B5CF6).withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  LucideIcons.hand,
-                  color: Color(0xFF8B5CF6),
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Speaker Request',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            '${latestRequest.name} wants to join the speakers panel',
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 16,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _denySpeakerRequest(latestRequest);
-              },
-              child: const Text(
-                'Deny',
-                style: TextStyle(color: Colors.red),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _approveSpeakerRequest(latestRequest);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF8B5CF6),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text(
-                'Approve',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   void _handleRoomUpdate(dynamic response) async {
@@ -3328,10 +3484,52 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
 
 
+  /// Check if all speaker slots are filled
+  bool _areAllSlotsFilled() {
+    final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
+    if (isDebateRoom) {
+      // For debate rooms, check if both positions are filled
+      final hasAffirmative = _participantRoles.values.contains('affirmative');
+      final hasNegative = _participantRoles.values.contains('negative');
+      return hasAffirmative && hasNegative;
+    } else {
+      // For discussion rooms, check if speaker panel is full (max 8 speakers excluding moderator = 9 total)
+      final otherSpeakersCount = _speakerPanelists.where((speaker) => speaker.id != _moderator?.id).length;
+      return otherSpeakersCount >= 8;
+    }
+  }
+
   void _requestToJoinSpeakers() async {
     if (_isCurrentUserModerator || _currentUser == null) {
       return;
     }
+
+    // HAND-RAISE FIX: Double-check slot availability from database in real-time
+    AppLogger().info('🤚 HAND-RAISE FIX: Checking slot availability before raising hand');
+
+    // Force refresh participants to get latest slot status
+    await _loadParticipants();
+
+    // Check if speaker slots are full (after refresh)
+    if (_areAllSlotsFilled()) {
+      final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
+      AppLogger().warning('❌ HAND-RAISE FIX: Slots filled - user tried to raise hand but all positions taken');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isDebateRoom
+              ? '❌ All debate positions are now filled'
+              : '❌ Speaker panel is now full (8/8 speakers)'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    AppLogger().info('✅ HAND-RAISE FIX: Slots available - proceeding with hand raise');
 
     // Check if current user is a Super Moderator
     final superModService = SuperModeratorService();
@@ -3551,10 +3749,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     } else {
       // For regular rooms, use the original logic
       final otherSpeakersCount = _speakerPanelists.where((speaker) => speaker.id != _moderator?.id).length;
-      if (otherSpeakersCount >= 6) {
+      if (otherSpeakersCount >= 8) {
         return;
       }
-      
+
       AppLogger().debug('🏛️ Assigning user to regular speaker role');
       await _assignUserToRole(user, 'speaker');
     }
@@ -4101,6 +4299,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     try {
       AppLogger().info('🚪 User leaving room - role: ${_isCurrentUserModerator ? 'moderator' : _isCurrentUserSpeaker ? 'speaker' : 'audience'}');
 
+      // CRITICAL: Disconnect LiveKit audio FIRST to prevent audio bleeding
+      if (_liveKitService.isConnected) {
+        AppLogger().info('🔇 Disconnecting LiveKit audio before leaving room');
+        await _liveKitService.disconnect();
+        AppLogger().info('✅ LiveKit audio disconnected');
+      }
+
       if (_isJoined && _currentUser != null) {
         await _appwrite.leaveDebateDiscussionRoom(
           roomId: widget.roomId,
@@ -4261,11 +4466,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         AppLogger().debug('🚪 PopScope triggered - didPop: $didPop, joined: $_isJoined, disposing: $_isDisposing');
         AppLogger().debug('🚪 User role - moderator: $_isCurrentUserModerator, speaker: $_isCurrentUserSpeaker, timed out: $_isCurrentUserTimedOut');
 
-        // Prevent leaving if user is timed out (trap them in the room)
-        if (_isCurrentUserTimedOut) {
-          AppLogger().debug('🚪 User is timed out - preventing navigation');
-          return;
-        }
+        // REMOVED: Timeout check - users can now leave even when timed out
+        // This allows users to exit the room if they need to
 
         if (!didPop && _isJoined && _currentUser != null && !_isDisposing) {
           // Capture navigator before async operation
@@ -4305,14 +4507,35 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            _buildHeader(),
-            _buildRoomTitleSection(),
-            Expanded(
-              child: _buildVideoGrid(),
+            // Main content
+            Column(
+              children: [
+                _buildHeader(),
+                _buildRoomTitleSection(),
+                Expanded(
+                  child: _buildVideoGrid(),
+                ),
+                _buildControlsBar(),
+              ],
             ),
-            _buildControlsBar(),
+
+            // Timeout overlay (positioned above control bar)
+            if (_timeoutExpiresAt != null)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _TimeoutOverlay(
+                  expiresAt: _timeoutExpiresAt!,
+                  onExpired: () {
+                    _checkTimeoutStatus();
+                    // Don't auto-dismiss - wait for user
+                  },
+                  onDismiss: _dismissTimeoutOverlay,
+                ),
+              ),
           ],
         ),
       ),
@@ -4328,16 +4551,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       child: Row(
         children: [
           GestureDetector(
-            onTap: _isCurrentUserTimedOut ? null : () => Navigator.pop(context),
+            onTap: () => Navigator.pop(context), // Allow users to leave even when timed out
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(_isCurrentUserTimedOut ? 0.05 : 0.1),
+                color: Colors.white.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Icon(
+              child: const Icon(
                 LucideIcons.arrowLeft,
-                color: _isCurrentUserTimedOut ? Colors.grey : Colors.white,
+                color: Colors.white,
                 size: 20,
               ),
             ),
@@ -4669,6 +4892,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       isCurrentUserModerator: _isCurrentUserModerator, // Pass moderator status
       activeReactions: _activeReactions, // Pass active reactions
       avatarEmojiOverlays: _avatarEmojiOverlays, // Pass avatar emoji overlays
+      senderAvatarTransformations: _senderAvatarTransformations, // Pass sender transformations for audience
+      avatarGiftIndicators: _avatarGiftIndicators, // Pass gift indicators for audience
       onSpeakerTap: (userId) {
         final speaker = _speakerPanelists.firstWhere((s) => s.id == userId);
         final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
@@ -4797,6 +5022,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   }) {
     final hasGiftIndicator = _avatarGiftIndicators[participant.id] == true;
     final receiverEmoji = _receiverReactionAnimations[participant.id];
+    final senderTransformEmoji = _senderAvatarTransformations[participant.id];
     final isWinner = _debateWinners.contains(participant.id);
 
     return Stack(
@@ -4823,7 +5049,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
               ],
             ),
           ),
-        // Avatar
+        // Avatar (or transformed emoji)
         Container(
           width: radius * 2,
           height: radius * 2,
@@ -4836,16 +5062,18 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                   ),
                 )
               : null,
-          child: CircleAvatar(
-            radius: radius,
-            backgroundColor: const Color(0xFF8B5CF6),
-            backgroundImage: participant.avatar != null && participant.avatar!.isNotEmpty
-                ? NetworkImage(participant.avatar!)
-                : null,
-            child: participant.avatar == null || participant.avatar!.isEmpty
-                ? _buildAvatarText(participant, fontSize ?? (isModerator ? 18 : 14))
-                : null,
-          ),
+          child: senderTransformEmoji != null
+              ? _buildTransformedAvatar(senderTransformEmoji, radius)
+              : CircleAvatar(
+                  radius: radius,
+                  backgroundColor: const Color(0xFF8B5CF6),
+                  backgroundImage: participant.avatar != null && participant.avatar!.isNotEmpty
+                      ? NetworkImage(participant.avatar!)
+                      : null,
+                  child: participant.avatar == null || participant.avatar!.isEmpty
+                      ? _buildAvatarText(participant, fontSize ?? (isModerator ? 18 : 14))
+                      : null,
+                ),
         ),
         // Gift indicator (small gift icon in top-right corner)
         if (hasGiftIndicator)
@@ -4912,6 +5140,31 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     );
   }
 
+  /// Build transformed avatar - sender's avatar becomes the gift/reaction emoji
+  Widget _buildTransformedAvatar(String emoji, double radius) {
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 500),
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        // Pulse animation - scale in and out
+        final scale = 1.0 + (0.2 * (1.0 - (value - 0.5).abs() * 2));
+
+        return CircleAvatar(
+          radius: radius,
+          backgroundColor: Colors.white.withOpacity(0.9),
+          child: Transform.scale(
+            scale: scale,
+            child: Text(
+              emoji,
+              style: TextStyle(
+                fontSize: radius * 1.2, // Make emoji nice and big
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   // Unused method - kept for potential future use
   // ignore: unused_element
@@ -5098,7 +5351,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     final screenWidth = MediaQuery.of(context).size.width;
     final avatarSize = screenWidth < 360 ? 36.0 : 42.0;
     final fontSize = screenWidth < 360 ? 9.0 : 10.0;
-    
+
     return GestureDetector(
       onTap: () {
         final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
@@ -5129,6 +5382,77 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                 participant: member,
                 radius: avatarSize / 2,
                 fontSize: avatarSize * 0.35,
+              ),
+              // Show timeout badge for moderators
+              if (_hasModeratorPowers)
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: FutureBuilder<Map<String, dynamic>?>(
+                    future: UserTimeoutService().getActiveTimeout(member.id, widget.roomId),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData && snapshot.data != null) {
+                        final timeout = snapshot.data!;
+                        final expiresAt = DateTime.parse(timeout['expiresAt']);
+                        final remaining = expiresAt.difference(DateTime.now());
+
+                        if (remaining.isNegative) return const SizedBox.shrink();
+
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white, width: 1),
+                          ),
+                          child: Text(
+                            '${remaining.inMinutes}m',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ),
+              // Show phone icon if user is on a phone call
+              FutureBuilder<List<dynamic>>(
+                future: _appwrite.databases.listDocuments(
+                  databaseId: 'arena_db',
+                  collectionId: 'debate_discussion_participants',
+                  queries: [
+                    Query.equal('userId', member.id),
+                    Query.equal('roomId', widget.roomId),
+                    Query.equal('isOnPhoneCall', true),
+                    Query.limit(1),
+                  ],
+                ).then((docs) => docs.documents),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                    return Positioned(
+                      bottom: 0,
+                      left: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.9),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        child: const Icon(
+                          Icons.phone,
+                          color: Colors.white,
+                          size: 12,
+                        ),
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
               ),
             ],
           ),
@@ -5197,25 +5521,25 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                   child: Row(
                     key: const ValueKey('debates_controls_row_narrow'),
                     children: [
-                      // Hide chat button if user is timed out
-                      if (!_isCurrentUserTimedOut) ...[
-                        _buildControlButton(
-                          icon: LucideIcons.messageCircle,
-                          label: 'Chat',
-                          color: const Color(0xFF8B5CF6),
-                          onTap: _showChat,
-                        ),
-                        const SizedBox(width: 8),
-                      ],
+                      // Chat button - timeout enforcement handled by modal
+                      _buildControlButton(
+                        icon: LucideIcons.messageCircle,
+                        label: 'Chat',
+                        color: const Color(0xFF8B5CF6),
+                        onTap: _showChat,
+                      ),
+                      const SizedBox(width: 8),
                       if (!_isCurrentUserModerator) ...[
                         _buildControlButton(
                           icon: LucideIcons.hand,
-                          label: _isCurrentUserSpeaker 
-                            ? 'Leave Panel' 
-                            : (_hasRequestedSpeaker ? 'Pending' : 'Raise Hand'),
-                          color: _isCurrentUserSpeaker 
+                          label: _isCurrentUserSpeaker
+                            ? 'Leave Panel'
+                            : (_hasRequestedSpeaker ? 'Pending' : (_areAllSlotsFilled() ? 'Slots Full' : 'Raise Hand')),
+                          color: _isCurrentUserSpeaker
                             ? Colors.amber
-                            : (_hasRequestedSpeaker ? Colors.orange : ArenaColors.accentPurple),
+                            : (_hasRequestedSpeaker
+                                ? Colors.orange
+                                : (_areAllSlotsFilled() ? Colors.grey : ArenaColors.accentPurple)),
                           onTap: _isCurrentUserSpeaker ? _requestToLeaveSpeakerPanel : _requestToJoinSpeakers,
                         ),
                         const SizedBox(width: 8),
@@ -5237,21 +5561,21 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                       ],
                       const SizedBox(width: 8),
                       _buildControlButton(
-                        icon: _isAudioConnected 
+                        icon: _isAudioConnected
                           ? (_isMuted ? Icons.volume_off : Icons.volume_up)
                           : (_isAudioConnecting ? Icons.hourglass_empty : Icons.speaker),
-                        label: _isAudioConnected 
-                          ? ((_isCurrentUserModerator || _isCurrentUserSpeaker) 
+                        label: _isAudioConnected
+                          ? ((_hasModeratorPowers || _isCurrentUserSpeaker)
                               ? (_isMuted ? 'Unmute' : 'Mute')
                               : 'Listening')
                           : (_isAudioConnecting ? 'Connecting...' : 'Audio Off'),
-                        color: _isAudioConnected 
-                          ? ((_isCurrentUserModerator || _isCurrentUserSpeaker)
+                        color: _isAudioConnected
+                          ? ((_hasModeratorPowers || _isCurrentUserSpeaker)
                               ? (_isMuted ? Colors.red : Colors.green)
                               : Colors.grey)
                           : (_isAudioConnecting ? Colors.orange : Colors.grey),
-                        onTap: _isAudioConnected 
-                          ? ((_isCurrentUserModerator || _isCurrentUserSpeaker) 
+                        onTap: _isAudioConnected
+                          ? ((_hasModeratorPowers || _isCurrentUserSpeaker)
                               ? () => _toggleMute()
                               : () {
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -5298,18 +5622,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                           ),
                         ),
                       ],
-                      // Hide Leave button if user is timed out
-                      if (!_isCurrentUserTimedOut) ...[
-                        const SizedBox(width: 8),
-                        _buildControlButton(
-                          icon: LucideIcons.logOut,
-                          label: 'Leave',
-                          color: Colors.red,
-                          onTap: () {
-                            Navigator.pop(context);
-                          },
-                        ),
-                      ],
+                      // Leave button - timeout enforcement handled by modal
+                      const SizedBox(width: 8),
+                      _buildControlButton(
+                        icon: LucideIcons.logOut,
+                        label: 'Leave',
+                        color: Colors.red,
+                        onTap: () {
+                          Navigator.pop(context);
+                        },
+                      ),
         ], // End of Row children
       ), // End of Row
     ); // End of SingleChildScrollView
@@ -5318,23 +5640,24 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    // Hide chat button if user is timed out
-                    if (!_isCurrentUserTimedOut)
-                      _buildControlButton(
-                        icon: LucideIcons.messageCircle,
-                        label: 'Chat',
-                        color: const Color(0xFF8B5CF6),
-                        onTap: _showChat,
-                      ),
+                    // Chat button - timeout enforcement handled by modal
+                    _buildControlButton(
+                      icon: LucideIcons.messageCircle,
+                      label: 'Chat',
+                      color: const Color(0xFF8B5CF6),
+                      onTap: _showChat,
+                    ),
                     if (!_isCurrentUserModerator)
                       _buildControlButton(
                         icon: LucideIcons.hand,
-                        label: _isCurrentUserSpeaker 
-                          ? 'Leave Panel' 
-                          : (_hasRequestedSpeaker ? 'Pending' : 'Raise Hand'),
-                        color: _isCurrentUserSpeaker 
+                        label: _isCurrentUserSpeaker
+                          ? 'Leave Panel'
+                          : (_hasRequestedSpeaker ? 'Pending' : (_areAllSlotsFilled() ? 'Slots Full' : 'Raise Hand')),
+                        color: _isCurrentUserSpeaker
                           ? Colors.amber
-                          : (_hasRequestedSpeaker ? Colors.orange : ArenaColors.accentPurple),
+                          : (_hasRequestedSpeaker
+                              ? Colors.orange
+                              : (_areAllSlotsFilled() ? Colors.grey : ArenaColors.accentPurple)),
                         onTap: _isCurrentUserSpeaker ? _requestToLeaveSpeakerPanel : _requestToJoinSpeakers,
                       ),
                     _buildControlButton(
@@ -5408,16 +5731,15 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                           ),
                         ),
                       ),
-                    // Hide Leave button if user is timed out
-                    if (!_isCurrentUserTimedOut)
-                      _buildControlButton(
-                        icon: LucideIcons.logOut,
-                        label: 'Leave',
-                        color: Colors.red,
-                        onTap: () {
-                          Navigator.pop(context);
-                        },
-                      ),
+                    // Leave button - timeout enforcement handled by modal
+                    _buildControlButton(
+                      icon: LucideIcons.logOut,
+                      label: 'Leave',
+                      color: Colors.red,
+                      onTap: () {
+                        Navigator.pop(context);
+                      },
+                    ),
                   ],
                 );
               }
@@ -5483,17 +5805,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   void _showChat() {
     if (_currentUser == null) return;
 
-    // Prevent opening chat if user is timed out
-    if (_isCurrentUserTimedOut) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('⏰ You are timed out and cannot access chat'),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 3),
-        ),
-      );
-      return;
-    }
+    // Timeout enforcement handled by modal - user can see chat but modal prevents sending messages
 
     // Create participants list for chat
     final chatParticipants = <ChatParticipant>[
@@ -6215,7 +6527,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                       final member = _audienceMembers[index];
                       final hasAffirmative = _speakerPanelists.any((speaker) => _participantRoles[speaker.id] == 'affirmative');
                       final hasNegative = _speakerPanelists.any((speaker) => _participantRoles[speaker.id] == 'negative');
-                      final canAssign = !isDebateRoom || (!hasAffirmative || !hasNegative);
+
+                      // SUPER MOD FIX: Check both role availability AND moderator permissions
+                      final hasRoleAvailable = !isDebateRoom || (!hasAffirmative || !hasNegative);
+                      final canAssign = _hasModeratorPowers && hasRoleAvailable;
                       
                       return ListTile(
                         key: ValueKey('audience_member_${member.id}'),
@@ -6228,11 +6543,13 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                           style: const TextStyle(color: Colors.white),
                         ),
                         subtitle: Text(
-                          isDebateRoom && !canAssign
-                              ? 'All positions filled'
-                              : 'Audience Member',
+                          !_hasModeratorPowers
+                              ? 'Requires moderator permissions'
+                              : (isDebateRoom && !hasRoleAvailable
+                                  ? 'All positions filled'
+                                  : 'Audience Member'),
                           style: TextStyle(
-                            color: isDebateRoom && !canAssign
+                            color: !canAssign
                                 ? Colors.orange[400]
                                 : Colors.grey[400],
                           ),
@@ -6838,11 +7155,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
             const SizedBox(height: 20),
             _buildOptionTile(
               icon: LucideIcons.users,
-              title: 'Speaker Limit (Currently: ${_speakerPanelists.length}/7)',
+              title: 'Speaker Limit (Currently: ${_speakerPanelists.length}/9)',
               onTap: () {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Room supports up to 6 speakers + 1 moderator')),
+                  const SnackBar(content: Text('Room supports up to 8 speakers + 1 moderator')),
                 );
               },
             ),
@@ -7577,6 +7894,13 @@ To join this debate:
         try {
           final payload = response.payload;
 
+          // Validate payload is a Map (runtime check for safety)
+          // ignore: unnecessary_type_check
+          if (payload is! Map<String, dynamic>) {
+            AppLogger().warning('Invalid reaction payload type: ${payload.runtimeType}');
+            return;
+          }
+
           // Only process create events
           if (response.events.any((event) => event.contains('.create'))) {
             final roomId = payload['roomId'];
@@ -7606,16 +7930,18 @@ To join this debate:
               if (reaction.isGift) {
                 AppLogger().info('🎁 Received gift: ${reaction.emoji} (${reaction.giftName}) from ${reaction.senderName} to ${reaction.targetUserId}');
 
-                // Show gift icon on SENDER's avatar
+                // Transform SENDER's avatar into the gift emoji
                 if (mounted) {
                   setState(() {
+                    _senderAvatarTransformations[reaction.senderUserId] = reaction.emoji;
                     _avatarGiftIndicators[reaction.senderUserId] = true;
                   });
 
-                  // Auto-clear gift indicator after 5 seconds
-                  Future.delayed(const Duration(seconds: 5), () {
+                  // Auto-clear transformation after 3 seconds
+                  Future.delayed(const Duration(seconds: 3), () {
                     if (mounted) {
                       setState(() {
+                        _senderAvatarTransformations.remove(reaction.senderUserId);
                         _avatarGiftIndicators.remove(reaction.senderUserId);
                       });
                     }
@@ -7624,17 +7950,18 @@ To join this debate:
               } else {
                 AppLogger().info('✨ Received reaction: ${reaction.emoji} from ${reaction.senderUserId} to ${reaction.targetUserId}');
 
-                // Show emoji on SENDER's avatar with confetti (avatar replacement) - only on OTHER devices
-                // Note: Sender already sees it locally from immediate feedback at line 7529
-                if (mounted && reaction.senderUserId != _currentUser?.id) {
+                // Transform SENDER's avatar into the reaction emoji
+                if (mounted) {
                   setState(() {
+                    _senderAvatarTransformations[reaction.senderUserId] = reaction.emoji;
                     _avatarEmojiOverlays[reaction.senderUserId] = reaction.emoji;
                   });
 
-                  // Auto-clear sender's emoji after 5 seconds (longer for confetti animation)
-                  Future.delayed(const Duration(seconds: 5), () {
+                  // Auto-clear transformation after 3 seconds
+                  Future.delayed(const Duration(seconds: 3), () {
                     if (mounted) {
                       setState(() {
+                        _senderAvatarTransformations.remove(reaction.senderUserId);
                         _avatarEmojiOverlays.remove(reaction.senderUserId);
                       });
                     }
@@ -7669,14 +7996,106 @@ To join this debate:
               }
             }
           }
-        } catch (e) {
+        } catch (e, stackTrace) {
           AppLogger().error('❌ Error processing reaction update: $e');
+          AppLogger().error('Stack trace: $stackTrace');
+          // Don't show error to user - reactions are non-critical
         }
       });
 
       AppLogger().info('🔄 Reactions real-time sync initialized for room ${widget.roomId}');
     } catch (e) {
       AppLogger().error('❌ Failed to initialize reactions sync: $e');
+    }
+  }
+
+  /// Initialize real-time participant role changes sync (Appwrite)
+  Future<void> _initializeParticipantsSync() async {
+    if (!mounted) return;
+
+    try {
+      // Subscribe to participant changes for this room
+      final realtime = _appwrite.realtime;
+
+      _participantsSubscription = realtime.subscribe([
+        'databases.arena_db.collections.debate_discussion_participants.documents'
+      ]);
+
+      AppLogger().info('✅ REALTIME: Subscribed to debate_discussion_participants (Appwrite)');
+
+      _participantsSubscription!.stream.listen((response) {
+        if (!mounted || _isDisposing) return;
+
+        try {
+          final payload = response.payload;
+          final roomId = payload['roomId'];
+
+          // Only process events for this room
+          if (roomId != widget.roomId) {
+            return;
+          }
+
+          // Process update events (role changes)
+          if (response.events.any((event) => event.contains('.update'))) {
+            final userId = payload['userId'];
+            final newRole = payload['role'];
+            final updatedAt = payload['\$updatedAt'];
+
+            if (userId != null && newRole != null) {
+              AppLogger().info('📡 APPWRITE: Participant role update - User $userId → $newRole');
+
+              // Parse timestamp from Appwrite
+              DateTime? timestamp;
+              if (updatedAt != null) {
+                try {
+                  timestamp = DateTime.parse(updatedAt);
+                } catch (e) {
+                  AppLogger().warning('Failed to parse timestamp: $updatedAt');
+                }
+              }
+
+              // Handle role change via unified handler
+              _handleParticipantRoleChange(
+                userId: userId,
+                newRole: newRole,
+                timestamp: timestamp,
+                source: 'appwrite',
+              );
+            }
+          }
+
+          // Process create events (new participants joining)
+          if (response.events.any((event) => event.contains('.create'))) {
+            final userId = payload['userId'];
+            final newRole = payload['role'];
+
+            if (userId != null && newRole != null) {
+              AppLogger().info('📡 APPWRITE: New participant joined - User $userId as $newRole');
+
+              // Refresh participant list for new joins
+              _loadParticipants();
+            }
+          }
+
+          // Process delete events (participants leaving)
+          if (response.events.any((event) => event.contains('.delete'))) {
+            final userId = payload['userId'];
+
+            if (userId != null) {
+              AppLogger().info('📡 APPWRITE: Participant left - User $userId');
+
+              // Refresh participant list for departures
+              _loadParticipants();
+            }
+          }
+
+        } catch (e) {
+          AppLogger().error('Error processing participant realtime event: $e');
+        }
+      });
+
+    } catch (e) {
+      AppLogger().error('❌ Failed to initialize participants sync: $e');
     }
   }
 
@@ -8295,16 +8714,18 @@ To join this debate:
         await soundService.playApplauseSound();
       }
 
-      // Show emoji on sender's avatar immediately
+      // Transform sender's avatar into reaction emoji immediately
       if (mounted) {
         setState(() {
+          _senderAvatarTransformations[_currentUser!.id] = emoji;
           _avatarEmojiOverlays[_currentUser!.id] = emoji;
         });
 
-        // Auto-clear sender's emoji after 5 seconds
-        Future.delayed(const Duration(seconds: 5), () {
+        // Auto-clear transformation after 3 seconds
+        Future.delayed(const Duration(seconds: 3), () {
           if (mounted) {
             setState(() {
+              _senderAvatarTransformations.remove(_currentUser!.id);
               _avatarEmojiOverlays.remove(_currentUser!.id);
             });
           }
@@ -8378,16 +8799,18 @@ To join this debate:
 
       AppLogger().info('✅ Gift sent to Appwrite: $emoji ($giftName) value=$giftValue to $targetUserId');
 
-      // Show gift indicator on sender's avatar immediately (local feedback)
+      // Transform sender's avatar into the gift emoji immediately (local feedback)
       if (mounted) {
         setState(() {
+          _senderAvatarTransformations[_currentUser!.id] = emoji;
           _avatarGiftIndicators[_currentUser!.id] = true;
         });
 
-        // Auto-clear after 5 seconds
-        Future.delayed(const Duration(seconds: 5), () {
+        // Auto-clear transformation after 3 seconds
+        Future.delayed(const Duration(seconds: 3), () {
           if (mounted) {
             setState(() {
+              _senderAvatarTransformations.remove(_currentUser!.id);
               _avatarGiftIndicators.remove(_currentUser!.id);
             });
           }
@@ -8482,4 +8905,141 @@ To join this debate:
     );
   }
 
+}
+
+/// Simple timeout overlay that stays fixed above control icons
+class _TimeoutOverlay extends StatefulWidget {
+  final DateTime expiresAt;
+  final VoidCallback onExpired;
+  final VoidCallback onDismiss;
+
+  const _TimeoutOverlay({
+    required this.expiresAt,
+    required this.onExpired,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_TimeoutOverlay> createState() => _TimeoutOverlayState();
+}
+
+class _TimeoutOverlayState extends State<_TimeoutOverlay> {
+  bool _hasExpired = false;
+
+  void _onExpired() {
+    if (mounted) {
+      setState(() {
+        _hasExpired = true;
+      });
+      widget.onExpired();
+      AppLogger().info('⏰ Timeout expired - showing dismiss button');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AbsorbPointer(
+      // Block all touches to controls beneath this overlay
+      absorbing: true,
+      child: Container(
+        // Make it tall enough to cover the entire control bar
+        height: 150,
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.95),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.5),
+              blurRadius: 10,
+              offset: const Offset(0, -3),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Calculate available width
+                  final availableWidth = constraints.maxWidth;
+                  final isNarrow = availableWidth < 360;
+
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Timer icon
+                      Container(
+                        padding: EdgeInsets.all(isNarrow ? 4 : 6),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(
+                          Icons.timer,
+                          color: Colors.orange,
+                          size: isNarrow ? 16 : 18,
+                        ),
+                      ),
+                      SizedBox(width: isNarrow ? 6 : 10),
+
+                      // "Timed Out" text
+                      Text(
+                        'Timed Out',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: isNarrow ? 12 : 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      SizedBox(width: isNarrow ? 8 : 12),
+
+                      // Countdown timer (flexible width)
+                      Flexible(
+                        child: TimeoutCountdownWidget(
+                          expiresAt: widget.expiresAt,
+                          onExpired: _onExpired,
+                        ),
+                      ),
+
+                      // Dismiss button (only when expired)
+                      if (_hasExpired)
+                        Padding(
+                          padding: EdgeInsets.only(left: isNarrow ? 6 : 8),
+                          child: ElevatedButton(
+                            onPressed: widget.onDismiss,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isNarrow ? 10 : 12,
+                                vertical: isNarrow ? 6 : 8,
+                              ),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              elevation: 2,
+                            ),
+                            child: Text(
+                              'Dismiss',
+                              style: TextStyle(
+                                fontSize: isNarrow ? 11 : 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
