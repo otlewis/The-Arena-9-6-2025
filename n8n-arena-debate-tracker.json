@@ -1,0 +1,445 @@
+{
+  "name": "Arena Debate Activity Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "arena-debate-activity",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "name": "Webhook - Debate Event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "arena-debate-activity"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"body\"][\"event\"]}}",
+              "operation": "exists"
+            },
+            {
+              "value1": "={{$json[\"body\"][\"roomId\"]}}",
+              "operation": "exists"
+            },
+            {
+              "value1": "={{$json[\"body\"][\"participants\"]}}",
+              "operation": "exists"
+            }
+          ]
+        }
+      },
+      "name": "Validate Payload",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract debate data from webhook payload\nconst event = $input.item.json.body.event;\nconst debateData = $input.item.json.body;\n\nreturn {\n  json: {\n    event: event,\n    roomId: debateData.roomId,\n    roomType: debateData.roomType || 'arena',\n    topic: debateData.topic || 'Debate',\n    participants: debateData.participants || [],\n    winnerId: debateData.winnerId || null,\n    judgmentType: debateData.judgmentType || 'unknown',\n    completedAt: debateData.completedAt || new Date().toISOString(),\n    duration: debateData.duration || 0\n  }\n};"
+      },
+      "name": "Extract Debate Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [690, 200]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "participants",
+        "options": {}
+      },
+      "name": "Split Participants",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [910, 200]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "search",
+        "filterType": "manual",
+        "filters": {
+          "values": [
+            {
+              "propertyName": "arena_user_id",
+              "operator": "EQ",
+              "value": "={{$json[\"participants\"][\"userId\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Find Contact in HubSpot",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1130, 200],
+      "credentials": {
+        "hubspotApi": {
+          "id": "1",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json[\"total\"]}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "Contact Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1350, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Get debate data from earlier node\nconst debateData = $node[\"Extract Debate Data\"].json;\nconst participant = $input.item.json.participants;\nconst contact = $input.item.json.results[0];\n\n// Calculate new stats\nconst currentDebates = contact.properties.arena_total_debates || 0;\nconst currentWins = contact.properties.arena_total_wins || 0;\nconst currentLosses = contact.properties.arena_total_losses || 0;\n\n// Check if this participant won\nconst didWin = debateData.winnerId === participant.userId;\nconst didLose = debateData.winnerId && !didWin;\n\n// Calculate updates\nconst newTotalDebates = currentDebates + 1;\nconst newTotalWins = didWin ? currentWins + 1 : currentWins;\nconst newTotalLosses = didLose ? currentLosses + 1 : currentLosses;\nconst newWinRate = newTotalDebates > 0 \n  ? Math.round((newTotalWins / newTotalDebates) * 100)\n  : 0;\n\n// Calculate engagement score (0-100)\nlet engagementScore = 0;\n\n// Debate frequency (40 points)\nif (newTotalDebates >= 50) engagementScore += 40;\nelse if (newTotalDebates >= 20) engagementScore += 30;\nelse if (newTotalDebates >= 10) engagementScore += 20;\nelse if (newTotalDebates >= 5) engagementScore += 10;\n\n// Win rate (15 points)\nif (newWinRate >= 60) engagementScore += 15;\nelse if (newWinRate >= 40) engagementScore += 10;\nelse if (newWinRate >= 20) engagementScore += 5;\n\n// Recency (30 points) - debated today\nengagementScore += 30;\n\n// Premium (15 points)\nif (contact.properties.arena_is_premium) engagementScore += 15;\n\n// Determine user tier\nlet userTier = 'BRONZE';\nif (engagementScore >= 80) userTier = 'DIAMOND';\nelse if (engagementScore >= 60) userTier = 'PLATINUM';\nelse if (engagementScore >= 40) userTier = 'GOLD';\nelse if (engagementScore >= 20) userTier = 'SILVER';\n\n// Determine activity status\nlet activityStatus = 'ACTIVE';\n\n// Check for milestones\nconst milestones = [];\nif (newTotalDebates === 1) milestones.push('first_debate');\nif (newTotalDebates === 10) milestones.push('10_debates');\nif (newTotalDebates === 50) milestones.push('50_debates');\nif (newTotalDebates === 100) milestones.push('100_debates');\nif (newTotalWins === 5) milestones.push('5_wins');\nif (newTotalWins === 20) milestones.push('20_wins');\nif (newTotalWins === 50) milestones.push('50_wins');\n\nreturn {\n  json: {\n    contactId: contact.id,\n    email: contact.properties.email,\n    arenaUserId: participant.userId,\n    role: participant.role,\n    didWin: didWin,\n    didLose: didLose,\n    \n    // Updated properties\n    updateProperties: {\n      arena_total_debates: newTotalDebates,\n      arena_total_wins: newTotalWins,\n      arena_total_losses: newTotalLosses,\n      arena_win_rate: newWinRate,\n      arena_last_debate_date: debateData.completedAt,\n      arena_last_activity_date: new Date().toISOString(),\n      arena_engagement_score: engagementScore,\n      arena_user_tier: userTier,\n      arena_activity_status: activityStatus,\n      arena_days_since_last_activity: 0\n    },\n    \n    // Timeline event data\n    timelineEvent: {\n      roomId: debateData.roomId,\n      topic: debateData.topic,\n      role: participant.role,\n      result: didWin ? 'WON' : (didLose ? 'LOST' : 'PARTICIPATED'),\n      judgmentType: debateData.judgmentType,\n      duration: debateData.duration\n    },\n    \n    // Milestones\n    milestones: milestones\n  }\n};"
+      },
+      "name": "Calculate Updates",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1570, 100]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "update",
+        "contactId": "={{$json[\"contactId\"]}}",
+        "properties": "={{$json[\"updateProperties\"]}}",
+        "options": {}
+      },
+      "name": "Update Contact Stats",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1790, 100],
+      "credentials": {
+        "hubspotApi": {
+          "id": "1",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "timelineEvent",
+        "operation": "create",
+        "eventTemplateId": "arena_debate_completed",
+        "email": "={{$node[\"Calculate Updates\"].json[\"email\"]}}",
+        "additionalFields": {
+          "properties": {
+            "property": [
+              {
+                "name": "room_id",
+                "value": "={{$node[\"Calculate Updates\"].json[\"timelineEvent\"][\"roomId\"]}}"
+              },
+              {
+                "name": "topic",
+                "value": "={{$node[\"Calculate Updates\"].json[\"timelineEvent\"][\"topic\"]}}"
+              },
+              {
+                "name": "role",
+                "value": "={{$node[\"Calculate Updates\"].json[\"timelineEvent\"][\"role\"]}}"
+              },
+              {
+                "name": "result",
+                "value": "={{$node[\"Calculate Updates\"].json[\"timelineEvent\"][\"result\"]}}"
+              },
+              {
+                "name": "judgment_type",
+                "value": "={{$node[\"Calculate Updates\"].json[\"timelineEvent\"][\"judgmentType\"]}}"
+              },
+              {
+                "name": "duration_seconds",
+                "value": "={{$node[\"Calculate Updates\"].json[\"timelineEvent\"][\"duration\"]}}"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Add Timeline Event",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [2010, 100],
+      "credentials": {
+        "hubspotApi": {
+          "id": "1",
+          "name": "HubSpot API"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$node[\"Calculate Updates\"].json[\"milestones\"].length}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "Has Milestones?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2230, 100]
+    },
+    {
+      "parameters": {
+        "url": "=https://your-n8n-instance.com/webhook/arena-milestone-handler",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "contactId",
+              "value": "={{$node[\"Calculate Updates\"].json[\"contactId\"]}}"
+            },
+            {
+              "name": "email",
+              "value": "={{$node[\"Calculate Updates\"].json[\"email\"]}}"
+            },
+            {
+              "name": "arenaUserId",
+              "value": "={{$node[\"Calculate Updates\"].json[\"arenaUserId\"]}}"
+            },
+            {
+              "name": "milestones",
+              "value": "={{$node[\"Calculate Updates\"].json[\"milestones\"]}}"
+            },
+            {
+              "name": "totalDebates",
+              "value": "={{$node[\"Calculate Updates\"].json[\"updateProperties\"][\"arena_total_debates\"]}}"
+            },
+            {
+              "name": "totalWins",
+              "value": "={{$node[\"Calculate Updates\"].json[\"updateProperties\"][\"arena_total_wins\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Trigger Milestone Handler",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2450, 0],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "functionCode": "// Aggregate results from all participants\nconst allItems = $input.all();\n\nconst successCount = allItems.filter(item => \n  item.json.success !== false\n).length;\n\nconst failedCount = allItems.length - successCount;\n\nconst debateData = $node[\"Extract Debate Data\"].json;\n\nreturn {\n  json: {\n    success: true,\n    message: \"Debate activity tracked successfully\",\n    roomId: debateData.roomId,\n    participantsProcessed: allItems.length,\n    successCount: successCount,\n    failedCount: failedCount,\n    milestoneTriggered: allItems.some(item => \n      item.json.milestones && item.json.milestones.length > 0\n    )\n  }\n};"
+      },
+      "name": "Aggregate Results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2670, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2890, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"error\": \"Invalid payload: missing required fields\",\n  \"required\": [\"event\", \"roomId\", \"participants\"]\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [690, 400]
+    }
+  ],
+  "connections": {
+    "Webhook - Debate Event": {
+      "main": [
+        [
+          {
+            "node": "Validate Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Payload": {
+      "main": [
+        [
+          {
+            "node": "Extract Debate Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Debate Data": {
+      "main": [
+        [
+          {
+            "node": "Split Participants",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Participants": {
+      "main": [
+        [
+          {
+            "node": "Find Contact in HubSpot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Contact in HubSpot": {
+      "main": [
+        [
+          {
+            "node": "Contact Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contact Found?": {
+      "main": [
+        [
+          {
+            "node": "Calculate Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Updates": {
+      "main": [
+        [
+          {
+            "node": "Update Contact Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Contact Stats": {
+      "main": [
+        [
+          {
+            "node": "Add Timeline Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Timeline Event": {
+      "main": [
+        [
+          {
+            "node": "Has Milestones?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Milestones?": {
+      "main": [
+        [
+          {
+            "node": "Trigger Milestone Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Milestone Handler": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Results": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-01-28T00:00:00.000Z",
+      "updatedAt": "2025-01-28T00:00:00.000Z",
+      "id": "1",
+      "name": "Arena DTD"
+    },
+    {
+      "createdAt": "2025-01-28T00:00:00.000Z",
+      "updatedAt": "2025-01-28T00:00:00.000Z",
+      "id": "2",
+      "name": "HubSpot Sync"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-28T00:00:00.000Z",
+  "versionId": "1"
+}

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/logging/app_logger.dart';
 import '../screens/debates_discussions_screen.dart';
+import '../screens/arena_screen.dart';
 import '../services/follower_invitation_service.dart';
+import '../services/appwrite_service.dart';
 
 /// Modal that pops up when user receives a room invitation
 class RoomInvitationModal extends StatefulWidget {
@@ -77,17 +79,75 @@ class _RoomInvitationModalState extends State<RoomInvitationModal>
       final roomId = widget.invitation['roomId'];
       final roomName = widget.invitation['roomName'];
       final inviterName = widget.invitation['inviterName'];
+      final roomType = widget.invitation['roomType'] ?? 'Discussion'; // Default to Discussion if not specified
 
       // Mark as accepted
       await _invitationService.acceptInvitation(invitationId);
 
-      if (mounted) {
-        // Close modal
-        Navigator.pop(context);
-        widget.onDismiss();
+      if (!mounted) return;
 
-        // Navigate to room
-        Navigator.push(
+      // Close modal first
+      Navigator.pop(context);
+      widget.onDismiss();
+
+      // Wait a frame for the modal to fully close
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      if (!mounted) return;
+
+      // Navigate to appropriate room based on type
+      if (roomType.toLowerCase() == 'arena') {
+        // Fetch arena room details and add user as participant
+        try {
+          final appwrite = AppwriteService();
+          final currentUser = await appwrite.account.get();
+
+          final arenaRoom = await appwrite.databases.getDocument(
+            databaseId: 'arena_db',
+            collectionId: 'arena_rooms',
+            documentId: roomId,
+          );
+
+          // Add user as audience member if not already a participant
+          try {
+            await appwrite.assignArenaRole(
+              roomId: roomId,
+              userId: currentUser.$id,
+              role: 'audience',
+            );
+            AppLogger().info('Added user to arena as audience');
+          } catch (e) {
+            AppLogger().warning('Could not assign audience role (user may already be participant): $e');
+          }
+
+          // Navigate to Arena screen with required parameters
+          if (mounted) {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ArenaScreen(
+                  roomId: roomId,
+                  challengeId: arenaRoom.data['challengeId'] ?? roomId,
+                  topic: arenaRoom.data['topic'] ?? roomName,
+                  description: arenaRoom.data['description'],
+                ),
+              ),
+            );
+          }
+        } catch (e) {
+          AppLogger().error('Failed to join arena: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to join arena: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      } else {
+        // Navigate to Debates & Discussions screen
+        await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => DebatesDiscussionsScreen(

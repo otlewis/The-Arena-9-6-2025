@@ -318,7 +318,7 @@ class SamsungWorkarounds extends ManufacturerWorkaround {
   
   @override
   Map<String, dynamic> getAudioConfig() => {
-    'disableEffects': true,
+    'disableEffects': false, // Keep echo cancellation enabled for Samsung devices
     'useSimpleAudioTrack': true,
     'avoidAudioFocus': false,
     'preferredBufferSize': 256,
@@ -360,7 +360,7 @@ class XiaomiWorkarounds extends ManufacturerWorkaround {
   
   @override
   Map<String, dynamic> getAudioConfig() => {
-    'disableEffects': true,
+    'disableEffects': false, // Keep echo cancellation enabled for Xiaomi devices
     'forceStereoToMono': true,
     'useAudioAttributesBuilder': true,
     'avoidHighSampleRates': true,
@@ -402,10 +402,10 @@ class HuaweiWorkarounds extends ManufacturerWorkaround {
       service._logger.debug('Huawei workarounds error: $e');
     }
   }
-  
+
   @override
   Map<String, dynamic> getAudioConfig() => {
-    'disableEffects': true,
+    'disableEffects': false, // Keep echo cancellation enabled for Huawei devices
     'useCompatibilityMode': true,
     'forceLowLatency': false,
     'preferredLatency': 100,
@@ -443,10 +443,10 @@ class OppoWorkarounds extends ManufacturerWorkaround {
       service._logger.debug('Oppo workarounds error: $e');
     }
   }
-  
+
   @override
   Map<String, dynamic> getAudioConfig() => {
-    'disableEffects': true,
+    'disableEffects': false, // Keep echo cancellation enabled for Oppo devices
     'useSimpleBuffering': true,
     'avoidAudioFocusChanges': true,
   };
@@ -471,7 +471,7 @@ Lock in recents:
 /// Vivo-specific workarounds
 class VivoWorkarounds extends ManufacturerWorkaround {
   const VivoWorkarounds();
-  
+
   @override
   Future<void> apply(ManufacturerWorkaroundsService service) async {
     try {
@@ -481,10 +481,10 @@ class VivoWorkarounds extends ManufacturerWorkaround {
       service._logger.debug('Vivo workarounds error: $e');
     }
   }
-  
+
   @override
   Map<String, dynamic> getAudioConfig() => {
-    'disableEffects': true,
+    'disableEffects': false, // Keep echo cancellation enabled for Vivo devices
     'useBasicAudioTrack': true,
   };
   
@@ -669,16 +669,16 @@ Note: Arena won't work in Ultra STAMINA mode
 /// Tecno-specific workarounds
 class TecnoWorkarounds extends ManufacturerWorkaround {
   const TecnoWorkarounds();
-  
+
   @override
   Future<void> apply(ManufacturerWorkaroundsService service) async {
     // Tecno HiOS optimizations
     service._logger.info('📱 Tecno HiOS optimizations applied');
   }
-  
+
   @override
   Map<String, dynamic> getAudioConfig() => {
-    'disableEffects': true,
+    'disableEffects': false, // Keep echo cancellation enabled for Tecno devices
     'useBasicAudioTrack': true,
     'avoidAudioFocusChanges': true,
   };
@@ -701,16 +701,16 @@ Phone Master app:
 /// Infinix-specific workarounds
 class InfinixWorkarounds extends ManufacturerWorkaround {
   const InfinixWorkarounds();
-  
+
   @override
   Future<void> apply(ManufacturerWorkaroundsService service) async {
     // Infinix XOS optimizations
     service._logger.info('📱 Infinix XOS optimizations applied');
   }
-  
+
   @override
   Map<String, dynamic> getAudioConfig() => {
-    'disableEffects': true,
+    'disableEffects': false, // Keep echo cancellation enabled for Infinix devices
     'useBasicAudioTrack': true,
   };
   

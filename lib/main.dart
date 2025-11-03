@@ -52,6 +52,7 @@ import 'widgets/network_quality_indicator.dart';
 import 'package:mcp_toolkit/mcp_toolkit.dart';
 import 'services/firebase_participant_sync_service.dart';
 import 'services/super_moderator_service.dart';
+import 'services/user_timeout_service.dart';
 import 'services/revenue_cat_service.dart';
 import 'services/reputation_service.dart';
 import 'services/moderator_reputation_service.dart';
@@ -216,7 +217,10 @@ void main() async {
     } catch (e) {
       logger.error('Failed to initialize Super Moderator service: $e');
     }
-    
+
+    // Initialize User Timeout service (will start cleanup after app is ready)
+    // Note: Actual cleanup timer is started in ArenaApp.initState after AppwriteService is ready
+
     // Initialize RevenueCat service
     try {
       final revenueCatInitialized = await getIt<RevenueCatService>().initialize();
@@ -233,12 +237,19 @@ void main() async {
     FlutterError.onError = (FlutterErrorDetails details) {
       final error = ErrorHandler.handleError(details.exception, details.stack);
       logger.logError(error);
-      
+
       // Don't crash in release mode for known issues
       if (!kDebugMode && details.exception.toString().contains('RealtimeResponse')) {
         return;
       }
-      
+
+      // Gracefully handle widget disposal assertion errors
+      if (details.exception.toString().contains('_dependents.isEmpty')) {
+        logger.warning('⚠️ Widget disposal race condition detected - suppressing red screen');
+        logger.debug('Stack: ${details.stack}');
+        return; // Suppress the red screen for this known timing issue
+      }
+
       FlutterError.presentError(details);
     };
 
@@ -474,13 +485,19 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
     try {
       // Wait for heavy services if they're async
       await getIt.allReady();
-      
-      // Cleanup removed - we'll test the fix directly
-      
+
+      // Start timeout cleanup service after AppwriteService is ready
+      try {
+        UserTimeoutService().startPeriodicCleanup();
+        AppLogger().info('⏰ User Timeout cleanup service started');
+      } catch (e) {
+        AppLogger().error('Failed to start timeout cleanup service: $e');
+      }
+
       _messagingService = getIt<ChallengeMessagingService>();
       _soundService = getIt<SoundService>();
       _notificationService = getIt<NotificationService>();
-      
+
       // Setup messaging after services are ready
       _setupMessageListening();
     } catch (e) {

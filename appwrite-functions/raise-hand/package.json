@@ -1,0 +1,16 @@
+{
+  "name": "raise-hand",
+  "version": "1.0.0",
+  "description": "Handle hand raising in Debates & Discussions rooms",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "node-appwrite": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0"
+  }
+}

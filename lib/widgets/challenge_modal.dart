@@ -186,6 +186,8 @@ class _ChallengeModalState extends State<ChallengeModal>
                         fontWeight: FontWeight.bold,
                         color: deepPurple,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       'wants to debate with you',
@@ -193,6 +195,8 @@ class _ChallengeModalState extends State<ChallengeModal>
                         fontSize: 14,
                         color: Colors.grey[600],
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),

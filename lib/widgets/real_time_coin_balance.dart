@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:appwrite/appwrite.dart';
 import '../services/appwrite_service.dart';
-import '../services/coin_service.dart';
+import '../services/firebase_coin_service.dart';
 import '../core/logging/app_logger.dart';
 
 /// A widget that displays the user's coin balance in real-time
@@ -50,12 +49,12 @@ class RealTimeCoinBalanceController {
 
 class _RealTimeCoinBalanceState extends State<RealTimeCoinBalance> {
   final AppwriteService _appwriteService = AppwriteService();
-  final CoinService _coinService = CoinService();
-  
+  final FirebaseCoinService _firebaseCoinService = FirebaseCoinService();
+
   int _coinBalance = 0;
   bool _isLoading = true;
   String? _userId;
-  RealtimeSubscription? _subscription;
+  Stream<int>? _balanceStream;
   bool _hasOptimisticUpdate = false;
   DateTime? _lastOptimisticUpdateTime;
   
@@ -85,14 +84,12 @@ class _RealTimeCoinBalanceState extends State<RealTimeCoinBalance> {
       });
       AppLogger().debug('🪙 Optimistically deducted $amount coins. New balance: $_coinBalance');
 
-      // Clear the optimistic flag after 5 seconds to allow real-time sync
-      Future.delayed(const Duration(seconds: 5), () {
+      // Clear the optimistic flag after 10 seconds to allow real-time sync
+      Future.delayed(const Duration(seconds: 10), () {
         if (mounted) {
           setState(() {
             _hasOptimisticUpdate = false;
           });
-          // Reload balance from server after optimistic period expires
-          _loadBalance();
         }
       });
     }
@@ -108,14 +105,12 @@ class _RealTimeCoinBalanceState extends State<RealTimeCoinBalance> {
       });
       AppLogger().debug('🪙 Optimistically added $amount coins. New balance: $_coinBalance');
 
-      // Clear the optimistic flag after 5 seconds to allow real-time sync
-      Future.delayed(const Duration(seconds: 5), () {
+      // Clear the optimistic flag after 10 seconds to allow real-time sync
+      Future.delayed(const Duration(seconds: 10), () {
         if (mounted) {
           setState(() {
             _hasOptimisticUpdate = false;
           });
-          // Reload balance from server after optimistic period expires
-          _loadBalance();
         }
       });
     }
@@ -123,7 +118,7 @@ class _RealTimeCoinBalanceState extends State<RealTimeCoinBalance> {
   
   @override
   void dispose() {
-    _subscription?.close();
+    // No need to dispose Firebase stream - it's automatically managed
     super.dispose();
   }
   
@@ -141,12 +136,12 @@ class _RealTimeCoinBalanceState extends State<RealTimeCoinBalance> {
       }
       
       _userId = user.$id;
-      
-      // Load initial balance
+
+      // Load initial balance from Firebase
       await _loadBalance();
-      
-      // Subscribe to real-time updates for the user document
-      _subscribeToBalanceUpdates();
+
+      // Subscribe to Firebase real-time updates
+      _subscribeToFirebaseUpdates();
       
     } catch (e) {
       AppLogger().error('Failed to initialize coin balance: $e');
@@ -160,9 +155,9 @@ class _RealTimeCoinBalanceState extends State<RealTimeCoinBalance> {
   
   Future<void> _loadBalance() async {
     if (_userId == null) return;
-    
+
     try {
-      final coins = await _coinService.getUserCoins(_userId!);
+      final coins = await _firebaseCoinService.getUserCoins(_userId!);
       if (mounted) {
         setState(() {
           _coinBalance = coins;
@@ -170,7 +165,7 @@ class _RealTimeCoinBalanceState extends State<RealTimeCoinBalance> {
         });
       }
     } catch (e) {
-      AppLogger().error('Failed to load coin balance: $e');
+      AppLogger().error('Failed to load coin balance from Firebase: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -179,41 +174,35 @@ class _RealTimeCoinBalanceState extends State<RealTimeCoinBalance> {
     }
   }
   
-  void _subscribeToBalanceUpdates() {
+  void _subscribeToFirebaseUpdates() {
     if (_userId == null) return;
-    
+
     try {
-      // Subscribe to updates on the user's document
-      _subscription = _appwriteService.realtime.subscribe([
-        'databases.arena_db.collections.users.documents.$_userId'
-      ]);
-      
-      _subscription!.stream.listen((event) {
-        // Check if this is an update event for the user document
-        final isUpdate = event.events.any((e) =>
-          e.contains('update') ||
-          e.contains('databases.arena_db.collections.users.documents.$_userId')
-        );
+      // Subscribe to Firebase real-time updates
+      _balanceStream = _firebaseCoinService.watchCoinBalance(_userId!);
 
-        if (isUpdate) {
-          // Skip real-time updates during optimistic update period
-          if (_hasOptimisticUpdate) {
-            final timeSinceOptimistic = DateTime.now().difference(_lastOptimisticUpdateTime ?? DateTime.now());
-            if (timeSinceOptimistic.inSeconds < 3) {
-              AppLogger().debug('🪙 Skipping real-time update during optimistic period');
-              return;
-            }
+      _balanceStream!.listen((newBalance) {
+        // Skip real-time updates during optimistic update period
+        if (_hasOptimisticUpdate) {
+          final timeSinceOptimistic = DateTime.now().difference(_lastOptimisticUpdateTime ?? DateTime.now());
+          if (timeSinceOptimistic.inSeconds < 8) {
+            AppLogger().debug('🪙 Firebase: Skipping real-time update during optimistic period');
+            return;
           }
+        }
 
-          // Balance was updated, reload it
-          _loadBalance();
-          AppLogger().debug('🪙 Coin balance updated via real-time subscription');
+        // Update balance from Firebase
+        if (mounted) {
+          setState(() {
+            _coinBalance = newBalance;
+          });
+          AppLogger().debug('🪙 Firebase: Coin balance updated to $newBalance');
         }
       });
-      
-      AppLogger().debug('🔔 Subscribed to real-time coin balance updates');
+
+      AppLogger().debug('🔔 Firebase: Subscribed to real-time coin balance updates');
     } catch (e) {
-      AppLogger().error('Failed to subscribe to balance updates: $e');
+      AppLogger().error('Failed to subscribe to Firebase balance updates: $e');
     }
   }
   

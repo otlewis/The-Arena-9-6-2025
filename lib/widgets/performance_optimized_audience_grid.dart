@@ -9,12 +9,16 @@ class PerformanceOptimizedAudienceGrid extends StatefulWidget {
   final List<Map<String, dynamic>> participants;
   final Function(String userId)? onParticipantTap;
   final String debugLabel;
-  
+  final Map<String, String>? senderAvatarTransformations; // userId -> emoji
+  final Map<String, bool>? avatarGiftIndicators; // userId -> hasGift
+
   const PerformanceOptimizedAudienceGrid({
     super.key,
     required this.participants,
     this.onParticipantTap,
     this.debugLabel = 'AudienceGrid',
+    this.senderAvatarTransformations,
+    this.avatarGiftIndicators,
   });
 
   @override
@@ -60,11 +64,13 @@ class _PerformanceOptimizedAudienceGridState extends State<PerformanceOptimizedA
   
   void _buildCachedWidgets() {
     _cachedParticipants = List.from(widget.participants);
-    _cachedWidgets = widget.participants.map((participant) => 
+    _cachedWidgets = widget.participants.map((participant) =>
       _AudienceCard(
         key: ValueKey(participant['userId'] ?? participant['id'] ?? DateTime.now().millisecondsSinceEpoch),
         participant: participant,
         onTap: widget.onParticipantTap,
+        senderAvatarTransformations: widget.senderAvatarTransformations,
+        avatarGiftIndicators: widget.avatarGiftIndicators,
       )
     ).toList();
   }
@@ -327,11 +333,15 @@ Widget _buildAvatarTextFromMap(Map<String, dynamic> data, double fontSize) {
 class _AudienceCard extends StatelessWidget {
   final Map<String, dynamic> participant;
   final Function(String userId)? onTap;
-  
+  final Map<String, String>? senderAvatarTransformations;
+  final Map<String, bool>? avatarGiftIndicators;
+
   const _AudienceCard({
     super.key,
     required this.participant,
     this.onTap,
+    this.senderAvatarTransformations,
+    this.avatarGiftIndicators,
   });
 
   @override
@@ -339,50 +349,80 @@ class _AudienceCard extends StatelessWidget {
     final userId = participant['userId'] ?? participant['id'] ?? '';
     final name = participant['name'] ?? participant['userName'] ?? 'Unknown';
     final avatarUrl = participant['avatarUrl'] ?? participant['avatar'] ?? '';
-    
+    final transformEmoji = senderAvatarTransformations?[userId];
+    final hasGiftIndicator = avatarGiftIndicators?[userId] == true;
+
     return RepaintBoundary(
       child: GestureDetector(
         onTap: onTap != null ? () => onTap!(userId) : null,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Round profile picture
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.grey.withOpacity(0.3),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(30),
-                child: avatarUrl.isNotEmpty
-                    ? Image.network(
-                        avatarUrl,
-                        width: 60,
-                        height: 60,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            Container(
-                          width: 60,
-                          height: 60,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF8B5CF6),
-                            shape: BoxShape.circle,
-                          ),
-                          child: _buildAvatarTextFromMap(participant, 20),
+            // Round profile picture OR transformed emoji
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.grey.withOpacity(0.3),
+                  ),
+                  child: transformEmoji != null
+                      ? _buildTransformedAvatar(transformEmoji, 30)
+                      : ClipRRect(
+                          borderRadius: BorderRadius.circular(30),
+                          child: avatarUrl.isNotEmpty
+                              ? Image.network(
+                                  avatarUrl,
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      Container(
+                                    width: 60,
+                                    height: 60,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF8B5CF6),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: _buildAvatarTextFromMap(participant, 20),
+                                  ),
+                                )
+                              : Container(
+                                  width: 60,
+                                  height: 60,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF8B5CF6),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: _buildAvatarTextFromMap(participant, 20),
+                                ),
                         ),
-                      )
-                    : Container(
-                        width: 60,
-                        height: 60,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF8B5CF6),
-                          shape: BoxShape.circle,
-                        ),
-                        child: _buildAvatarTextFromMap(participant, 20),
+                ),
+                // Gift indicator badge
+                if (hasGiftIndicator)
+                  Positioned(
+                    top: -4,
+                    right: -4,
+                    child: Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFD700),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
                       ),
-              ),
+                      child: const Center(
+                        child: Text(
+                          '🎁',
+                          style: TextStyle(fontSize: 10),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 8),
             // Name underneath
@@ -393,6 +433,32 @@ class _AudienceCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// Build transformed avatar - sender's avatar becomes the gift/reaction emoji
+  Widget _buildTransformedAvatar(String emoji, double radius) {
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 500),
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        // Pulse animation - scale in and out
+        final scale = 1.0 + (0.2 * (1.0 - (value - 0.5).abs() * 2));
+
+        return CircleAvatar(
+          radius: radius,
+          backgroundColor: Colors.white.withOpacity(0.9),
+          child: Transform.scale(
+            scale: scale,
+            child: Text(
+              emoji,
+              style: TextStyle(
+                fontSize: radius * 1.2, // Make emoji nice and big
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -624,6 +690,8 @@ class PerformanceOptimizedSpeakersPanel extends StatefulWidget {
   // Reaction system
   final List<ReactionData> activeReactions; // Active emoji reactions
   final Map<String, String> avatarEmojiOverlays; // Avatar emoji overlays (userId -> emoji)
+  final Map<String, String>? senderAvatarTransformations; // Sender transformations for audience (userId -> emoji)
+  final Map<String, bool>? avatarGiftIndicators; // Gift indicators for audience (userId -> hasGift)
 
   const PerformanceOptimizedSpeakersPanel({
     super.key,
@@ -648,6 +716,8 @@ class PerformanceOptimizedSpeakersPanel extends StatefulWidget {
     this.onToggleQueue,
     this.activeReactions = const [],
     this.avatarEmojiOverlays = const {},
+    this.senderAvatarTransformations,
+    this.avatarGiftIndicators,
   });
 
   @override
@@ -1354,6 +1424,8 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
                 participants: widget.audience!,
                 onParticipantTap: widget.onAudienceTap,
                 debugLabel: 'SpeakerPanelAudience',
+                senderAvatarTransformations: widget.senderAvatarTransformations,
+                avatarGiftIndicators: widget.avatarGiftIndicators,
               ),
             ),
           ],

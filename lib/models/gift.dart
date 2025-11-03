@@ -61,6 +61,7 @@ class Gift {
 }
 
 enum GiftCategory {
+  money,        // Direct coin tips
   intellectual,
   supportive,
   fun,
@@ -78,6 +79,77 @@ enum GiftTier {
 
 class GiftConstants {
   static const List<Gift> allGifts = [
+    // MONEY TIPS (Direct Coin Gifts)
+    Gift(
+      id: 'tip_5',
+      name: '5 Coins',
+      emoji: '💰',
+      description: 'Small tip',
+      cost: 5,
+      category: GiftCategory.money,
+      tier: GiftTier.basic,
+    ),
+    Gift(
+      id: 'tip_10',
+      name: '10 Coins',
+      emoji: '💰',
+      description: 'Nice tip!',
+      cost: 10,
+      category: GiftCategory.money,
+      tier: GiftTier.standard,
+    ),
+    Gift(
+      id: 'tip_25',
+      name: '25 Coins',
+      emoji: '💰',
+      description: 'Generous tip',
+      cost: 25,
+      category: GiftCategory.money,
+      tier: GiftTier.premium,
+    ),
+    Gift(
+      id: 'tip_50',
+      name: '50 Coins',
+      emoji: '💰',
+      description: 'Big tip!',
+      cost: 50,
+      category: GiftCategory.money,
+      tier: GiftTier.premium,
+      hasVisualEffect: true,
+    ),
+    Gift(
+      id: 'tip_100',
+      name: '100 Coins',
+      emoji: '💰',
+      description: 'Huge tip!!',
+      cost: 100,
+      category: GiftCategory.money,
+      tier: GiftTier.legendary,
+      hasVisualEffect: true,
+    ),
+    Gift(
+      id: 'tip_250',
+      name: '250 Coins',
+      emoji: '💰',
+      description: 'Massive tip!!!',
+      cost: 250,
+      category: GiftCategory.money,
+      tier: GiftTier.legendary,
+      hasVisualEffect: true,
+      hasProfileBadge: true,
+    ),
+    Gift(
+      id: 'tip_500',
+      name: '500 Coins',
+      emoji: '💰',
+      description: 'Legendary tip!!!!',
+      cost: 500,
+      category: GiftCategory.money,
+      tier: GiftTier.legendary,
+      hasVisualEffect: true,
+      hasProfileBadge: true,
+    ),
+
     // INTELLECTUAL ACHIEVEMENT GIFTS
     Gift(
       id: 'brain_power',

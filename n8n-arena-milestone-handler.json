@@ -1,0 +1,544 @@
+{
+  "name": "Arena Milestone Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e8d5c5b0-5f4a-4e5e-9b5e-0e5e5e5e5e5e",
+      "name": "When called by another workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "milestone_type",
+              "name": "milestoneType",
+              "value": "={{ $json.milestoneType }}",
+              "type": "string"
+            },
+            {
+              "id": "user_id",
+              "name": "userId",
+              "value": "={{ $json.userId }}",
+              "type": "string"
+            },
+            {
+              "id": "arena_user_id",
+              "name": "arenaUserId",
+              "value": "={{ $json.arenaUserId }}",
+              "type": "string"
+            },
+            {
+              "id": "total_debates",
+              "name": "totalDebates",
+              "value": "={{ $json.totalDebates }}",
+              "type": "number"
+            },
+            {
+              "id": "user_email",
+              "name": "userEmail",
+              "value": "={{ $json.userEmail }}",
+              "type": "string"
+            },
+            {
+              "id": "user_name",
+              "name": "userName",
+              "value": "={{ $json.userName }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "milestone-vars",
+      "name": "Extract Milestone Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.milestoneType }}",
+              "operation": "equals",
+              "value2": "first_debate"
+            }
+          ]
+        }
+      },
+      "id": "check-first-debate",
+      "name": "Is First Debate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "update",
+        "contactId": "={{ $json.userId }}",
+        "updateFields": {
+          "customPropertiesUi": {
+            "customPropertiesValues": [
+              {
+                "property": "arena_first_debate_date",
+                "value": "={{ $now.toISO() }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "update-first-debate",
+      "name": "Update First Debate Date",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [910, 200],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "addToList",
+        "contactId": "={{ $json.userId }}",
+        "listId": "MILESTONE_FIRST_DEBATE_LIST_ID"
+      },
+      "id": "add-to-first-debate-list",
+      "name": "Add to First Debate List",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1130, 200],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "enrollInSequence",
+        "contactId": "={{ $json.userId }}",
+        "sequenceId": "FIRST_DEBATE_EMAIL_SEQUENCE_ID"
+      },
+      "id": "enroll-first-debate-email",
+      "name": "Enroll in First Debate Email",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1350, 200],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.milestoneType }}",
+              "operation": "equals",
+              "value2": "debates_10"
+            }
+          ]
+        }
+      },
+      "id": "check-10-debates",
+      "name": "Is 10 Debates?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [690, 500]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "update",
+        "contactId": "={{ $json.userId }}",
+        "updateFields": {
+          "customPropertiesUi": {
+            "customPropertiesValues": [
+              {
+                "property": "arena_milestone_10_debates_date",
+                "value": "={{ $now.toISO() }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "update-10-debates",
+      "name": "Update 10 Debates Date",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [910, 400],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "addToList",
+        "contactId": "={{ $json.userId }}",
+        "listId": "MILESTONE_10_DEBATES_LIST_ID"
+      },
+      "id": "add-to-10-debates-list",
+      "name": "Add to 10 Debates List",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1130, 400],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "enrollInSequence",
+        "contactId": "={{ $json.userId }}",
+        "sequenceId": "MILESTONE_10_DEBATES_EMAIL_SEQUENCE_ID"
+      },
+      "id": "enroll-10-debates-email",
+      "name": "Enroll in 10 Debates Email",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1350, 400],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.milestoneType }}",
+              "operation": "equals",
+              "value2": "debates_50"
+            }
+          ]
+        }
+      },
+      "id": "check-50-debates",
+      "name": "Is 50 Debates?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [690, 700]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "update",
+        "contactId": "={{ $json.userId }}",
+        "updateFields": {
+          "customPropertiesUi": {
+            "customPropertiesValues": [
+              {
+                "property": "arena_milestone_50_debates_date",
+                "value": "={{ $now.toISO() }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "update-50-debates",
+      "name": "Update 50 Debates Date",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [910, 600],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "addToList",
+        "contactId": "={{ $json.userId }}",
+        "listId": "MILESTONE_50_DEBATES_LIST_ID"
+      },
+      "id": "add-to-50-debates-list",
+      "name": "Add to 50 Debates List",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1130, 600],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "enrollInSequence",
+        "contactId": "={{ $json.userId }}",
+        "sequenceId": "MILESTONE_50_DEBATES_EMAIL_SEQUENCE_ID"
+      },
+      "id": "enroll-50-debates-email",
+      "name": "Enroll in 50 Debates Email",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1350, 600],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "engagementTimeline",
+        "operation": "create",
+        "contactId": "={{ $json.userId }}",
+        "eventTemplateId": "MILESTONE_ACHIEVED_EVENT_TEMPLATE_ID",
+        "fields": {
+          "milestone_type": "={{ $json.milestoneType }}",
+          "milestone_value": "={{ $json.totalDebates }}",
+          "achievement_date": "={{ $now.toISO() }}"
+        }
+      },
+      "id": "add-timeline-event",
+      "name": "Add Timeline Event",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1570, 400],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "options": {
+          "responseData": {
+            "success": true,
+            "milestone": "={{ $json.milestoneType }}",
+            "userId": "={{ $json.userId }}",
+            "arenaUserId": "={{ $json.arenaUserId }}",
+            "timestamp": "={{ $now.toISO() }}"
+          }
+        }
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1790, 400]
+    }
+  ],
+  "connections": {
+    "When called by another workflow": {
+      "main": [
+        [
+          {
+            "node": "Extract Milestone Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Milestone Data": {
+      "main": [
+        [
+          {
+            "node": "Is First Debate?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is 10 Debates?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is 50 Debates?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is First Debate?": {
+      "main": [
+        [
+          {
+            "node": "Update First Debate Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update First Debate Date": {
+      "main": [
+        [
+          {
+            "node": "Add to First Debate List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to First Debate List": {
+      "main": [
+        [
+          {
+            "node": "Enroll in First Debate Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enroll in First Debate Email": {
+      "main": [
+        [
+          {
+            "node": "Add Timeline Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is 10 Debates?": {
+      "main": [
+        [
+          {
+            "node": "Update 10 Debates Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update 10 Debates Date": {
+      "main": [
+        [
+          {
+            "node": "Add to 10 Debates List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to 10 Debates List": {
+      "main": [
+        [
+          {
+            "node": "Enroll in 10 Debates Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enroll in 10 Debates Email": {
+      "main": [
+        [
+          {
+            "node": "Add Timeline Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is 50 Debates?": {
+      "main": [
+        [
+          {
+            "node": "Update 50 Debates Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update 50 Debates Date": {
+      "main": [
+        [
+          {
+            "node": "Add to 50 Debates List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to 50 Debates List": {
+      "main": [
+        [
+          {
+            "node": "Enroll in 50 Debates Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enroll in 50 Debates Email": {
+      "main": [
+        [
+          {
+            "node": "Add Timeline Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Timeline Event": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "arena-milestone-handler",
+  "meta": {
+    "instanceId": "YOUR_N8N_INSTANCE_ID"
+  },
+  "tags": []
+}

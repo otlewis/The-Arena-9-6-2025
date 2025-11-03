@@ -239,6 +239,8 @@ class RoleAssignmentService {
 enum ArenaRole {
   affirmative('affirmative'),
   negative('negative'),
+  affirmative2('affirmative2'), // 2v2 support
+  negative2('negative2'),       // 2v2 support
   judge1('judge1'),
   judge2('judge2'),
   judge3('judge3'),

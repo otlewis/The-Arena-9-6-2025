@@ -1,0 +1,496 @@
+{
+  "name": "Arena User Sync to HubSpot",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "arena-user-sync",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "name": "Webhook - User Event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "arena-user-sync"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract user data from Appwrite webhook payload\nconst userData = $input.item.json;\n\n// Parse name into first and last name\nconst nameParts = (userData.name || '').trim().split(' ');\nconst firstname = nameParts[0] || '';\nconst lastname = nameParts.slice(1).join(' ') || '';\n\n// Calculate fields\nconst winRate = userData.totalDebates > 0 \n  ? Math.round((userData.totalWins / userData.totalDebates) * 100) \n  : 0;\n\nconst daysSinceSignup = Math.floor(\n  (Date.now() - new Date(userData.$createdAt).getTime()) / (1000 * 60 * 60 * 24)\n);\n\n// Determine lifecycle stage\nlet lifecyclestage = 'lead';\nif (userData.isPremium) {\n  lifecyclestage = 'customer';\n} else if (userData.totalDebates >= 5) {\n  lifecyclestage = 'subscriber';\n}\n\n// Prepare HubSpot contact properties\nconst hubspotContact = {\n  email: userData.email,\n  firstname: firstname,\n  lastname: lastname,\n  lifecyclestage: lifecyclestage,\n  \n  // Arena custom properties\n  arena_user_id: userData.$id,\n  arena_username: userData.name,\n  arena_avatar_url: userData.avatar || '',\n  arena_bio: userData.bio || '',\n  arena_location: userData.location || '',\n  arena_website: userData.website || '',\n  \n  // Social media\n  arena_twitter_handle: userData.xHandle || '',\n  arena_linkedin_handle: userData.linkedinHandle || '',\n  arena_youtube_handle: userData.youtubeHandle || '',\n  arena_facebook_handle: userData.facebookHandle || '',\n  arena_instagram_handle: userData.instagramHandle || '',\n  \n  // Engagement metrics\n  arena_total_debates: userData.totalDebates || 0,\n  arena_total_wins: userData.totalWins || 0,\n  arena_total_losses: userData.totalLosses || 0,\n  arena_win_rate: winRate,\n  arena_total_rooms_created: userData.totalRoomsCreated || 0,\n  arena_total_rooms_joined: userData.totalRoomsJoined || 0,\n  arena_reputation_percentage: userData.reputationPercentage || 100,\n  arena_reputation_points: userData.reputation || 0,\n  \n  // Economic data\n  arena_coin_balance: userData.coinBalance || 0,\n  arena_total_gifts_sent: userData.totalGiftsSent || 0,\n  arena_total_gifts_received: userData.totalGiftsReceived || 0,\n  \n  // Activity\n  arena_signup_date: userData.$createdAt,\n  arena_last_activity_date: userData.$updatedAt || userData.$createdAt,\n  \n  // Status\n  arena_is_verified: userData.isVerified || false,\n  arena_is_moderator: userData.isAvailableAsModerator || false,\n  arena_is_judge: userData.isAvailableAsJudge || false,\n  arena_is_public_profile: userData.isPublicProfile !== false,\n  arena_is_banned: userData.isBanned || false,\n  arena_ban_reason: userData.banReason || '',\n  arena_banned_at: userData.bannedAt || '',\n  \n  // Subscription\n  arena_is_premium: userData.isPremium || false,\n  arena_premium_type: userData.premiumType || 'FREE',\n  arena_premium_expiry: userData.premiumExpiry || '',\n  arena_is_test_subscription: userData.isTestSubscription || false,\n  \n  // Interests\n  arena_interests: (userData.interests || []).join(';'),\n  arena_joined_clubs: (userData.joinedClubs || []).join(',')\n};\n\nreturn {\n  json: {\n    arenaUserId: userData.$id,\n    email: userData.email,\n    hubspotContact: hubspotContact\n  }\n};"
+      },
+      "name": "Transform User Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [690, 200]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "search",
+        "filterType": "manual",
+        "filters": {
+          "values": [
+            {
+              "propertyName": "arena_user_id",
+              "operator": "EQ",
+              "value": "={{$json[\"arenaUserId\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Search Existing Contact",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [910, 200],
+      "credentials": {
+        "hubspotApi": {
+          "id": "1",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json[\"total\"]}}",
+              "operation": "equal",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "Contact Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1130, 200]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "upsert",
+        "email": "={{$node[\"Transform User Data\"].json[\"email\"]}}",
+        "additionalFields": {
+          "customPropertiesUi": {
+            "customPropertiesValues": [
+              {
+                "property": "firstname",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"firstname\"]}}"
+              },
+              {
+                "property": "lastname",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"lastname\"]}}"
+              },
+              {
+                "property": "arena_user_id",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_user_id\"]}}"
+              },
+              {
+                "property": "arena_username",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_username\"]}}"
+              },
+              {
+                "property": "arena_total_debates",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_total_debates\"]}}"
+              },
+              {
+                "property": "arena_total_wins",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_total_wins\"]}}"
+              },
+              {
+                "property": "arena_total_losses",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_total_losses\"]}}"
+              },
+              {
+                "property": "arena_win_rate",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_win_rate\"]}}"
+              },
+              {
+                "property": "arena_is_premium",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_is_premium\"]}}"
+              },
+              {
+                "property": "arena_premium_type",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_premium_type\"]}}"
+              },
+              {
+                "property": "arena_signup_date",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_signup_date\"]}}"
+              },
+              {
+                "property": "arena_is_moderator",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_is_moderator\"]}}"
+              },
+              {
+                "property": "arena_is_judge",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_is_judge\"]}}"
+              },
+              {
+                "property": "arena_coin_balance",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_coin_balance\"]}}"
+              },
+              {
+                "property": "lifecyclestage",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"lifecyclestage\"]}}"
+              }
+            ]
+          }
+        },
+        "options": {}
+      },
+      "name": "Create New Contact",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1350, 100],
+      "credentials": {
+        "hubspotApi": {
+          "id": "1",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "update",
+        "contactId": "={{$node[\"Search Existing Contact\"].json[\"results\"][0][\"id\"]}}",
+        "updateFields": {
+          "customPropertiesUi": {
+            "customPropertiesValues": [
+              {
+                "property": "firstname",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"firstname\"]}}"
+              },
+              {
+                "property": "lastname",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"lastname\"]}}"
+              },
+              {
+                "property": "arena_username",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_username\"]}}"
+              },
+              {
+                "property": "arena_total_debates",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_total_debates\"]}}"
+              },
+              {
+                "property": "arena_total_wins",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_total_wins\"]}}"
+              },
+              {
+                "property": "arena_total_losses",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_total_losses\"]}}"
+              },
+              {
+                "property": "arena_win_rate",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_win_rate\"]}}"
+              },
+              {
+                "property": "arena_is_premium",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_is_premium\"]}}"
+              },
+              {
+                "property": "arena_premium_type",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_premium_type\"]}}"
+              },
+              {
+                "property": "arena_is_moderator",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_is_moderator\"]}}"
+              },
+              {
+                "property": "arena_is_judge",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_is_judge\"]}}"
+              },
+              {
+                "property": "arena_coin_balance",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"arena_coin_balance\"]}}"
+              },
+              {
+                "property": "lifecyclestage",
+                "value": "={{$node[\"Transform User Data\"].json[\"hubspotContact\"][\"lifecyclestage\"]}}"
+              }
+            ]
+          }
+        },
+        "options": {}
+      },
+      "name": "Update Existing Contact",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1350, 300],
+      "credentials": {
+        "hubspotApi": {
+          "id": "1",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Determine which tags to add based on user data\nconst userData = $node[\"Transform User Data\"].json;\nconst inputData = $input.item.json;\nconst tags = [];\n\n// Get contactId from the current node's input (either from Create or Update)\n// HubSpot returns different formats, try all possibilities\nconst contactId = inputData.id || inputData.vid || inputData.properties?.hs_object_id || userData.arenaUserId;\n\n// Lifecycle tags\nconst daysSinceSignup = Math.floor(\n  (Date.now() - new Date(userData.hubspotContact.arena_signup_date).getTime()) / (1000 * 60 * 60 * 24)\n);\n\nif (daysSinceSignup <= 7) {\n  tags.push('arena-new-user');\n}\n\n// Engagement tags\nconst totalDebates = userData.hubspotContact.arena_total_debates;\n\nif (totalDebates >= 100) {\n  tags.push('arena-100-debates');\n} else if (totalDebates >= 50) {\n  tags.push('arena-50-debates');\n} else if (totalDebates >= 10) {\n  tags.push('arena-10-debates');\n} else if (totalDebates >= 1) {\n  tags.push('arena-first-debate');\n}\n\n// Power user\nif (totalDebates >= 20) {\n  tags.push('arena-power-user');\n}\n\n// Winner tags\nconst totalWins = userData.hubspotContact.arena_total_wins;\nif (totalWins >= 20) {\n  tags.push('arena-champion');\n} else if (totalWins >= 5) {\n  tags.push('arena-winner');\n}\n\n// Role tags\nif (userData.hubspotContact.arena_is_moderator) {\n  tags.push('arena-moderator');\n}\nif (userData.hubspotContact.arena_is_judge) {\n  tags.push('arena-judge');\n}\n\n// Subscription tags\nif (userData.hubspotContact.arena_is_premium) {\n  const premiumType = userData.hubspotContact.arena_premium_type;\n  if (premiumType === 'MONTHLY') {\n    tags.push('arena-premium-monthly');\n  } else if (premiumType === 'YEARLY') {\n    tags.push('arena-premium-yearly');\n  }\n} else {\n  tags.push('arena-free-user');\n}\n\n// Status tags\nif (userData.hubspotContact.arena_is_verified) {\n  tags.push('arena-verified');\n}\nif (userData.hubspotContact.arena_is_banned) {\n  tags.push('arena-banned');\n}\n\n// Room creator\nif (userData.hubspotContact.arena_total_rooms_created > 0) {\n  tags.push('arena-room-creator');\n}\n\nreturn {\n  json: {\n    contactId: contactId,\n    email: userData.email,\n    tags: tags\n  }\n};"
+      },
+      "name": "Calculate Tags",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1570, 200]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "name": "Split Tags",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 2,
+      "position": [1790, 200]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.hubapi.com/contacts/v1/lists/name/{{$json[\"tags\"][$index]}}/add",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "vids",
+              "value": "=[{{$node[\"Calculate Tags\"].json[\"contactId\"]}}]"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Add Contact to List",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2010, 200],
+      "credentials": {
+        "hubspotApi": {
+          "id": "1",
+          "name": "HubSpot API"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "timelineEvent",
+        "operation": "create",
+        "eventTemplateId": "arena_user_sync",
+        "email": "={{$node[\"Calculate Tags\"].json[\"email\"]}}",
+        "additionalFields": {
+          "properties": {
+            "property": [
+              {
+                "name": "event_type",
+                "value": "={{$node[\"Calculate Tags\"].json[\"event\"]}}"
+              },
+              {
+                "name": "arena_user_id",
+                "value": "={{$node[\"Transform User Data\"].json[\"arenaUserId\"]}}"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Add Timeline Event",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [2230, 200],
+      "credentials": {
+        "hubspotApi": {
+          "id": "1",
+          "name": "HubSpot API"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"User synced to HubSpot successfully\",\n  \"contactId\": \"{{$node[\"Calculate Tags\"].json[\"contactId\"]}}\",\n  \"email\": \"{{$node[\"Calculate Tags\"].json[\"email\"]}}\",\n  \"tags\": {{$json[\"tags\"]}},\n  \"event\": \"{{$node[\"Calculate Tags\"].json[\"event\"]}}\"\n}",
+        "options": {}
+      },
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2450, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"error\": \"Invalid payload: missing required fields\",\n  \"required\": [\"event\", \"userId\", \"userData\"]\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "name": "Error Response - Invalid Payload",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [690, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"error\": \"Failed to sync user to HubSpot\",\n  \"details\": \"{{$json[\"error\"][\"message\"]}}\"\n}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "name": "Error Response - Sync Failed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2450, 400]
+    }
+  ],
+  "connections": {
+    "Webhook - User Event": {
+      "main": [
+        [
+          {
+            "node": "Transform User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform User Data": {
+      "main": [
+        [
+          {
+            "node": "Search Existing Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Existing Contact": {
+      "main": [
+        [
+          {
+            "node": "Contact Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contact Exists?": {
+      "main": [
+        [
+          {
+            "node": "Create New Contact",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Existing Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create New Contact": {
+      "main": [
+        [
+          {
+            "node": "Calculate Tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Existing Contact": {
+      "main": [
+        [
+          {
+            "node": "Calculate Tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Tags": {
+      "main": [
+        [
+          {
+            "node": "Split Tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Tags": {
+      "main": [
+        [
+          {
+            "node": "Add Contact to List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Contact to List": {
+      "main": [
+        [
+          {
+            "node": "Split Tags",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Add Timeline Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Timeline Event": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-01-28T00:00:00.000Z",
+      "updatedAt": "2025-01-28T00:00:00.000Z",
+      "id": "1",
+      "name": "Arena DTD"
+    },
+    {
+      "createdAt": "2025-01-28T00:00:00.000Z",
+      "updatedAt": "2025-01-28T00:00:00.000Z",
+      "id": "2",
+      "name": "HubSpot Sync"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-28T00:00:00.000Z",
+  "versionId": "1"
+}

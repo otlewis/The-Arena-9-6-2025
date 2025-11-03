@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:audio_session/audio_session.dart' as audio_session;
 import 'package:livekit_client/livekit_client.dart';
+import 'package:volume_controller/volume_controller.dart';
 import '../core/logging/app_logger.dart';
 
 /// Service to manage audio volume and output routing for Arena debates
@@ -17,6 +18,9 @@ class AudioVolumeService {
   Future<void> configureLoudAudio() async {
     try {
       final session = await audio_session.AudioSession.instance;
+
+      // BOOST VOLUME: Set to maximum before configuring audio session
+      await _setSystemVolume(1.0);
 
       if (Platform.isIOS) {
         // iOS Configuration for loud speaker output
@@ -47,20 +51,41 @@ class AudioVolumeService {
         _logger.info('🔊 iOS: Speaker output configured via defaultToSpeaker option');
 
       } else if (Platform.isAndroid) {
-        // Android Configuration for loud speaker output
-        await session.configure(const audio_session.AudioSessionConfiguration.speech());
+        // Android Configuration optimized for high-quality audio output
+        await session.configure(audio_session.AudioSessionConfiguration(
+          avAudioSessionCategory: audio_session.AVAudioSessionCategory.playAndRecord,
+          avAudioSessionCategoryOptions:
+            audio_session.AVAudioSessionCategoryOptions.defaultToSpeaker,
+          avAudioSessionMode: audio_session.AVAudioSessionMode.videoChat,
+          avAudioSessionRouteSharingPolicy:
+            audio_session.AVAudioSessionRouteSharingPolicy.defaultPolicy,
+          avAudioSessionSetActiveOptions:
+            audio_session.AVAudioSessionSetActiveOptions.none,
+          androidAudioAttributes: const audio_session.AndroidAudioAttributes(
+            contentType: audio_session.AndroidAudioContentType.speech,
+            flags: audio_session.AndroidAudioFlags.audibilityEnforced, // Force audible audio
+            usage: audio_session.AndroidAudioUsage.voiceCommunication,
+          ),
+          androidAudioFocusGainType:
+            audio_session.AndroidAudioFocusGainType.gain, // Full audio focus for best quality
+          androidWillPauseWhenDucked: false,
+        ));
         await session.setActive(true);
 
         // Force speakerphone on Android using platform channel
         await _setSpeakerphoneOn(true);
 
-        _logger.info('🔊 Android: Speakerphone enabled');
+        _logger.info('🔊 Android: High-quality speakerphone enabled with full audio focus');
       }
 
-      // Boost system volume to 80% (if possible)
-      await _setSystemVolume(0.8);
+      // Double-check volume is at maximum after audio session configuration
+      await _setSystemVolume(1.0);
 
-      _logger.info('✅ Audio configured for loud speaker output');
+      // Add a small delay and check again (some Android devices reset volume)
+      await Future.delayed(const Duration(milliseconds: 500));
+      await _ensureMaximumVolume();
+
+      _logger.info('✅ Audio configured for loud speaker output with maximum volume');
 
     } catch (e) {
       _logger.error('Failed to configure loud audio: $e');
@@ -79,12 +104,19 @@ class AudioVolumeService {
     }
   }
 
-  /// Set system volume (requires volume_controller package for full control)
+  /// Set system volume to maximum for best audio quality
   Future<void> _setSystemVolume(double volume) async {
     try {
-      // This is a placeholder - you'd need volume_controller package
-      // or native code to actually control system volume
-      _logger.info('📢 Volume boost requested: ${(volume * 100).toInt()}%');
+      // Set volume to maximum (1.0 = 100%)
+      VolumeController().setVolume(volume);
+
+      // Small delay to let the change apply
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // Get current volume to verify
+      final currentVolume = await VolumeController().getVolume();
+
+      _logger.info('📢 System volume set to: ${(volume * 100).toInt()}% (actual: ${(currentVolume * 100).toInt()}%)');
     } catch (e) {
       _logger.error('Failed to set system volume: $e');
     }
@@ -137,6 +169,43 @@ class AudioVolumeService {
     if (!await isSpeakerOn()) {
       _logger.warning('⚠️ Speaker was disabled, re-enabling...');
       await configureLoudAudio();
+    }
+  }
+
+  /// Ensure volume is at maximum level
+  Future<void> _ensureMaximumVolume() async {
+    try {
+      final currentVolume = await VolumeController().getVolume();
+
+      if (currentVolume < 0.95) {
+        _logger.warning('⚠️ Volume dropped to ${(currentVolume * 100).toInt()}%, boosting back to 100%');
+        VolumeController().setVolume(1.0);
+      } else {
+        _logger.info('✅ Volume confirmed at maximum: ${(currentVolume * 100).toInt()}%');
+      }
+    } catch (e) {
+      _logger.error('Failed to ensure maximum volume: $e');
+    }
+  }
+
+  /// Periodically monitor and maintain maximum volume (call this in arena rooms)
+  Future<void> maintainMaximumVolume() async {
+    try {
+      // Listen to volume changes
+      VolumeController().listener((volume) {
+        _logger.debug('📢 Volume changed to: ${(volume * 100).toInt()}%');
+
+        // If user lowers volume, respect it but log it
+        if (volume < 0.8) {
+          _logger.info('ℹ️ User manually lowered volume to ${(volume * 100).toInt()}%');
+        }
+      });
+
+      // Set initial volume to maximum
+      VolumeController().setVolume(1.0);
+      _logger.info('🔊 Volume monitoring active - maintaining maximum volume');
+    } catch (e) {
+      _logger.error('Failed to maintain maximum volume: $e');
     }
   }
 }

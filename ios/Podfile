@@ -38,6 +38,8 @@ post_install do |installer|
     # If you *must* relax privacy manifest validation (optional):
     target.build_configurations.each do |config|
       config.build_settings['VALIDATE_PRIVACY_MANIFESTS'] = 'NO'
+      # Ensure minimum iOS deployment target for all pods
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
     end
   end
 end

@@ -21,7 +21,14 @@ service cloud.firestore {
     match /coin_transactions/{transactionId} {
       allow read, write: if request.auth != null;
     }
-    
+
+    // Users collection - coin balances stored here
+    match /users/{userId} {
+      // Allow any authenticated user to read/write any user's coin balance
+      // This is necessary because we use Appwrite user IDs, not Firebase Auth UIDs
+      allow read, write: if request.auth != null;
+    }
+
     // Default rule for other collections
     match /{document=**} {
       allow read, write: if false;

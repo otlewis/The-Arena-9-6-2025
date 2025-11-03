@@ -71,4 +71,27 @@ Got dependencies!
 64 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 Analyzing arena2...                                             
-No issues found! (ran in 8.4s)
+
+warning • The value of the field '_userService' isn't used • lib/screens/admin_dashboard_screen.dart:18:26 • unused_field
+  error • The getter 'isBanned' isn't defined for the type 'UserProfile' • lib/screens/admin_user_management_screen.dart:186:23 • undefined_getter
+  error • The getter 'isBanned' isn't defined for the type 'UserProfile' • lib/screens/admin_user_management_screen.dart:194:33 • undefined_getter
+  error • The property 'isNotEmpty' can't be unconditionally accessed because the receiver can be 'null' • lib/screens/admin_user_management_screen.dart:198:27 • unchecked_use_of_nullable_value
+  error • The argument type 'String?' can't be assigned to the parameter type 'String'.  • lib/screens/admin_user_management_screen.dart:198:53 • argument_type_not_assignable
+  error • The property 'isEmpty' can't be unconditionally accessed because the receiver can be 'null' • lib/screens/admin_user_management_screen.dart:199:30 • unchecked_use_of_nullable_value
+  error • The getter 'isBanned' isn't defined for the type 'UserProfile' • lib/screens/admin_user_management_screen.dart:203:33 • undefined_getter
+  error • The getter 'isBanned' isn't defined for the type 'UserProfile' • lib/screens/admin_user_management_screen.dart:221:22 • undefined_getter
+  error • The getter 'reputation' isn't defined for the type 'UserProfile' • lib/screens/admin_user_management_screen.dart:243:53 • undefined_getter
+  error • The getter 'totalLosses' isn't defined for the type 'UserProfile' • lib/screens/admin_user_management_screen.dart:243:100 • undefined_getter
+  error • The getter 'reputation' isn't defined for the type 'UserProfile' • lib/screens/admin_user_management_screen.dart:286:46 • undefined_getter
+warning • Unnecessary cast • lib/screens/admin_user_management_screen.dart:308:26 • unnecessary_cast
+warning • Unnecessary cast • lib/screens/admin_user_management_screen.dart:309:30 • unnecessary_cast
+  error • The property 'isNotEmpty' can't be unconditionally accessed because the receiver can be 'null' • lib/screens/admin_user_management_screen.dart:459:61 • unchecked_use_of_nullable_value
+  error • The argument type 'String?' can't be assigned to the parameter type 'String'.  • lib/screens/admin_user_management_screen.dart:460:44 • argument_type_not_assignable
+  error • The property 'isEmpty' can't be unconditionally accessed because the receiver can be 'null' • lib/screens/admin_user_management_screen.dart:462:51 • unchecked_use_of_nullable_value
+  error • The getter 'isBanned' isn't defined for the type 'UserProfile' • lib/screens/admin_user_management_screen.dart:495:45 • undefined_getter
+  error • The getter 'totalLosses' isn't defined for the type 'UserProfile' • lib/screens/admin_user_management_screen.dart:563:39 • undefined_getter
+  error • The getter 'isBanned' isn't defined for the type 'UserProfile' • lib/screens/admin_user_management_screen.dart:727:26 • undefined_getter
+  error • The getter 'banReason' isn't defined for the type 'UserProfile' • lib/screens/admin_user_management_screen.dart:785:27 • undefined_getter
+  error • The getter 'banReason' isn't defined for the type 'UserProfile' • lib/screens/admin_user_management_screen.dart:788:42 • undefined_getter
+
+21 issues found. (ran in 9.8s)

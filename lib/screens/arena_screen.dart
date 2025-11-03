@@ -10,6 +10,7 @@ import '../models/message.dart';
 import '../models/judge_scorecard.dart';
 import '../widgets/user_profile_bottom_sheet.dart';
 import '../widgets/mattermost_chat_widget.dart';
+import '../widgets/invite_followers_bottom_sheet.dart';
 import '../models/discussion_chat_message.dart';
 import '../screens/email_compose_screen.dart';
 import 'dart:async';
@@ -560,6 +561,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Timer? _roomCompletionTimer; // Timer for room completion after closure
   Timer? _muteStateSyncTimer; // Periodic mute state sync to prevent stuck states
   Timer? _liveKitStateDebounce; // Debounce rapid LiveKit state changes (AGC can trigger many events)
+  Timer? _participantUpdateDebouncer; // Debounce rapid participant updates
   // Consolidated real-time subscription manager
   final RoomRealtimeManager _realtimeManager = RoomRealtimeManager();
   RoomSubscription? _roomSubscription;
@@ -623,6 +625,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   bool _isReconnecting = false;
   int _connectionDropCount = 0;
   DateTime? _lastConnectionDrop;
+
+  // Timeout tracking
+  bool _isCurrentUserTimedOut = false;
+  Timer? _timeoutCheckTimer;
+  StreamSubscription<RealtimeMessage>? _timeoutSubscription;
   
   // Connection stability thresholds
   int _consecutiveUnhealthyChecks = 0;
@@ -656,6 +663,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     'judge2': null,
     'judge3': null,
   };
+
+  /// Check if all 3 judge slots are filled
+  bool get _areAllJudgeSlotsFilled {
+    return _participants['judge1'] != null &&
+           _participants['judge2'] != null &&
+           _participants['judge3'] != null;
+  }
 
   // Realtime role change tracking (race condition prevention + deduplication)
   final Map<String, DateTime> _lastRoleChangeTimestamps = {}; // userId -> timestamp
@@ -998,6 +1012,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _liveKitStateDebounce?.cancel();
     _liveKitStateDebounce = null;
 
+    AppLogger().debug('🛑 DISPOSE: Cancelling participant update debouncer...');
+    _participantUpdateDebouncer?.cancel();
+    _participantUpdateDebouncer = null;
+
     AppLogger().debug('🛑 DISPOSE: Removing LiveKit service listener...');
     _liveKitService.removeListener(_onLiveKitStateChanged);
 
@@ -1008,7 +1026,14 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _stopConnectionHealthMonitoring();
     _reconnectionTimer?.cancel();
     _presenceHeartbeatTimer?.cancel();
-    
+
+    // Stop timeout monitoring
+    AppLogger().debug('🛑 DISPOSE: Cancelling timeout monitoring...');
+    _timeoutCheckTimer?.cancel();
+    _timeoutCheckTimer = null;
+    _timeoutSubscription?.cancel();
+    _timeoutSubscription = null;
+
     AppLogger().debug('🛑 DISPOSE: Cleaning up consolidated subscriptions...');
     _realtimeManager.unsubscribeFromRoom(widget.roomId);
     _participantStreamListener?.cancel();
@@ -1938,22 +1963,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
             if (userId != null && newRole != null) {
               AppLogger().info('📡 APPWRITE: New participant joined - User $userId as $newRole');
-              AppLogger().info('🎯 2v2 FIX: New ${newRole} joined - triggering full participant refresh');
+              AppLogger().info('🎯 2v2 FIX: New ${newRole} joined - triggering debounced participant refresh');
 
               // CRITICAL FIX FOR 2v2: When new participants join (especially affirmative2/negative2),
               // existing users need to see them immediately without leaving/rejoining
+              // Use debounced reload to prevent rapid flickering
               if (mounted && !_isExiting) {
-                // Step 1: Refresh participant list to get new user data
-                await _loadParticipants();
-
-                // Step 2: Force UI rebuild to show new participants
-                // LiveKit will automatically detect the new participant via room events
-                // and the UI rebuild will pick up their audio/video streams
-                if (mounted) {
-                  setState(() {
-                    AppLogger().debug('🔄 2v2 FIX: UI refreshed to show new participant in $newRole slot');
-                  });
-                }
+                _debouncedLoadParticipants();
               }
             }
           }
@@ -1965,8 +1981,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             if (userId != null) {
               AppLogger().info('📡 APPWRITE: Participant left - User $userId');
 
-              // Refresh participant list for departures
-              _loadParticipants();
+              // Refresh participant list for departures (debounced to prevent rapid flickering)
+              _debouncedLoadParticipants();
             }
           }
 
@@ -2528,7 +2544,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         return;
       }
       
-      // Only allow audio toggle for judges, moderators, and debaters  
+      // Only allow audio toggle for judges, moderators, and debaters
       if (!_shouldUserPublishMedia()) {
         AppLogger().debug('🔇 Mute Toggle: Role $_userRole does not have microphone access');
         if (mounted) {
@@ -2542,7 +2558,35 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         }
         return;
       }
-      
+
+      // TIMEOUT CHECK: Prevent timed out users from unmuting
+      if (_currentUser != null) {
+        final timeoutService = UserTimeoutService();
+        final isTimedOut = await timeoutService.isUserTimedOut(_currentUser!.id, widget.roomId);
+
+        if (isTimedOut) {
+          final timeout = await timeoutService.getActiveTimeout(_currentUser!.id, widget.roomId);
+
+          if (timeout != null) {
+            final expiresAt = DateTime.parse(timeout['expiresAt']);
+            final remainingMinutes = expiresAt.difference(DateTime.now()).inMinutes;
+
+            AppLogger().warning('⏰ User is timed out - cannot unmute (${remainingMinutes}m remaining)');
+
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('⏰ You are timed out and cannot unmute ($remainingMinutes minutes remaining)'),
+                  backgroundColor: Colors.orange,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            }
+          }
+          return;
+        }
+      }
+
       // Connect to audio first if not connected
       if (!_isWebRTCConnected) {
         AppLogger().info('🎤 MODERATOR FIX: Not connected to WebRTC - initiating connection for $_userRole');
@@ -2677,12 +2721,94 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       }
     }
   }
-  
+
+  // ===== TIMEOUT MANAGEMENT =====
+
+  /// Check if current user is timed out and update state
+  Future<void> _checkTimeoutStatus() async {
+    if (_currentUser == null) return;
+
+    try {
+      final timeoutService = UserTimeoutService();
+      final isTimedOut = await timeoutService.isUserTimedOut(_currentUser!.id, widget.roomId);
+
+      // Update state if timeout status changed
+      if (mounted && _isCurrentUserTimedOut != isTimedOut) {
+        setState(() {
+          _isCurrentUserTimedOut = isTimedOut;
+        });
+
+        // If user was just released from timeout, show success message
+        if (!isTimedOut && mounted) {
+          AppLogger().info('✅ Timeout expired - permissions restored for ${_currentUser!.id}');
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Timeout expired - you can now unmute and participate'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+
+          // Force UI rebuild to ensure buttons are enabled
+          setState(() {
+            // Trigger rebuild
+          });
+        }
+      }
+    } catch (e) {
+      AppLogger().error('Error checking timeout status: $e');
+    }
+  }
+
+  /// Start periodic timeout status check (every 10 seconds)
+  void _startPeriodicTimeoutCheck() {
+    if (_currentUser == null) return;
+
+    // Run initial check
+    _checkTimeoutStatus();
+
+    // Set up periodic timer
+    _timeoutCheckTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _checkTimeoutStatus();
+    });
+
+    AppLogger().debug('⏰ Started periodic timeout status check');
+  }
+
+  /// Set up real-time subscription for user timeout changes
+  void _setupTimeoutSubscription() {
+    if (_currentUser == null) return;
+
+    try {
+      final realtime = _appwrite.realtime;
+
+      // Subscribe to user_timeouts collection
+      _timeoutSubscription = realtime.subscribe([
+        'databases.arena_db.collections.user_timeouts.documents',
+      ]).stream.listen((response) async {
+        AppLogger().debug('⏰ Timeout subscription event: ${response.events}');
+
+        // Check if this timeout event is for the current user in this room
+        final payload = response.payload;
+        if (payload['userId'] == _currentUser!.id && payload['roomId'] == widget.roomId) {
+          AppLogger().info('⏰ REAL-TIME: Timeout event for current user');
+
+          // Immediately check timeout status
+          await _checkTimeoutStatus();
+        }
+      });
+
+      AppLogger().debug('⏰ Timeout realtime subscription set up');
+    } catch (e) {
+      AppLogger().error('Failed to set up timeout subscription: $e');
+    }
+  }
 
 
 
   // Video toggle removed - Arena is audio-only
-  
+
   /// Standardized microphone button matching Open Discussion style
   Widget _buildEnhancedMicButton() {
     // Show loading state if role is not loaded yet
@@ -3091,6 +3217,20 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
+  /// Debounced participant reload to prevent rapid flickering
+  /// Only reload once per 300ms to batch rapid updates
+  void _debouncedLoadParticipants() {
+    // Cancel any pending reload
+    _participantUpdateDebouncer?.cancel();
+
+    // Schedule new reload after 300ms
+    _participantUpdateDebouncer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted && !_isExiting) {
+        _loadParticipants();
+      }
+    });
+  }
+
   Future<void> _loadParticipants() async {
     AppLogger().debug('🎭 DEBUG: _loadParticipants() called for room ${widget.roomId}');
     try {
@@ -3492,7 +3632,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       if (_isIOSOptimizationEnabled && _currentUser != null) {
         _iosUserProfileCache[user.$id] = _currentUser!;
       }
-      
+
+      // Start timeout monitoring now that we have current user
+      if (_currentUser != null && mounted) {
+        _startPeriodicTimeoutCheck();
+        _setupTimeoutSubscription();
+      }
+
       AppLogger().info('iOS: User data loaded in ${stopwatch.elapsedMilliseconds}ms');
     } catch (e) {
       AppLogger().error('Error loading optimized user data: $e');
@@ -4235,6 +4381,49 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
+  /// Show invite followers modal to ping followers into the arena
+  void _showPingFollowers() async {
+    try {
+      if (_currentUser == null) {
+        AppLogger().error('Cannot ping followers: current user is null');
+        return;
+      }
+
+      // Get room name from roomData
+      String roomName = 'Arena';
+      if (_roomData != null && _roomData!['topic'] != null) {
+        roomName = _roomData!['topic'];
+      } else if (_roomData != null && _roomData!['title'] != null) {
+        roomName = _roomData!['title'];
+      }
+
+      if (mounted) {
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (context) => InviteFollowersBottomSheet(
+            roomId: widget.roomId,
+            roomName: roomName,
+            roomType: 'arena',
+            currentUserId: _currentUser!.id,
+            currentUserName: _currentUser!.name,
+          ),
+        );
+      }
+    } catch (e) {
+      AppLogger().error('Error showing ping followers modal: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
 
   void _showUserProfile(UserProfile userProfile, String? userRole) {
     showModalBottomSheet(
@@ -4243,6 +4432,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       isScrollControlled: true,
       builder: (context) => UserProfileBottomSheet(
         user: userProfile,
+        roomId: widget.roomId, // Pass room ID for ping followers
+        roomType: 'arena', // Arena room type
         onFollow: () async {
           if (_currentUser == null) return;
 
@@ -4361,6 +4552,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         backgroundColor: Colors.black,
         appBar: ArenaAppBar(
           isModerator: _isModerator,
+          isSuperModerator: _isSuperModerator, // Pass super moderator status
           isDebater: _isDebater, // DEBATER MODERATOR: Pass debater status
           onShowModeratorControls: _showModeratorControlModal,
           onShowDebaterControls: _isDebater && !_isModerator
@@ -4368,6 +4560,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               : null, // DEBATER MODERATOR: Only show if debater and no moderator
           onExitArena: _exitArena,
           onEmergencyCloseRoom: _emergencyCloseRoom,
+          onPingFollowers: _showPingFollowers, // Ping followers button
           roomId: widget.roomId,
           userId: _currentUserId ?? '',
           votedCount: _judgeVotedCount,
@@ -4700,21 +4893,21 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         // More aggressive sizing for iOS to ensure audience is visible
         final isSmallScreen = availableHeight < 600;
         
-        // Adjust heights based on available space - increased for larger avatars
+        // Adjust heights based on available space - optimized for iPhone 12 and smaller screens
         final judgeHeight = isIOS
-            ? (isSmallScreen ? 110.0 : 135.0) // Increased judge size for larger avatars
-            : (isSmallScreen ? 120.0 : 150.0); // Increased judge size for larger avatars
+            ? (isSmallScreen ? 100.0 : 135.0) // Reduced for small screens (iPhone 12)
+            : (isSmallScreen ? 120.0 : 150.0);
         // Different heights for 1v1 vs 2v2 modes
         final debaterHeight1v1 = isIOS
-            ? (isSmallScreen ? 120.0 : 140.0) // Good size for 1v1
-            : (isSmallScreen ? 140.0 : 160.0); // Good size for 1v1
-        // For 2v2: balanced size for comfort while showing audience (reduced for small screens)
+            ? (isSmallScreen ? 110.0 : 140.0) // Reduced for small screens
+            : (isSmallScreen ? 140.0 : 160.0);
+        // For 2v2: reduced size for small screens to prevent overflow
         final debaterHeight2v2 = isIOS
-            ? (isSmallScreen ? 180.0 : 220.0) // Reduced for small screens to prevent overflow
-            : (isSmallScreen ? 190.0 : 250.0); // Reduced for small screens to prevent overflow
+            ? (isSmallScreen ? 160.0 : 220.0) // Significantly reduced for small screens to prevent overflow
+            : (isSmallScreen ? 180.0 : 250.0);
         final moderatorHeight = isIOS
-            ? (isSmallScreen ? 95.0 : 115.0) // Increased moderator size for larger avatars
-            : (isSmallScreen ? 105.0 : 130.0); // Increased moderator size for larger avatars
+            ? (isSmallScreen ? 85.0 : 115.0) // Reduced for small screens
+            : (isSmallScreen ? 105.0 : 130.0);
         
         // Calculate total debate section height dynamically - use appropriate debater height
         final debaterHeight = _teamSize == 1 ? debaterHeight1v1 : debaterHeight2v2;
@@ -6178,9 +6371,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   ),
                 ),
 
-              // Request Judge button (only for moderators when judging hasn't started)
+              // Request Judge button (only for moderators when judging hasn't started and slots available)
               // EXPLICITLY prevent debaters from seeing this button
-              if (_userRole == 'moderator' && !_isDebater && !_judgingComplete) ...[
+              if (_userRole == 'moderator' && !_isDebater && !_judgingComplete && !_areAllJudgeSlotsFilled) ...[
                 // Debug logging
                 Builder(builder: (context) {
                   AppLogger().debug('🎯 REQUEST JUDGE BUTTON: Showing for moderator (role: $_userRole)');

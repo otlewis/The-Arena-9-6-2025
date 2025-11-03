@@ -5,5 +5,7 @@
         <domain includeSubdomains="false">localhost</domain>
         <domain includeSubdomains="false">127.0.0.1</domain>
         <domain includeSubdomains="false">10.0.2.2</domain>
+        <!-- LiveKit server on Google Cloud Services -->
+        <domain includeSubdomains="false">34.171.185.205</domain>
     </domain-config>
 </network-security-config>

@@ -1,0 +1,514 @@
+{
+  "name": "Arena Inactivity Detector",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule-daily",
+      "name": "Schedule Daily Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 1000,
+        "filters": {
+          "customPropertiesUi": {
+            "customPropertiesValues": [
+              {
+                "property": "arena_user_id",
+                "operator": "HAS_PROPERTY"
+              }
+            ]
+          }
+        },
+        "options": {
+          "properties": [
+            "arena_user_id",
+            "email",
+            "firstname",
+            "lastname",
+            "arena_last_activity_date",
+            "arena_days_since_last_activity",
+            "arena_total_debates",
+            "arena_is_premium",
+            "arena_engagement_score"
+          ]
+        }
+      },
+      "id": "get-all-contacts",
+      "name": "Get All Arena Contacts",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [470, 300],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate days since last activity for each contact\nconst contacts = $input.all();\nconst today = new Date();\nconst updatedContacts = [];\n\nfor (const contact of contacts) {\n  const lastActivity = contact.json.properties?.arena_last_activity_date;\n  \n  if (lastActivity) {\n    const lastActivityDate = new Date(lastActivity);\n    const timeDiff = today.getTime() - lastActivityDate.getTime();\n    const daysSinceActivity = Math.floor(timeDiff / (1000 * 3600 * 24));\n    \n    // Determine user lifecycle stage\n    let lifecycleStage = 'active';\n    if (daysSinceActivity >= 60) {\n      lifecycleStage = 'churned';\n    } else if (daysSinceActivity >= 30) {\n      lifecycleStage = 'at_risk';\n    } else if (daysSinceActivity >= 14) {\n      lifecycleStage = 'inactive';\n    } else if (daysSinceActivity >= 7) {\n      lifecycleStage = 'cooling';\n    }\n    \n    // Calculate re-engagement priority (0-100)\n    let reEngagementPriority = 0;\n    const totalDebates = contact.json.properties?.arena_total_debates || 0;\n    const isPremium = contact.json.properties?.arena_is_premium || false;\n    const engagementScore = contact.json.properties?.arena_engagement_score || 0;\n    \n    // Base priority on inactivity\n    if (daysSinceActivity >= 7 && daysSinceActivity <= 14) {\n      reEngagementPriority += 30; // Recent inactivity - catch them early\n    } else if (daysSinceActivity >= 14 && daysSinceActivity <= 30) {\n      reEngagementPriority += 50; // Moderately inactive - high priority\n    } else if (daysSinceActivity >= 30 && daysSinceActivity <= 60) {\n      reEngagementPriority += 40; // Very inactive - still recoverable\n    } else if (daysSinceActivity > 60) {\n      reEngagementPriority += 10; // Churned - low priority\n    }\n    \n    // Boost priority for valuable users\n    if (isPremium) {\n      reEngagementPriority += 20;\n    }\n    if (totalDebates >= 20) {\n      reEngagementPriority += 15;\n    }\n    if (engagementScore >= 60) {\n      reEngagementPriority += 10;\n    }\n    \n    // Cap at 100\n    reEngagementPriority = Math.min(reEngagementPriority, 100);\n    \n    updatedContacts.push({\n      json: {\n        id: contact.json.id,\n        arenaUserId: contact.json.properties?.arena_user_id,\n        email: contact.json.properties?.email,\n        firstName: contact.json.properties?.firstname,\n        lastName: contact.json.properties?.lastname,\n        daysSinceActivity,\n        lifecycleStage,\n        reEngagementPriority,\n        totalDebates,\n        isPremium,\n        engagementScore,\n        lastActivityDate: lastActivity\n      }\n    });\n  }\n}\n\n// Sort by re-engagement priority (highest first)\nupdatedContacts.sort((a, b) => b.json.reEngagementPriority - a.json.reEngagementPriority);\n\nreturn updatedContacts;"
+      },
+      "id": "calculate-inactivity",
+      "name": "Calculate Inactivity Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.daysSinceActivity }}",
+              "operation": "largerEqual",
+              "value2": 7
+            }
+          ]
+        }
+      },
+      "id": "filter-inactive",
+      "name": "Filter Inactive Users",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "update",
+        "contactId": "={{ $json.id }}",
+        "updateFields": {
+          "customPropertiesUi": {
+            "customPropertiesValues": [
+              {
+                "property": "arena_days_since_last_activity",
+                "value": "={{ $json.daysSinceActivity }}"
+              },
+              {
+                "property": "arena_lifecycle_stage",
+                "value": "={{ $json.lifecycleStage }}"
+              },
+              {
+                "property": "arena_re_engagement_priority",
+                "value": "={{ $json.reEngagementPriority }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "update-contact-metrics",
+      "name": "Update Contact Metrics",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1130, 200],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.lifecycleStage }}",
+              "operation": "equals",
+              "value2": "cooling"
+            }
+          ]
+        }
+      },
+      "id": "is-cooling",
+      "name": "Is Cooling?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1350, 200]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "enrollInSequence",
+        "contactId": "={{ $json.id }}",
+        "sequenceId": "COOLING_USERS_EMAIL_SEQUENCE_ID"
+      },
+      "id": "enroll-cooling-email",
+      "name": "Enroll in Cooling Email",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1570, 100],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.lifecycleStage }}",
+              "operation": "equals",
+              "value2": "inactive"
+            }
+          ]
+        }
+      },
+      "id": "is-inactive",
+      "name": "Is Inactive?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1350, 400]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "enrollInSequence",
+        "contactId": "={{ $json.id }}",
+        "sequenceId": "INACTIVE_USERS_EMAIL_SEQUENCE_ID"
+      },
+      "id": "enroll-inactive-email",
+      "name": "Enroll in Inactive Email",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1570, 300],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.lifecycleStage }}",
+              "operation": "equals",
+              "value2": "at_risk"
+            }
+          ]
+        }
+      },
+      "id": "is-at-risk",
+      "name": "Is At Risk?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1350, 600]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "enrollInSequence",
+        "contactId": "={{ $json.id }}",
+        "sequenceId": "AT_RISK_USERS_EMAIL_SEQUENCE_ID"
+      },
+      "id": "enroll-at-risk-email",
+      "name": "Enroll in At-Risk Email",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1570, 500],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.lifecycleStage }}",
+              "operation": "equals",
+              "value2": "churned"
+            }
+          ]
+        }
+      },
+      "id": "is-churned",
+      "name": "Is Churned?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1350, 800]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "addToList",
+        "contactId": "={{ $json.id }}",
+        "listId": "CHURNED_USERS_LIST_ID"
+      },
+      "id": "add-to-churned-list",
+      "name": "Add to Churned List",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1570, 700],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "engagementTimeline",
+        "operation": "create",
+        "contactId": "={{ $json.id }}",
+        "eventTemplateId": "INACTIVITY_DETECTED_EVENT_TEMPLATE_ID",
+        "fields": {
+          "lifecycle_stage": "={{ $json.lifecycleStage }}",
+          "days_since_activity": "={{ $json.daysSinceActivity }}",
+          "re_engagement_priority": "={{ $json.reEngagementPriority }}",
+          "detection_date": "={{ $now.toISO() }}"
+        }
+      },
+      "id": "add-timeline-event",
+      "name": "Add Timeline Event",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1790, 400],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "multiplex"
+      },
+      "id": "merge-results",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [2010, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate results\nconst items = $input.all();\nconst summary = {\n  totalProcessed: items.length,\n  cooling: 0,\n  inactive: 0,\n  atRisk: 0,\n  churned: 0,\n  timestamp: new Date().toISOString()\n};\n\nfor (const item of items) {\n  const stage = item.json.lifecycleStage;\n  if (stage === 'cooling') summary.cooling++;\n  else if (stage === 'inactive') summary.inactive++;\n  else if (stage === 'at_risk') summary.atRisk++;\n  else if (stage === 'churned') summary.churned++;\n}\n\nreturn [{ json: summary }];"
+      },
+      "id": "create-summary",
+      "name": "Create Summary Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2230, 400]
+    }
+  ],
+  "connections": {
+    "Schedule Daily Check": {
+      "main": [
+        [
+          {
+            "node": "Get All Arena Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Arena Contacts": {
+      "main": [
+        [
+          {
+            "node": "Calculate Inactivity Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Inactivity Metrics": {
+      "main": [
+        [
+          {
+            "node": "Filter Inactive Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Inactive Users": {
+      "main": [
+        [
+          {
+            "node": "Update Contact Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Contact Metrics": {
+      "main": [
+        [
+          {
+            "node": "Is Cooling?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is Inactive?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is At Risk?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is Churned?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Cooling?": {
+      "main": [
+        [
+          {
+            "node": "Enroll in Cooling Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enroll in Cooling Email": {
+      "main": [
+        [
+          {
+            "node": "Add Timeline Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Inactive?": {
+      "main": [
+        [
+          {
+            "node": "Enroll in Inactive Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enroll in Inactive Email": {
+      "main": [
+        [
+          {
+            "node": "Add Timeline Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is At Risk?": {
+      "main": [
+        [
+          {
+            "node": "Enroll in At-Risk Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enroll in At-Risk Email": {
+      "main": [
+        [
+          {
+            "node": "Add Timeline Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Churned?": {
+      "main": [
+        [
+          {
+            "node": "Add to Churned List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to Churned List": {
+      "main": [
+        [
+          {
+            "node": "Add Timeline Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Timeline Event": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Create Summary Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "arena-inactivity-detector",
+  "meta": {
+    "instanceId": "YOUR_N8N_INSTANCE_ID"
+  },
+  "tags": []
+}

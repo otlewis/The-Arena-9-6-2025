@@ -1,4 +1,5 @@
 // ignore_for_file: deprecated_member_use_from_same_package
+import 'dart:convert';
 import '../services/appwrite_service.dart';
 import '../services/reputation_service.dart';
 import '../core/logging/app_logger.dart';
@@ -112,19 +113,64 @@ class CoinService {
     }
   }
 
-  /// INSTANT DEDUCTION: Deduct coins with immediate database update (no balance check delay)
-  /// This method directly updates the database without fetching current balance first.
-  /// Use this for instant deductions where you've already verified the balance locally.
+  /// Call the Appwrite Function for coin operations (server-side atomic operations)
+  Future<Map<String, dynamic>?> _callCoinFunction({
+    required String operation,
+    required String userId,
+    int? amount,
+    String? recipientId,
+    String? giftId,
+  }) async {
+    try {
+      final body = {
+        'operation': operation,
+        'userId': userId,
+        if (amount != null) 'amount': amount,
+        if (recipientId != null) 'recipientId': recipientId,
+        if (giftId != null) 'giftId': giftId,
+      };
+
+      AppLogger().info('🔧 Calling manage-coin-balance function: $operation for user $userId');
+
+      final execution = await _appwrite.functions.createExecution(
+        functionId: 'manage-coin-balance',
+        body: jsonEncode(body),
+        xasync: false, // Wait for response
+      );
+
+      AppLogger().debug('🔧 Function execution response: ${execution.responseBody}');
+
+      if (execution.responseStatusCode == 200) {
+        final response = jsonDecode(execution.responseBody);
+        if (response['success'] == true) {
+          AppLogger().info('✅ Function call successful: $operation');
+          return response;
+        } else {
+          AppLogger().error('❌ Function returned error: ${response['error']}');
+          return null;
+        }
+      } else {
+        AppLogger().error('❌ Function execution failed with status: ${execution.responseStatusCode}');
+        return null;
+      }
+    } catch (e) {
+      AppLogger().error('❌ Error calling coin function: $e');
+      return null;
+    }
+  }
+
+  /// INSTANT DEDUCTION: Deduct coins using server-side function (ATOMIC)
+  /// This method calls the Appwrite Function to ensure atomic operations
   ///
   /// Parameters:
   /// - userId: The user's ID
   /// - amount: Amount to deduct
-  /// - currentBalance: The current balance (already known/verified)
+  /// - currentBalance: The current balance (for validation only)
   ///
   /// Returns: true if successful, false if insufficient funds or error
   Future<bool> deductCoinsInstant(String userId, int amount, int currentBalance) async {
     try {
-      // Quick validation
+      // Quick client-side validation
       if (currentBalance < amount) {
         AppLogger().warning('⚡ INSTANT DEDUCT: Insufficient coins for user $userId. Has: $currentBalance, needs: $amount');
         return false;
@@ -135,23 +181,22 @@ class CoinService {
         return false;
       }
 
-      final newBalance = currentBalance - amount;
+      AppLogger().info('⚡ INSTANT DEDUCT: Calling server function to deduct $amount coins from user $userId');
 
-      AppLogger().info('⚡ INSTANT DEDUCT: Deducting $amount coins from user $userId. New balance: $newBalance');
-
-      // Directly update the database without fetching balance first
-      await _appwrite.databases.updateDocument(
-        databaseId: 'arena_db',
-        collectionId: 'users',
-        documentId: userId,
-        data: {
-          'coinBalance': newBalance,
-          // Appwrite automatically updates $updatedAt
-        },
+      // Call server-side function for atomic operation
+      final response = await _callCoinFunction(
+        operation: 'DEDUCT',
+        userId: userId,
+        amount: amount,
       );
 
-      AppLogger().info('✅ INSTANT DEDUCT: Successfully deducted $amount coins from user $userId');
-      return true;
+      if (response != null && response['success'] == true) {
+        AppLogger().info('✅ INSTANT DEDUCT: Server confirmed deduction. New balance: ${response['newBalance']}');
+        return true;
+      } else {
+        AppLogger().error('❌ INSTANT DEDUCT: Server-side deduction failed');
+        return false;
+      }
     } catch (e) {
       AppLogger().error('❌ INSTANT DEDUCT: Error deducting coins: $e');
       return false;

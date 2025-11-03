@@ -34,6 +34,7 @@ import '../services/super_moderator_service.dart';
 import '../services/gamified_ranking_service.dart';
 import '../services/ranking_sync_service.dart';
 import 'rankings_screen.dart';
+import 'admin_dashboard_screen.dart';
 // All test screen imports removed - files deleted
 
 class HomeScreen extends StatefulWidget {
@@ -1111,7 +1112,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ],
         ),
         const SizedBox(height: 12),
-        // Bottom row - 2 cards
+        // Bottom row - 3 cards
         Row(
           children: [
             Expanded(
@@ -1136,6 +1137,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
           ],
         ),
+        // Admin row - only for super moderators
+        if (_currentUserProfile != null && SuperModeratorService().isSuperModerator(_currentUserProfile!.id)) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: AnimatedScaleIn(
+                  delay: const Duration(milliseconds: 2200),
+                  child: _buildFeatureCard('Admin', 'Admin Dashboard', () => _navigateToAdmin()),
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(child: SizedBox()), // Empty space
+              const SizedBox(width: 12),
+              const Expanded(child: SizedBox()), // Empty space
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -1152,6 +1171,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       'DebateClubs': 'assets/icons/debate clubs.png',
       'Tournaments': 'assets/images/bracket.png',
       'Rankings': 'assets/icons/rank1.png',
+      'Admin': Icons.admin_panel_settings, // Admin icon for super moderators
     };
     
     final iconAsset = iconMap[feature];
@@ -1333,6 +1353,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       context,
       MaterialPageRoute(
         builder: (context) => const RankingsScreen(),
+      ),
+    );
+  }
+
+  void _navigateToAdmin() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AdminDashboardScreen(),
       ),
     );
   }

@@ -111,41 +111,66 @@ class _UserProfileModalState extends State<UserProfileModal>
     }
   }
 
-  /// Check if user role restricts them from being challenged (optimized)
+  /// Check if user role restricts them from being challenged
+  /// Audience members can ALWAYS be challenged (even super moderators in audience)
   bool _isRoleRestrictedFromChallenges() {
+    // Check current role FIRST - audience members can ALWAYS be challenged
     final role = widget.userRole?.toLowerCase();
-    
-    if (role == null || role.isEmpty) {
-      return false;
+
+    if (role != null && role.isNotEmpty) {
+      // Audience members can ALWAYS be challenged (even super moderators in audience)
+      if (role == 'audience') {
+        return false;
+      }
+
+      // Room moderators cannot be challenged
+      if (role == 'moderator') {
+        return true;
+      }
+
+      // Judges cannot be challenged
+      if (role == 'judge' || role == 'judge1' || role == 'judge2' || role == 'judge3') {
+        return true;
+      }
+
+      // Active debaters cannot be challenged
+      if (role == 'affirmative' || role == 'negative' ||
+          role == 'affirmative2' || role == 'negative2') {
+        return true;
+      }
+
+      // Speakers in Discussion/Take rooms CAN be challenged
+      if (role == 'speaker') {
+        return false; // Speakers are allowed to be challenged
+      }
     }
-    
-    const restrictedRoles = {
-      'moderator',
-      'judge',
-      'judge1', 
-      'judge2',
-      'judge3',
-      'affirmative',
-      'negative',
-      'affirmative2',
-      'negative2',
-      'speaker', // For discussion rooms
-    };
-    
-    return restrictedRoles.contains(role);
+
+    // If no role in room, check if they're a registered moderator
+    // (Only block if they're not in a room or have no role)
+    if (widget.userProfile.isAvailableAsModerator) {
+      return true;
+    }
+
+    return false;
   }
 
   /// Get user-friendly restriction message based on role
   String _getRestrictionMessage() {
     final userName = widget.userProfile.displayName;
+
+    // If user is a registered moderator, show that message first
+    if (widget.userProfile.isAvailableAsModerator) {
+      return '$userName is a registered moderator and cannot be challenged';
+    }
+
     final role = widget.userRole?.toLowerCase();
-    
+
     switch (role) {
       case 'moderator':
-        return '$userName is a moderator and can\'t be challenged at this time';
+        return '$userName is a room moderator and can\'t be challenged';
       case 'judge':
       case 'judge1':
-      case 'judge2': 
+      case 'judge2':
       case 'judge3':
         return '$userName is currently judging and can\'t be challenged';
       case 'affirmative':
@@ -153,8 +178,6 @@ class _UserProfileModalState extends State<UserProfileModal>
       case 'affirmative2':
       case 'negative2':
         return '$userName is actively debating and can\'t be challenged right now';
-      case 'speaker':
-        return '$userName is currently speaking and can\'t be challenged';
       default:
         return '$userName is currently unavailable for challenges';
     }

@@ -8,7 +8,6 @@ import 'network_resilience_service.dart';
 import 'background_audio_service.dart';
 import 'manufacturer_workarounds_service.dart';
 import 'livekit_track_manager.dart';
-import 'appwrite_service.dart';
 
 /// LiveKit service that replaces MediaSoup SFU for all room types
 /// Handles Arena, Debates & Discussions, and Open Discussion rooms
@@ -23,7 +22,7 @@ class LiveKitService extends ChangeNotifier {
   
   // State
   bool _isConnected = false;
-  bool _isMuted = true; // Start muted by default to prevent audio bleeding
+  bool _isMuted = false; // Start unmuted - user can manually mute if needed
   bool _isDisposed = false;
   String? _currentRoom;
   String? _currentRoomType;
@@ -49,7 +48,11 @@ class LiveKitService extends ChangeNotifier {
   final Map<String, double> _audioLevels = {};
   final Map<String, Timer?> _speakingTimers = {};
   static const Duration _speakingTimeout = Duration(milliseconds: 500); // Time before considering user stopped speaking
-  
+
+  // Audio health monitoring
+  Timer? _audioHealthCheckTimer;
+  static const Duration _audioHealthCheckInterval = Duration(seconds: 10); // Check audio every 10 seconds
+
   // Callbacks for UI updates
   Function(RemoteParticipant)? onParticipantConnected;
   Function(RemoteParticipant)? onParticipantDisconnected;
@@ -439,7 +442,10 @@ class LiveKitService extends ChangeNotifier {
       }
       
       // Connection successful
-      
+
+      // Start periodic audio health monitoring
+      _startAudioHealthMonitoring();
+
       // Start background audio service if device supports it
       if (_canPublishMediaArenaOverride(_userRole!, _currentRoomType!)) {
         final userName = _localParticipant?.identity ?? 'User';
@@ -507,14 +513,19 @@ class LiveKitService extends ChangeNotifier {
     });
     
     // Track subscribed
-    roomListener.on<TrackSubscribedEvent>((event) {
+    roomListener.on<TrackSubscribedEvent>((event) async {
       AppLogger().debug('🎵 Track subscribed: ${event.track.kind}');
 
       // Always enable audio tracks - this is a debate room, everyone should be heard
       if (event.publication.kind.name == 'audio' && event.track is RemoteAudioTrack) {
         final audioTrack = event.track as RemoteAudioTrack;
+
+        // Enable the audio track
         audioTrack.enable();
-        AppLogger().debug('🔊 Audio enabled from ${event.participant.identity}');
+        AppLogger().debug('🔊 Audio enabled for ${event.participant.identity}');
+
+        // Note: RemoteAudioTrack volume is controlled at the platform audio mixer level
+        // The track is enabled which allows audio to flow through the system mixer at full volume
       }
 
       onTrackSubscribed?.call(event.publication, event.participant);
@@ -814,21 +825,29 @@ class LiveKitService extends ChangeNotifier {
     AppLogger().debug('🎤 SETUP MEDIA: Can publish result: $canPublish for role "$_userRole" in "$_currentRoomType"');
     
     if (canPublish) {
-      // IMPORTANT: Don't create tracks immediately for speakers/moderators
-      // They will be created when the user actually unmutes
-      // This prevents TrackPublishException on initial connection
-      AppLogger().debug('✅ SETUP MEDIA: Speaker/Moderator role detected - tracks will be created on first unmute');
-      AppLogger().debug('💡 SETUP MEDIA: Starting with muted state to prevent immediate track publishing');
-      _isMuted = true;
-      notifyListeners();
-      
-      // For moderators in debate_discussion rooms, try to setup tracks after a delay
+      // Media tracks will be created when user enables audio
+      AppLogger().debug('✅ SETUP MEDIA: Speaker/Moderator role detected - ready for audio');
+
+      // For moderators in debate_discussion rooms, auto-unmute after a delay
       // This gives the room time to fully establish connection
       if (_userRole == 'moderator' && _currentRoomType == 'debate_discussion') {
-        AppLogger().debug('⏳ SETUP MEDIA: Moderator detected - will attempt track creation after delay');
+        AppLogger().debug('⏳ SETUP MEDIA: Moderator detected - will auto-unmute after delay');
         Future.delayed(const Duration(seconds: 2), () async {
           if (_localParticipant != null && _room?.connectionState == ConnectionState.connected) {
             await _attemptModeratorAutoUnmute();
+          }
+        });
+      } else {
+        // For non-moderators (speakers, debaters), enable audio immediately
+        AppLogger().debug('🎤 SETUP MEDIA: Non-moderator role - enabling audio immediately');
+        Future.delayed(const Duration(milliseconds: 500), () async {
+          if (_localParticipant != null && _room?.connectionState == ConnectionState.connected && !_isMuted) {
+            try {
+              await enableAudio();
+              AppLogger().debug('✅ SETUP MEDIA: Audio enabled successfully for non-moderator');
+            } catch (e) {
+              AppLogger().warning('⚠️ SETUP MEDIA: Failed to auto-enable audio: $e');
+            }
           }
         });
       }
@@ -1114,7 +1133,10 @@ class LiveKitService extends ChangeNotifier {
 
             // Always enable audio - this is a debate room, everyone should be heard
             await audioTrack.enable();
-            AppLogger().debug('🔊 Enabled audio from ${participant.identity}');
+            AppLogger().debug('🔊 Enabled audio for ${participant.identity}');
+
+            // Note: RemoteAudioTrack volume is controlled at the platform audio mixer level
+            // The track is enabled which allows audio to flow through the system mixer at full volume
           }
         }
       }
@@ -1406,60 +1428,32 @@ class LiveKitService extends ChangeNotifier {
 
     AppLogger().debug('✅ FORCE ROLE UPDATE: LiveKit role updated to $_userRole');
 
-    // Check if permissions changed and we need a new token
+    // Check if permissions changed
     final oldCanPublish = oldRole != null ? _canPublishMedia(oldRole, roomType) : false;
     final newCanPublish = _canPublishMedia(newRole, roomType);
 
     if (oldCanPublish != newCanPublish) {
-      AppLogger().debug('🎫 TOKEN REFRESH: Permissions changed, requesting new token');
-      await _requestNewToken();
+      AppLogger().debug('🎫 PERMISSION CHANGE: Permissions changed from $oldCanPublish to $newCanPublish');
+
+      // If user gained audio permission (e.g., audience -> debater/judge)
+      if (!oldCanPublish && newCanPublish) {
+        AppLogger().debug('🎤 PERMISSION GRANTED: User can now publish audio - enabling audio track immediately');
+
+        // Immediately enable audio for faster permission granting
+        try {
+          // Small delay to let the role update propagate
+          await Future.delayed(const Duration(milliseconds: 100));
+          await enableAudio();
+          AppLogger().debug('✅ PERMISSION GRANTED: Audio enabled successfully');
+        } catch (e) {
+          AppLogger().debug('⚠️ PERMISSION GRANTED: Failed to auto-enable audio: $e');
+          // Not critical - user can manually unmute
+        }
+      }
     }
 
     notifyListeners();
   }
-
-  /// Request a new token from the server with updated role permissions
-  Future<void> _requestNewToken() async {
-    if (_currentRoom == null) return;
-
-    try {
-      AppLogger().debug('🎫 TOKEN REFRESH: Requesting new LiveKit token from server');
-      AppLogger().debug('🎫 TOKEN REFRESH: Current room: $_currentRoom');
-      AppLogger().debug('🎫 TOKEN REFRESH: Current role: $_userRole');
-
-      // Call the createLiveKitToken function with current room
-      final result = await _appwriteService.functions.createExecution(
-        functionId: 'createLiveKitToken',
-        body: jsonEncode({
-          'roomName': _currentRoom,
-        }),
-      );
-
-      AppLogger().debug('✅ TOKEN REFRESH: New token received from server');
-      AppLogger().debug('🎫 TOKEN REFRESH: Response: ${result.responseBody}');
-
-      // Note: In a production app, you'd need to reconnect with the new token
-      // For now, we'll just log that a new token was generated
-      AppLogger().debug('💡 TOKEN REFRESH: User should rejoin room to get new permissions');
-
-    } catch (e) {
-      AppLogger().debug('❌ TOKEN REFRESH: Failed to get new token: $e');
-
-      // More specific error handling
-      if (e.toString().contains('Function not found')) {
-        AppLogger().debug('🔧 TOKEN REFRESH: createLiveKitToken function not deployed yet');
-        onError?.call('Backend functions not available. Please ask moderator to refresh your role.');
-      } else if (e.toString().contains('Unauthorized')) {
-        AppLogger().debug('🔑 TOKEN REFRESH: Authentication issue');
-        onError?.call('Authentication error. Please re-login and try again.');
-      } else {
-        onError?.call('Failed to refresh permissions: $e');
-      }
-    }
-  }
-
-  /// Get reference to AppwriteService for token refresh
-  final _appwriteService = AppwriteService();
 
   /// Force setup audio for arena participants (judges, debaters) who might be having token issues
   Future<void> forceSetupArenaAudio() async {
@@ -1747,10 +1741,68 @@ class LiveKitService extends ChangeNotifier {
     await _unpublishAllTracks();
   }
 
+  /// Start periodic audio health monitoring to fix low volume issues proactively
+  void _startAudioHealthMonitoring() {
+    _audioHealthCheckTimer?.cancel();
+    _audioHealthCheckTimer = Timer.periodic(_audioHealthCheckInterval, (timer) {
+      _checkAndFixAudioHealth();
+    });
+    AppLogger().debug('🔊 Started audio health monitoring (every ${_audioHealthCheckInterval.inSeconds}s)');
+  }
+
+  /// Stop audio health monitoring
+  void _stopAudioHealthMonitoring() {
+    _audioHealthCheckTimer?.cancel();
+    _audioHealthCheckTimer = null;
+    AppLogger().debug('🔇 Stopped audio health monitoring');
+  }
+
+  /// Check and fix audio health for all remote participants
+  Future<void> _checkAndFixAudioHealth() async {
+    if (_room == null || !_isConnected) return;
+
+    try {
+      int fixedTracks = 0;
+      int checkedTracks = 0;
+
+      for (final participant in _room!.remoteParticipants.values) {
+        for (final publication in participant.audioTrackPublications) {
+          if (publication.track != null && publication.subscribed) {
+            final audioTrack = publication.track as RemoteAudioTrack;
+            checkedTracks++;
+
+            // CRITICAL FIX: Always ensure audio tracks stay enabled
+            // This prevents the gradual volume degradation issue
+            try {
+              // Re-enable the track to refresh its audio pipeline
+              audioTrack.disable();
+              await Future.delayed(const Duration(milliseconds: 50));
+              audioTrack.enable();
+              fixedTracks++;
+
+              AppLogger().debug('🔧 AUDIO HEALTH: Refreshed audio track for ${participant.identity}');
+            } catch (e) {
+              AppLogger().warning('⚠️ AUDIO HEALTH: Could not refresh track for ${participant.identity}: $e');
+            }
+          }
+        }
+      }
+
+      if (fixedTracks > 0 || checkedTracks > 0) {
+        AppLogger().debug('✅ AUDIO HEALTH: Refreshed $fixedTracks/$checkedTracks audio tracks');
+      }
+    } catch (e) {
+      AppLogger().warning('⚠️ AUDIO HEALTH: Error during health check: $e');
+    }
+  }
+
   /// Disconnect from the room
   Future<void> disconnect() async {
     try {
       AppLogger().debug('🔌 Disconnecting from LiveKit room...');
+
+      // Stop audio health monitoring
+      _stopAudioHealthMonitoring();
 
       // Stop background audio service
       await _backgroundAudioService.stopBackgroundService();

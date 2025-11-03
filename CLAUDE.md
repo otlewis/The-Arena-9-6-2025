@@ -104,7 +104,7 @@ lib/features/[feature_name]/
 - **Cloud Infrastructure**: Scalable SFU (Selective Forwarding Unit) architecture
 
 ### Debates & Discussions Room
-- **Floating Speakers Panel**: Always show 7 slots (1 moderator + 6 speakers)
+- **Floating Speakers Panel**: Always show 9 slots (1 moderator + 8 speakers)
 - **Hand-raising Flow**: audience → pending → speaker (requires moderator approval)
 - **Role Transitions**: Keep users visible in audience when pending
 - **Room Ending**: Must navigate ALL users out when moderator ends room

@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:appwrite/appwrite.dart';
 import '../../screens/email_inbox_screen.dart';
 import '../../screens/home_screen.dart';
 import '../../screens/premium_store_screen.dart';
 import '../../screens/profile_screen.dart';
 import '../../screens/login_screen.dart';
 import '../../screens/arena_screen.dart';
+import '../../screens/debates_discussions_screen.dart';
 import '../../features/navigation/providers/navigation_provider.dart';
 import '../../services/challenge_messaging_service.dart';
 import '../../services/sound_service.dart';
+import '../../services/appwrite_service.dart';
+import '../../services/livekit_service.dart';
 import '../../widgets/challenge_modal.dart';
 import '../../widgets/arena_role_notification_modal.dart';
 import '../../widgets/messaging_modal_system.dart';
@@ -27,26 +31,23 @@ class OptimizedMainNavigator extends ConsumerStatefulWidget {
 }
 
 class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator> with WidgetsBindingObserver {
-  
-  // Challenge system components
-  late final ChallengeMessagingService _messagingService;
-  late final SoundService _soundService;
-  late final NotificationService _notificationService;
+
+  // Challenge system components - lazy getters to avoid accessing before ready
+  ChallengeMessagingService get _messagingService => GetIt.instance<ChallengeMessagingService>();
+  SoundService get _soundService => GetIt.instance<SoundService>();
+  NotificationService get _notificationService => GetIt.instance<NotificationService>();
+  AppwriteService get _appwriteService => GetIt.instance<AppwriteService>();
+  LiveKitService get _liveKitService => GetIt.instance<LiveKitService>();
+
   final List<OverlayEntry> _arenaRoleOverlays = [];
   OverlayEntry? _challengeOverlay;
-  
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    
-    // Initialize services
-    _messagingService = GetIt.instance<ChallengeMessagingService>();
-    _soundService = GetIt.instance<SoundService>();
-    _notificationService = GetIt.instance<NotificationService>();
-    
-    
-    // Setup challenge listening after first frame
+
+    // Setup challenge listening after first frame (when services are ready)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(navigationProvider.notifier).refreshAuth();
       _setupChallengeListening();
@@ -176,17 +177,96 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
     AppLogger().debug('📱 ✅ Optimized challenge listening setup complete');
   }
 
-  void _navigateToArena(Map<String, dynamic> challenge) {
+  void _navigateToArena(Map<String, dynamic> challenge) async {
     AppLogger().debug('🏛️ Navigating to arena for challenge: ${challenge['id']}');
-    
+
     // Remove any existing challenge overlay
     _challengeOverlay?.remove();
     _challengeOverlay = null;
-    
+
     // Get the actual room ID from the challenge
     final roomId = challenge['arenaRoomId'] ?? 'arena_${challenge['id']}';
-    
+
+    // CHECK: Prevent moderators from accepting challenges while moderating a room
+    try {
+      final currentUser = await _appwriteService.getCurrentUser();
+      if (currentUser != null) {
+        // Check if user is currently moderating any debates_discussions rooms
+        final moderatingRooms = await _appwriteService.databases.listDocuments(
+          databaseId: 'arena_db',
+          collectionId: 'debate_discussion_rooms',
+          queries: [
+            Query.equal('moderatorId', currentUser.$id),
+            Query.equal('status', 'active'),
+            Query.limit(1),
+          ],
+        );
+
+        if (moderatingRooms.documents.isNotEmpty) {
+          // User is currently moderating a room - block navigation and show message
+          if (!mounted) return;
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.block, color: Colors.red),
+                  SizedBox(width: 8),
+                  Text('Cannot Accept Challenge'),
+                ],
+              ),
+              content: const Text(
+                'You are currently moderating a Debates & Discussions room.\n\n'
+                'Please end that room or assign another moderator before accepting arena challenges.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+          return; // Block navigation to arena
+        }
+      }
+    } catch (e) {
+      AppLogger().warning('⚠️ Error checking moderator status: $e');
+      // Continue anyway - don't block the user if check fails
+    }
+
+    // CRITICAL: Disconnect from LiveKit BEFORE navigating to prevent audio issues
+    // This ensures the user's microphone is disconnected from the debates_discussions room
+    try {
+      if (_liveKitService.isConnected) {
+        AppLogger().info('🎤 Disconnecting microphone from debates_discussions room before arena navigation...');
+        await _liveKitService.disconnect();
+        AppLogger().info('✅ Microphone disconnected');
+      }
+    } catch (e) {
+      AppLogger().warning('⚠️ Error disconnecting microphone: $e');
+    }
+
+    // CRITICAL FIX: Clean up Appwrite participants BEFORE navigating to arena
+    // This prevents ghost presence (user appearing in both rooms)
+    try {
+      final currentUser = await _appwriteService.getCurrentUser();
+      if (currentUser != null) {
+        // Set flag to prevent "kicked from room" modal in debates_discussions_screen
+        DebatesDiscussionsScreen.isNavigatingToArena = true;
+
+        AppLogger().info('🧹 Cleaning up debate/discussion rooms BEFORE arena navigation...');
+        await _appwriteService.exitAllDebateDiscussionRooms(userId: currentUser.$id);
+        AppLogger().info('✅ Successfully cleaned up debate/discussion rooms');
+      }
+    } catch (e) {
+      AppLogger().warning('⚠️ Error during cleanup before arena navigation: $e');
+      // Reset flag on error
+      DebatesDiscussionsScreen.isNavigatingToArena = false;
+    }
+
     // Navigate to Arena
+    if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => ArenaScreen(
@@ -199,10 +279,10 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
           challengedId: challenge['challengedId'],
         ),
       ),
-    ).then((_) {
-      // When user returns from arena, ensure bottom navigation is visible
+    ).then((_) async {
+      // Ensure bottom navigation is visible when returning from arena
       _ensureBottomNavigationVisible();
-      
+
       // Force refresh the widget
       if (mounted) {
         setState(() {
@@ -210,8 +290,9 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
         });
       }
     });
-    
+
     // Show notification that challenge was accepted
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('⚡ ${challenge['challengedName'] ?? 'Opponent'} accepted your challenge!'),

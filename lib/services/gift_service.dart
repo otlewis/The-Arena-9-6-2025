@@ -146,8 +146,15 @@ class GiftService {
         data: receivedGift.toJson(),
       );
 
-      // Deduct coins from sender
-      final coinDeducted = await _coinService.deductCoins(_currentUserId!, gift.cost.toInt());
+      // Get sender's current balance for instant deduction
+      final senderBalance = await _coinService.getUserCoins(_currentUserId!);
+
+      // Deduct coins from sender using instant deduction (server-side)
+      final coinDeducted = await _coinService.deductCoinsInstant(
+        _currentUserId!,
+        gift.cost.toInt(),
+        senderBalance
+      );
       if (!coinDeducted) {
         throw Exception('Failed to deduct coins');
       }

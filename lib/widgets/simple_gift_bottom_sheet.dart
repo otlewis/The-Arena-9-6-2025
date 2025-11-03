@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../models/user_profile.dart';
 import '../models/gift.dart';
+import '../models/money_tip.dart';
 import '../services/gift_service.dart';
-import '../services/coin_service.dart';
+import '../services/firebase_coin_service.dart';
 import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
 import 'real_time_coin_balance.dart';
+import 'money_tip_bottom_sheet.dart';
 
 /// Simple gift bottom sheet that definitely works
 class SimpleGiftBottomSheet extends StatefulWidget {
@@ -26,17 +28,26 @@ class SimpleGiftBottomSheet extends StatefulWidget {
 
 class _SimpleGiftBottomSheetState extends State<SimpleGiftBottomSheet> {
   final GiftService _giftService = GiftService();
-  final CoinService _coinService = CoinService();
+  final FirebaseCoinService _firebaseCoinService = FirebaseCoinService();
   final AppwriteService _appwriteService = AppwriteService();
 
   Gift? _selectedGift;
   final TextEditingController _messageController = TextEditingController();
+  RealTimeCoinBalanceController? _coinBalanceController;
 
 
   @override
   void dispose() {
     _messageController.dispose();
     super.dispose();
+  }
+
+  /// Determine room type from context
+  RoomType? _getRoomType() {
+    // You can determine this based on the room type passed from parent
+    // For now, return null and let the money tip sheet handle it
+    // You can pass roomType as a parameter to SimpleGiftBottomSheet if needed
+    return null;
   }
 
   Future<void> _sendGift() async {
@@ -60,59 +71,69 @@ class _SimpleGiftBottomSheetState extends State<SimpleGiftBottomSheet> {
       }
       AppLogger().debug('🎁 Current user: ${user.$id}');
 
-      // Check coin balance
-      final balance = await _coinService.getUserCoins(user.$id);
+      // Check coin balance from Firebase
+      final balance = await _firebaseCoinService.getUserCoins(user.$id);
       if (balance < _selectedGift!.cost) {
         _showError('Insufficient coins! You need ${_selectedGift!.cost} coins but only have $balance.');
         return;
       }
 
-      // If we have a callback (for in-room gifts), use it for real-time visual
+      // STEP 1: OPTIMISTICALLY deduct coins from UI FIRST (before anything else)
+      if (_coinBalanceController != null) {
+        _coinBalanceController!.optimisticallyDeduct(_selectedGift!.cost);
+        AppLogger().debug('💰 Step 1: Optimistically deducted ${_selectedGift!.cost} coins from UI');
+      }
+
+      // STEP 2: Deduct coins from Firebase IMMEDIATELY (atomic transaction)
+      bool coinDeductionSuccess = false;
+      try {
+        AppLogger().debug('💰 Step 2: Attempting to deduct ${_selectedGift!.cost} coins from user ${user.$id} via Firebase transaction...');
+        coinDeductionSuccess = await _firebaseCoinService.deductCoins(user.$id, _selectedGift!.cost);
+        if (coinDeductionSuccess) {
+          AppLogger().info('✅ Step 2: Successfully deducted ${_selectedGift!.cost} coins via Firebase!');
+        } else {
+          AppLogger().error('❌ Step 2: Firebase coin deduction failed - insufficient balance');
+          _showError('Failed to deduct coins. Please try again.');
+          return; // Don't send gift if coins couldn't be deducted
+        }
+      } catch (e) {
+        AppLogger().error('❌ Step 2: Coin deduction error: $e');
+        _showError('Failed to deduct coins: $e');
+        return; // Don't send gift if coins couldn't be deducted
+      }
+
+      // STEP 3: Now send the gift (only after coins are successfully deducted)
       if (widget.onGiftSent != null && widget.roomId != null) {
         try {
-          AppLogger().debug('🎁 Getting current user profile for gift visual...');
+          AppLogger().debug('🎁 Step 3: Getting current user profile for gift visual...');
           final currentUserProfile = await _appwriteService.getUserProfile(user.$id);
-          AppLogger().debug('🎁 Calling onGiftSent callback to broadcast gift...');
+          AppLogger().debug('🎁 Step 3: Calling onGiftSent callback to broadcast gift...');
           widget.onGiftSent!(
             _selectedGift!.emoji,
             _selectedGift!.name,
             _selectedGift!.cost,
             currentUserProfile?.displayName ?? 'Someone',
           );
-          AppLogger().info('✅ Gift broadcast sent via callback!');
+          AppLogger().info('✅ Step 3: Gift broadcast sent via callback!');
         } catch (e) {
-          AppLogger().error('❌ Failed to broadcast gift visual: $e');
+          AppLogger().error('❌ Step 3: Failed to broadcast gift visual: $e');
         }
       } else {
         // No callback - this is a profile gift (not in-room), use Firebase
         try {
-          AppLogger().info('📬 Sending gift via Firebase (profile gift)...');
+          AppLogger().info('📬 Step 3: Sending gift via Firebase (profile gift)...');
           await _giftService.sendGift(
             giftId: _selectedGift!.id,
             receiverId: widget.recipient.id,
             receiverName: widget.recipient.displayName,
             message: _messageController.text.trim(),
           );
-          AppLogger().info('✅ Firebase gift sent!');
+          AppLogger().info('✅ Step 3: Firebase gift sent!');
         } catch (e) {
-          AppLogger().error('❌ Firebase gift send failed: $e');
+          AppLogger().error('❌ Step 3: Firebase gift send failed: $e');
           _showError('Failed to send gift: $e');
           return;
         }
-      }
-
-      // Deduct coins from sender's balance
-      try {
-        AppLogger().debug('💰 Attempting to deduct ${_selectedGift!.cost} coins from user ${user.$id}...');
-        final deductSuccess = await _coinService.deductCoins(user.$id, _selectedGift!.cost);
-        if (deductSuccess) {
-          AppLogger().info('✅ Successfully deducted ${_selectedGift!.cost} coins!');
-        } else {
-          AppLogger().warning('⚠️ Coin deduction returned false - insufficient balance?');
-        }
-      } catch (e) {
-        AppLogger().error('❌ Coin deduction failed with error: $e');
-        // Continue anyway - gift was sent, coin sync can happen later
       }
 
       // Show success message
@@ -169,7 +190,7 @@ class _SimpleGiftBottomSheetState extends State<SimpleGiftBottomSheet> {
                 ),
               ),
               const Spacer(),
-              const RealTimeCoinBalance(
+              RealTimeCoinBalance(
                 textStyle: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -177,6 +198,9 @@ class _SimpleGiftBottomSheetState extends State<SimpleGiftBottomSheet> {
                 ),
                 backgroundColor: Colors.transparent,
                 showCoinIcon: true,
+                onControllerCreated: (controller) {
+                  _coinBalanceController = controller;
+                },
               ),
             ],
           ),
@@ -186,6 +210,73 @@ class _SimpleGiftBottomSheetState extends State<SimpleGiftBottomSheet> {
             style: TextStyle(
               fontSize: 16,
               color: Colors.grey[400],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Tip the Speaker Button - styled like coin icon
+          GestureDetector(
+            onTap: () {
+              // Close current bottom sheet
+              Navigator.pop(context);
+              // Open money tip bottom sheet
+              showMoneyTipBottomSheet(
+                context,
+                recipient: widget.recipient,
+                roomId: widget.roomId,
+                roomType: _getRoomType(),
+              );
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+              decoration: BoxDecoration(
+                color: Color(0xFF2D2D2D),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Scarlet outline circle with purple dollar sign
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Color(0xFFDC143C), // Scarlet outline
+                        width: 3,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0xFFDC143C).withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Text(
+                        '\$',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF8B5CF6), // Purple color
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 16),
+                  Text(
+                    'Tip the Speaker',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 20),
@@ -281,10 +372,16 @@ class _SimpleGiftBottomSheetState extends State<SimpleGiftBottomSheet> {
   }
 
   Widget _buildGiftCategorySection(GiftCategory category) {
+    // Skip money category - it has its own button now
+    if (category == GiftCategory.money) {
+      return const SizedBox.shrink();
+    }
+
     final categoryGifts = GiftConstants.getGiftsByCategory(category);
     if (categoryGifts.isEmpty) return const SizedBox.shrink();
 
-    String categoryTitle = category.name.split('').map((char) => 
+    // Category title
+    String categoryTitle = category.name.split('').map((char) =>
       char == category.name[0] ? char.toUpperCase() : char
     ).join('').replaceAll('_', ' ');
     

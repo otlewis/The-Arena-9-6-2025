@@ -27,7 +27,6 @@ import '../widgets/user_profile_bottom_sheet.dart';
 import '../widgets/debate_voting_modal.dart';
 import '../widgets/challenge_bell.dart';
 import '../widgets/mattermost_chat_widget.dart';
-import '../widgets/real_time_coin_balance.dart';
 import 'email_compose_screen.dart';
 import '../models/discussion_chat_message.dart';
 // import '../widgets/floating_im_widget.dart'; // Unused import
@@ -235,16 +234,17 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   // In-flight fetch tracking to prevent redundant database calls
   final Set<String> _inFlightFetches = {};
 
-  // Performance optimization - cache last participants to prevent unnecessary rebuilds
+  // Performance optimization - track participant changes
   final ParticipantDiffManager _diffManager = ParticipantDiffManager();
-  List<dynamic> _lastParticipants = [];
-  
+
   // Connection stability monitoring
   Timer? _connectionHealthTimer;
   Timer? _reconnectionTimer;
   Timer? _participantSyncTimer;
   Timer? _presenceHeartbeatTimer; // Updates lastSeen every 15 seconds
   Timer? _timeoutCheckTimer; // Checks timeout status every 10 seconds
+  Timer? _participantUpdateDebouncer; // Debounce rapid participant updates
+  bool _isLoadingParticipants = false; // Prevent concurrent participant loads
   bool _wasOffline = false;
   
   // Materials system
@@ -356,7 +356,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     _initializeWebRTC();
     _initializeSpeakerQueueSync();
     _initializeReactionsSync();
-    _initializeParticipantsSync(); // Initialize hybrid realtime role change listeners
+    // DISABLED: _initializeParticipantsSync() - duplicate subscription causing rapid updates
+    // Participant updates are already handled by _setupRealTimeUpdates() via RoomRealtimeManager
 
     // Add LiveKit service listener to sync mute state changes from data messages
     _liveKitService.addListener(_onLiveKitStateChanged);
@@ -1446,13 +1447,15 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           }
 
           // Show success message to user
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✅ Timeout expired - you can now unmute, chat, and leave the room'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
-            ),
-          );
+          if (mounted && !_isDisposing) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✅ Timeout expired - you can now unmute, chat, and leave the room'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
 
           // Force a complete UI rebuild to ensure all buttons are enabled
           setState(() {
@@ -1927,14 +1930,21 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     WidgetsBinding.instance.removeObserver(this);
 
     // CRITICAL: Remove participant from room when leaving
+    // Fire immediately without awaiting to ensure it executes before navigation
     if (_isJoined && _currentUser != null) {
-      AppLogger().info('🚪 User leaving room - removing from participants');
+      AppLogger().info('🚪 DISPOSE: User leaving room - removing from participants (userId: ${_currentUser!.id}, roomId: ${widget.roomId})');
+
+      // Execute cleanup immediately - don't await in dispose
       _appwrite.leaveDebateDiscussionRoom(
         roomId: widget.roomId,
         userId: _currentUser!.id,
-      ).catchError((e) {
-        AppLogger().error('Failed to leave room cleanly: $e');
+      ).then((_) {
+        AppLogger().info('✅ DISPOSE: Successfully removed participant from room');
+      }).catchError((e) {
+        AppLogger().error('❌ DISPOSE: Failed to leave room cleanly: $e');
       });
+    } else {
+      AppLogger().warning('⚠️ DISPOSE: Skipping participant cleanup - _isJoined: $_isJoined, _currentUser: ${_currentUser != null}');
     }
 
 
@@ -1987,7 +1997,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     _participantSyncTimer?.cancel();
     _presenceHeartbeatTimer?.cancel();
     _timeoutCheckTimer?.cancel();
-    
+    _participantUpdateDebouncer?.cancel();
+
     // Stop AI moderation
     _aiModerationService.stopRoomMonitoring(widget.roomId);
 
@@ -2186,28 +2197,51 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           _isAudioConnecting = false;
           _isAudioConnected = false;
         });
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(userMessage),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-            action: SnackBarAction(
-              label: 'Retry',
-              onPressed: () => _connectToAudio(),
+
+        if (mounted && !_isDisposing) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(userMessage),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Retry',
+                onPressed: () => _connectToAudio(),
+              ),
             ),
-          ),
-        );
+          );
+        }
       }
     }
   }
 
+  /// Debounced participant reload to prevent rapid flickering
+  /// Only reload once per 500ms to batch rapid updates
+  /// Increased from 300ms to 500ms for more aggressive batching
+  void _debouncedLoadParticipants() {
+    // Cancel any pending reload
+    _participantUpdateDebouncer?.cancel();
+
+    // Schedule new reload after 500ms
+    _participantUpdateDebouncer = Timer(const Duration(milliseconds: 500), () {
+      if (mounted && !_isDisposing) {
+        _loadParticipants();
+      }
+    });
+  }
 
   Future<void> _loadParticipants() async {
+    // Prevent concurrent loads - if already loading, skip
+    if (_isLoadingParticipants) {
+      AppLogger().debug('⏭️ SKIP: Already loading participants, skipping duplicate request');
+      return;
+    }
+
+    _isLoadingParticipants = true;
     try {
       AppLogger().debug('Loading participants for room: ${widget.roomId}');
-      
-      
+
+
       // Optimize network request with shorter cache for faster role updates
       final participants = await optimizedNetworkRequest(
         requestId: 'participants_${widget.roomId}',
@@ -2216,13 +2250,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       );
       
       if (mounted && !_isDisposing) {
-        // Check if participants actually changed to avoid unnecessary rebuilds
-        if (!PerformanceOptimizations.participantsChanged(_lastParticipants, participants)) {
-          AppLogger().debug('Participants unchanged, skipping rebuild');
-          return;
-        }
-        _lastParticipants = List.from(participants);
-        
         // Use batched operations to minimize UI updates
         final List<VoidCallback> operations = [];
         
@@ -2238,23 +2265,26 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         });
         
         // Process participants efficiently
-        final List<UserProfile> newSpeakers = [];
+        final List<Map<String, dynamic>> newSpeakersData = [];
         final List<UserProfile> newAudience = [];
         final List<UserProfile> newRequests = [];
-        
+
         for (var participant in participants) {
           final userProfileData = participant['userProfile'];
           if (userProfileData != null) {
             final userProfile = UserProfile.fromMap(userProfileData);
             final role = participant['role'] ?? 'audience';
-            
+
             // Store role mapping for this participant
             _participantRoles[userProfile.id] = role;
             
             // Efficiently sort participants by role
             if (role == 'moderator') {
-              if (!newSpeakers.any((p) => p.id == userProfile.id)) {
-                newSpeakers.add(userProfile);
+              if (!newSpeakersData.any((p) => (p['userProfile'] as UserProfile).id == userProfile.id)) {
+                newSpeakersData.add({
+                  'userProfile': userProfile,
+                  'createdAt': participant['\$createdAt'] ?? participant['createdAt'] ?? DateTime.now().toIso8601String(),
+                });
               }
               if (userProfile.id == _currentUser?.id) {
                 AppLogger().debug('🔍 ROLE ASSIGNMENT: Adding moderator operation for ${userProfile.name}');
@@ -2264,8 +2294,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                 });
               }
             } else if (role == 'speaker' || role == 'affirmative' || role == 'negative') {
-              if (!newSpeakers.any((p) => p.id == userProfile.id)) {
-                newSpeakers.add(userProfile);
+              if (!newSpeakersData.any((p) => (p['userProfile'] as UserProfile).id == userProfile.id)) {
+                newSpeakersData.add({
+                  'userProfile': userProfile,
+                  'createdAt': participant['\$createdAt'] ?? participant['createdAt'] ?? DateTime.now().toIso8601String(),
+                });
               }
               if (userProfile.id == _currentUser?.id) {
                 AppLogger().info('🎤 SPEAKER ROLE: Current user found as speaker with role: $role');
@@ -2295,13 +2328,24 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         
         // Add final operation to update all lists at once
         operations.add(() {
-          // Sort speakers by ID to maintain consistent ordering across updates
-          // This prevents random slot switching when participant list is refreshed
-          newSpeakers.sort((a, b) => a.id.compareTo(b.id));
+          // Sort speakers by when they joined (createdAt) to maintain stable slot positions
+          // This prevents slot switching by preserving the order in which speakers joined
+          newSpeakersData.sort((a, b) {
+            final aTime = a['createdAt'] as String;
+            final bTime = b['createdAt'] as String;
+            return aTime.compareTo(bTime);
+          });
 
-          _speakerPanelists.addAll(newSpeakers);
+          // Extract UserProfile objects in the correct order
+          final List<UserProfile> orderedSpeakers = newSpeakersData
+              .map((data) => data['userProfile'] as UserProfile)
+              .toList();
+
+          _speakerPanelists.addAll(orderedSpeakers);
           _audienceMembers.addAll(newAudience);
           _speakerRequests.addAll(newRequests);
+
+          AppLogger().debug('✅ Speakers sorted by join time: ${orderedSpeakers.map((s) => s.name).join(", ")}');
         });
 
         // CRITICAL FIX: Ensure moderator status is preserved even if not in participants list
@@ -2334,8 +2378,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         }
         
         // Preload avatar images for better scroll performance
+        final speakerAvatars = newSpeakersData.map((data) => (data['userProfile'] as UserProfile).avatar).toList();
         final avatarUrls = newAudience.map((p) => p.avatar).toList() +
-                          newSpeakers.map((p) => p.avatar).toList() +
+                          speakerAvatars +
                           newRequests.map((p) => p.avatar).toList();
         PerformanceOptimizations.preloadAvatarImages(avatarUrls, context);
       }
@@ -2474,6 +2519,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           }
         }
       });
+    } finally {
+      // Always reset loading flag
+      _isLoadingParticipants = false;
     }
   }
 
@@ -2537,7 +2585,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
         // Update role flags
         _isCurrentUserModerator = (newRole == 'moderator');
-        _isCurrentUserSpeaker = (newRole == 'speaker');
+        // Check for all speaking roles: speaker (Discussion/Take), affirmative/negative (Debate)
+        _isCurrentUserSpeaker = (newRole == 'speaker' || newRole == 'affirmative' || newRole == 'negative');
 
         needsFullRefresh = true; // Full refresh needed for permissions
       } else {
@@ -2603,14 +2652,14 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
       // Step 7: Defensive programming - full refresh if needed or periodically
       if (needsFullRefresh) {
-        AppLogger().info('🔄 FULL REFRESH: Fetching complete participant list from database');
-        await _loadParticipants();
+        AppLogger().info('🔄 FULL REFRESH: Fetching complete participant list from database (debounced)');
+        _debouncedLoadParticipants();
       } else {
         // Even if optimistic update succeeded, verify with server after a short delay
         Future.delayed(const Duration(seconds: 3), () async {
           if (!mounted || _isDisposing) return;
-          AppLogger().debug('🔍 VERIFY: Checking server state for consistency');
-          await _loadParticipants();
+          AppLogger().debug('🔍 VERIFY: Checking server state for consistency (debounced)');
+          _debouncedLoadParticipants();
         });
       }
 
@@ -2618,9 +2667,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       AppLogger().error('Error handling realtime role change: $e');
       AppLogger().error('Stack trace: $stackTrace');
 
-      // Fallback: Full refresh on any error
+      // Fallback: Full refresh on any error (debounced)
       if (mounted && !_isDisposing) {
-        await _loadParticipants();
+        _debouncedLoadParticipants();
       }
     }
   }
@@ -2726,6 +2775,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       }
 
       // Calculate diff
+      AppLogger().info('🔍 PAYLOAD BEFORE DIFF: ${response.payload}');
+      AppLogger().info('🔍 UPDATE TYPE: $updateType');
+      AppLogger().info('🔍 USER ID: ${response.payload['userId']}');
+      AppLogger().info('🔍 NEW ROLE: ${response.payload['role']}');
+
       final diff = _diffManager.calculateDiff(
         roomId: widget.roomId,
         currentParticipants: currentParticipants,
@@ -2771,8 +2825,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
     } catch (e) {
       AppLogger().error('Error handling participant update: $e');
-      // Fallback to full reload on error
-      await _loadParticipants();
+      // Fallback to full reload on error (debounced)
+      _debouncedLoadParticipants();
     }
   }
 
@@ -2944,6 +2998,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
       // Check for special role changes
       if (roleChange.newRole == 'pending') {
+        AppLogger().info('🤚 HAND RAISE DETECTED: User ${userProfile.name} (${userId}) changed from ${roleChange.oldRole} to pending');
+        AppLogger().info('🤚 Current user has moderator powers: $_hasModeratorPowers');
         // INSTANT NOTIFICATION: Show hand-raise dialog immediately for moderator
         // Note: userProfile is guaranteed non-null here due to stub creation above
         if (_hasModeratorPowers) {
@@ -2955,6 +3011,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
               _showHandRaiseNotificationFromPayload({'userId': userId});
             }
           });
+        } else {
+          AppLogger().warning('⚠️ Hand raise detected but current user does NOT have moderator powers - no notification shown');
         }
       } else if (roleChange.newRole == 'speaker') {
         // Check if this user is a Super Moderator joining the speaker panel
@@ -3016,6 +3074,15 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       setState(() {
         // UI will rebuild with updated participant lists
       });
+
+      // CRITICAL: Invalidate ALL participant caches before reload to ensure fresh data
+      invalidateNetworkCache(patternPrefix: 'participants_');
+      _performanceOptimizer.clearCache(); // Also clear performance optimizer cache
+
+      // CRITICAL: Force IMMEDIATE reload (not debounced) for role changes to ensure sync
+      // Real-time updates don't have createdAt timestamps, so we need to reload
+      // from database to get proper chronological ordering
+      _loadParticipants();
     }
 
     if (isHandLowerEvent) {
@@ -3050,9 +3117,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       case 'negative':
         if (!_speakerPanelists.any((p) => p.id == user.id)) {
           _speakerPanelists.add(user);
-          // CRITICAL: Sort to maintain consistent slot ordering (same as _loadParticipants)
-          // This prevents visual "jumping" when participants are added via real-time updates
-          _speakerPanelists.sort((a, b) => a.id.compareTo(b.id));
+          // NOTE: Do NOT sort here - sorting by userId causes inconsistent slot ordering
+          // Slots should be ordered by join time (createdAt) which is handled in _loadParticipants
+          // Real-time updates should just trigger a debounced reload to maintain correct order
         }
         break;
       case 'pending':
@@ -3221,11 +3288,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                     }
                   }
                 }
-                
-                // Force immediate reload after reconnection
+
+                // Force reload after reconnection (debounced to prevent rapid flickering)
                 invalidateNetworkCache(patternPrefix: 'participants_');
-                await _loadParticipants();
-                
+                _debouncedLoadParticipants();
+
                 if (isHandRaiseEvent && _hasModeratorPowers) {
                   _showHandRaiseNotificationFromPayload(response.payload);
                 }
@@ -3558,12 +3625,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
         AppLogger().info('✅ HAND LOWER: Audio muted instantly, now updating database');
 
-        // Now update database (audio already muted)
-        await _appwrite.updateDebateDiscussionParticipantRole(
-          roomId: widget.roomId,
-          userId: _currentUser!.id,
-          newRole: 'audience',
+        // Now lower hand via dedicated Appwrite Function
+        final lowerHandResult = await _appwrite.callFunction(
+          functionId: 'raise-hand',
+          body: {
+            'roomId': widget.roomId,
+            'action': 'lower',
+          },
         );
+
+        AppLogger().info('🔍 HAND LOWER RESULT: $lowerHandResult');
 
         AppLogger().info('🔇 HAND LOWER: Audio cleanup complete for ${_currentUser!.name} returning to audience');
 
@@ -3583,11 +3654,12 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
         AppLogger().info('User ${_currentUser!.name} lowered their hand');
       } else if (isSuperMod) {
-        // Super Moderator - instant promotion to speaker
-        await _appwrite.updateDebateDiscussionParticipantRole(
+        // Super Moderator - instant promotion to speaker via Appwrite Function
+        await _roleAssignmentService.assignRole(
           roomId: widget.roomId,
           userId: _currentUser!.id,
-          newRole: 'speaker',
+          role: DDRole.speaker,
+          requesterId: _currentUser!.id,
         );
 
         if (mounted && !_isDisposing) {
@@ -3615,15 +3687,39 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         final handRaiseStartTime = DateTime.now();
         AppLogger().info('⏱️ HAND RAISE: Starting database update at ${handRaiseStartTime.millisecondsSinceEpoch}');
 
-        await _appwrite.updateDebateDiscussionParticipantRole(
+        // Update to pending via Appwrite Function
+        final assignRoleResult = await _roleAssignmentService.assignRole(
           roomId: widget.roomId,
           userId: _currentUser!.id,
-          newRole: 'pending',
+          role: DDRole.pending,
+          requesterId: _currentUser!.id,
         );
 
         final handRaiseEndTime = DateTime.now();
         final handRaiseDuration = handRaiseEndTime.difference(handRaiseStartTime).inMilliseconds;
         AppLogger().info('⏱️ HAND RAISE: Database updated in ${handRaiseDuration}ms');
+        AppLogger().info('🔍 HAND RAISE RESULT: $assignRoleResult');
+        AppLogger().info('🔍 ASSIGNED ROLE: ${assignRoleResult['assignedRole']}');
+        AppLogger().info('🔍 SUCCESS: ${assignRoleResult['success']}');
+
+        if (assignRoleResult['success'] == false) {
+          // Hand raise failed - revert optimistic update
+          if (mounted && !_isDisposing) {
+            setState(() {
+              _hasRequestedSpeaker = false;
+            });
+
+            final errorMsg = assignRoleResult['error'] ?? 'Failed to raise hand';
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('❌ $errorMsg'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+          return;
+        }
 
         if (mounted && !_isDisposing) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -3698,11 +3794,12 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
     if (shouldLeave == true) {
       try {
-        // Move user back to audience
-        await _appwrite.updateDebateDiscussionParticipantRole(
+        // Move user back to audience via Appwrite Function
+        await _roleAssignmentService.assignRole(
           roomId: widget.roomId,
           userId: _currentUser!.id,
-          newRole: 'audience',
+          role: DDRole.audience,
+          requesterId: _currentUser!.id,
         );
 
         if (mounted) {
@@ -3930,12 +4027,26 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         AppLogger().info('⚡ OPTIMISTIC: Moderator UI updated instantly BEFORE database call for ${user.name} → $role');
       }
 
-      // Now update database (moderator already sees the change)
-      await _appwrite.updateDebateDiscussionParticipantRole(
+      // Now update database via Appwrite Function (moderator already sees the change)
+      final result = await _roleAssignmentService.assignRole(
         roomId: widget.roomId,
         userId: user.id,
-        newRole: role,
+        role: DDRoleExtension.fromString(role),
+        requesterId: _currentUser!.id,
       );
+
+      if (result['success'] != true) {
+        AppLogger().error('❌ Role assignment failed: ${result['error']}');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to assign role: ${result['error']}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
 
       if (mounted) {
         final roleDisplayName = role == 'affirmative' ? 'Affirmative' :
@@ -4070,11 +4181,12 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         AppLogger().info('⚡ OPTIMISTIC: Moderator sees ${user.name} demoted to audience instantly');
       }
 
-      // Now update database
-      await _appwrite.updateDebateDiscussionParticipantRole(
+      // Now update database via Appwrite Function
+      await _roleAssignmentService.assignRole(
         roomId: widget.roomId,
         userId: user.id,
-        newRole: 'audience',
+        role: DDRole.audience,
+        requesterId: _currentUser!.id,
       );
 
       if (mounted) {
@@ -4297,23 +4409,29 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   /// Perform the actual room leaving process
   Future<void> _performLeaveRoom() async {
     try {
-      AppLogger().info('🚪 User leaving room - role: ${_isCurrentUserModerator ? 'moderator' : _isCurrentUserSpeaker ? 'speaker' : 'audience'}');
+      AppLogger().info('🚪 LEAVE-ROOM: User leaving room - role: ${_isCurrentUserModerator ? 'moderator' : _isCurrentUserSpeaker ? 'speaker' : 'audience'}');
+      AppLogger().info('🚪 LEAVE-ROOM: _isJoined: $_isJoined, _currentUser: ${_currentUser?.id}');
 
       // CRITICAL: Disconnect LiveKit audio FIRST to prevent audio bleeding
       if (_liveKitService.isConnected) {
-        AppLogger().info('🔇 Disconnecting LiveKit audio before leaving room');
+        AppLogger().info('🔇 LEAVE-ROOM: Disconnecting LiveKit audio before leaving room');
         await _liveKitService.disconnect();
-        AppLogger().info('✅ LiveKit audio disconnected');
+        AppLogger().info('✅ LEAVE-ROOM: LiveKit audio disconnected');
       }
 
       if (_isJoined && _currentUser != null) {
+        AppLogger().info('🚪 LEAVE-ROOM: Removing participant from database (userId: ${_currentUser!.id}, roomId: ${widget.roomId})');
         await _appwrite.leaveDebateDiscussionRoom(
           roomId: widget.roomId,
           userId: _currentUser!.id,
         );
+        AppLogger().info('✅ LEAVE-ROOM: Successfully removed participant from database');
+      } else {
+        AppLogger().warning('⚠️ LEAVE-ROOM: Skipping participant removal - _isJoined: $_isJoined, _currentUser: ${_currentUser != null}');
       }
     } catch (e) {
-      AppLogger().error('Failed to leave room cleanly: $e');
+      AppLogger().error('❌ LEAVE-ROOM: Failed to leave room cleanly: $e');
+      AppLogger().error('❌ LEAVE-ROOM: Stack trace: ${StackTrace.current}');
     }
   }
 
@@ -4551,34 +4669,50 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       child: Row(
         children: [
           GestureDetector(
-            onTap: () => Navigator.pop(context), // Allow users to leave even when timed out
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(
-                LucideIcons.arrowLeft,
-                color: Colors.white,
-                size: 20,
-              ),
+            onTap: () => Navigator.pop(context), // Leave room functionality
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Icon(
+                    LucideIcons.logOut,
+                    color: Colors.red,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Leave',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
           ),
           const Spacer(),
-          // Coin Balance
-          const RealTimeCoinBalance(
-            textStyle: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-            backgroundColor: Colors.transparent,
-            showCoinIcon: true,
-            iconSize: 12,
-            padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          ),
-          SizedBox(width: isSmallScreen ? 8 : 16),
+          // Coin Balance - REMOVED to prevent conflict with gift bottom sheet
+          // Only show coin balance in the gift bottom sheet to avoid multiple
+          // real-time subscriptions fighting each other
+          // const RealTimeCoinBalance(
+          //   textStyle: TextStyle(
+          //     fontSize: 11,
+          //     fontWeight: FontWeight.bold,
+          //     color: Colors.white,
+          //   ),
+          //   backgroundColor: Colors.transparent,
+          //   showCoinIcon: true,
+          //   iconSize: 12,
+          //   padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          // ),
+          // SizedBox(width: isSmallScreen ? 8 : 16),
           const ChallengeBell(
             key: ValueKey('debates_challenge_bell'),
             iconColor: Colors.white,
@@ -5622,16 +5756,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                           ),
                         ),
                       ],
-                      // Leave button - timeout enforcement handled by modal
-                      const SizedBox(width: 8),
-                      _buildControlButton(
-                        icon: LucideIcons.logOut,
-                        label: 'Leave',
-                        color: Colors.red,
-                        onTap: () {
-                          Navigator.pop(context);
-                        },
-                      ),
         ], // End of Row children
       ), // End of Row
     ); // End of SingleChildScrollView
@@ -5731,15 +5855,6 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                           ),
                         ),
                       ),
-                    // Leave button - timeout enforcement handled by modal
-                    _buildControlButton(
-                      icon: LucideIcons.logOut,
-                      label: 'Leave',
-                      color: Colors.red,
-                      onTap: () {
-                        Navigator.pop(context);
-                      },
-                    ),
                   ],
                 );
               }
@@ -6707,10 +6822,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                   icon: LucideIcons.thumbsUp,
                   title: 'Affirmative',
                   subtitle: 'Pro side of the debate',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pop(context); // Close role assignment sheet
-                    _assignRole(member, 'affirmative');
+                  onTap: () async {
+                    // Capture navigator before async gap
+                    final navigator = Navigator.of(context);
+
+                    // Close both modals
+                    navigator.pop(); // Close role selection dialog
+                    navigator.pop(); // Close role assignment sheet
+
+                    // Now safely assign role
+                    await _assignRole(member, 'affirmative');
                   },
                 ),
                 if (!hasNegative) const SizedBox(height: 8),
@@ -6720,10 +6841,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                   icon: LucideIcons.thumbsDown,
                   title: 'Negative',
                   subtitle: 'Against side of the debate',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pop(context); // Close role assignment sheet
-                    _assignRole(member, 'negative');
+                  onTap: () async {
+                    // Capture navigator before async gap
+                    final navigator = Navigator.of(context);
+
+                    // Close both modals
+                    navigator.pop(); // Close role selection dialog
+                    navigator.pop(); // Close role assignment sheet
+
+                    // Now safely assign role
+                    await _assignRole(member, 'negative');
                   },
                 ),
               ],
@@ -6771,10 +6898,16 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                 icon: LucideIcons.mic,
                 title: 'Speaker',
                 subtitle: 'Can participate in discussion',
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pop(context); // Close role assignment sheet
-                  _assignRole(member, 'speaker');
+                onTap: () async {
+                  // Capture navigator before async gap
+                  final navigator = Navigator.of(context);
+
+                  // Close both modals
+                  navigator.pop(); // Close role selection dialog
+                  navigator.pop(); // Close role assignment sheet
+
+                  // Now safely assign role
+                  await _assignRole(member, 'speaker');
                 },
               ),
             ],
@@ -6937,6 +7070,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
     AppLogger().info('Assigning role "$role" to ${member.name}');
 
+    // Capture ScaffoldMessenger reference BEFORE async operation to avoid context issues
+    final messenger = ScaffoldMessenger.of(context);
+
     // Convert string role to DDRole enum
     final ddRole = DDRoleExtension.fromString(role);
 
@@ -6972,7 +7108,8 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         if (mounted) {
           setState(() {
             // Move user immediately in UI
-            if (role == 'speaker') {
+            // Check for all speaking roles: speaker (Discussion/Take), affirmative/negative (Debate)
+            if (role == 'speaker' || role == 'affirmative' || role == 'negative') {
               // Remove from audience/pending
               _audienceMembers.removeWhere((u) => u.id == member.id);
               _speakerRequests.removeWhere((u) => u.id == member.id);
@@ -7022,19 +7159,24 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
       },
     );
 
+    // Use captured messenger reference (safe even if widget is disposed)
     if (mounted) {
       if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text('✅ ${member.name} assigned as ${result['assignedRole']}'),
             backgroundColor: Colors.green,
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
+        final errorMsg = result['error'] ?? 'Unknown error occurred';
+        final errorCode = result['code'] ?? '';
+        final displayMsg = errorCode.isNotEmpty ? '$errorMsg ($errorCode)' : errorMsg;
+        messenger.showSnackBar(
           SnackBar(
-            content: Text('❌ Error: ${result['error']}'),
+            content: Text('❌ Error: $displayMsg'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -7065,13 +7207,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         return;
       }
       
-      // Check if user is moderator OR super moderator
-      final superModService = SuperModeratorService();
-      final currentUserId = _currentUser?.id ?? '';
-      final isSuperMod = superModService.isSuperModerator(currentUserId);
-      
-      if (!_hasModeratorPowers && !isSuperMod) {
-        AppLogger().warning('🔇 User is not moderator or super mod, cannot mute all');
+      // Check if user has moderator powers (regular moderator OR super moderator)
+      if (!_hasModeratorPowers) {
+        AppLogger().warning('🔇 User does not have moderator powers, cannot mute all');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -7245,11 +7383,12 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
         AppLogger().info('⚡ OPTIMISTIC: Moderator sees ${user.name} denied instantly');
       }
 
-      // Change user role back to audience
-      await _appwrite.updateDebateDiscussionParticipantRole(
+      // Change user role back to audience via Appwrite Function
+      await _roleAssignmentService.assignRole(
         roomId: widget.roomId,
         userId: user.id,
-        newRole: 'audience',
+        role: DDRole.audience,
+        requesterId: _currentUser!.id,
       );
 
       if (mounted) {
@@ -7742,23 +7881,20 @@ To join this debate:
 
       // Audio cleanup handled by LiveKit
 
+      AppLogger().info('Room ended by moderator');
+
       // Navigate back to room list
       if (mounted) {
         Navigator.of(context).popUntil((route) => route.isFirst);
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Room ended successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
       }
-      
-      AppLogger().info('Room ended by moderator');
     } catch (e) {
       AppLogger().error('Error ending room: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        // Capture ScaffoldMessenger before any navigation
+        final messenger = ScaffoldMessenger.of(context);
+
+        // Show error message
+        messenger.showSnackBar(
           SnackBar(
             content: Text('Error ending room: $e'),
             backgroundColor: Colors.red,
@@ -8010,6 +8146,9 @@ To join this debate:
   }
 
   /// Initialize real-time participant role changes sync (Appwrite)
+  /// DISABLED - This creates duplicate subscriptions causing rapid updates
+  /// Participant updates are now handled exclusively by _setupRealTimeUpdates()
+  /*
   Future<void> _initializeParticipantsSync() async {
     if (!mounted) return;
 
@@ -8072,8 +8211,8 @@ To join this debate:
             if (userId != null && newRole != null) {
               AppLogger().info('📡 APPWRITE: New participant joined - User $userId as $newRole');
 
-              // Refresh participant list for new joins
-              _loadParticipants();
+              // Refresh participant list for new joins (debounced to prevent rapid flickering)
+              _debouncedLoadParticipants();
             }
           }
 
@@ -8084,8 +8223,8 @@ To join this debate:
             if (userId != null) {
               AppLogger().info('📡 APPWRITE: Participant left - User $userId');
 
-              // Refresh participant list for departures
-              _loadParticipants();
+              // Refresh participant list for departures (debounced to prevent rapid flickering)
+              _debouncedLoadParticipants();
             }
           }
 
@@ -8098,6 +8237,7 @@ To join this debate:
       AppLogger().error('❌ Failed to initialize participants sync: $e');
     }
   }
+  */
 
   // Gift modal methods - simplified to use working gift bottom sheet
   void _showGiftModal() {

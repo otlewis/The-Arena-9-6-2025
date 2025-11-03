@@ -17,8 +17,10 @@ class UserProfile {
   final String? instagramHandle;
   final Map<String, dynamic> preferences;
   final int reputationPercentage; // 0-100% rating, only moderators can change
+  final int reputation; // Reputation points (different from percentage)
   final int totalDebates;
   final int totalWins;
+  final int totalLosses;
   final int totalRoomsCreated;
   final int totalRoomsJoined;
   final int coinBalance;
@@ -36,6 +38,9 @@ class UserProfile {
   final String? premiumType; // 'monthly' or 'yearly'
   final DateTime? premiumExpiry;
   final bool isTestSubscription;
+  final bool isBanned;
+  final String? banReason;
+  final String? bannedAt;
 
   UserProfile({
     required this.id,
@@ -52,8 +57,10 @@ class UserProfile {
     this.instagramHandle,
     this.preferences = const {},
     this.reputationPercentage = 100, // Start with 100% reputation
+    this.reputation = 0, // Start with 0 reputation points
     this.totalDebates = 0,
     this.totalWins = 0,
+    this.totalLosses = 0,
     this.totalRoomsCreated = 0,
     this.totalRoomsJoined = 0,
     this.coinBalance = 100, // Start new users with 100 coins
@@ -71,6 +78,9 @@ class UserProfile {
     this.premiumType,
     this.premiumExpiry,
     this.isTestSubscription = false,
+    this.isBanned = false,
+    this.banReason,
+    this.bannedAt,
   });
 
   /// Safely parse preferences field with proper error handling
@@ -121,8 +131,10 @@ class UserProfile {
       instagramHandle: map['instagramHandle'],
       preferences: _safeParsePreferences(map['preferences']),
       reputationPercentage: _safeParseInt(map['reputationPercentage'], defaultValue: 100),
+      reputation: _safeParseInt(map['reputation'], defaultValue: 0),
       totalDebates: _safeParseInt(map['totalDebates'], defaultValue: 0),
       totalWins: _safeParseInt(map['totalWins'], defaultValue: 0),
+      totalLosses: _safeParseInt(map['totalLosses'], defaultValue: 0),
       totalRoomsCreated: _safeParseInt(map['totalRoomsCreated'], defaultValue: 0),
       totalRoomsJoined: _safeParseInt(map['totalRoomsJoined'], defaultValue: 0),
       coinBalance: _safeParseInt(map['coinBalance'], defaultValue: 100),
@@ -144,6 +156,9 @@ class UserProfile {
       premiumType: map['premiumType'],
       premiumExpiry: DateTime.tryParse(map['premiumExpiry'] ?? ''),
       isTestSubscription: map['isTestSubscription'] ?? false,
+      isBanned: map['isBanned'] ?? false,
+      banReason: map['banReason'],
+      bannedAt: map['bannedAt'],
     );
   }
 
@@ -164,8 +179,10 @@ class UserProfile {
       'instagramHandle': instagramHandle,
       'preferences': json.encode(preferences),
       'reputationPercentage': reputationPercentage,
+      'reputation': reputation,
       'totalDebates': totalDebates,
       'totalWins': totalWins,
+      'totalLosses': totalLosses,
       'totalRoomsCreated': totalRoomsCreated,
       'totalRoomsJoined': totalRoomsJoined,
       'coinBalance': coinBalance,
@@ -183,6 +200,9 @@ class UserProfile {
       'premiumType': premiumType,
       'premiumExpiry': premiumExpiry?.toIso8601String(),
       'isTestSubscription': isTestSubscription,
+      'isBanned': isBanned,
+      'banReason': banReason,
+      'bannedAt': bannedAt,
     };
   }
 
@@ -202,8 +222,10 @@ class UserProfile {
     String? instagramHandle,
     Map<String, dynamic>? preferences,
     int? reputationPercentage,
+    int? reputation,
     int? totalDebates,
     int? totalWins,
+    int? totalLosses,
     int? totalRoomsCreated,
     int? totalRoomsJoined,
     int? coinBalance,
@@ -221,6 +243,9 @@ class UserProfile {
     String? premiumType,
     DateTime? premiumExpiry,
     bool? isTestSubscription,
+    bool? isBanned,
+    String? banReason,
+    String? bannedAt,
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -237,8 +262,10 @@ class UserProfile {
       instagramHandle: instagramHandle ?? this.instagramHandle,
       preferences: preferences ?? this.preferences,
       reputationPercentage: reputationPercentage ?? this.reputationPercentage,
+      reputation: reputation ?? this.reputation,
       totalDebates: totalDebates ?? this.totalDebates,
       totalWins: totalWins ?? this.totalWins,
+      totalLosses: totalLosses ?? this.totalLosses,
       totalRoomsCreated: totalRoomsCreated ?? this.totalRoomsCreated,
       totalRoomsJoined: totalRoomsJoined ?? this.totalRoomsJoined,
       coinBalance: coinBalance ?? this.coinBalance,
@@ -256,6 +283,9 @@ class UserProfile {
       premiumType: premiumType ?? this.premiumType,
       premiumExpiry: premiumExpiry ?? this.premiumExpiry,
       isTestSubscription: isTestSubscription ?? this.isTestSubscription,
+      isBanned: isBanned ?? this.isBanned,
+      banReason: banReason ?? this.banReason,
+      bannedAt: bannedAt ?? this.bannedAt,
     );
   }
 

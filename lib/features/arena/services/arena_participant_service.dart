@@ -68,14 +68,18 @@ class ArenaParticipantService {
       for (final audienceDoc in audienceResponse.documents) {
         final audienceData = audienceDoc.data;
         final userId = audienceData['userId'];
-        
+
         final userProfile = await _loadUserProfile(userId);
         if (userProfile != null) {
           audience.add(userProfile);
           AppLogger().debug('Loaded audience member: ${userProfile.name}');
         }
       }
-      
+
+      // CRITICAL: Sort audience by ID to maintain consistent ordering
+      // This prevents visual "jumping" when audience list is refreshed
+      audience.sort((a, b) => a.id.compareTo(b.id));
+
       AppLogger().info('Loaded ${audience.length} audience members for room: $roomId');
       return audience;
     } catch (e) {

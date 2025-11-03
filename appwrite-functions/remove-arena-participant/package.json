@@ -1,0 +1,13 @@
+{
+  "name": "remove-arena-participant",
+  "version": "1.0.0",
+  "description": "Remove participant from arena room with reliable broadcasting",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {
+    "node-appwrite": "^13.0.0"
+  }
+}

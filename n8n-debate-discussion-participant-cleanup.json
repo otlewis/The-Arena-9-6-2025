@@ -1,0 +1,186 @@
+{
+  "name": "Debate Discussion Participant Cleanup",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/5 * * * *"
+            }
+          ]
+        }
+      },
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://cloud.appwrite.io/v1/databases/arena_db/collections/debate_discussion_participants/documents",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "appwriteApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "queries[]",
+              "value": "equal(\"status\", \"joined\")"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Get All Active Participants",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check for stale participants (no presence heartbeat in last 3 minutes)\n// Longer timeout than arena since debates can have longer pauses\n\nconst staleParticipants = [];\nconst now = new Date();\nconst THREE_MINUTES = 3 * 60 * 1000;\n\nfor (const participant of $input.all()[0].json.documents) {\n  const lastActiveAt = participant.lastActiveAt ? new Date(participant.lastActiveAt) : null;\n  const timeSinceLastActive = lastActiveAt ? now - lastActiveAt : Infinity;\n  \n  // Mark as stale if:\n  // 1. No lastActiveAt (never sent heartbeat)\n  // 2. lastActiveAt > 3 minutes ago\n  if (!lastActiveAt || timeSinceLastActive > THREE_MINUTES) {\n    staleParticipants.push({\n      documentId: participant.$id,\n      userId: participant.userId,\n      roomId: participant.roomId,\n      role: participant.role,\n      lastActiveAt: participant.lastActiveAt || 'never',\n      staleDuration: lastActiveAt ? Math.floor(timeSinceLastActive / 1000) + 's' : 'never'\n    });\n  }\n}\n\nconsole.log(`Found ${staleParticipants.length} stale debate/discussion participants out of ${$input.all()[0].json.documents.length} total`);\n\nreturn staleParticipants.map(p => ({ json: p }));"
+      },
+      "name": "Find Stale Participants",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.documentId }}",
+              "operation": "exists"
+            }
+          ]
+        }
+      },
+      "name": "Has Stale Participants?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://cloud.appwrite.io/v1/databases/arena_db/collections/debate_discussion_participants/documents/{{ $json.documentId }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "appwriteApi",
+        "method": "DELETE",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Appwrite-Project",
+              "value": "683a37a8003719978879"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Remove Stale Participant",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1130, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log cleanup action\nconst participant = $input.all()[0].json;\n\nconsole.log(`🧹 CLEANUP: Removed stale debate/discussion participant`);\nconsole.log(`  User ID: ${participant.userId}`);\nconsole.log(`  Room ID: ${participant.roomId}`);\nconsole.log(`  Role: ${participant.role}`);\nconsole.log(`  Last Active: ${participant.lastActiveAt}`);\nconsole.log(`  Stale Duration: ${participant.staleDuration}`);\n\nreturn [{ json: participant }];"
+      },
+      "name": "Log Cleanup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1350, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Summary of cleanup operation\nconst cleanedCount = $input.all().length;\n\nconsole.log(`✅ Debate/Discussion participant cleanup complete`);\nconsole.log(`   Removed ${cleanedCount} stale participants`);\n\nreturn [{ json: { cleanedCount, timestamp: new Date().toISOString() } }];"
+      },
+      "name": "Cleanup Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1130, 400]
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Get All Active Participants",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Active Participants": {
+      "main": [
+        [
+          {
+            "node": "Find Stale Participants",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Stale Participants": {
+      "main": [
+        [
+          {
+            "node": "Has Stale Participants?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Stale Participants?": {
+      "main": [
+        [
+          {
+            "node": "Remove Stale Participant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cleanup Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove Stale Participant": {
+      "main": [
+        [
+          {
+            "node": "Log Cleanup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-30T00:00:00.000Z",
+  "versionId": "1"
+}

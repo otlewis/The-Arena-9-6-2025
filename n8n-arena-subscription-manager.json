@@ -1,0 +1,527 @@
+{
+  "name": "Arena Subscription Manager",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "arena-subscription-update",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-subscription",
+      "name": "Subscription Update Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "arena-subscription-update"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "user_id",
+              "name": "userId",
+              "value": "={{ $json.userId }}",
+              "type": "string"
+            },
+            {
+              "id": "arena_user_id",
+              "name": "arenaUserId",
+              "value": "={{ $json.$id }}",
+              "type": "string"
+            },
+            {
+              "id": "email",
+              "name": "email",
+              "value": "={{ $json.email }}",
+              "type": "string"
+            },
+            {
+              "id": "is_premium",
+              "name": "isPremium",
+              "value": "={{ $json.isPremium }}",
+              "type": "boolean"
+            },
+            {
+              "id": "premium_type",
+              "name": "premiumType",
+              "value": "={{ $json.premiumType || 'none' }}",
+              "type": "string"
+            },
+            {
+              "id": "premium_expiry",
+              "name": "premiumExpiry",
+              "value": "={{ $json.premiumExpiry || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "coin_balance",
+              "name": "coinBalance",
+              "value": "={{ $json.coinBalance || 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "lifetime_value",
+              "name": "lifetimeValue",
+              "value": "={{ $json.lifetimeValue || 0 }}",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "id": "extract-subscription-data",
+      "name": "Extract Subscription Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "search",
+        "filterGroupsUi": {
+          "filterGroupsValues": [
+            {
+              "filtersUi": {
+                "filterValues": [
+                  {
+                    "propertyName": "arena_user_id",
+                    "operator": "EQ",
+                    "value": "={{ $json.arenaUserId }}"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {
+          "limit": 1
+        }
+      },
+      "id": "find-contact",
+      "name": "Find HubSpot Contact",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [690, 300],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "largerEqual",
+              "value2": 1
+            }
+          ]
+        }
+      },
+      "id": "contact-exists",
+      "name": "Contact Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate subscription metrics\nconst isPremium = $input.first().json.isPremium;\nconst premiumType = $input.first().json.premiumType || 'none';\nconst premiumExpiry = $input.first().json.premiumExpiry;\nconst coinBalance = $input.first().json.coinBalance || 0;\nconst lifetimeValue = $input.first().json.lifetimeValue || 0;\n\n// Calculate days until expiry\nlet daysUntilExpiry = null;\nif (premiumExpiry) {\n  const expiryDate = new Date(premiumExpiry);\n  const today = new Date();\n  const timeDiff = expiryDate.getTime() - today.getTime();\n  daysUntilExpiry = Math.ceil(timeDiff / (1000 * 3600 * 24));\n}\n\n// Determine subscription status\nlet subscriptionStatus = 'free';\nif (isPremium) {\n  if (daysUntilExpiry && daysUntilExpiry > 0) {\n    subscriptionStatus = 'active';\n  } else {\n    subscriptionStatus = 'expired';\n  }\n}\n\n// Calculate churn risk\nlet churnRisk = 0;\nif (isPremium && daysUntilExpiry) {\n  if (daysUntilExpiry <= 7) {\n    churnRisk = 80;\n  } else if (daysUntilExpiry <= 14) {\n    churnRisk = 60;\n  } else if (daysUntilExpiry <= 30) {\n    churnRisk = 40;\n  } else {\n    churnRisk = 10;\n  }\n}\n\n// Determine tier based on lifetime value\nlet customerTier = 'bronze';\nif (lifetimeValue >= 100) {\n  customerTier = 'diamond';\n} else if (lifetimeValue >= 50) {\n  customerTier = 'platinum';\n} else if (lifetimeValue >= 25) {\n  customerTier = 'gold';\n} else if (lifetimeValue >= 10) {\n  customerTier = 'silver';\n}\n\nreturn {\n  ...item,\n  json: {\n    ...item.json,\n    subscriptionStatus,\n    daysUntilExpiry,\n    churnRisk,\n    customerTier\n  }\n};"
+      },
+      "id": "calculate-metrics",
+      "name": "Calculate Subscription Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1130, 200]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "update",
+        "contactId": "={{ $json.id }}",
+        "updateFields": {
+          "customPropertiesUi": {
+            "customPropertiesValues": [
+              {
+                "property": "arena_is_premium",
+                "value": "={{ $json.isPremium }}"
+              },
+              {
+                "property": "arena_premium_type",
+                "value": "={{ $json.premiumType }}"
+              },
+              {
+                "property": "arena_premium_expiry",
+                "value": "={{ $json.premiumExpiry }}"
+              },
+              {
+                "property": "arena_subscription_status",
+                "value": "={{ $json.subscriptionStatus }}"
+              },
+              {
+                "property": "arena_coin_balance",
+                "value": "={{ $json.coinBalance }}"
+              },
+              {
+                "property": "arena_lifetime_value",
+                "value": "={{ $json.lifetimeValue }}"
+              },
+              {
+                "property": "arena_churn_risk_score",
+                "value": "={{ $json.churnRisk }}"
+              },
+              {
+                "property": "arena_customer_tier",
+                "value": "={{ $json.customerTier }}"
+              },
+              {
+                "property": "arena_days_until_expiry",
+                "value": "={{ $json.daysUntilExpiry }}"
+              },
+              {
+                "property": "arena_last_subscription_update",
+                "value": "={{ $now.toISO() }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "update-contact",
+      "name": "Update Contact Properties",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1350, 200],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isPremium }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "is-premium",
+      "name": "Is Premium?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1570, 200]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "addToList",
+        "contactId": "={{ $json.id }}",
+        "listId": "PREMIUM_USERS_LIST_ID"
+      },
+      "id": "add-to-premium-list",
+      "name": "Add to Premium List",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1790, 100],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "removeFromList",
+        "contactId": "={{ $json.id }}",
+        "listId": "PREMIUM_USERS_LIST_ID"
+      },
+      "id": "remove-from-premium-list",
+      "name": "Remove from Premium List",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1790, 300],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.daysUntilExpiry }}",
+              "operation": "smallerEqual",
+              "value2": 7
+            }
+          ]
+        }
+      },
+      "id": "expiring-soon",
+      "name": "Expiring Soon?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2010, 100]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "enrollInSequence",
+        "contactId": "={{ $json.id }}",
+        "sequenceId": "RENEWAL_REMINDER_EMAIL_SEQUENCE_ID"
+      },
+      "id": "enroll-renewal-reminder",
+      "name": "Enroll in Renewal Reminder",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [2230, 0],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "engagementTimeline",
+        "operation": "create",
+        "contactId": "={{ $json.id }}",
+        "eventTemplateId": "SUBSCRIPTION_UPDATE_EVENT_TEMPLATE_ID",
+        "fields": {
+          "subscription_status": "={{ $json.subscriptionStatus }}",
+          "premium_type": "={{ $json.premiumType }}",
+          "days_until_expiry": "={{ $json.daysUntilExpiry }}",
+          "update_date": "={{ $now.toISO() }}"
+        }
+      },
+      "id": "add-timeline-event",
+      "name": "Add Timeline Event",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [2010, 300],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_API_CREDENTIALS_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "options": {
+          "responseData": {
+            "success": true,
+            "contactId": "={{ $json.id }}",
+            "arenaUserId": "={{ $json.arenaUserId }}",
+            "subscriptionStatus": "={{ $json.subscriptionStatus }}",
+            "timestamp": "={{ $now.toISO() }}"
+          }
+        }
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2230, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "options": {
+          "responseCode": 404,
+          "responseData": {
+            "success": false,
+            "error": "Contact not found in HubSpot",
+            "arenaUserId": "={{ $json.arenaUserId }}"
+          }
+        }
+      },
+      "id": "respond-not-found",
+      "name": "Respond Not Found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1130, 400]
+    }
+  ],
+  "connections": {
+    "Subscription Update Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Subscription Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Subscription Data": {
+      "main": [
+        [
+          {
+            "node": "Find HubSpot Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find HubSpot Contact": {
+      "main": [
+        [
+          {
+            "node": "Contact Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contact Exists?": {
+      "main": [
+        [
+          {
+            "node": "Calculate Subscription Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Subscription Metrics": {
+      "main": [
+        [
+          {
+            "node": "Update Contact Properties",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Contact Properties": {
+      "main": [
+        [
+          {
+            "node": "Is Premium?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Premium?": {
+      "main": [
+        [
+          {
+            "node": "Add to Premium List",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Remove from Premium List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to Premium List": {
+      "main": [
+        [
+          {
+            "node": "Expiring Soon?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove from Premium List": {
+      "main": [
+        [
+          {
+            "node": "Add Timeline Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expiring Soon?": {
+      "main": [
+        [
+          {
+            "node": "Enroll in Renewal Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Add Timeline Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enroll in Renewal Reminder": {
+      "main": [
+        [
+          {
+            "node": "Add Timeline Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Timeline Event": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "arena-subscription-manager",
+  "meta": {
+    "instanceId": "YOUR_N8N_INSTANCE_ID"
+  },
+  "tags": []
+}

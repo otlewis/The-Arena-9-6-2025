@@ -93,7 +93,7 @@ class UserTimeoutService {
 
       // Call server-side function with 10 second timeout
       final result = await _appwrite.functions.createExecution(
-        functionId: 'timeout-user',
+        functionId: 'timeout-user-v2',
         body: jsonEncode({
           'targetUserId': userId,
           'roomId': roomId,

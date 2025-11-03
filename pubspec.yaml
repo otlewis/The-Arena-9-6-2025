@@ -1,7 +1,7 @@
 name: arena
 description: "A debate and discussion app with live streaming capabilities using Flutter."
 publish_to: 'none'
-version: 1.0.43+43
+version: 1.0.57+57
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -14,11 +14,11 @@ dependencies:
   
   cupertino_icons: ^1.0.2
   flutter_svg: ^2.0.10+1
-  appwrite: ^19.1.0
-  device_info_plus: ^12.1.0
-  package_info_plus: ^8.3.1
-  url_launcher: ^6.2.5
-  shared_preferences: ^2.2.2
+  appwrite: ^20.2.2
+  device_info_plus: ^12.2.0
+  package_info_plus: ^9.0.0
+  url_launcher: ^6.3.0
+  shared_preferences: ^2.4.0
   app_links: ^6.0.0
   permission_handler: ^12.0.1
   webview_flutter: ^4.7.0
@@ -55,11 +55,11 @@ dependencies:
   http: ^1.5.0
   in_app_purchase: ^3.2.0
   in_app_purchase_storekit: ^0.4.6
-  purchases_flutter: ^9.8.0
+  purchases_flutter: ^9.9.1
   flutter_launcher_icons: ^0.14.4
   livekit_client: ^2.5.1
   workmanager: ^0.9.0+2
-  share_plus: ^12.0.0
+  share_plus: ^12.0.1
   pdfx: ^2.6.0
   markdown_widget: ^2.3.2+6
   google_sign_in: ^7.2.0
@@ -70,6 +70,9 @@ dependencies:
   audio_session: ^0.2.2
   lottie: ^3.1.3
   animated_emoji: ^3.1.0
+  volume_controller: ^2.0.7
+  flutter_stripe: ^11.5.0
+  pay: ^3.2.1
 
 dev_dependencies:
   flutter_test:
@@ -89,7 +92,7 @@ dependency_overrides:
   flutter_web_auth_2: ^4.1.0
   flutter_webrtc: 1.2.0
   livekit_client: 2.5.1
-  device_info_plus: ^12.1.0
+  device_info_plus: ^12.2.0
   connectivity_plus: ^7.0.0
 
 flutter:

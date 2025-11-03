@@ -11,11 +11,13 @@ import '../../../widgets/simple_timer.dart';
 /// This is the exact app bar from the original arena with timer and moderator controls
 class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool isModerator;
+  final bool isSuperModerator; // Super moderator status
   final bool isDebater; // DEBATER MODERATOR: Track if user is a debater
   final VoidCallback onShowModeratorControls;
   final VoidCallback? onShowDebaterControls; // DEBATER MODERATOR: Optional debater controls
   final VoidCallback onExitArena;
   final VoidCallback onEmergencyCloseRoom;
+  final VoidCallback? onPingFollowers; // Callback to show ping followers modal
   final String roomId;
   final String userId;
   final int votedCount; // Number of judges who have voted
@@ -24,11 +26,13 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
   const ArenaAppBar({
     super.key,
     required this.isModerator,
+    this.isSuperModerator = false, // Default to false
     this.isDebater = false, // DEBATER MODERATOR: Default to false
     required this.onShowModeratorControls,
     this.onShowDebaterControls, // DEBATER MODERATOR: Optional callback
     required this.onExitArena,
     required this.onEmergencyCloseRoom,
+    this.onPingFollowers,
     required this.roomId,
     required this.userId,
     this.votedCount = 0,
@@ -61,8 +65,8 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
           
           return Row(
             children: [
-              // Moderator Controls Icons (only visible to moderators) - more compact on small screens
-              if (isModerator)
+              // Moderator Controls Icons (only visible to moderators and super moderators) - more compact on small screens
+              if (isModerator || isSuperModerator)
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -164,26 +168,26 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
         },
       ),
       actions: [
-        // Network quality indicator - more compact on small screens
+        // Network quality indicator - ultra compact on small screens
         SizedBox(
-          width: isSmallScreen ? 24 : 28,
+          width: isSmallScreen ? 18 : 28,
           child: const Center(
             child: CompactNetworkIndicator(),
           ),
         ),
-        // Challenge notification bell - more compact on small screens
+        // Challenge notification bell - ultra compact on small screens
         SizedBox(
-          width: isSmallScreen ? 28 : 32,
+          width: isSmallScreen ? 20 : 32,
           child: Center(
             child: ChallengeBell(
               iconColor: Colors.white,
-              iconSize: isSmallScreen ? 16 : 18,
+              iconSize: isSmallScreen ? 12 : 18,
             ),
           ),
         ),
         // Info/Rules button for everyone
         SizedBox(
-          width: isSmallScreen ? 28 : 32,
+          width: isSmallScreen ? 20 : 32,
           child: IconButton(
             padding: EdgeInsets.zero,
             onPressed: () {
@@ -193,24 +197,24 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
                 builder: (context) => const DebateRulesModal(),
               );
             },
-            icon: Icon(Icons.info, 
-                     color: Colors.white, 
-                     size: isSmallScreen ? 16 : 18),
+            icon: Icon(Icons.info,
+                     color: Colors.white,
+                     size: isSmallScreen ? 12 : 18),
             tooltip: 'Debate Rules & Guidelines',
           ),
         ),
-        // Leave button - more compact on small screens
+        // Leave button - ultra compact on small screens
         SizedBox(
-          width: isSmallScreen ? 28 : 32,
+          width: isSmallScreen ? 20 : 32,
           child: IconButton(
             padding: EdgeInsets.zero,
             onPressed: () {
               AppLogger().info('🚪 EXIT: Exit button clicked in ArenaAppBar');
               onExitArena();
             },
-            icon: Icon(Icons.exit_to_app, 
-                     color: Colors.white, 
-                     size: isSmallScreen ? 16 : 18),
+            icon: Icon(Icons.exit_to_app,
+                     color: Colors.white,
+                     size: isSmallScreen ? 12 : 18),
             tooltip: 'Leave Arena',
           ),
         ),

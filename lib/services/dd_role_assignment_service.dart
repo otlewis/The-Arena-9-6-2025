@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import '../core/logging/app_logger.dart';
@@ -6,6 +7,8 @@ import '../core/logging/app_logger.dart';
 enum DDRole {
   moderator,
   speaker,
+  affirmative,  // Debate room: argues FOR the topic
+  negative,     // Debate room: argues AGAINST the topic
   pending,
   audience,
 }
@@ -17,6 +20,10 @@ extension DDRoleExtension on DDRole {
         return 'moderator';
       case DDRole.speaker:
         return 'speaker';
+      case DDRole.affirmative:
+        return 'affirmative';
+      case DDRole.negative:
+        return 'negative';
       case DDRole.pending:
         return 'pending';
       case DDRole.audience:
@@ -30,6 +37,10 @@ extension DDRoleExtension on DDRole {
         return DDRole.moderator;
       case 'speaker':
         return DDRole.speaker;
+      case 'affirmative':
+        return DDRole.affirmative;
+      case 'negative':
+        return DDRole.negative;
       case 'pending':
         return DDRole.pending;
       case 'audience':
@@ -140,6 +151,7 @@ class DDRoleAssignmentService {
     _pendingRequests[requestKey] = DateTime.now();
 
     AppLogger().info('📡 D&D Role Assignment: $userId → ${role.value} in room $roomId');
+    AppLogger().debug('  - Requester: $requesterId');
 
     // Optimistic update (instant UI feedback)
     if (optimisticUpdate != null) {
@@ -148,15 +160,18 @@ class DDRoleAssignmentService {
     }
 
     try {
-      // Call backend function
+      // Call backend function with properly encoded JSON
+      final requestBody = jsonEncode({
+        'roomId': roomId,
+        'userId': userId,
+        'role': role.value,
+        'requesterId': requesterId,
+      });
+      AppLogger().debug('📤 Request body: $requestBody');
+
       final execution = await _functions.createExecution(
         functionId: 'assign-dd-role',
-        body: {
-          'roomId': roomId,
-          'userId': userId,
-          'role': role.value,
-          'requesterId': requesterId,
-        }.toString(),
+        body: requestBody,
       );
 
       // Parse response
@@ -172,7 +187,10 @@ class DDRoleAssignmentService {
         return response;
       } else {
         // Backend returned error - rollback optimistic update
-        AppLogger().error('❌ D&D Role assignment failed: ${response['error']}');
+        final errorMsg = response['error'] ?? 'Unknown error';
+        final errorCode = response['code'] ?? 'UNKNOWN';
+        AppLogger().error('❌ D&D Role assignment failed: $errorMsg (code: $errorCode)');
+        AppLogger().debug('  - Full response: $response');
         if (rollback != null) {
           AppLogger().debug('  🔄 Rolling back optimistic update');
           rollback();
@@ -236,66 +254,30 @@ class DDRoleAssignmentService {
   /// Parse function response body
   Map<String, dynamic> _parseResponse(String responseBody) {
     try {
-      // Response is already a JSON string, parse it
-      final dynamic parsed = _parseJson(responseBody);
+      AppLogger().debug('📥 Parsing response body: $responseBody');
+      // Use Dart's built-in JSON decoder
+      final dynamic parsed = jsonDecode(responseBody);
       if (parsed is Map<String, dynamic>) {
+        AppLogger().debug('✅ Successfully parsed response: $parsed');
         return parsed;
       }
+      AppLogger().error('❌ Response is not a Map: ${parsed.runtimeType}');
       return {
         'success': false,
-        'error': 'Invalid response format',
+        'error': 'Invalid response format: expected Map but got ${parsed.runtimeType}',
         'code': 'PARSE_ERROR',
       };
-    } catch (e) {
-      AppLogger().error('Failed to parse response: $e');
+    } catch (e, stackTrace) {
+      AppLogger().error('❌ Failed to parse response: $e');
+      AppLogger().debug('Stack trace: $stackTrace');
+      AppLogger().debug('Raw response body: $responseBody');
       return {
         'success': false,
         'error': 'Failed to parse response: $e',
         'code': 'PARSE_ERROR',
+        'rawResponse': responseBody,
       };
     }
-  }
-
-  /// Simple JSON parser
-  dynamic _parseJson(String jsonString) {
-    // Remove any leading/trailing whitespace
-    jsonString = jsonString.trim();
-
-    // If it starts with {, it's an object
-    if (jsonString.startsWith('{')) {
-      final Map<String, dynamic> result = {};
-      // Remove braces
-      final content = jsonString.substring(1, jsonString.length - 1).trim();
-      if (content.isEmpty) return result;
-
-      // Split by commas (simple parser, doesn't handle nested objects)
-      final pairs = content.split(',');
-      for (final pair in pairs) {
-        final keyValue = pair.split(':');
-        if (keyValue.length == 2) {
-          final key = keyValue[0].trim().replaceAll('"', '');
-          var value = keyValue[1].trim();
-
-          // Parse value
-          if (value == 'true') {
-            result[key] = true;
-          } else if (value == 'false') {
-            result[key] = false;
-          } else if (value == 'null') {
-            result[key] = null;
-          } else if (value.startsWith('"') && value.endsWith('"')) {
-            result[key] = value.substring(1, value.length - 1);
-          } else {
-            // Try to parse as number
-            final num = int.tryParse(value) ?? double.tryParse(value);
-            result[key] = num ?? value;
-          }
-        }
-      }
-      return result;
-    }
-
-    return jsonString;
   }
 
   /// Cleanup method - call when disposing the service

@@ -19,6 +19,7 @@ class TimeoutCountdownWidget extends StatefulWidget {
 class _TimeoutCountdownWidgetState extends State<TimeoutCountdownWidget> {
   Timer? _countdownTimer;
   Duration _remaining = Duration.zero;
+  bool _hasExpiredCallbackFired = false;
 
   @override
   void initState() {
@@ -39,8 +40,15 @@ class _TimeoutCountdownWidgetState extends State<TimeoutCountdownWidget> {
 
     if (diff.isNegative) {
       _remaining = Duration.zero;
-      if (widget.onExpired != null) {
-        widget.onExpired!();
+      // CRITICAL FIX: Only fire callback once, and use post-frame callback to ensure dialog is built
+      if (!_hasExpiredCallbackFired && widget.onExpired != null) {
+        _hasExpiredCallbackFired = true;
+        // Schedule callback after current frame to ensure dialog is fully rendered
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && widget.onExpired != null) {
+            widget.onExpired!();
+          }
+        });
       }
     } else {
       _remaining = diff;

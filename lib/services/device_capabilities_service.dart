@@ -277,33 +277,33 @@ class DeviceCapabilitiesService {
     // Adjust for network conditions with ultra-low bitrates for 2G/3G
     switch (networkType) {
       case NetworkType.cellular2G:
-        // Ultra-low bitrate for 2G networks (EDGE/GPRS) - 8kbps limit
+        // Ultra-low bitrate for 2G networks (EDGE/GPRS) - 16kbps limit (boosted from 8kbps)
         config = AudioConfiguration(
-          bitrate: 8000,
-          sampleRate: 8000,
+          bitrate: 16000, // Increased from 8000 for better quality
+          sampleRate: 16000, // Increased from 8000 for better quality
           channels: 1,
           dtx: true,
           red: true,
           noiseSuppression: false,
-          echoCancellation: false,
-          autoGainControl: false, // Disabled to start audio at full volume
-          preferredCodec: 'g711', // Most compatible for 2G
+          echoCancellation: true, // Enabled for better quality
+          autoGainControl: true, // Enabled to normalize audio levels and boost quality
+          preferredCodec: 'opus', // Opus is better than g711 even on 2G
           jitterBufferSize: 300,
           audioFrameDuration: 60,
         );
         break;
       case NetworkType.cellular3G:
-        // Low bitrate for 3G networks - 16kbps limit
+        // Moderate bitrate for 3G networks - 32kbps limit (boosted from 16kbps)
         config = AudioConfiguration(
-          bitrate: 16000,
-          sampleRate: 16000,
+          bitrate: 32000, // Increased from 16000 for better quality
+          sampleRate: 24000, // Increased from 16000 for better quality
           channels: 1,
           dtx: true,
-          red: true,
-          noiseSuppression: false,
+          red: false, // Disabled for better quality
+          noiseSuppression: true, // Enabled for better clarity
           echoCancellation: true,
-          autoGainControl: false, // Disabled to start audio at full volume
-          preferredCodec: profile.supportedCodecs.contains(AudioCodecSupport.amrWB) ? 'amr-wb' : 'g711',
+          autoGainControl: true, // Enabled to normalize audio levels and boost quality
+          preferredCodec: 'opus', // Always use Opus for best quality
           jitterBufferSize: 200,
           audioFrameDuration: 40,
         );
@@ -473,60 +473,60 @@ class AudioConfiguration {
     this.red = false,
     this.noiseSuppression = true,
     this.echoCancellation = true,
-    this.autoGainControl = false, // Disabled to start audio at full volume
+    this.autoGainControl = true, // Enabled to normalize audio levels and boost Android quality
     this.preferredCodec = 'opus',
     this.jitterBufferSize = 50,
     this.audioFrameDuration = 20,
   });
   
   factory AudioConfiguration.veryLowEnd() => AudioConfiguration(
-    bitrate: 8000,
-    sampleRate: 8000,
+    bitrate: 16000, // Increased from 8000 for better quality
+    sampleRate: 16000, // Increased from 8000 for better quality
     channels: 1,
     dtx: true,
     red: true,
     noiseSuppression: false,
     echoCancellation: false,
-    autoGainControl: false, // Disabled to start audio at full volume
+    autoGainControl: true, // Enabled to normalize audio levels and boost quality
     jitterBufferSize: 200,
     audioFrameDuration: 40,
   );
 
   factory AudioConfiguration.lowEnd() => AudioConfiguration(
-    bitrate: 16000,
-    sampleRate: 16000,
+    bitrate: 32000, // Increased from 16000 for better quality
+    sampleRate: 24000, // Increased from 16000 for better quality
     channels: 1,
     dtx: true,
-    red: true,
-    noiseSuppression: false,
+    red: false, // Disabled for better quality (less packet loss protection needed)
+    noiseSuppression: true, // Re-enabled for better clarity
     echoCancellation: true,
-    autoGainControl: false, // Disabled to start audio at full volume
+    autoGainControl: true, // Enabled to normalize audio levels and boost quality
     jitterBufferSize: 100,
     audioFrameDuration: 20,
   );
 
   factory AudioConfiguration.medium() => AudioConfiguration(
-    bitrate: 32000,
-    sampleRate: 24000,
+    bitrate: 48000, // Increased from 32000 for better quality
+    sampleRate: 32000, // Increased from 24000 for better quality
     channels: 1,
-    dtx: true,
+    dtx: false, // Disabled for better quality (continuous transmission)
     red: false,
     noiseSuppression: true,
     echoCancellation: true,
-    autoGainControl: false, // Disabled to start audio at full volume
+    autoGainControl: true, // Enabled to normalize audio levels and boost quality
     jitterBufferSize: 50,
     audioFrameDuration: 20,
   );
 
   factory AudioConfiguration.highEnd() => AudioConfiguration(
-    bitrate: 64000,
+    bitrate: 96000, // Increased from 64000 for crystal clear quality
     sampleRate: 48000,
-    channels: 2,
+    channels: 2, // Stereo for high-end devices
     dtx: false,
     red: false,
     noiseSuppression: true,
     echoCancellation: true,
-    autoGainControl: false, // Disabled to start audio at full volume
+    autoGainControl: true, // Enabled to normalize audio levels and boost quality
     jitterBufferSize: 20,
     audioFrameDuration: 10,
   );

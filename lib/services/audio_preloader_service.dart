@@ -22,30 +22,32 @@ class AudioPreloaderService {
   bool _isInitialized = false;
 
   // Critical audio assets for Arena app
+  // NOTE: Paths include 'assets/' prefix for rootBundle.load() validation,
+  // but setSourceAsset() will strip it automatically
   static const Map<String, String> _criticalAudioAssets = {
-    // Timer sounds
+    // Timer sounds (confirmed to exist)
     'timer_30_second_warning': 'assets/audio/30sec.mp3',
     'timer_zero': 'assets/audio/arenazero.mp3',
 
-    // UI feedback sounds
+    // UI feedback sounds (optional - will skip if not found)
     'button_click': 'assets/audio/button_click.mp3',
     'notification_sound': 'assets/audio/notification.mp3',
     'success_sound': 'assets/audio/success.mp3',
     'error_sound': 'assets/audio/error.mp3',
 
-    // Arena-specific sounds
+    // Arena-specific sounds (optional - will skip if not found)
     'debate_start': 'assets/audio/debate_start.mp3',
     'debate_end': 'assets/audio/debate_end.mp3',
     'hand_raise': 'assets/audio/hand_raise.mp3',
     'speaker_joined': 'assets/audio/speaker_joined.mp3',
     'speaker_left': 'assets/audio/speaker_left.mp3',
 
-    // Award and achievement sounds
+    // Award and achievement sounds (optional - will skip if not found)
     'coin_earned': 'assets/audio/coin_earned.mp3',
     'gift_received': 'assets/audio/gift_received.mp3',
     'level_up': 'assets/audio/level_up.mp3',
 
-    // Communication sounds
+    // Communication sounds (optional - will skip if not found)
     'message_received': 'assets/audio/message_received.mp3',
     'challenge_received': 'assets/audio/challenge_received.mp3',
     'room_joined': 'assets/audio/room_joined.mp3',
@@ -106,7 +108,11 @@ class AudioPreloaderService {
       await player.setVolume(1.0);
 
       // Preload the audio file using asset source (Android LOW_LATENCY compatible)
-      await player.setSourceAsset(assetPath);
+      // Note: setSourceAsset expects path WITHOUT 'assets/' prefix (e.g., 'audio/file.mp3')
+      final sourceAssetPath = assetPath.startsWith('assets/')
+          ? assetPath.substring('assets/'.length)
+          : assetPath;
+      await player.setSourceAsset(sourceAssetPath);
 
       _preloadedPlayers[key] = player;
       _preloadStatus[key] = true;

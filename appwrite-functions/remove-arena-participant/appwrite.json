@@ -1,0 +1,24 @@
+{
+    "projectId": "683a37a8003719978879",
+    "projectName": "Arena DTD",
+    "functions": [
+        {
+            "$id": "remove-arena-participant",
+            "name": "Remove Arena Participant",
+            "runtime": "node-18.0",
+            "execute": ["any"],
+            "events": [],
+            "schedule": "",
+            "timeout": 15,
+            "enabled": true,
+            "logging": true,
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "scopes": [
+                "databases.read",
+                "databases.write"
+            ],
+            "path": "appwrite-functions/remove-arena-participant"
+        }
+    ]
+}

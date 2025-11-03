@@ -1272,6 +1272,36 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
       ) as _i6.Future<void>);
 
   @override
+  _i6.Future<void> exitAllDebateDiscussionRooms({required String? userId}) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #exitAllDebateDiscussionRooms,
+          [],
+          {#userId: userId},
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> updateDebateDiscussionParticipantPresence({
+    required String? roomId,
+    required String? userId,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updateDebateDiscussionParticipantPresence,
+          [],
+          {
+            #roomId: roomId,
+            #userId: userId,
+          },
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
   _i6.Future<List<Map<String, dynamic>>> getDebateDiscussionParticipants(
           String? roomId) =>
       (super.noSuchMethod(
@@ -1335,6 +1365,7 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
     bool? audioReady,
     String? videoTrackSid,
     String? audioTrackSid,
+    bool? isOnPhoneCall,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1347,6 +1378,7 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
             #audioReady: audioReady,
             #videoTrackSid: videoTrackSid,
             #audioTrackSid: audioTrackSid,
+            #isOnPhoneCall: isOnPhoneCall,
           },
         ),
         returnValue: _i6.Future<void>.value(),
@@ -1937,6 +1969,24 @@ class MockAppwriteService extends _i1.Mock implements _i5.AppwriteService {
       (super.noSuchMethod(
         Invocation.method(
           #joinArenaRoom,
+          [],
+          {
+            #roomId: roomId,
+            #userId: userId,
+          },
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> updateArenaParticipantPresence({
+    required String? roomId,
+    required String? userId,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updateArenaParticipantPresence,
           [],
           {
             #roomId: roomId,
@@ -2784,6 +2834,16 @@ class MockSoundService extends _i1.Mock implements _i13.SoundService {
   _i6.Future<void> playClapSound() => (super.noSuchMethod(
         Invocation.method(
           #playClapSound,
+          [],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> playPing() => (super.noSuchMethod(
+        Invocation.method(
+          #playPing,
           [],
         ),
         returnValue: _i6.Future<void>.value(),

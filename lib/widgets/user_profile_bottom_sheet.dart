@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:appwrite/appwrite.dart';
 import '../models/user_profile.dart';
 import '../services/challenge_messaging_service.dart';
+import '../services/challenge_eligibility_service.dart';
 import '../services/appwrite_service.dart';
 import '../services/super_moderator_service.dart';
 import '../services/user_timeout_service.dart';
@@ -51,6 +53,7 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
   String? _currentUserId;
   int? _globalRank;
   String _tier = 'Bronze';
+  String? _userRoleInRoom; // Track the user's role in the current room
 
   @override
   void initState() {
@@ -72,6 +75,7 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
     _fetchUserRanking();
     _checkSuperModStatus();
     _checkFollowStatus();
+    _fetchUserRoleInRoom();
   }
 
   Future<void> _fetchUserRanking() async {
@@ -184,6 +188,114 @@ class _UserProfileBottomSheetState extends State<UserProfileBottomSheet>
     } catch (e) {
       AppLogger().error('Error checking follow status: $e');
     }
+  }
+
+  /// Fetch the user's role in the current room (if in a room)
+  Future<void> _fetchUserRoleInRoom() async {
+    if (widget.roomId == null || widget.roomType == null) {
+      return; // Not in a room context
+    }
+
+    try {
+      final appwrite = AppwriteService();
+      final roomType = widget.roomType!.toLowerCase();
+
+      // Determine which participant collection to query based on room type
+      String participantCollection;
+      if (roomType.contains('arena') || roomType.contains('debate')) {
+        participantCollection = 'arena_participants';
+      } else if (roomType.contains('discussion')) {
+        participantCollection = 'room_participants';
+      } else {
+        return; // Unknown room type
+      }
+
+      // Query for the user's participant record in this room
+      final participants = await appwrite.databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: participantCollection,
+        queries: [
+          Query.equal('roomId', widget.roomId!),
+          Query.equal('userId', widget.user.id),
+        ],
+      );
+
+      if (participants.documents.isNotEmpty && mounted) {
+        setState(() {
+          _userRoleInRoom = participants.documents.first.data['role'];
+        });
+        AppLogger().info('✅ User ${widget.user.name} has role $_userRoleInRoom in room ${widget.roomId}');
+      }
+    } catch (e) {
+      AppLogger().error('Error fetching user role in room: $e');
+    }
+  }
+
+  /// Check if the user is restricted from being challenged
+  /// Returns true if user is a moderator, active debater, or judge
+  /// Returns false for audience members (they can ALWAYS be challenged, even super mods)
+  /// Speakers in Discussion/Take rooms CAN be challenged (except moderators)
+  bool _isUserChallengeRestricted() {
+    // Check current role FIRST - audience members can ALWAYS be challenged
+    if (_userRoleInRoom != null) {
+      final role = _userRoleInRoom!.toLowerCase();
+
+      // Audience members can ALWAYS be challenged (even super moderators in audience)
+      if (role == 'audience') {
+        return false;
+      }
+
+      // Room moderators cannot be challenged
+      if (role == 'moderator') {
+        return true;
+      }
+
+      // Judges cannot be challenged
+      if (role == 'judge' || role == 'judge1' || role == 'judge2' || role == 'judge3') {
+        return true;
+      }
+
+      // Active debaters cannot be challenged
+      if (role == 'affirmative' || role == 'negative' ||
+          role == 'affirmative2' || role == 'negative2') {
+        return true;
+      }
+
+      // Speakers in Discussion/Take rooms CAN be challenged
+      if (role == 'speaker') {
+        return false; // Speakers are allowed to be challenged
+      }
+    }
+
+    // If no role in room, check if they're a registered moderator
+    // (Only block if they're not in a room or have no role)
+    if (widget.user.isAvailableAsModerator) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /// Get the reason why the user cannot be challenged
+  String _getChallengeRestrictionReason() {
+    if (widget.user.isAvailableAsModerator) {
+      return 'Moderators cannot be challenged';
+    }
+
+    if (_userRoleInRoom != null) {
+      final role = _userRoleInRoom!.toLowerCase();
+      if (role == 'moderator') {
+        return 'Room moderators cannot be challenged';
+      }
+      if (role == 'judge' || role.startsWith('judge')) {
+        return 'Judges cannot be challenged';
+      }
+      if (role.contains('affirmative') || role.contains('negative')) {
+        return 'Active debaters cannot be challenged';
+      }
+    }
+
+    return 'User is currently unavailable for challenges';
   }
 
   @override
@@ -587,14 +699,26 @@ Join Arena DTD to connect with debaters and participate in live discussions!
                               String roomType = widget.roomType ?? 'Discussion';
 
                               try {
-                                // Try to get room details
-                                final roomDoc = await appwrite.databases.getDocument(
-                                  databaseId: 'arena_db',
-                                  collectionId: 'debate_discussion_rooms',
-                                  documentId: widget.roomId!,
-                                );
-                                roomName = roomDoc.data['title'] ?? 'Room';
-                                roomType = roomDoc.data['debateStyle'] ?? 'Discussion';
+                                // Try to get room details from appropriate collection
+                                if (widget.roomType?.toLowerCase() == 'arena') {
+                                  // Arena room - check arena_rooms collection
+                                  final roomDoc = await appwrite.databases.getDocument(
+                                    databaseId: 'arena_db',
+                                    collectionId: 'arena_rooms',
+                                    documentId: widget.roomId!,
+                                  );
+                                  roomName = roomDoc.data['topic'] ?? roomDoc.data['title'] ?? 'Arena';
+                                  roomType = 'arena';
+                                } else {
+                                  // Debates & Discussions room
+                                  final roomDoc = await appwrite.databases.getDocument(
+                                    databaseId: 'arena_db',
+                                    collectionId: 'debate_discussion_rooms',
+                                    documentId: widget.roomId!,
+                                  );
+                                  roomName = roomDoc.data['title'] ?? 'Room';
+                                  roomType = roomDoc.data['debateStyle'] ?? 'Discussion';
+                                }
                               } catch (e) {
                                 AppLogger().error('Failed to get room details: $e');
                                 // Use defaults
@@ -741,62 +865,88 @@ Join Arena DTD to connect with debaters and participate in live discussions!
                           // Challenge button
                           Expanded(
                             child: GestureDetector(
-                              onTap: () {
-                                HapticFeedback.lightImpact();
-                                if (_currentUserIsPremium) {
-                                  // Show challenge dialog for premium users
-                                  _showChallengeDialog();
-                                } else {
-                                  // Show premium paywall for non-premium users
-                                  _showPremiumPaywall();
-                                }
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: _currentUserIsPremium
-                                        ? const Color(0xFFDC2626)
-                                        : Colors.grey.shade400,
-                                    width: 2,
+                              onTap: _isUserChallengeRestricted()
+                                  ? () {
+                                      // Show why they can't be challenged
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(_getChallengeRestrictionReason()),
+                                          backgroundColor: Colors.orange,
+                                          duration: const Duration(seconds: 2),
+                                        ),
+                                      );
+                                    }
+                                  : () async {
+                                      HapticFeedback.lightImpact();
+                                      if (_currentUserIsPremium) {
+                                        // Check eligibility before showing challenge dialog
+                                        await _checkAndShowChallenge();
+                                      } else {
+                                        // Show premium paywall for non-premium users
+                                        _showPremiumPaywall();
+                                      }
+                                    },
+                              child: Opacity(
+                                opacity: _isUserChallengeRestricted() ? 0.4 : 1.0,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  decoration: BoxDecoration(
+                                    color: _isUserChallengeRestricted()
+                                        ? Colors.grey.shade300 // Grayed out for restricted users
+                                        : Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: _isUserChallengeRestricted()
+                                          ? Colors.grey.shade400
+                                          : (_currentUserIsPremium
+                                              ? const Color(0xFFDC2626)
+                                              : Colors.grey.shade400),
+                                      width: 2,
+                                    ),
+                                    boxShadow: _isUserChallengeRestricted()
+                                        ? [] // No shadow for disabled state
+                                        : [
+                                            BoxShadow(
+                                              color: Colors.grey.shade300,
+                                              offset: const Offset(4, 4),
+                                              blurRadius: 8,
+                                              spreadRadius: 0,
+                                            ),
+                                            const BoxShadow(
+                                              color: Colors.white,
+                                              offset: Offset(-4, -4),
+                                              blurRadius: 8,
+                                              spreadRadius: 0,
+                                            ),
+                                          ],
                                   ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.grey.shade300,
-                                      offset: const Offset(4, 4),
-                                      blurRadius: 8,
-                                      spreadRadius: 0,
-                                    ),
-                                    const BoxShadow(
-                                      color: Colors.white,
-                                      offset: Offset(-4, -4),
-                                      blurRadius: 8,
-                                      spreadRadius: 0,
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      _currentUserIsPremium ? Icons.gavel : Icons.lock,
-                                      color: _currentUserIsPremium
-                                          ? const Color(0xFFDC2626)
-                                          : Colors.grey.shade600,
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      _currentUserIsPremium ? 'Challenge' : 'Premium',
-                                      style: TextStyle(
-                                        color: Colors.grey.shade700,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        _isUserChallengeRestricted()
+                                            ? Icons.block // Blocked icon for restricted users
+                                            : (_currentUserIsPremium ? Icons.gavel : Icons.lock),
+                                        color: _isUserChallengeRestricted()
+                                            ? Colors.grey.shade600
+                                            : (_currentUserIsPremium
+                                                ? const Color(0xFFDC2626)
+                                                : Colors.grey.shade600),
+                                        size: 18,
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        _isUserChallengeRestricted()
+                                            ? 'Unavailable'
+                                            : (_currentUserIsPremium ? 'Challenge' : 'Premium'),
+                                        style: TextStyle(
+                                          color: Colors.grey.shade700,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -959,108 +1109,6 @@ Join Arena DTD to connect with debaters and participate in live discussions!
                         const SizedBox(height: 12),
                       ],
 
-                      // Moderator Controls: Timeout and Mute (visible for both moderators and super mods, only if not viewing self)
-                      if ((widget.isCurrentUserModerator || _isCurrentUserSuperMod) &&
-                          widget.roomId != null &&
-                          widget.user.id != _currentUserId) ...[
-                        Row(
-                          children: [
-                            // Timeout User button
-                            Expanded(
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  onTap: () {
-                                    AppLogger().info('⏰ Timeout button tapped - userId: ${widget.user.id}...');
-                                    HapticFeedback.lightImpact();
-                                    _showTimeoutDialog();
-                                  },
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 14),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFFA500).withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: const Color(0xFFFFA500),
-                                        width: 2,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        const Icon(
-                                          Icons.timer,
-                                          color: Color(0xFFFFA500),
-                                          size: 18,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          'Timeout',
-                                          style: TextStyle(
-                                            color: Colors.grey.shade700,
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                            const SizedBox(width: 12),
-
-                            // Mute User button
-                            Expanded(
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  onTap: () {
-                                    AppLogger().info('🔇 Mute User button tapped - userId: ${widget.user.id}...');
-                                    HapticFeedback.lightImpact();
-                                    _showMuteUserDialog();
-                                  },
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 14),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF8B5CF6).withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: const Color(0xFF8B5CF6),
-                                        width: 2,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        const Icon(
-                                          Icons.mic_off,
-                                          color: Color(0xFF8B5CF6),
-                                          size: 18,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          'Mute',
-                                          style: TextStyle(
-                                            color: Colors.grey.shade700,
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 12),
-                      ],
 
                       // Report button (full width)
                       GestureDetector(
@@ -1178,6 +1226,61 @@ Join Arena DTD to connect with debaters and participate in live discussions!
           ),
         ),
       ],
+    );
+  }
+
+  /// Check challenge eligibility and show dialog or error message
+  Future<void> _checkAndShowChallenge() async {
+    final eligibilityService = ChallengeEligibilityService();
+
+    // Check if current user can issue challenges
+    final canIssueChallenge = await eligibilityService.canCurrentUserIssueChallenge();
+    if (canIssueChallenge != null) {
+      if (mounted) {
+        _showChallengeBlockedDialog('Cannot Issue Challenge', canIssueChallenge);
+      }
+      return;
+    }
+
+    // Check if target user can be challenged
+    final canBeChallenge = await eligibilityService.canUserBeChallenged(widget.user.id);
+    if (canBeChallenge != null) {
+      if (mounted) {
+        _showChallengeBlockedDialog('Cannot Challenge This User', canBeChallenge);
+      }
+      return;
+    }
+
+    // Both checks passed - show challenge dialog
+    _showChallengeDialog();
+  }
+
+  /// Show dialog when challenge is blocked
+  void _showChallengeBlockedDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.block, color: Colors.red),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1853,76 +1956,91 @@ Join Arena DTD to connect with debaters and participate in live discussions!
 
   /// Show timeout dialog (moderator only)
   void _showTimeoutDialog() {
+    AppLogger().info('⏰ _showTimeoutDialog called - showing dialog');
+    AppLogger().info('⏰ Widget mounted: $mounted');
+
+    if (!mounted) {
+      AppLogger().error('⏰ Cannot show dialog - widget not mounted');
+      return;
+    }
+
     final reasonController = TextEditingController();
     int selectedDuration = 2; // Default to 2 minutes
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text('⏰ Timeout ${widget.user.name}'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'User will not be able to speak or send messages during timeout.',
-                  style: TextStyle(fontSize: 14),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
-                  value: selectedDuration,
-                  decoration: const InputDecoration(labelText: 'Duration'),
-                  items: const [
-                    DropdownMenuItem(value: 2, child: Text('2 minutes')),
-                    DropdownMenuItem(value: 5, child: Text('5 minutes')),
-                    DropdownMenuItem(value: 10, child: Text('10 minutes')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => selectedDuration = value);
-                    }
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: reasonController,
-                  decoration: const InputDecoration(
-                    labelText: 'Reason (optional)',
-                    hintText: 'Why timeout this user?',
+      builder: (context) {
+        AppLogger().info('⏰ Dialog builder called');
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: Text('⏰ Timeout ${widget.user.name}'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'User will not be able to speak or send messages during timeout.',
+                    style: TextStyle(fontSize: 14),
                   ),
-                  maxLines: 2,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                await _timeoutUser(
-                  selectedDuration,
-                  reasonController.text.trim(),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFA500),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<int>(
+                    value: selectedDuration,
+                    decoration: const InputDecoration(labelText: 'Duration'),
+                    items: const [
+                      DropdownMenuItem(value: 2, child: Text('2 minutes')),
+                      DropdownMenuItem(value: 5, child: Text('5 minutes')),
+                      DropdownMenuItem(value: 10, child: Text('10 minutes')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => selectedDuration = value);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: reasonController,
+                    decoration: const InputDecoration(
+                      labelText: 'Reason (optional)',
+                      hintText: 'Why timeout this user?',
+                    ),
+                    maxLines: 2,
+                  ),
+                ],
               ),
-              child: const Text('Timeout'),
             ),
-          ],
-        ),
-      ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await _timeoutUser(
+                    selectedDuration,
+                    reasonController.text.trim(),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFA500),
+                ),
+                child: const Text('Timeout'),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
   /// Timeout user (moderator only)
   Future<void> _timeoutUser(int durationMinutes, String reason) async {
+    AppLogger().info('⏰ _timeoutUser called - duration: $durationMinutes, reason: "$reason"');
+    AppLogger().info('⏰ Current user ID: $_currentUserId, Room ID: ${widget.roomId}, Target user ID: ${widget.user.id}');
+
     if (_currentUserId == null || widget.roomId == null) {
+      AppLogger().error('⏰ FAILED: Missing currentUserId or roomId');
       return;
     }
 

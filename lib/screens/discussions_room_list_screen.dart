@@ -341,21 +341,12 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
     AppLogger().debug('🚀 Navigating to room: ${roomData['name']}');
     AppLogger().debug('🚀 Room ID: ${roomData['id']}');
     AppLogger().debug('🚀 Room data: $roomData');
-    
+
     if (!mounted) {
       AppLogger().debug('🚀 Widget not mounted, skipping navigation');
       return;
     }
-    
-    // Show joining message
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('🚀 Joining "${roomData['name']}"...'),
-        backgroundColor: primaryPurple,
-        duration: const Duration(seconds: 1),
-      ),
-    );
-    
+
     // Navigate immediately to the actual debates & discussions screen with room data
     AppLogger().debug('🚀 Pushing to DebatesDiscussionsScreen');
     Navigator.of(context).push(

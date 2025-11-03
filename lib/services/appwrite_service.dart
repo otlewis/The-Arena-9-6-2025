@@ -1783,6 +1783,17 @@ class AppwriteService {
       );
 
       AppLogger().info('User $followerId is now following $followingId');
+
+      // Create a follow notification for the followed user
+      try {
+        await _createFollowNotification(
+          followerId: followerId,
+          followingId: followingId,
+        );
+      } catch (notifError) {
+        // Don't fail the follow if notification creation fails
+        AppLogger().error('Error creating follow notification: $notifError');
+      }
     } catch (e) {
       AppLogger().error('Error following user: $e');
       rethrow;
@@ -1794,6 +1805,8 @@ class AppwriteService {
     required String followingId,
   }) async {
     try {
+      AppLogger().debug('🔍 UNFOLLOW: Looking for follow relationship: $followerId -> $followingId');
+
       final follows = await databases.listDocuments(
         databaseId: 'arena_db',
         collectionId: 'follows',
@@ -1803,17 +1816,21 @@ class AppwriteService {
         ],
       );
 
+      AppLogger().debug('🔍 UNFOLLOW: Found ${follows.documents.length} follow documents to delete');
+
       for (final follow in follows.documents) {
+        AppLogger().debug('🔍 UNFOLLOW: Deleting follow document: ${follow.$id}');
         await databases.deleteDocument(
           databaseId: 'arena_db',
           collectionId: 'follows',
           documentId: follow.$id,
         );
+        AppLogger().debug('✅ UNFOLLOW: Deleted follow document: ${follow.$id}');
       }
 
-      AppLogger().info('User $followerId unfollowed $followingId');
+      AppLogger().info('✅ User $followerId unfollowed $followingId');
     } catch (e) {
-      AppLogger().error('Error unfollowing user: $e');
+      AppLogger().error('❌ Error unfollowing user: $e');
       rethrow;
     }
   }
@@ -4035,6 +4052,102 @@ class AppwriteService {
     } catch (e) {
       AppLogger().error('Error sending arena notification: $e');
       rethrow;
+    }
+  }
+
+  /// Create a follow notification when someone follows a user
+  Future<void> _createFollowNotification({
+    required String followerId,
+    required String followingId,
+  }) async {
+    try {
+      // Get follower's profile to get their name
+      final followerProfile = await getUserProfile(followerId);
+      if (followerProfile == null) {
+        AppLogger().warning('Could not find follower profile: $followerId');
+        return;
+      }
+
+      await databases.createDocument(
+        databaseId: 'arena_db',
+        collectionId: 'arena_notifications',
+        documentId: ID.unique(),
+        data: {
+          'userId': followingId, // The person being followed receives the notification
+          'followerId': followerId,
+          'followerName': followerProfile.name,
+          'followerAvatar': followerProfile.avatar ?? '',
+          'type': 'follow', // New notification type
+          'status': 'unread', // unread, read, dismissed
+          'createdAt': DateTime.now().toIso8601String(),
+        },
+      );
+
+      AppLogger().info('Follow notification created: ${followerProfile.name} followed user $followingId');
+    } catch (e) {
+      AppLogger().error('Error creating follow notification: $e');
+      rethrow;
+    }
+  }
+
+  /// Get follow notifications for a user
+  Future<List<Map<String, dynamic>>> getFollowNotifications(String userId) async {
+    try {
+      final notifications = await databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'arena_notifications',
+        queries: [
+          Query.equal('userId', userId),
+          Query.equal('type', 'follow'),
+          Query.equal('status', 'unread'),
+          Query.orderDesc('\$createdAt'),
+          Query.limit(50),
+        ],
+      );
+
+      return notifications.documents.map((doc) => _safeDocumentToMap(doc)).toList();
+    } catch (e) {
+      AppLogger().error('Error getting follow notifications: $e');
+      return [];
+    }
+  }
+
+  /// Mark a follow notification as read
+  Future<void> markFollowNotificationAsRead(String notificationId) async {
+    try {
+      await databases.updateDocument(
+        databaseId: 'arena_db',
+        collectionId: 'arena_notifications',
+        documentId: notificationId,
+        data: {
+          'status': 'read',
+        },
+      );
+
+      AppLogger().info('Follow notification marked as read: $notificationId');
+    } catch (e) {
+      AppLogger().error('Error marking follow notification as read: $e');
+      rethrow;
+    }
+  }
+
+  /// Get unread follow notification count
+  Future<int> getUnreadFollowNotificationCount(String userId) async {
+    try {
+      final notifications = await databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'arena_notifications',
+        queries: [
+          Query.equal('userId', userId),
+          Query.equal('type', 'follow'),
+          Query.equal('status', 'unread'),
+        ],
+      );
+
+      return notifications.total;
+    } catch (e) {
+      AppLogger().error('Error getting unread follow notification count: $e');
+      return 0;
     }
   }
 
@@ -6458,6 +6571,41 @@ class AppwriteService {
       );
     } catch (e) {
       AppLogger().error('❌ Error recording playback event: $e');
+    }
+  }
+
+  /// Call an Appwrite Function
+  /// Returns the parsed response body as a Map
+  Future<Map<String, dynamic>> callFunction({
+    required String functionId,
+    Map<String, dynamic>? body,
+    ExecutionMethod method = ExecutionMethod.pOST,
+  }) async {
+    try {
+      AppLogger().debug('📡 Calling function: $functionId');
+
+      final execution = await functions.createExecution(
+        functionId: functionId,
+        body: body != null ? jsonEncode(body) : null,
+        method: method,
+      );
+
+      AppLogger().debug('✅ Function $functionId executed: ${execution.status}');
+
+      // Parse response body
+      try {
+        final responseData = jsonDecode(execution.responseBody);
+        if (responseData is Map<String, dynamic>) {
+          return responseData;
+        }
+        return {'data': responseData};
+      } catch (e) {
+        // Response is not JSON, return as string
+        return {'response': execution.responseBody};
+      }
+    } catch (e) {
+      AppLogger().error('❌ Error calling function $functionId: $e');
+      return {'success': false, 'error': e.toString()};
     }
   }
 } 

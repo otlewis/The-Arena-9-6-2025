@@ -77,8 +77,8 @@
             "path": "appwrite-functions/kick-user"
         },
         {
-            "$id": "timeout-user",
-            "name": "Timeout User in Room",
+            "$id": "timeout-user-v2",
+            "name": "Timeout User (New)",
             "runtime": "node-18.0",
             "execute": [
                 "users"
@@ -97,12 +97,11 @@
                 "databases.write"
             ],
             "ignore": [
-                "node_modules",
                 ".git",
                 ".appwrite"
             ],
             "path": "appwrite-functions/timeout-user",
-            "specification": "s-1vcpu-512mb"
+            "specification": "s-0.5vcpu-512mb"
         },
         {
             "$id": "lock-microphones",
@@ -195,6 +194,33 @@
             "path": "appwrite-functions/broadcast-arena-results"
         },
         {
+            "$id": "remove-arena-participant",
+            "name": "Remove Arena Participant",
+            "runtime": "node-18.0",
+            "execute": [
+                "users"
+            ],
+            "events": [],
+            "schedule": "",
+            "timeout": 15,
+            "enabled": true,
+            "logging": true,
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "scopes": [
+                "documents.read",
+                "documents.write",
+                "databases.read",
+                "databases.write"
+            ],
+            "ignore": [
+                "node_modules",
+                ".git",
+                ".appwrite"
+            ],
+            "path": "appwrite-functions/remove-arena-participant"
+        },
+        {
             "$id": "assign-arena-role",
             "name": "Assign Arena Role",
             "runtime": "node-18.0",
@@ -275,6 +301,62 @@
             ],
             "path": "appwrite-functions/cleanup-inactive-participants",
             "specification": "s-1vcpu-512mb"
+        },
+        {
+            "$id": "manage-coin-balance",
+            "name": "Manage Coin Balance",
+            "runtime": "node-18.0",
+            "execute": [
+                "users"
+            ],
+            "events": [],
+            "schedule": "",
+            "timeout": 15,
+            "enabled": true,
+            "logging": true,
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "scopes": [
+                "documents.read",
+                "documents.write",
+                "databases.read",
+                "databases.write"
+            ],
+            "ignore": [
+                "node_modules",
+                ".git",
+                ".appwrite"
+            ],
+            "path": "appwrite-functions/manage-coin-balance",
+            "specification": "s-0.5vcpu-512mb"
+        },
+        {
+            "$id": "raise-hand",
+            "name": "Raise/Lower Hand in Debates & Discussions",
+            "runtime": "node-18.0",
+            "execute": [
+                "users"
+            ],
+            "events": [],
+            "schedule": "",
+            "timeout": 15,
+            "enabled": true,
+            "logging": true,
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "scopes": [
+                "documents.read",
+                "documents.write",
+                "databases.read",
+                "databases.write"
+            ],
+            "ignore": [
+                "node_modules",
+                ".git",
+                ".appwrite"
+            ],
+            "path": "appwrite-functions/raise-hand",
+            "specification": "s-0.5vcpu-512mb"
         }
     ]
 }
