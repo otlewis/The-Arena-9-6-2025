@@ -356,7 +356,10 @@ class AppwriteService {
   }) async {
     try {
       AppLogger().debug('🔐 Starting signIn for: $email');
-      
+
+      // Reset circuit breaker for sign-in to allow fresh attempts
+      _networkService.resetCircuitBreaker('signIn');
+
       final session = await _executeWithRetry(
         'signIn',
         () async {
@@ -827,6 +830,23 @@ class AppwriteService {
     } catch (e) {
       AppLogger().debug('Error updating user stats: $e');
       rethrow;
+    }
+  }
+
+  /// Update user's lastSeen timestamp for online status tracking
+  Future<void> updateLastSeen(String userId) async {
+    try {
+      await databases.updateDocument(
+        databaseId: 'arena_db',
+        collectionId: 'users',
+        documentId: userId,
+        data: {
+          'lastSeen': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      // Silently fail - don't disrupt user experience for lastSeen updates
+      AppLogger().debug('Error updating lastSeen: $e');
     }
   }
 

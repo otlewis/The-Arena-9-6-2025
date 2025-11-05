@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/logging/app_logger.dart';
-import '../screens/debates_discussions_screen.dart';
-import '../screens/arena_screen.dart';
-import '../services/follower_invitation_service.dart';
-import '../services/appwrite_service.dart';
+import '../services/room_invitation_acceptance_service.dart';
 
 /// Modal that pops up when user receives a room invitation
 class RoomInvitationModal extends StatefulWidget {
@@ -23,7 +20,7 @@ class RoomInvitationModal extends StatefulWidget {
 
 class _RoomInvitationModalState extends State<RoomInvitationModal>
     with SingleTickerProviderStateMixin {
-  final FollowerInvitationService _invitationService = FollowerInvitationService();
+  final RoomInvitationAcceptanceService _acceptanceService = RoomInvitationAcceptanceService();
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
   late Animation<double> _fadeAnimation;
@@ -50,7 +47,7 @@ class _RoomInvitationModalState extends State<RoomInvitationModal>
       end: 1.0,
     ).animate(CurvedAnimation(
       parent: _animationController,
-      curve: Curves.elasticOut,
+      curve: Curves.easeOutBack,
     ));
 
     _fadeAnimation = Tween<double>(
@@ -75,91 +72,39 @@ class _RoomInvitationModalState extends State<RoomInvitationModal>
     HapticFeedback.lightImpact();
 
     try {
-      final invitationId = widget.invitation['\$id'];
-      final roomId = widget.invitation['roomId'];
-      final roomName = widget.invitation['roomName'];
-      final inviterName = widget.invitation['inviterName'];
-      final roomType = widget.invitation['roomType'] ?? 'Discussion'; // Default to Discussion if not specified
+      // Step 1: Accept the invitation (marks as accepted, updates presence)
+      final roomData = await _acceptanceService.acceptInvitation(
+        invitation: widget.invitation,
+      );
 
-      // Mark as accepted
-      await _invitationService.acceptInvitation(invitationId);
+      if (roomData == null) {
+        if (mounted) {
+          setState(() => _isProcessing = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to accept invitation'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
 
       if (!mounted) return;
 
-      // Close modal first
+      // Step 2: Close modal BEFORE navigating
       Navigator.pop(context);
       widget.onDismiss();
 
-      // Wait a frame for the modal to fully close
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      if (!mounted) return;
-
-      // Navigate to appropriate room based on type
-      if (roomType.toLowerCase() == 'arena') {
-        // Fetch arena room details and add user as participant
-        try {
-          final appwrite = AppwriteService();
-          final currentUser = await appwrite.account.get();
-
-          final arenaRoom = await appwrite.databases.getDocument(
-            databaseId: 'arena_db',
-            collectionId: 'arena_rooms',
-            documentId: roomId,
-          );
-
-          // Add user as audience member if not already a participant
-          try {
-            await appwrite.assignArenaRole(
-              roomId: roomId,
-              userId: currentUser.$id,
-              role: 'audience',
-            );
-            AppLogger().info('Added user to arena as audience');
-          } catch (e) {
-            AppLogger().warning('Could not assign audience role (user may already be participant): $e');
-          }
-
-          // Navigate to Arena screen with required parameters
-          if (mounted) {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ArenaScreen(
-                  roomId: roomId,
-                  challengeId: arenaRoom.data['challengeId'] ?? roomId,
-                  topic: arenaRoom.data['topic'] ?? roomName,
-                  description: arenaRoom.data['description'],
-                ),
-              ),
-            );
-          }
-        } catch (e) {
-          AppLogger().error('Failed to join arena: $e');
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Failed to join arena: $e'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        }
-      } else {
-        // Navigate to Debates & Discussions screen
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => DebatesDiscussionsScreen(
-              roomId: roomId,
-              roomName: roomName,
-              moderatorName: inviterName,
-            ),
-          ),
+      // Step 3: Navigate to room (after modal is closed)
+      if (mounted) {
+        await _acceptanceService.joinRoom(
+          context: context,
+          roomData: roomData,
         );
       }
     } catch (e) {
-      AppLogger().error('Failed to accept invitation: $e');
+      AppLogger().error('Error accepting invitation: $e');
       if (mounted) {
         setState(() => _isProcessing = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -178,23 +123,18 @@ class _RoomInvitationModalState extends State<RoomInvitationModal>
     setState(() => _isProcessing = true);
     HapticFeedback.lightImpact();
 
-    try {
-      final invitationId = widget.invitation['\$id'];
+    final invitationId = widget.invitation['\$id'];
+    final success = await _acceptanceService.declineInvitation(invitationId);
 
-      // Mark as declined
-      await _invitationService.declineInvitation(invitationId);
-
-      if (mounted) {
+    if (mounted) {
+      if (success) {
         Navigator.pop(context);
         widget.onDismiss();
-      }
-    } catch (e) {
-      AppLogger().error('Failed to decline invitation: $e');
-      if (mounted) {
+      } else {
         setState(() => _isProcessing = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
+          const SnackBar(
+            content: Text('Failed to decline invitation'),
             backgroundColor: Colors.red,
           ),
         );

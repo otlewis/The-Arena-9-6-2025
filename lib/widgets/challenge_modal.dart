@@ -390,8 +390,10 @@ class _ChallengeModalState extends State<ChallengeModal>
         if (response == 'accepted') {
           final topic = widget.challenge['topic'] ?? 'Debate Topic';
           final description = widget.challenge['description'];
-          
-          ScaffoldMessenger.of(context).showSnackBar(
+
+          // Capture scaffold messenger early to avoid async gap issues
+          final messenger = ScaffoldMessenger.of(context);
+          messenger.showSnackBar(
             const SnackBar(
               content: Text('⚡ Challenge accepted! Getting Arena room...'),
               backgroundColor: Colors.green,
@@ -460,7 +462,9 @@ class _ChallengeModalState extends State<ChallengeModal>
           _dismiss();
         } else {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
+            // Capture scaffold messenger early
+            final messenger = ScaffoldMessenger.of(context);
+            messenger.showSnackBar(
               const SnackBar(
                 content: Text('❌ Challenge declined'),
                 backgroundColor: Colors.orange,
@@ -472,9 +476,18 @@ class _ChallengeModalState extends State<ChallengeModal>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+        // Capture scaffold messenger before any async gaps
+        final messenger = ScaffoldMessenger.of(context);
+
+        // Show error message
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
+
+        setState(() => _isResponding = false);
       }
     } finally {
       if (mounted) {

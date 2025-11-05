@@ -1460,17 +1460,48 @@ Join Arena DTD to connect with debaters and participate in live discussions!
   Future<void> _sendChallengeToUser(String topic, String description, String position) async {
     try {
       AppLogger().info('Sending challenge to ${widget.user.id}: $topic');
-      
-      // Get the challenge messaging service
+
+      // Check if current user can issue challenges
+      final eligibilityService = ChallengeEligibilityService();
+      final canIssueChallenge = await eligibilityService.canCurrentUserIssueChallenge();
+      if (canIssueChallenge != null) {
+        // Current user cannot issue challenges
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(canIssueChallenge),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Check if target user can be challenged
+      final canBeChalleng = await eligibilityService.canUserBeChallenged(widget.user.id);
+      if (canBeChalleng != null) {
+        // Target user cannot be challenged
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(canBeChalleng),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Both users are eligible - send the challenge
       final challengeService = ChallengeMessagingService();
-      
+
       await challengeService.sendChallenge(
         challengedUserId: widget.user.id,
         topic: topic,
         description: description,
         position: position,
       );
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1479,7 +1510,7 @@ Join Arena DTD to connect with debaters and participate in live discussions!
           ),
         );
       }
-      
+
     } catch (e) {
       AppLogger().error('Failed to send challenge: $e');
       if (mounted) {

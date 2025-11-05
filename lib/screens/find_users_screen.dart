@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/appwrite_service.dart';
 import '../services/theme_service.dart';
 import '../services/challenge_messaging_service.dart';
+import '../services/challenge_eligibility_service.dart';
 import '../models/user_profile.dart';
 import '../widgets/user_avatar.dart';
 import '../widgets/challenge_bell.dart';
@@ -765,6 +766,40 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
 
   Future<void> _sendChallenge(UserProfile user, String topic, String description, String position) async {
     try {
+      // Check eligibility BEFORE sending challenge
+      final eligibilityService = ChallengeEligibilityService();
+
+      // Check if current user can issue challenges
+      final canIssueChallenge = await eligibilityService.canCurrentUserIssueChallenge();
+      if (canIssueChallenge != null) {
+        if (mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(canIssueChallenge),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Check if target user can be challenged
+      final canBeChallenged = await eligibilityService.canUserBeChallenged(user.id);
+      if (canBeChallenged != null) {
+        if (mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(canBeChallenged),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Both users are eligible - send the challenge
       await ChallengeMessagingService().sendChallenge(
         challengedUserId: user.id,
         topic: topic,

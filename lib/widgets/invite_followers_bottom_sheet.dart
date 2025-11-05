@@ -364,9 +364,25 @@ class _InviteFollowersBottomSheetState extends State<InviteFollowersBottomSheet>
                                       ? Text(follower.name[0].toUpperCase())
                                       : null,
                                 ),
-                                title: Text(
-                                  follower.name,
-                                  style: const TextStyle(fontWeight: FontWeight.w500),
+                                title: Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        follower.name,
+                                        style: const TextStyle(fontWeight: FontWeight.w500),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: follower.isOnline ? Colors.green : Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                                 subtitle: follower.email.isNotEmpty
                                     ? Text(follower.email)

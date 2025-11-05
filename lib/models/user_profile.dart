@@ -41,6 +41,8 @@ class UserProfile {
   final bool isBanned;
   final String? banReason;
   final String? bannedAt;
+  final DateTime? lastSeen; // Track when user was last active
+  final bool isOnline; // Computed based on lastSeen
 
   UserProfile({
     required this.id,
@@ -81,6 +83,8 @@ class UserProfile {
     this.isBanned = false,
     this.banReason,
     this.bannedAt,
+    this.lastSeen,
+    this.isOnline = false,
   });
 
   /// Safely parse preferences field with proper error handling
@@ -116,6 +120,10 @@ class UserProfile {
 
   /// Create UserProfile from Appwrite document data
   factory UserProfile.fromMap(Map<String, dynamic> map) {
+    final lastSeenDateTime = DateTime.tryParse(map['lastSeen'] ?? '');
+    final bool isOnlineStatus = lastSeenDateTime != null &&
+                                 DateTime.now().difference(lastSeenDateTime).inMinutes < 5;
+
     return UserProfile(
       id: map['id'] ?? map['\$id'] ?? '',
       name: map['name'] ?? '',
@@ -159,6 +167,8 @@ class UserProfile {
       isBanned: map['isBanned'] ?? false,
       banReason: map['banReason'],
       bannedAt: map['bannedAt'],
+      lastSeen: lastSeenDateTime,
+      isOnline: isOnlineStatus,
     );
   }
 
@@ -203,6 +213,7 @@ class UserProfile {
       'isBanned': isBanned,
       'banReason': banReason,
       'bannedAt': bannedAt,
+      'lastSeen': lastSeen?.toIso8601String(),
     };
   }
 
@@ -246,6 +257,8 @@ class UserProfile {
     bool? isBanned,
     String? banReason,
     String? bannedAt,
+    DateTime? lastSeen,
+    bool? isOnline,
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -286,6 +299,8 @@ class UserProfile {
       isBanned: isBanned ?? this.isBanned,
       banReason: banReason ?? this.banReason,
       bannedAt: bannedAt ?? this.bannedAt,
+      lastSeen: lastSeen ?? this.lastSeen,
+      isOnline: isOnline ?? this.isOnline,
     );
   }
 

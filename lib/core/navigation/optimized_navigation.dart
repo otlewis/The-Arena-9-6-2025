@@ -203,31 +203,9 @@ class _OptimizedMainNavigatorState extends ConsumerState<OptimizedMainNavigator>
         );
 
         if (moderatingRooms.documents.isNotEmpty) {
-          // User is currently moderating a room - block navigation and show message
-          if (!mounted) return;
-          await showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Row(
-                children: [
-                  Icon(Icons.block, color: Colors.red),
-                  SizedBox(width: 8),
-                  Text('Cannot Accept Challenge'),
-                ],
-              ),
-              content: const Text(
-                'You are currently moderating a Debates & Discussions room.\n\n'
-                'Please end that room or assign another moderator before accepting arena challenges.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-          return; // Block navigation to arena
+          // User is currently moderating a room - warn but allow navigation
+          // (The challenge should have been blocked earlier, but if it got through, let them join)
+          AppLogger().warning('⚠️ User is moderating but has accepted challenge - allowing navigation');
         }
       }
     } catch (e) {

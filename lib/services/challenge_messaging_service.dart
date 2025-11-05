@@ -469,13 +469,25 @@ class ChallengeMessagingService {
       
       // If accepting, create arena room
       if (response == 'accepted') {
-        final challenge = _pendingChallenges.firstWhere((c) => c.id == challengeId);
+        final challenge = _pendingChallenges.firstWhere(
+          (c) => c.id == challengeId,
+          orElse: () {
+            throw Exception('Challenge not found in pending list');
+          },
+        );
         final roomId = await _createArenaRoom(challenge);
         updateData['arenaRoomId'] = roomId;
       } else if (response == 'declined') {
         // Find the original challenge to get details
-        final originalChallenge = _pendingChallenges.firstWhere((c) => c.id == challengeId, orElse: () => throw Exception('Original challenge not found'));
-        await _sendDeclinedNotification(originalChallenge);
+        try {
+          final originalChallenge = _pendingChallenges.firstWhere(
+            (c) => c.id == challengeId,
+          );
+          await _sendDeclinedNotification(originalChallenge);
+        } catch (e) {
+          AppLogger().warning('⚠️ Challenge not found in pending list for decline notification: $e');
+          // Continue with decline even if notification fails
+        }
       }
       
       // Update challenge in database

@@ -17,6 +17,7 @@ import '../services/appwrite_service.dart';
 import '../services/challenge_messaging_service.dart';
 import '../services/theme_service.dart';
 import '../services/sound_service.dart';
+import '../services/user_presence_service.dart';
 import '../constants/appwrite.dart';
 import 'package:appwrite/appwrite.dart';
 import '../widgets/arena_role_notification_modal.dart';
@@ -48,6 +49,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final AppwriteService _appwrite = AppwriteService();
   final ThemeService _themeService = ThemeService();
   final SoundService _soundService = SoundService();
+  final UserPresenceService _presenceService = UserPresenceService();
   late final ChallengeMessagingService _messagingService;
   final GamifiedRankingService _rankingService = GetIt.instance<GamifiedRankingService>();
   final RankingSyncService _syncService = RankingSyncService();
@@ -88,12 +90,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _roleCheckTimer?.cancel();
+    _presenceService.stopTracking();
     WidgetsBinding.instance.removeObserver(this);
     _pingSubscription?.close();
     _roomInvitationSubscription?.close();
     _currentInvitationOverlay?.remove();
     _currentInvitationOverlay = null;
-    _roleCheckTimer?.cancel();
     super.dispose();
   }
 
@@ -130,6 +133,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           });
           // Check roles after profile is loaded
           _checkUserRoles();
+
+          // Start tracking user presence for online status
+          _presenceService.startTracking(currentUser.$id);
         }
       } else {
         if (mounted) {
