@@ -228,6 +228,20 @@ class NetworkResilienceService {
     }
     AppLogger().info('🔄 All circuit breakers reset');
   }
+
+  /// Manually reset a specific circuit breaker (for development/debugging)
+  void resetCircuitBreaker(String operationId) {
+    final breaker = _circuitBreakers[operationId];
+    if (breaker != null) {
+      breaker.reset();
+      AppLogger().info('🔄 Circuit breaker reset for $operationId');
+    }
+  }
+
+  /// Manually reset all circuit breakers (for development/debugging)
+  void resetAllCircuitBreakers() {
+    _resetCircuitBreakers();
+  }
   
   /// Get adaptive timeout based on network quality
   Duration getAdaptiveTimeout({Duration baseTimeout = const Duration(seconds: 10)}) {

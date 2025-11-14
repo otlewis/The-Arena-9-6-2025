@@ -131,9 +131,9 @@ class LiveKitService extends ChangeNotifier {
             ),
           ),
         ).timeout(
-          Duration(seconds: 10 + (attempt * 2)), // Faster timeouts: 12s, 14s, 16s
+          Duration(seconds: 20 + (attempt * 5)), // More generous timeouts for Android: 25s, 30s, 35s
           onTimeout: () {
-            throw Exception('LiveKit connection timeout on attempt $attempt');
+            throw Exception('LiveKit connection timeout on attempt $attempt after ${20 + (attempt * 5)} seconds');
           },
         );
         
@@ -1076,19 +1076,35 @@ class LiveKitService extends ChangeNotifier {
         return;
       }
 
-      // Disable microphone completely
-      await lp.setMicrophoneEnabled(false);
+      // CRITICAL: Disable microphone at multiple levels for complete silence
 
-      // Additional safeguard: Explicitly disable any published audio tracks
+      // Level 1: Disable microphone at LiveKit SDK level
+      await lp.setMicrophoneEnabled(false);
+      AppLogger().debug('🔇 Level 1: Microphone disabled via SDK');
+
+      // Level 2: Unpublish all audio tracks to stop transmission
       try {
         for (final publication in lp.audioTrackPublications) {
           if (publication.track != null) {
+            // Stop the track first
             await publication.track!.stop();
-            AppLogger().debug('🔇 Stopped local audio track: ${publication.track!.sid}');
+            AppLogger().debug('🔇 Level 2: Stopped audio track: ${publication.track!.sid}');
+
+            // Then mute it for extra safety
+            await publication.track!.mute();
+            AppLogger().debug('🔇 Level 2: Muted audio track: ${publication.track!.sid}');
           }
         }
       } catch (trackError) {
         AppLogger().debug('⚠️ Error stopping local audio tracks: $trackError');
+      }
+
+      // Level 3: Explicitly mute at participant level
+      try {
+        await lp.setMicrophoneEnabled(false); // Double-check
+        AppLogger().debug('🔇 Level 3: Final microphone disable confirmation');
+      } catch (muteError) {
+        AppLogger().debug('⚠️ Error in final mute confirmation: $muteError');
       }
 
       // ANDROID CRASH PROTECTION: Only update state if service is still valid

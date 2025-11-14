@@ -678,6 +678,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   
   final List<UserProfile> _audience = [];
 
+  // Hand-raise feature removed - was causing moderator removal issues
+
   // Reactions and gifts
   final List<ReactionData> _activeReactions = [];
   final Map<String, String> _avatarEmojiOverlays = {}; // userId -> emoji for avatar overlays (sender)
@@ -731,6 +733,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _initializeWebRTC();
     _initializeReactionsSync();
     _initializeParticipantsSync(); // Initialize hybrid realtime role change listeners
+    // _initializeHandRaiseSync(); // REMOVED: Hand raise feature
 
     // Set up speaking detection listener
     _speakingService.addListener(_onSpeakingStateChanged);
@@ -765,13 +768,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Future<void> _preWarmAudioSession() async {
     try {
       AppLogger().info('🚀 INSTANT: Pre-warming audio session...');
-      
+
       // Start WebRTC connection immediately without waiting for role
       if (!_isWebRTCConnected && mounted) {
         AppLogger().debug('🚀 INSTANT: Starting parallel WebRTC connection...');
         _connectToWebRTC(); // Fire and forget for speed
       }
-      
+
       // Pre-configure audio permissions in parallel
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
         AppLogger().debug('🚀 INSTANT: Pre-configuring iOS audio session...');
@@ -783,7 +786,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           avAudioSessionMode: audio_session.AVAudioSessionMode.videoChat,
         ));
       }
-      
+
       AppLogger().info('🚀 INSTANT: Audio pre-warm complete');
     } catch (e) {
       AppLogger().debug('🚀 INSTANT: Pre-warm error (non-critical): $e');
@@ -1693,8 +1696,18 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       _liveKitService.onError = (error) {
         AppLogger().error('❌ Arena audio error: $error');
         if (mounted) {
+          // Show friendly message for permission-related errors during role assignment
+          final errorStr = error.toString().toLowerCase();
+          final isPermissionError = errorStr.contains('permission') || errorStr.contains('publish');
+
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Audio error: $error')),
+            SnackBar(
+              content: Text(isPermissionError
+                ? '⏳ Setting up your audio... Please wait'
+                : 'Audio error: $error'),
+              backgroundColor: isPermissionError ? Colors.blue : Colors.red,
+              duration: Duration(seconds: isPermissionError ? 2 : 3),
+            ),
           );
         }
       };
@@ -2702,11 +2715,17 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         } catch (reconnectError) {
           AppLogger().error('❌ Reconnection failed: $reconnectError');
           if (mounted) {
+            // Show friendly message for permission-related errors during role assignment
+            final errorStr = reconnectError.toString().toLowerCase();
+            final isPermissionError = errorStr.contains('permission') || errorStr.contains('publish');
+
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Failed to enable audio: $reconnectError'),
-                backgroundColor: Colors.red,
-                duration: const Duration(seconds: 3),
+                content: Text(isPermissionError
+                  ? '⏳ Setting up your audio... Please wait'
+                  : 'Failed to enable audio: $reconnectError'),
+                backgroundColor: isPermissionError ? Colors.blue : Colors.red,
+                duration: Duration(seconds: isPermissionError ? 2 : 3),
               ),
             );
           }
@@ -4592,6 +4611,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   },
                 ),
               ),
+            // Hand-raise panel removed - was causing moderator removal issues
           ],
         ),
       ), // Close PopScope
@@ -6345,6 +6365,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 ),
               ),
 
+              // Hand-raise button removed - feature was causing issues
 
               // Share Screen button (for moderators, debaters, and judges - ALL PLATFORMS)
               if ((_isModerator || _isDebater || _isJudge))
@@ -6466,6 +6487,639 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
 
 
+
+
+  // Hand-raise toggle
+  /// REMOVED: Hand raise toggle method
+  /*
+  Future<void> _toggleHandRaise() async {
+    if (_currentUser == null) return;
+    try {
+      if (_hasRaisedHand) {
+        if (_handRaiseDocumentId != null) {
+          await _appwrite.databases.deleteDocument(
+            databaseId: 'arena_db',
+            collectionId: 'arena_hand_raises',
+            documentId: _handRaiseDocumentId!,
+          );
+          if (mounted) {
+            setState(() {
+              _hasRaisedHand = false;
+              _handRaiseDocumentId = null;
+            });
+          }
+          AppLogger().info('✋ Hand lowered');
+        }
+      } else {
+        final doc = await _appwrite.databases.createDocument(
+          databaseId: 'arena_db',
+          collectionId: 'arena_hand_raises',
+          documentId: ID.unique(),
+          data: {
+            'roomId': widget.roomId,
+            'userId': _currentUser!.id,
+            'userName': _currentUser!.name,
+            'status': 'raised',
+            'raisedAt': DateTime.now().toIso8601String(),
+          },
+        );
+        if (mounted) {
+          setState(() {
+            _hasRaisedHand = true;
+            _handRaiseDocumentId = doc.$id;
+          });
+        }
+        AppLogger().info('✋ Hand raised');
+      }
+    } catch (e) {
+      AppLogger().error('Error toggling hand raise: $e');
+    }
+  }
+
+  // Initialize hand-raise real-time sync
+  Future<void> _initializeHandRaiseSync() async {
+    // Wait for current user to be loaded
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (!mounted || _currentUser == null) {
+      AppLogger().warning('⚠️ Hand-raise sync: No current user yet');
+      return;
+    }
+
+    try {
+      // Check for existing hand raise
+      final existingRaises = await _appwrite.databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'arena_hand_raises',
+        queries: [
+          Query.equal('roomId', widget.roomId),
+          Query.equal('userId', _currentUser!.id),
+          Query.equal('status', 'raised'),
+        ],
+      );
+
+      if (existingRaises.documents.isNotEmpty && mounted) {
+        setState(() {
+          _hasRaisedHand = true;
+          _handRaiseDocumentId = existingRaises.documents.first.$id;
+        });
+      }
+
+      // Subscribe to hand raises
+      final realtime = _appwrite.realtime;
+      _handRaisesSubscription = realtime.subscribe([
+        'databases.arena_db.collections.arena_hand_raises.documents'
+      ]).stream.listen((response) {
+        if (!mounted) return;
+
+        final payload = response.payload;
+        final roomId = payload['roomId'];
+
+        if (roomId != widget.roomId) return;
+
+        // Handle create events (new hand raise)
+        if (response.events.any((event) => event.contains('.create'))) {
+          final status = payload['status'];
+          AppLogger().debug('🟠 HAND RAISE EVENT: Create event received, status=$status, isModerator=$_isModerator');
+          if (status == 'raised' && _isModerator) {
+            setState(() {
+              if (!_pendingHandRaises.any((raise) => raise['userId'] == payload['userId'])) {
+                _pendingHandRaises.add(payload);
+                AppLogger().info('📢 New hand raise from ${payload['userName']} - Total: ${_pendingHandRaises.length}');
+              }
+            });
+          }
+        }
+
+        // Handle delete events
+        if (response.events.any((event) => event.contains('.delete'))) {
+          final userId = payload['userId'];
+          if (_isModerator) {
+            setState(() {
+              _pendingHandRaises.removeWhere((raise) => raise['userId'] == userId);
+            });
+          }
+        }
+      });
+
+      // Load existing hand raises for moderators
+      if (_isModerator) {
+        final result = await _appwrite.databases.listDocuments(
+          databaseId: 'arena_db',
+          collectionId: 'arena_hand_raises',
+          queries: [
+            Query.equal('roomId', widget.roomId),
+            Query.equal('status', 'raised'),
+          ],
+        );
+
+        if (mounted) {
+          setState(() {
+            _pendingHandRaises = result.documents.map((doc) => doc.data).toList();
+          });
+        }
+        AppLogger().info('✅ Loaded ${_pendingHandRaises.length} pending hand raises');
+      }
+
+      AppLogger().info('✅ Hand-raise sync initialized');
+    } catch (e) {
+      AppLogger().error('Error initializing hand-raise sync: $e');
+    }
+  }
+
+  /// Show hand raises panel for moderators
+  void _showHandRaisesPanel() {
+    if (_pendingHandRaises.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No one has raised their hand'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        builder: (context, scrollController) => Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[900],
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: Column(
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[600],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Title
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    const Icon(Icons.pan_tool, color: Colors.orange, size: 28),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Hand Raises',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${_pendingHandRaises.length}',
+                      style: const TextStyle(
+                        color: Colors.orange,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // List of hand raises
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  itemCount: _pendingHandRaises.length,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemBuilder: (context, index) {
+                    final raise = _pendingHandRaises[index];
+                    return _buildHandRaiseCard(raise);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  */
+  // END OF REMOVED HAND RAISE METHODS (toggle, init, show panel)
+
+  /// REMOVED: Hand raise feature was causing moderator removal issues
+  /*
+  /// Build floating hand raise panel (automatically shows when hand raises exist)
+  Widget _buildFloatingHandRaisePanel() {
+    return Positioned(
+      bottom: 100, // Position above control panel
+      left: 16,
+      right: 16,
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 300),
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.orange, width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.5),
+              blurRadius: 10,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.2),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(14),
+                  topRight: Radius.circular(14),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.pan_tool, color: Colors.orange, size: 24),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Hand Raises',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${_pendingHandRaises.length}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // List of hand raises
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _pendingHandRaises.length,
+                padding: const EdgeInsets.all(8),
+                itemBuilder: (context, index) {
+                  final raise = _pendingHandRaises[index];
+                  return _buildCompactHandRaiseCard(raise);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build compact hand raise card for floating panel
+  Widget _buildCompactHandRaiseCard(Map<String, dynamic> raise) {
+    final userName = raise['userName'] as String;
+    final userId = raise['userId'] as String;
+    final raisedAt = DateTime.parse(raise['raisedAt'] as String);
+    final timeAgo = DateTime.now().difference(raisedAt);
+
+    String timeAgoText;
+    if (timeAgo.inMinutes < 1) {
+      timeAgoText = 'Just now';
+    } else if (timeAgo.inMinutes < 60) {
+      timeAgoText = '${timeAgo.inMinutes}m ago';
+    } else {
+      timeAgoText = '${timeAgo.inHours}h ago';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[850],
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          // Avatar
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: Colors.orange,
+            child: Text(
+              userName[0].toUpperCase(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  userName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  timeAgoText,
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Assign button
+          ElevatedButton(
+            onPressed: () {
+              _showRoleSelectionForHandRaise(userId, userName);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentPurple,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              minimumSize: const Size(70, 36),
+            ),
+            child: const Text(
+              'Assign',
+              style: TextStyle(fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build a hand raise card
+  Widget _buildHandRaiseCard(Map<String, dynamic> raise) {
+    final userName = raise['userName'] as String;
+    final userId = raise['userId'] as String;
+    final raisedAt = DateTime.parse(raise['raisedAt'] as String);
+    final timeAgo = DateTime.now().difference(raisedAt);
+
+    String timeAgoText;
+    if (timeAgo.inMinutes < 1) {
+      timeAgoText = 'Just now';
+    } else if (timeAgo.inMinutes < 60) {
+      timeAgoText = '${timeAgo.inMinutes}m ago';
+    } else {
+      timeAgoText = '${timeAgo.inHours}h ago';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[850],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          // Avatar
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: Colors.orange,
+            child: Text(
+              userName[0].toUpperCase(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  userName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  timeAgoText,
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Assign button
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showRoleSelectionForHandRaise(userId, userName);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentPurple,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+            child: const Text('Assign'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show role selection dialog for a user who raised their hand
+  Future<void> _showRoleSelectionForHandRaise(String userId, String userName) async {
+    // Get available roles
+    final availableRoles = <String>[];
+
+    if (_participants['affirmative'] == null) availableRoles.add('affirmative');
+    if (_participants['negative'] == null) availableRoles.add('negative');
+    if (_teamSize == 2 && _participants['affirmative2'] == null) availableRoles.add('affirmative2');
+    if (_teamSize == 2 && _participants['negative2'] == null) availableRoles.add('negative2');
+    if (_participants['judge1'] == null) availableRoles.add('judge1');
+    if (_participants['judge2'] == null) availableRoles.add('judge2');
+    if (_participants['judge3'] == null) availableRoles.add('judge3');
+
+    if (availableRoles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('All roles are filled'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Show role selection dialog
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Assign Role to $userName',
+          style: const TextStyle(color: Colors.white, fontSize: 18),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: availableRoles.map((role) {
+            return _buildRoleOption(role, userId, userName);
+          }).toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build a role option button
+  Widget _buildRoleOption(String role, String userId, String userName) {
+    String displayName;
+    Color color;
+    IconData icon;
+
+    switch (role) {
+      case 'affirmative':
+      case 'affirmative2':
+        displayName = role == 'affirmative' ? 'Affirmative' : 'Affirmative 2';
+        color = Colors.green;
+        icon = Icons.thumb_up;
+        break;
+      case 'negative':
+      case 'negative2':
+        displayName = role == 'negative' ? 'Negative' : 'Negative 2';
+        color = Colors.red;
+        icon = Icons.thumb_down;
+        break;
+      case 'judge1':
+      case 'judge2':
+      case 'judge3':
+        displayName = role.replaceAll('judge', 'Judge ');
+        color = Colors.amber;
+        icon = Icons.gavel;
+        break;
+      default:
+        displayName = role;
+        color = Colors.blue;
+        icon = Icons.person;
+    }
+
+    return InkWell(
+      onTap: () {
+        Navigator.pop(context);
+        _sendArenaInvitation(userId, userName, role);
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(width: 12),
+            Text(
+              displayName,
+              style: TextStyle(
+                color: color,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Assign arena role to user who raised hand
+  Future<void> _sendArenaInvitation(String userId, String userName, String role) async {
+    if (_currentUser == null) return;
+
+    try {
+      // Delete the hand raise first
+      final handRaises = await _appwrite.databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'arena_hand_raises',
+        queries: [
+          Query.equal('roomId', widget.roomId),
+          Query.equal('userId', userId),
+          Query.equal('status', 'raised'),
+        ],
+      );
+
+      for (final doc in handRaises.documents) {
+        await _appwrite.databases.deleteDocument(
+          databaseId: 'arena_db',
+          collectionId: 'arena_hand_raises',
+          documentId: doc.$id,
+        );
+      }
+
+      // Directly assign the role using existing assignment logic
+      await _assignRole(userId, role);
+
+      AppLogger().info('✅ Assigned $userName to role $role');
+    } catch (e) {
+      AppLogger().error('Error assigning role: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+  */
+  // END OF REMOVED HAND RAISE METHODS
 
   void _showGiftModal() {
     AppLogger().debug('🎁 DEBUG: Gift modal button pressed');
