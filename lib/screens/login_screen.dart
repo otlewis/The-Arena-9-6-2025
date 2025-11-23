@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/appwrite_service.dart';
+import '../services/theme_service.dart';
 import 'forgot_password_screen.dart';
 import 'policy_viewer_screen.dart';
 import 'parental_consent_screen.dart';
@@ -16,6 +17,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final AppwriteService _appwrite = AppwriteService();
+  final ThemeService _themeService = ThemeService();
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -326,27 +328,20 @@ class _LoginScreenState extends State<LoginScreen> {
   }) {
     return InputDecoration(
       labelText: labelText,
-      labelStyle: TextStyle(
-        color: Colors.grey.shade600,
+      labelStyle: const TextStyle(
+        color: Color(0xFF6B5F7A),  // Medium purple
         fontSize: 16,
         fontWeight: FontWeight.w500,
       ),
       prefixIcon: Container(
         margin: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [
-              Color(0xFF6B46C1),
-              Color(0xFF8B5CF6),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(
           icon,
-          color: Colors.white,
+          color: const Color(0xFF8B5CF6),
           size: 20,
         ),
       ),
@@ -356,12 +351,12 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Container(
                 margin: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                  color: Colors.grey.shade600,
+                  color: const Color(0xFF8B5CF6),
                   size: 20,
                 ),
               ),
@@ -369,15 +364,15 @@ class _LoginScreenState extends State<LoginScreen> {
           : null,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5),
+        borderSide: BorderSide(color: const Color(0xFF8B5CF6).withValues(alpha: 0.3), width: 1),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5),
+        borderSide: BorderSide(color: const Color(0xFF8B5CF6).withValues(alpha: 0.3), width: 1),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: Color(0xFF6B46C1), width: 2),
+        borderSide: const BorderSide(color: Color(0xFF8B5CF6), width: 2),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
@@ -388,42 +383,65 @@ class _LoginScreenState extends State<LoginScreen> {
         borderSide: const BorderSide(color: Color(0xFFDC2626), width: 2),
       ),
       filled: true,
-      fillColor: Colors.white,
+      fillColor: Colors.white.withValues(alpha: 0.5),
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade100, // Neumorphism background
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(32.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 40),
-                // Modern Logo and Title Header
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
-                        spreadRadius: 0,
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
+    return Container(
+      color: _themeService.isDarkMode
+          ? const Color(0xFF1A1A1A)  // Dark background
+          : const Color(0xFFE8E4F3),  // Light purple background
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(32.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 40),
+                  // Modern Logo and Title Header - Neumorphic
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 28),
+                    decoration: BoxDecoration(
+                      color: _themeService.isDarkMode
+                          ? const Color(0xFF1A1A1A)  // Dark mode
+                          : const Color(0xFFE8E4F3),  // Light mode
+                      borderRadius: BorderRadius.circular(28),
+                      boxShadow: _themeService.isDarkMode
+                          ? [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                offset: const Offset(-8, -8),
+                                blurRadius: 16,
+                              ),
+                              BoxShadow(
+                                color: Colors.white.withValues(alpha: 0.05),
+                                offset: const Offset(8, 8),
+                                blurRadius: 16,
+                              ),
+                            ]
+                          : [
+                              BoxShadow(
+                                color: Colors.white.withValues(alpha: 0.8),
+                                offset: const Offset(-8, -8),
+                                blurRadius: 16,
+                              ),
+                              BoxShadow(
+                                color: const Color(0xFFC8C0DC).withValues(alpha: 0.5),
+                                offset: const Offset(8, 8),
+                                blurRadius: 16,
+                              ),
+                            ],
+                    ),
+                    child: Column(
+                      children: [
                       // Logo with gradient background
                       Container(
                         width: 120,
@@ -471,40 +489,32 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      // App title with gradient text effect
-                      ShaderMask(
-                        shaderCallback: (bounds) => const LinearGradient(
-                          colors: [
-                            Color(0xFFDC2626), // Red
-                            Color(0xFFEF4444), // Lighter red
-                          ],
-                        ).createShader(bounds),
-                        child: Text(
-                          _isSignUp ? 'Join The Arena DTD' : 'The Arena DTD',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: _isSignUp ? 26 : 32,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white, // This will be overridden by the shader
-                          ),
+                      // App title
+                      Text(
+                        _isSignUp ? 'Join The Arena DTD' : 'The Arena DTD',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: _isSignUp ? 26 : 32,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF4A4458),  // Dark purple
                         ),
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        _isSignUp 
+                        _isSignUp
                           ? 'Create your account to start debating'
                           : 'Sign in to enter the arena',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 16,
-                          color: Colors.grey.shade600,
+                          color: Color(0xFF6B5F7A),  // Medium purple
                           height: 1.4,
                         ),
                       ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                  
+
                   const SizedBox(height: 40),
                   
                   // Form Fields
@@ -522,8 +532,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       child: TextFormField(
                         controller: _nameController,
-                        style: TextStyle(
-                          color: Colors.grey.shade800,
+                        style: const TextStyle(
+                          color: Color(0xFF4A4458),  // Dark purple
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
                         ),
@@ -543,90 +553,82 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // Date of Birth Picker
-                    Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: InkWell(
-                        onTap: () async {
-                          final DateTime? picked = await showDatePicker(
-                            context: context,
-                            initialDate: DateTime.now().subtract(const Duration(days: 4745)), // 13 years ago
-                            firstDate: DateTime(1900),
-                            lastDate: DateTime.now(),
-                            builder: (context, child) {
-                              return Theme(
-                                data: Theme.of(context).copyWith(
-                                  colorScheme: const ColorScheme.light(
-                                    primary: Color(0xFF6B46C1),
-                                    onPrimary: Colors.white,
-                                    surface: Colors.white,
-                                    onSurface: Colors.black,
+                    // Date of Birth Picker - Neumorphic
+                    InkWell(
+                      onTap: () async {
+                            final DateTime? picked = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime.now().subtract(const Duration(days: 4745)), // 13 years ago
+                              firstDate: DateTime(1900),
+                              lastDate: DateTime.now(),
+                              builder: (context, child) {
+                                return Theme(
+                                  data: Theme.of(context).copyWith(
+                                    colorScheme: const ColorScheme.light(
+                                      primary: Color(0xFF6B46C1),
+                                      onPrimary: Colors.white,
+                                      surface: Colors.white,
+                                      onSurface: Colors.black,
+                                    ),
+                                  ),
+                                  child: child!,
+                                );
+                              },
+                            );
+                            if (picked != null && picked != _selectedBirthDate) {
+                              setState(() {
+                                _selectedBirthDate = picked;
+                              });
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8E4F3),  // Same as background
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.white.withValues(alpha: 0.8),
+                                  offset: const Offset(-6, -6),
+                                  blurRadius: 12,
+                                ),
+                                BoxShadow(
+                                  color: const Color(0xFFC8C0DC).withValues(alpha: 0.5),
+                                  offset: const Offset(6, 6),
+                                  blurRadius: 12,
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  margin: const EdgeInsets.only(right: 12),
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.cake,
+                                    color: Color(0xFF8B5CF6),
+                                    size: 20,
                                   ),
                                 ),
-                                child: child!,
-                              );
-                            },
-                          );
-                          if (picked != null && picked != _selectedBirthDate) {
-                            setState(() {
-                              _selectedBirthDate = picked;
-                            });
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.grey.shade300, width: 1.5),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                margin: const EdgeInsets.only(right: 12),
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFF6B46C1),
-                                      Color(0xFF8B5CF6),
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
+                                Text(
+                                  _selectedBirthDate == null
+                                      ? 'Date of Birth (Must be 13+)'
+                                      : '${_selectedBirthDate!.month}/${_selectedBirthDate!.day}/${_selectedBirthDate!.year}',
+                                  style: TextStyle(
+                                    color: _selectedBirthDate == null
+                                        ? const Color(0xFF6B5F7A)
+                                        : const Color(0xFF4A4458),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: const Icon(
-                                  Icons.cake,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                              ),
-                              Text(
-                                _selectedBirthDate == null
-                                    ? 'Date of Birth (Must be 13+)'
-                                    : '${_selectedBirthDate!.month}/${_selectedBirthDate!.day}/${_selectedBirthDate!.year}',
-                                style: TextStyle(
-                                  color: _selectedBirthDate == null
-                                      ? Colors.grey.shade600
-                                      : Colors.grey.shade800,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      ),
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -645,7 +647,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
-                      style: TextStyle(color: Colors.grey.shade800),
+                      style: const TextStyle(color: Color(0xFF4A4458)),  // Dark purple
                       decoration: _buildModernInputDecoration(
                         labelText: 'Email',
                         icon: Icons.email,
@@ -678,7 +680,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: TextFormField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
-                      style: TextStyle(color: Colors.grey.shade800),
+                      style: const TextStyle(color: Color(0xFF4A4458)),  // Dark purple
                       decoration: _buildModernInputDecoration(
                         labelText: 'Password',
                         icon: Icons.lock,
@@ -705,221 +707,232 @@ class _LoginScreenState extends State<LoginScreen> {
                   if (_isSignUp) ...[
                     const SizedBox(height: 24),
                     Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              Checkbox(
-                                value: _acceptedTos,
-                                onChanged: (bool? value) {
-                                  setState(() {
-                                    _acceptedTos = value ?? false;
-                                  });
-                                },
-                                activeColor: const Color(0xFF6B46C1),
-                              ),
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap: () => _showPolicyDialog('Terms of Service'),
-                                  child: RichText(
-                                    text: TextSpan(
-                                      style: TextStyle(
-                                        color: Colors.grey.shade800,
-                                        fontSize: 14,
-                                      ),
-                                      children: const [
-                                        TextSpan(text: 'I accept the '),
-                                        TextSpan(
-                                          text: 'Terms of Service',
-                                          style: TextStyle(
-                                            color: Color(0xFF6B46C1),
-                                            decoration: TextDecoration.underline,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
+                        color: const Color(0xFFE8E4F3),  // Same as background
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.white.withValues(alpha: 0.8),
+                            offset: const Offset(-6, -6),
+                            blurRadius: 12,
                           ),
-                          Row(
-                            children: [
-                              Checkbox(
-                                value: _acceptedPrivacy,
-                                onChanged: (bool? value) {
-                                  setState(() {
-                                    _acceptedPrivacy = value ?? false;
-                                  });
-                                },
-                                activeColor: const Color(0xFF6B46C1),
-                              ),
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap: () => _showPolicyDialog('Privacy Policy'),
-                                  child: RichText(
-                                    text: TextSpan(
-                                      style: TextStyle(
-                                        color: Colors.grey.shade800,
-                                        fontSize: 14,
-                                      ),
-                                      children: const [
-                                        TextSpan(text: 'I accept the '),
-                                        TextSpan(
-                                          text: 'Privacy Policy',
-                                          style: TextStyle(
-                                            color: Color(0xFF6B46C1),
-                                            decoration: TextDecoration.underline,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          // Beta Testing Agreement Checkbox
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Checkbox(
-                                value: _acceptedBeta,
-                                onChanged: (bool? value) {
-                                  setState(() {
-                                    _acceptedBeta = value ?? false;
-                                  });
-                                },
-                                activeColor: const Color(0xFF6B46C1),
-                              ),
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap: () => _showPolicyDialog('Beta Testing Agreement'),
-                                  child: RichText(
-                                    text: TextSpan(
-                                      style: TextStyle(
-                                        color: Colors.grey.shade800,
-                                        fontSize: 14,
-                                      ),
-                                      children: const [
-                                        TextSpan(text: 'I accept the '),
-                                        TextSpan(
-                                          text: 'Beta Testing Agreement & NDA',
-                                          style: TextStyle(
-                                            color: Color(0xFF6B46C1),
-                                            decoration: TextDecoration.underline,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFEF2F2),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFFFCA5A5)),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.warning_amber_rounded,
-                                  color: Color(0xFFDC2626),
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'This is a confidential beta. Do not share, screenshot, or distribute any part of this app.',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade700,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'You must be 13 years or older to use The Arena DTD. Teens 13-17 require parental consent.',
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 12,
-                              fontStyle: FontStyle.italic,
-                            ),
-                            textAlign: TextAlign.center,
+                          BoxShadow(
+                            color: const Color(0xFFC8C0DC).withValues(alpha: 0.5),
+                            offset: const Offset(6, 6),
+                            blurRadius: 12,
                           ),
                         ],
                       ),
-                    ),
+                          child: Column(
+                            children: [
+                              Row(
+                                children: [
+                                  Checkbox(
+                                    value: _acceptedTos,
+                                    onChanged: (bool? value) {
+                                      setState(() {
+                                        _acceptedTos = value ?? false;
+                                      });
+                                    },
+                                    activeColor: const Color(0xFF8B5CF6),
+                                    checkColor: Colors.white,
+                                    side: const BorderSide(color: Color(0xFF8B5CF6)),
+                                  ),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => _showPolicyDialog('Terms of Service'),
+                                      child: RichText(
+                                        text: const TextSpan(
+                                          style: TextStyle(
+                                            color: Color(0xFF6B5F7A),
+                                            fontSize: 14,
+                                          ),
+                                          children: [
+                                            TextSpan(text: 'I accept the '),
+                                            TextSpan(
+                                              text: 'Terms of Service',
+                                              style: TextStyle(
+                                                color: Color(0xFF8B5CF6),
+                                                decoration: TextDecoration.underline,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  Checkbox(
+                                    value: _acceptedPrivacy,
+                                    onChanged: (bool? value) {
+                                      setState(() {
+                                        _acceptedPrivacy = value ?? false;
+                                      });
+                                    },
+                                    activeColor: const Color(0xFF8B5CF6),
+                                    checkColor: Colors.white,
+                                    side: const BorderSide(color: Color(0xFF8B5CF6)),
+                                  ),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => _showPolicyDialog('Privacy Policy'),
+                                      child: RichText(
+                                        text: const TextSpan(
+                                          style: TextStyle(
+                                            color: Color(0xFF6B5F7A),
+                                            fontSize: 14,
+                                          ),
+                                          children: [
+                                            TextSpan(text: 'I accept the '),
+                                            TextSpan(
+                                              text: 'Privacy Policy',
+                                              style: TextStyle(
+                                                color: Color(0xFF8B5CF6),
+                                                decoration: TextDecoration.underline,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              // Beta Testing Agreement Checkbox
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Checkbox(
+                                    value: _acceptedBeta,
+                                    onChanged: (bool? value) {
+                                      setState(() {
+                                        _acceptedBeta = value ?? false;
+                                      });
+                                    },
+                                    activeColor: const Color(0xFF8B5CF6),
+                                    checkColor: Colors.white,
+                                    side: const BorderSide(color: Color(0xFF8B5CF6)),
+                                  ),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => _showPolicyDialog('Beta Testing Agreement'),
+                                      child: RichText(
+                                        text: const TextSpan(
+                                          style: TextStyle(
+                                            color: Color(0xFF6B5F7A),
+                                            fontSize: 14,
+                                          ),
+                                          children: [
+                                            TextSpan(text: 'I accept the '),
+                                            TextSpan(
+                                              text: 'Beta Testing Agreement & NDA',
+                                              style: TextStyle(
+                                                color: Color(0xFF8B5CF6),
+                                                decoration: TextDecoration.underline,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFF2400).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Icon(
+                                      Icons.warning_amber_rounded,
+                                      color: Color(0xFFFF2400),
+                                      size: 20,
+                                    ),
+                                    SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'This is a confidential beta. Do not share, screenshot, or distribute any part of this app.',
+                                        style: TextStyle(
+                                          color: Color(0xFF4A4458),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'You must be 13 years or older to use The Arena DTD. Teens 13-17 require parental consent.',
+                                style: TextStyle(
+                                  color: Color(0xFF6B5F7A),
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                      ),
                   ],
                   
                   const SizedBox(height: 32),
-                  
+
                   // Neumorphic Auth Button
-                  Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
+                  Material(
+                    color: const Color(0xFF8B5CF6),
+                    borderRadius: BorderRadius.circular(16),
+                    child: InkWell(
+                      onTap: _isLoading ? null : _handleEmailAuth,
                       borderRadius: BorderRadius.circular(16),
-                      boxShadow: _isLoading ? [] : const [
-                        BoxShadow(
-                          color: Colors.grey,
-                          offset: Offset(4, 4),
-                          blurRadius: 8,
-                          spreadRadius: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.white.withValues(alpha: 0.5),
+                              offset: const Offset(-4, -4),
+                              blurRadius: 8,
+                            ),
+                            BoxShadow(
+                              color: const Color(0xFFC8C0DC).withValues(alpha: 0.5),
+                              offset: const Offset(4, 4),
+                              blurRadius: 8,
+                            ),
+                          ],
                         ),
-                        BoxShadow(
-                          color: Colors.white,
-                          offset: Offset(-4, -4),
-                          blurRadius: 8,
-                          spreadRadius: 0,
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(16),
-                      child: InkWell(
-                        onTap: _isLoading ? null : _handleEmailAuth,
-                        borderRadius: BorderRadius.circular(16),
-                        child: Container(
-                          padding: const EdgeInsets.all(18),
-                          child: Center(
-                            child: _isLoading
-                                ? SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.grey.shade700),
-                                    ),
-                                  )
-                                : Text(
-                                    _isSignUp ? 'Create Account' : 'Sign In',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.grey.shade800,
-                                    ),
+                        child: Center(
+                          child: _isLoading
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                   ),
-                          ),
+                                )
+                              : Text(
+                                  _isSignUp ? 'Create Account' : 'Sign In',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
                         ),
                       ),
                     ),
@@ -1002,35 +1015,35 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           );
                         },
-                        child: Text(
+                        child: const Text(
                           'Forgot Password?',
                           style: TextStyle(
-                            color: Colors.blue.shade600,
+                            color: Color(0xFF8B5CF6),
                             fontWeight: FontWeight.w500,
                             decoration: TextDecoration.underline,
                           ),
                         ),
                       ),
                     ),
-                  
+
                   const SizedBox(height: 24),
-                  
+
                   // Toggle Sign Up / Sign In
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        _isSignUp 
+                        _isSignUp
                           ? 'Already have an account? '
                           : 'Don\'t have an account? ',
-                        style: TextStyle(color: Colors.grey.shade600),
+                        style: const TextStyle(color: Color(0xFF6B5F7A)),
                       ),
                       GestureDetector(
                         onTap: _toggleMode,
                         child: Text(
                           _isSignUp ? 'Sign In' : 'Sign Up',
-                          style: TextStyle(
-                            color: Colors.blue.shade600,
+                          style: const TextStyle(
+                            color: Color(0xFF8B5CF6),
                             fontWeight: FontWeight.bold,
                             decoration: TextDecoration.underline,
                           ),
@@ -1045,7 +1058,8 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
-      );
+      ),
+    );
   }
 
   void _showPolicyDialog(String policyType) {

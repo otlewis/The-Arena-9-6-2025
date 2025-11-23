@@ -98,17 +98,21 @@ class _PresentationViewerState extends State<PresentationViewer> {
 
   Future<void> _loadPresentationPdf() async {
     if (widget.slideData.pdfUrl == null) {
-      setState(() {
-        _errorMessage = 'No PDF URL available';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'No PDF URL available';
+          _isLoading = false;
+        });
+      }
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
     
     try {
       _logger.info('📊 Loading presentation PDF: ${widget.slideData.fileName}');
@@ -135,11 +139,13 @@ class _PresentationViewerState extends State<PresentationViewer> {
       _logger.info('📊 Getting page count...');
       final pageCount = document.pagesCount;
       _logger.info('📊 Page count: $pageCount');
-      
-      setState(() {
-        _totalPages = pageCount;
-        _isLoading = false;
-      });
+
+      if (mounted) {
+        setState(() {
+          _totalPages = pageCount;
+          _isLoading = false;
+        });
+      }
       _logger.info('📊 State updated with totalPages: $_totalPages');
       
       // Jump to current slide
@@ -155,10 +161,12 @@ class _PresentationViewerState extends State<PresentationViewer> {
       }
       
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Failed to load presentation: $e';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to load presentation: $e';
+          _isLoading = false;
+        });
+      }
       _logger.error('Error loading presentation PDF: $e');
     }
   }

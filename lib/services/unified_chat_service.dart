@@ -6,6 +6,7 @@ import '../models/instant_message.dart';
 import '../models/user_profile.dart';
 import 'appwrite_service.dart';
 import 'challenge_messaging_service.dart';
+import 'content_moderation_service.dart';
 import '../core/logging/app_logger.dart';
 
 /// Unified chat service that handles both room chat and private DMs
@@ -17,14 +18,27 @@ class UnifiedChatService {
 
   final AppwriteService _appwrite = AppwriteService();
   final ChallengeMessagingService _challengeMessaging = ChallengeMessagingService();
-  
-  // Stream controllers for reactive UI
-  final _roomMessagesController = StreamController<List<DiscussionChatMessage>>.broadcast();
-  final _newRoomMessageController = StreamController<DiscussionChatMessage>.broadcast();
-  final _dmMessagesController = StreamController<List<InstantMessage>>.broadcast();
-  final _newDmMessageController = StreamController<InstantMessage>.broadcast();
-  final _participantsController = StreamController<List<ChatParticipant>>.broadcast();
-  final _typingUsersController = StreamController<List<String>>.broadcast();
+  final ContentModerationService _moderation = ContentModerationService();
+
+  // Stream controllers for reactive UI (late-initialized for re-initialization after dispose)
+  late StreamController<List<DiscussionChatMessage>> _roomMessagesController;
+  late StreamController<DiscussionChatMessage> _newRoomMessageController;
+  late StreamController<List<InstantMessage>> _dmMessagesController;
+  late StreamController<InstantMessage> _newDmMessageController;
+  late StreamController<List<ChatParticipant>> _participantsController;
+  late StreamController<List<String>> _typingUsersController;
+  bool _controllersInitialized = false;
+
+  void _initializeControllers() {
+    if (_controllersInitialized) return;
+    _roomMessagesController = StreamController<List<DiscussionChatMessage>>.broadcast();
+    _newRoomMessageController = StreamController<DiscussionChatMessage>.broadcast();
+    _dmMessagesController = StreamController<List<InstantMessage>>.broadcast();
+    _newDmMessageController = StreamController<InstantMessage>.broadcast();
+    _participantsController = StreamController<List<ChatParticipant>>.broadcast();
+    _typingUsersController = StreamController<List<String>>.broadcast();
+    _controllersInitialized = true;
+  }
   
   // Cache and state
   String? _currentUserId;
@@ -56,14 +70,17 @@ class UnifiedChatService {
 
   /// Initialize the unified chat service
   Future<void> initialize(String userId) async {
+    // Initialize controllers if not already done or after dispose
+    _initializeControllers();
+
     if (_isInitialized && _currentUserId == userId) {
       AppLogger().debug('🗨️ UnifiedChatService already initialized for user: $userId');
       return;
     }
-    
+
     _currentUserId = userId;
     AppLogger().debug('🗨️ Initializing UnifiedChatService for user: $userId');
-    
+
     // Initialize existing challenge messaging service
     await _challengeMessaging.initialize(userId);
     
@@ -132,9 +149,30 @@ class UnifiedChatService {
 
     try {
       AppLogger().debug('🗨️ Sending room message to: $_currentRoomId');
-      
+
       // Get current user profile
       final userProfile = await _getUserProfile(_currentUserId!);
+
+      // MODERATE CONTENT BEFORE SENDING
+      final moderationResult = await _moderation.moderateContentViaFunction(
+        content: content.trim(),
+        userId: _currentUserId!,
+        userEmail: userProfile?.email ?? 'unknown@arena.com',
+        contentType: 'room_message',
+      );
+
+      // If content is blocked, throw exception with user-friendly message
+      if (moderationResult['blocked'] == true) {
+        final reason = moderationResult['reason'] ?? 'policy_violation';
+        AppLogger().warning('🚫 Message blocked: $reason');
+        throw Exception(_getUserFriendlyBlockMessage(reason));
+      }
+
+      // If flagged (but not blocked), log warning but allow message
+      if (moderationResult['flagged'] == true) {
+        AppLogger().info('⚠️ Message flagged: ${moderationResult['reason']} (${moderationResult['severity']})');
+        // Message will be sent, but it's logged in Odoo for manual review
+      }
       
       // Process reply information
       String? replyToContent;
@@ -425,6 +463,98 @@ class UnifiedChatService {
     }
   }
 
+  /// Load older room messages for pagination (when scrolling up)
+  Future<bool> loadOlderRoomMessages(String roomId) async {
+    if (_roomMessages.isEmpty) return false;
+
+    try {
+      AppLogger().debug('🗨️ Loading older room messages for: $roomId');
+
+      // Get the timestamp of the oldest message
+      final oldestMessage = _roomMessages.first;
+      final oldestTimestamp = oldestMessage.timestamp;
+
+      final response = await _appwrite.databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'discussion_chat_messages',
+        queries: [
+          Query.equal('roomId', roomId),
+          Query.lessThan('\$createdAt', oldestTimestamp.toIso8601String()),
+          Query.orderDesc('\$createdAt'),
+          Query.limit(50),
+        ],
+      );
+
+      if (response.documents.isEmpty) {
+        AppLogger().debug('🗨️ No older room messages available');
+        return false; // No more messages
+      }
+
+      final olderMessages = response.documents
+          .map((doc) => DiscussionChatMessageAppwrite.fromAppwrite(doc.data, doc.$id))
+          .toList()
+          .reversed
+          .toList();
+
+      // Prepend older messages to the beginning
+      _roomMessages = [...olderMessages, ..._roomMessages];
+      _roomMessagesController.add(_roomMessages);
+
+      AppLogger().debug('🗨️ Loaded ${olderMessages.length} older room messages');
+      return true; // More messages may be available
+    } catch (e) {
+      AppLogger().error('Error loading older room messages: $e');
+      return false;
+    }
+  }
+
+  /// Load older DM messages for pagination (when scrolling up)
+  Future<bool> loadOlderDmMessages(String otherUserId) async {
+    if (_dmMessages.isEmpty || _currentUserId == null) return false;
+
+    try {
+      AppLogger().debug('🗨️ Loading older DM messages with: $otherUserId');
+
+      final conversationId = InstantMessageAppwrite.generateConversationId(_currentUserId!, otherUserId);
+
+      // Get the timestamp of the oldest message
+      final oldestMessage = _dmMessages.first;
+      final oldestTimestamp = oldestMessage.timestamp;
+
+      final response = await _appwrite.databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: 'instant_messages',
+        queries: [
+          Query.equal('conversationId', conversationId),
+          Query.lessThan('\$createdAt', oldestTimestamp.toIso8601String()),
+          Query.orderDesc('\$createdAt'),
+          Query.limit(50),
+        ],
+      );
+
+      if (response.documents.isEmpty) {
+        AppLogger().debug('🗨️ No older DM messages available');
+        return false; // No more messages
+      }
+
+      final olderMessages = response.documents
+          .map((doc) => InstantMessageAppwrite.fromAppwrite(doc.data, doc.$id))
+          .toList()
+          .reversed
+          .toList();
+
+      // Prepend older messages to the beginning
+      _dmMessages = [...olderMessages, ..._dmMessages];
+      _dmMessagesController.add(_dmMessages);
+
+      AppLogger().debug('🗨️ Loaded ${olderMessages.length} older DM messages');
+      return true; // More messages may be available
+    } catch (e) {
+      AppLogger().error('Error loading older DM messages: $e');
+      return false;
+    }
+  }
+
   /// Load room participants
   Future<void> _loadRoomParticipants(String roomId) async {
     try {
@@ -649,24 +779,45 @@ class UnifiedChatService {
     _participantsController.add(_participants);
   }
 
+  /// Get user-friendly error message for blocked content
+  String _getUserFriendlyBlockMessage(String reason) {
+    switch (reason) {
+      case 'hate_speech':
+        return 'Your message contains hate speech and cannot be posted.';
+      case 'violence':
+        return 'Your message contains violent content and cannot be posted.';
+      case 'sexual_content':
+        return 'Your message contains inappropriate sexual content.';
+      case 'harassment':
+        return 'Your message contains harassing content.';
+      case 'spam':
+        return 'Your message appears to be spam.';
+      default:
+        return 'Your message violates our community guidelines and cannot be posted.';
+    }
+  }
+
   /// Dispose the service
   void dispose() {
     AppLogger().debug('🗨️ Disposing UnifiedChatService');
-    
+
     _cleanupSubscriptions();
-    
-    _roomMessagesController.close();
-    _newRoomMessageController.close();
-    _dmMessagesController.close();
-    _newDmMessageController.close();
-    _participantsController.close();
-    _typingUsersController.close();
-    
+
+    if (_controllersInitialized) {
+      _roomMessagesController.close();
+      _newRoomMessageController.close();
+      _dmMessagesController.close();
+      _newDmMessageController.close();
+      _participantsController.close();
+      _typingUsersController.close();
+      _controllersInitialized = false; // Allow re-initialization
+    }
+
     _roomMessages.clear();
     _dmMessages.clear();
     _participants.clear();
     _userProfileCache.clear();
-    
+
     _currentUserId = null;
     _currentRoomId = null;
     _currentConversationId = null;

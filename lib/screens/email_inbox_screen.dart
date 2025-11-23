@@ -1,3 +1,4 @@
+import 'dart:async';
 import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
@@ -29,6 +30,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
   String? _currentUsername;
   bool _isLoading = true;
   RealtimeSubscription? _subscription;
+  StreamSubscription? _emailStreamSubscription;
   
   // Colors
   static const Color darkBackground = Color(0xFF0A0A0A);
@@ -53,6 +55,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
   @override
   void dispose() {
     _tabController.dispose();
+    _emailStreamSubscription?.cancel();
     _subscription?.close();
     super.dispose();
   }
@@ -61,12 +64,14 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
     try {
       final user = await _appwrite.account.get();
       final profile = await _appwrite.getUserProfile(user.$id);
-      
-      setState(() {
-        _currentUserId = user.$id;
-        _currentUsername = profile?.name ?? user.name;
-      });
-      
+
+      if (mounted) {
+        setState(() {
+          _currentUserId = user.$id;
+          _currentUsername = profile?.name ?? user.name;
+        });
+      }
+
       await _loadEmails();
     } catch (e) {
       AppLogger().debug('Error loading user: $e');
@@ -170,10 +175,10 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
       _subscription = realtime.subscribe([
         'databases.${AppwriteConstants.databaseId}.collections.${AppwriteConstants.arenaEmailsCollection}.documents'
       ]);
-      
-      _subscription!.stream.listen((response) {
+
+      _emailStreamSubscription = _subscription!.stream.listen((response) {
         AppLogger().debug('Email subscription event received: ${response.events}');
-        
+
         // Check if this is a new email for the current user
         if (response.events.contains('databases.${AppwriteConstants.databaseId}.collections.${AppwriteConstants.arenaEmailsCollection}.documents.*.create')) {
           // New email created, check if it's for current user
@@ -183,7 +188,7 @@ class _EmailInboxScreenState extends State<EmailInboxScreen> with TickerProvider
             _soundService.playEmailSound();
           }
         }
-        
+
         _loadEmails(); // Reload emails on any change
       });
     } catch (e) {

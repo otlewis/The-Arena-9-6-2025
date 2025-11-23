@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import '../models/user_profile.dart';
 import '../models/money_tip.dart';
 import '../services/stripe_payment_service.dart';
-import '../services/appwrite_service.dart';
 import '../core/logging/app_logger.dart';
 
 /// Bottom sheet for sending real money tips via Stripe
@@ -25,7 +24,6 @@ class MoneyTipBottomSheet extends StatefulWidget {
 
 class _MoneyTipBottomSheetState extends State<MoneyTipBottomSheet> {
   final StripePaymentService _stripeService = StripePaymentService();
-  final AppwriteService _appwriteService = AppwriteService();
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfx/pdfx.dart';
@@ -37,19 +38,22 @@ class SlidesTab extends StatefulWidget {
 class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixin {
   static final _logger = AppLogger();
   final SlideLibraryService _slideLibraryService = SlideLibraryService();
-  
+
   PdfController? _pdfController;
   bool _isLoading = false;
   String? _errorMessage;
   bool _isUploading = false;
-  
+
   // Slide navigation
   int _currentPage = 1;
   int _totalPages = 0;
-  
+
   // Slide library
   List<UserSlideLibrary> _userSlides = [];
   UserSlideLibrary? _currentLoadedSlide;
+
+  // Stream subscription for cleanup
+  StreamSubscription? _slideChangesSubscription;
   
   @override
   bool get wantKeepAlive => true;
@@ -64,7 +68,7 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
   }
   
   void _listenToSlideChanges() {
-    widget.syncService.slideChanges.listen((slideData) {
+    _slideChangesSubscription = widget.syncService.slideChanges.listen((slideData) {
       if (mounted && _pdfController != null && slideData.currentSlide != _currentPage) {
         _pdfController!.jumpToPage(slideData.currentSlide - 1);
         setState(() {
@@ -495,6 +499,7 @@ class _SlidesTabState extends State<SlidesTab> with AutomaticKeepAliveClientMixi
   
   @override
   void dispose() {
+    _slideChangesSubscription?.cancel();
     _pdfController?.dispose();
     super.dispose();
   }

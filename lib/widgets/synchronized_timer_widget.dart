@@ -105,6 +105,7 @@ class _SynchronizedTimerWidgetState extends State<SynchronizedTimerWidget>
   }
 
   void _setupDisplayUpdateTimer() {
+    _displayUpdateTimer?.cancel();
     _displayUpdateTimer = Timer.periodic(
       const Duration(seconds: 1),
       (_) => _updateDisplayTime(),

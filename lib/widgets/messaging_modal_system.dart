@@ -28,7 +28,8 @@ class _MessagingModalSystemState extends State<MessagingModalSystem> {
   UserProfile? _currentUser;
   StreamSubscription<List<Conversation>>? _conversationsSubscription;
   RealtimeSubscription? _unreadCountSubscription;
-  
+  StreamSubscription? _messageStreamSubscription;
+
   final List<Conversation> _conversations = [];
   final int _unreadCount = 0;
   
@@ -89,25 +90,23 @@ class _MessagingModalSystemState extends State<MessagingModalSystem> {
   void _subscribeToMessages(String userId) {
     try {
       // Subscribe to instant messages where user is sender or receiver
-      final subscription = _appwriteService.realtimeInstance.subscribe([
+      _unreadCountSubscription = _appwriteService.realtimeInstance.subscribe([
         'databases.${AppwriteConstants.databaseId}.collections.instant_messages.documents'
       ]);
-      
-      subscription.stream.listen((response) {
+
+      _messageStreamSubscription = _unreadCountSubscription!.stream.listen((response) {
         AppLogger().info('📱 MessagingModal realtime event: ${response.events}');
         AppLogger().debug('📱 MessagingModal payload: ${response.payload}');
-        
+
         // Check for any instant message create events
-        final hasCreateEvent = response.events.any((event) => 
+        final hasCreateEvent = response.events.any((event) =>
           event.contains('instant_messages.documents') && event.contains('create'));
-          
+
         if (hasCreateEvent) {
           AppLogger().info('📱 MessagingModal processing new message event');
           _handleNewMessage(response.payload);
         }
       });
-      
-      _unreadCountSubscription = subscription;
     } catch (e) {
       AppLogger().error('Failed to subscribe to messages: $e');
     }
@@ -1134,6 +1133,7 @@ class _MessagingModalSystemState extends State<MessagingModalSystem> {
   @override
   void dispose() {
     _conversationsSubscription?.cancel();
+    _messageStreamSubscription?.cancel();
     _unreadCountSubscription?.close();
     _notificationTimer?.cancel();
     _searchController.dispose();

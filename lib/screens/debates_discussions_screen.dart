@@ -27,6 +27,8 @@ import '../widgets/user_profile_bottom_sheet.dart';
 import '../widgets/debate_voting_modal.dart';
 import '../widgets/challenge_bell.dart';
 import '../widgets/mattermost_chat_widget.dart';
+import '../widgets/help_modal.dart';
+import '../config/help_content.dart';
 import 'email_compose_screen.dart';
 import '../models/discussion_chat_message.dart';
 // import '../widgets/floating_im_widget.dart'; // Unused import
@@ -209,6 +211,10 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
   final List<UserProfile> _audienceMembers = [];
   final List<UserProfile> _speakerRequests = []; // Pending speaker requests
 
+  // Speaker invitation state
+  Map<String, dynamic>? _pendingSpeakerInvitation; // Current pending invitation for this user
+  UserProfile? _inviterProfile; // Profile of user who sent the invitation
+
   // Speaker Queue System for Discussions Mode
   final List<String> _speakerQueue = []; // Queue of speaker user IDs waiting to speak
   String? _currentSpeaker; // Current speaker from the queue
@@ -219,9 +225,15 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
 
   // Real-time reactions sync
   RealtimeSubscription? _reactionsSubscription;
+  StreamSubscription? _reactionsStreamListener;
 
   // Real-time participant role changes sync
   RealtimeSubscription? _participantsSubscription;
+  StreamSubscription? _participantsStreamListener2; // Separate from _participantStreamListener
+
+  // Real-time speaker invitations sync
+  RealtimeSubscription? _invitationsSubscription;
+  StreamSubscription? _invitationsStreamListener;
 
   // Role mapping for participants (userId -> role)
   final Map<String, String> _participantRoles = {};
@@ -356,6 +368,7 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     _initializeWebRTC();
     _initializeSpeakerQueueSync();
     _initializeReactionsSync();
+    // NOTE: _initializeSpeakerInvitationsSync() is called in _initializeRoom() after _currentUser is set
     // DISABLED: _initializeParticipantsSync() - duplicate subscription causing rapid updates
     // Participant updates are already handled by _setupRealTimeUpdates() via RoomRealtimeManager
 
@@ -1104,8 +1117,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           });
         }
         AppLogger().debug('👤 Current user loaded: ${userProfile?.name}');
+
+        // Initialize speaker invitations sync NOW that we have currentUser
+        await _initializeSpeakerInvitationsSync();
       }
-      
+
       // Load room data
       await _loadRoomData();
       
@@ -1490,6 +1506,9 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           await _checkTimeoutStatus();
         }
       });
+
+      // Track timeout subscription
+      trackSubscription('timeout_stream', _timeoutSubscription!);
 
       AppLogger().info('✅ User timeout real-time subscription established');
     } catch (e) {
@@ -1974,10 +1993,19 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     _speakerQueueSubscription?.close();
 
     // Reactions subscription
+    _reactionsStreamListener?.cancel();
+    _reactionsStreamListener = null;
     _reactionsSubscription?.close();
 
     // Participants subscription
+    _participantsStreamListener2?.cancel();
+    _participantsStreamListener2 = null;
     _participantsSubscription?.close();
+
+    // Speaker invitations subscription
+    _invitationsStreamListener?.cancel();
+    _invitationsStreamListener = null;
+    _invitationsSubscription?.close();
 
     // Phone call detection
     _phoneCallService.dispose();
@@ -4718,6 +4746,32 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
             iconColor: Colors.white,
           ),
           SizedBox(width: isSmallScreen ? 8 : 16),
+          // Help button
+          GestureDetector(
+            onTap: () {
+              showDialog(
+                context: context,
+                builder: (context) => HelpModal(
+                  title: 'Room Controls Guide',
+                  items: HelpContent.roomControls(),
+                  accentColor: const Color(0xFF8B5CF6),
+                ),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF8B5CF6).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(
+                Icons.help_outline,
+                color: Color(0xFF8B5CF6),
+                size: 20,
+              ),
+            ),
+          ),
+          SizedBox(width: isSmallScreen ? 8 : 16),
           // Compact participant count and audio status
           Row(
             key: const ValueKey('debates_header_stats'),
@@ -6019,11 +6073,11 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
                       },
                     ),
                     _buildOptionTile(
-                      icon: LucideIcons.users2,
-                      title: 'Assign Roles',
+                      icon: LucideIcons.userPlus2,
+                      title: 'Invite to Speak',
                       onTap: () {
                         Navigator.pop(context);
-                        _showRoleAssignment();
+                        _showInviteToSpeak();
                       },
                     ),
                     _buildOptionTile(
@@ -6589,9 +6643,23 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     );
   }
 
-  void _showRoleAssignment() {
-    final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
-    
+  void _showInviteToSpeak() {
+    // Get all non-speaker participants (audience and pending)
+    final invitableUsers = [
+      ..._audienceMembers,
+      ..._speakerRequests,
+    ];
+
+    if (invitableUsers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No users available to invite'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.grey[900],
@@ -6608,88 +6676,70 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
           child: Column(
             children: [
               const Text(
-                'Assign Roles',
+                'Invite to Speak',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
               ),
+              const SizedBox(height: 8),
+              Text(
+                'Select users to invite to the speaker panel',
+                style: TextStyle(
+                  color: Colors.grey[400],
+                  fontSize: 14,
+                ),
+              ),
               const SizedBox(height: 20),
-              
-              // Show position availability for debate rooms
-              if (isDebateRoom) ...[
-                _buildPositionStatus(),
-                const SizedBox(height: 20),
-              ],
-              
-              // Show all audience members for role assignment
-              if (_audienceMembers.isNotEmpty) ...[
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Audience Members',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: ListView.builder(
-                    key: const ValueKey('audience_members_list'),
-                    controller: scrollController,
-                    itemCount: _audienceMembers.length,
-                    itemBuilder: (context, index) {
-                      final member = _audienceMembers[index];
-                      final hasAffirmative = _speakerPanelists.any((speaker) => _participantRoles[speaker.id] == 'affirmative');
-                      final hasNegative = _speakerPanelists.any((speaker) => _participantRoles[speaker.id] == 'negative');
 
-                      // SUPER MOD FIX: Check both role availability AND moderator permissions
-                      final hasRoleAvailable = !isDebateRoom || (!hasAffirmative || !hasNegative);
-                      final canAssign = _hasModeratorPowers && hasRoleAvailable;
-                      
-                      return ListTile(
-                        key: ValueKey('audience_member_${member.id}'),
-                        leading: CircleAvatar(
+              // Show all invitable users
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  itemCount: invitableUsers.length,
+                  itemBuilder: (context, index) {
+                    final user = invitableUsers[index];
+                    final isPending = _speakerRequests.any((p) => p.id == user.id);
+
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: const Color(0xFF8B5CF6),
+                        child: _buildAvatarText(user, 14),
+                      ),
+                      title: Text(
+                        user.name,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      subtitle: Text(
+                        isPending ? 'Hand Raised (Pending)' : 'Audience Member',
+                        style: TextStyle(
+                          color: isPending ? Colors.orange[400] : Colors.grey[400],
+                        ),
+                      ),
+                      trailing: ElevatedButton.icon(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          // Check if this is a debate room - if so, show position selection
+                          final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
+                          if (isDebateRoom) {
+                            await _showDebatePositionSelection(user);
+                          } else {
+                            await _inviteUserToSpeak(user, null);
+                          }
+                        },
+                        icon: const Icon(Icons.person_add, size: 16),
+                        label: const Text('Invite'),
+                        style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF8B5CF6),
-                          child: _buildAvatarText(member, 14),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
-                        title: Text(
-                          member.name,
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        subtitle: Text(
-                          !_hasModeratorPowers
-                              ? 'Requires moderator permissions'
-                              : (isDebateRoom && !hasRoleAvailable
-                                  ? 'All positions filled'
-                                  : 'Audience Member'),
-                          style: TextStyle(
-                            color: !canAssign
-                                ? Colors.orange[400]
-                                : Colors.grey[400],
-                          ),
-                        ),
-                        trailing: IconButton(
-                          icon: Icon(
-                            canAssign ? LucideIcons.userCheck : LucideIcons.userX,
-                            color: canAssign ? const Color(0xFF8B5CF6) : Colors.grey[600],
-                          ),
-                          onPressed: canAssign ? () => _showRoleSelectionDialog(member) : null,
-                        ),
-                      );
-                    },
-                  ),
+                      ),
+                    );
+                  },
                 ),
-              ] else ...[
-                const Expanded(
-                  child: Center(
-                    child: Text(
-                      'No audience members available',
-                      style: TextStyle(color: Colors.grey, fontSize: 16),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ],
           ),
         ),
@@ -6697,91 +6747,371 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     );
   }
 
-  Widget _buildPositionStatus() {
+  Future<void> _showDebatePositionSelection(UserProfile user) async {
+    // Check which positions are available
     final hasAffirmative = _speakerPanelists.any((speaker) => _participantRoles[speaker.id] == 'affirmative');
     final hasNegative = _speakerPanelists.any((speaker) => _participantRoles[speaker.id] == 'negative');
-    
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[850],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[700]!, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Debate Positions',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildPositionIndicator(
-                  icon: LucideIcons.thumbsUp,
-                  title: 'Affirmative',
-                  isOccupied: hasAffirmative,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildPositionIndicator(
-                  icon: LucideIcons.thumbsDown,
-                  title: 'Negative',
-                  isOccupied: hasNegative,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildPositionIndicator({
-    required IconData icon,
-    required String title,
-    required bool isOccupied,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isOccupied ? Colors.red[900]?.withOpacity(0.3) : Colors.green[900]?.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isOccupied ? Colors.red[700]! : Colors.green[700]!,
-          width: 1,
+    if (hasAffirmative && hasNegative) {
+      // Both positions filled
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Both debate positions are already filled'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Show position selection dialog
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Select Debate Position for ${user.name}',
+          style: const TextStyle(color: Colors.white, fontSize: 18),
         ),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            icon,
-            color: isOccupied ? Colors.red[400] : Colors.green[400],
-            size: 20,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Choose which side of the debate to invite them to:',
+              style: TextStyle(color: Colors.grey[300], fontSize: 14),
+            ),
+            const SizedBox(height: 20),
+
+            // Affirmative option
+            if (!hasAffirmative)
+              InkWell(
+                onTap: () {
+                  Navigator.pop(context);
+                  _inviteUserToSpeak(user, 'affirmative');
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green[900]?.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green[700]!, width: 2),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.thumbsUp, color: Colors.green[400], size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Affirmative',
+                              style: TextStyle(
+                                color: Colors.green[400],
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Pro/For side of the debate',
+                              style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            if (!hasAffirmative && !hasNegative) const SizedBox(height: 12),
+
+            // Negative option
+            if (!hasNegative)
+              InkWell(
+                onTap: () {
+                  Navigator.pop(context);
+                  _inviteUserToSpeak(user, 'negative');
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red[900]?.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red[700]!, width: 2),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.thumbsDown, color: Colors.red[400], size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Negative',
+                              style: TextStyle(
+                                color: Colors.red[400],
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Con/Against side of the debate',
+                              style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
-          const SizedBox(height: 4),
-          Text(
-            title,
-            style: TextStyle(
-              color: isOccupied ? Colors.red[400] : Colors.green[400],
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+        ],
+      ),
+    );
+  }
+
+  Future<void> _inviteUserToSpeak(UserProfile user, String? debatePosition) async {
+    if (_currentUser == null) {
+      AppLogger().error('❌ Cannot invite user: current user is null');
+      return;
+    }
+
+    AppLogger().info('📤 INVITATION SEND: Inviting ${user.name} (${user.id}) to speak in room ${widget.roomId}');
+
+    try {
+      // Check if there's room for more speakers (max 8 speakers + 1 moderator = 9 total)
+      if (_speakerPanelists.length >= 8) {
+        AppLogger().warning('⚠️ Speaker panel is full (${_speakerPanelists.length}/8)');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Speaker panel is full (max 8 speakers)'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Show loading indicator
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sending invitation to ${user.name}...'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+
+      // Create speaker invitation record in speaker_invitations collection
+      final invitationData = {
+        'roomId': widget.roomId,
+        'userId': user.id,
+        'invitedBy': _currentUser!.id,
+        'status': 'invited',
+        'invitedAt': DateTime.now().toIso8601String(),
+        if (debatePosition != null) 'debatePosition': debatePosition,
+      };
+
+      AppLogger().debug('📝 Creating invitation document with data: $invitationData');
+
+      final doc = await _appwrite.databases.createDocument(
+        databaseId: 'arena_db',
+        collectionId: 'speaker_invitations',
+        documentId: ID.unique(),
+        data: invitationData,
+      );
+
+      AppLogger().info('✅ Invitation document created successfully with ID: ${doc.$id}');
+
+      // Success feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Invitation sent to ${user.name}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
+      AppLogger().info('✅ Successfully sent speaker invitation to ${user.name}');
+    } catch (e) {
+      AppLogger().error('❌ Error inviting user to speak: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error inviting ${user.name}: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showSpeakerInvitationModal() {
+    if (_pendingSpeakerInvitation == null || _inviterProfile == null) {
+      AppLogger().warning('⚠️ Cannot show invitation modal - invitation: ${_pendingSpeakerInvitation != null}, inviter: ${_inviterProfile != null}');
+      return;
+    }
+
+    AppLogger().info('🎭 MODAL: Displaying speaker invitation from ${_inviterProfile!.name}');
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.record_voice_over, color: Color(0xFF8B5CF6), size: 28),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Speaker Invitation',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            RichText(
+              text: TextSpan(
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+                children: [
+                  TextSpan(
+                    text: _inviterProfile!.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF8B5CF6),
+                    ),
+                  ),
+                  const TextSpan(
+                    text: ' has invited you to join the speaker panel!',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Show debate position if this is a debate invitation
+            if (_pendingSpeakerInvitation!['debatePosition'] != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _pendingSpeakerInvitation!['debatePosition'] == 'affirmative'
+                      ? Colors.green.withOpacity(0.1)
+                      : Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _pendingSpeakerInvitation!['debatePosition'] == 'affirmative'
+                        ? Colors.green.withOpacity(0.3)
+                        : Colors.red.withOpacity(0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _pendingSpeakerInvitation!['debatePosition'] == 'affirmative'
+                          ? LucideIcons.thumbsUp
+                          : LucideIcons.thumbsDown,
+                      color: _pendingSpeakerInvitation!['debatePosition'] == 'affirmative'
+                          ? Colors.green[400]
+                          : Colors.red[400],
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _pendingSpeakerInvitation!['debatePosition'] == 'affirmative'
+                                ? 'Affirmative Position'
+                                : 'Negative Position',
+                            style: TextStyle(
+                              color: _pendingSpeakerInvitation!['debatePosition'] == 'affirmative'
+                                  ? Colors.green[400]
+                                  : Colors.red[400],
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _pendingSpeakerInvitation!['debatePosition'] == 'affirmative'
+                                ? 'You\'ll argue for the pro side'
+                                : 'You\'ll argue against the con side',
+                            style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'You\'ll be able to speak and participate in the discussion',
+                      style: TextStyle(color: Colors.grey[300], fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () => _declineSpeakerInvitation(),
+            icon: const Icon(Icons.close, color: Colors.red),
+            label: const Text('Decline', style: TextStyle(color: Colors.red)),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            isOccupied ? 'FILLED' : 'OPEN',
-            style: TextStyle(
-              color: isOccupied ? Colors.red[300] : Colors.green[300],
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
+          ElevatedButton.icon(
+            onPressed: () => _acceptSpeakerInvitation(),
+            icon: const Icon(Icons.check, color: Colors.white),
+            label: const Text('Accept'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8B5CF6),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             ),
           ),
         ],
@@ -6789,6 +7119,158 @@ class _DebatesDiscussionsScreenState extends State<DebatesDiscussionsScreen>
     );
   }
 
+  Future<void> _acceptSpeakerInvitation() async {
+    if (_pendingSpeakerInvitation == null || _currentUser == null) return;
+
+    final navigator = Navigator.of(context);
+    navigator.pop(); // Close the invitation modal
+
+    try {
+      AppLogger().info('📢 INVITATION: User accepting speaker invitation');
+
+      // Delete the invitation record first
+      await _appwrite.databases.deleteDocument(
+        databaseId: 'arena_db',
+        collectionId: 'speaker_invitations',
+        documentId: _pendingSpeakerInvitation!['\$id'],
+      );
+
+      // Directly update the participant's role in the database
+      // This bypasses permission checks since user is accepting a moderator's invitation
+      try {
+        // Get the debate position from the invitation if present
+        final debatePosition = _pendingSpeakerInvitation!['debatePosition'] as String?;
+        final roleToAssign = debatePosition ?? 'speaker';
+
+        AppLogger().info('📢 Assigning role: $roleToAssign');
+
+        // Find the user's participant document
+        final participantDocs = await _appwrite.databases.listDocuments(
+          databaseId: 'arena_db',
+          collectionId: 'debate_discussion_participants',
+          queries: [
+            Query.equal('roomId', widget.roomId),
+            Query.equal('userId', _currentUser!.id),
+          ],
+        );
+
+        if (participantDocs.documents.isNotEmpty) {
+          final participantDoc = participantDocs.documents.first;
+
+          // Update role to speaker or debate position
+          await _appwrite.databases.updateDocument(
+            databaseId: 'arena_db',
+            collectionId: 'debate_discussion_participants',
+            documentId: participantDoc.$id,
+            data: {
+              'role': roleToAssign,
+            },
+          );
+
+          AppLogger().info('✅ Updated participant role to $roleToAssign');
+        } else {
+          // If participant doesn't exist, create them with the role
+          await _appwrite.databases.createDocument(
+            databaseId: 'arena_db',
+            collectionId: 'debate_discussion_participants',
+            documentId: ID.unique(),
+            data: {
+              'roomId': widget.roomId,
+              'userId': _currentUser!.id,
+              'role': roleToAssign,
+              'joinedAt': DateTime.now().toIso8601String(),
+            },
+          );
+
+          AppLogger().info('✅ Created new participant record with role $roleToAssign');
+        }
+
+        // Clear invitation state
+        setState(() {
+          _pendingSpeakerInvitation = null;
+          _inviterProfile = null;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ You are now a speaker!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+
+        AppLogger().info('✅ Successfully accepted speaker invitation');
+      } catch (e) {
+        AppLogger().error('❌ Error updating participant role: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to join speaker panel: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      AppLogger().error('Error accepting speaker invitation: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error accepting invitation: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _declineSpeakerInvitation() async {
+    if (_pendingSpeakerInvitation == null) return;
+
+    final navigator = Navigator.of(context);
+    navigator.pop(); // Close the invitation modal
+
+    try {
+      AppLogger().info('🚫 INVITATION: User declining speaker invitation');
+
+      // Delete the invitation record
+      await _appwrite.databases.deleteDocument(
+        databaseId: 'arena_db',
+        collectionId: 'speaker_invitations',
+        documentId: _pendingSpeakerInvitation!['\$id'],
+      );
+
+      // Clear invitation state
+      setState(() {
+        _pendingSpeakerInvitation = null;
+        _inviterProfile = null;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invitation declined'),
+            backgroundColor: Colors.grey,
+          ),
+        );
+      }
+
+      AppLogger().info('✅ Invitation declined successfully');
+    } catch (e) {
+      AppLogger().error('Error declining speaker invitation: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error declining invitation: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // ignore: unused_element
   void _showRoleSelectionDialog(UserProfile member) {
     final isDebateRoom = _roomData?['debateStyle'] == 'Debate';
     
@@ -8024,7 +8506,7 @@ To join this debate:
         'databases.arena_db.collections.room_reactions.documents'
       ]);
 
-      _reactionsSubscription!.stream.listen((response) {
+      _reactionsStreamListener = _reactionsSubscription!.stream.listen((response) {
         if (!mounted) return;
 
         try {
@@ -8139,9 +8621,177 @@ To join this debate:
         }
       });
 
+      // Track reactions stream listener
+      trackSubscription('reactions_stream', _reactionsStreamListener!);
+
       AppLogger().info('🔄 Reactions real-time sync initialized for room ${widget.roomId}');
     } catch (e) {
       AppLogger().error('❌ Failed to initialize reactions sync: $e');
+    }
+  }
+
+  Future<void> _initializeSpeakerInvitationsSync() async {
+    if (!mounted || _currentUser == null) {
+      AppLogger().warning('⚠️ INVITATION SYNC: Cannot initialize - mounted: $mounted, currentUser: ${_currentUser != null}');
+      return;
+    }
+
+    AppLogger().info('🔄 INVITATION SYNC: Starting initialization for user ${_currentUser!.id} in room ${widget.roomId}');
+
+    try {
+      // First, check for any existing invitations
+      await _checkForExistingInvitations();
+
+      // Subscribe to speaker invitations for this user
+      final realtime = _appwrite.realtime;
+
+      _invitationsSubscription = realtime.subscribe([
+        'databases.arena_db.collections.speaker_invitations.documents'
+      ]);
+
+      AppLogger().info('✅ REALTIME: Subscribed to speaker_invitations');
+
+      _invitationsStreamListener = _invitationsSubscription!.stream.listen((response) async {
+        // Log ALL events received on this channel
+        AppLogger().info('🔔 RAW INVITATION EVENT: ${response.events}');
+
+        if (!mounted || _isDisposing || _currentUser == null) {
+          AppLogger().warning('⚠️ INVITATION EVENT: Skipping - mounted: $mounted, disposing: $_isDisposing, currentUser: ${_currentUser != null}');
+          return;
+        }
+
+        try {
+          final payload = response.payload;
+          AppLogger().debug('📬 INVITATION EVENT: Received event - ${response.events}');
+          AppLogger().debug('📬 INVITATION PAYLOAD: $payload');
+
+          // Only process create events (new invitations)
+          if (response.events.any((event) => event.contains('.create'))) {
+            final userId = payload['userId'];
+            final roomId = payload['roomId'];
+
+            AppLogger().info('📨 INVITATION CREATE: userId=$userId, roomId=$roomId, currentUser=${_currentUser!.id}, currentRoom=${widget.roomId}');
+
+            // Only process invitations for current user in current room
+            if (userId == _currentUser!.id && roomId == widget.roomId) {
+              final inviterId = payload['invitedBy'];
+
+              AppLogger().info('✅ INVITATION MATCH: Received speaker invitation from $inviterId');
+
+              // Fetch inviter profile
+              try {
+                AppLogger().debug('👤 Fetching inviter profile for $inviterId');
+                final inviterDoc = await _appwrite.databases.getDocument(
+                  databaseId: 'arena_db',
+                  collectionId: 'users',
+                  documentId: inviterId,
+                );
+
+                final inviterProfile = UserProfile.fromMap(inviterDoc.data);
+                AppLogger().info('✅ Fetched inviter profile: ${inviterProfile.name}');
+
+                // Set invitation state and show modal
+                if (mounted) {
+                  setState(() {
+                    _pendingSpeakerInvitation = payload;
+                    _inviterProfile = inviterProfile;
+                  });
+
+                  AppLogger().info('🎭 Showing speaker invitation modal');
+                  // Show invitation modal
+                  _showSpeakerInvitationModal();
+                } else {
+                  AppLogger().warning('⚠️ Cannot show modal - widget not mounted');
+                }
+              } catch (e) {
+                AppLogger().error('❌ Error fetching inviter profile: $e');
+              }
+            } else {
+              AppLogger().debug('⏭️ INVITATION SKIP: Not for this user/room');
+            }
+          }
+
+          // Process delete events (invitation canceled/accepted/declined)
+          if (response.events.any((event) => event.contains('.delete'))) {
+            final documentId = payload['\$id'];
+
+            AppLogger().debug('🗑️ INVITATION DELETE: documentId=$documentId');
+
+            // Clear invitation state if it matches
+            if (mounted && _pendingSpeakerInvitation?['\$id'] == documentId) {
+              setState(() {
+                _pendingSpeakerInvitation = null;
+                _inviterProfile = null;
+              });
+
+              AppLogger().info('✅ INVITATION: Cleared invitation state');
+            }
+          }
+        } catch (e) {
+          AppLogger().error('❌ Error processing speaker invitation event: $e');
+        }
+      });
+
+      // Track invitations stream listener
+      trackSubscription('invitations_stream', _invitationsStreamListener!);
+
+      AppLogger().info('✅ Speaker invitations real-time sync initialized successfully');
+    } catch (e) {
+      AppLogger().error('❌ Failed to initialize speaker invitations sync: $e');
+    }
+  }
+
+  /// Check for existing speaker invitations on room join
+  Future<void> _checkForExistingInvitations() async {
+    if (!mounted || _currentUser == null) return;
+
+    try {
+      AppLogger().info('🔍 Checking for existing invitations for user ${_currentUser!.id} in room ${widget.roomId}');
+
+      final result = await _appwrite.databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'speaker_invitations',
+        queries: [
+          Query.equal('userId', _currentUser!.id),
+          Query.equal('roomId', widget.roomId),
+          Query.equal('status', 'invited'),
+        ],
+      );
+
+      if (result.documents.isNotEmpty) {
+        final invitation = result.documents.first.data;
+        final inviterId = invitation['invitedBy'];
+
+        AppLogger().info('✅ Found existing invitation from $inviterId');
+
+        // Fetch inviter profile
+        try {
+          final inviterDoc = await _appwrite.databases.getDocument(
+            databaseId: 'arena_db',
+            collectionId: 'users',
+            documentId: inviterId,
+          );
+
+          final inviterProfile = UserProfile.fromMap(inviterDoc.data);
+
+          // Set invitation state and show modal
+          if (mounted) {
+            setState(() {
+              _pendingSpeakerInvitation = invitation;
+              _inviterProfile = inviterProfile;
+            });
+
+            AppLogger().info('🎭 Showing existing invitation modal');
+            _showSpeakerInvitationModal();
+          }
+        } catch (e) {
+          AppLogger().error('❌ Error fetching inviter profile for existing invitation: $e');
+        }
+      } else {
+        AppLogger().info('ℹ️ No existing invitations found');
+      }
+    } catch (e) {
+      AppLogger().error('❌ Error checking for existing invitations: $e');
     }
   }
 

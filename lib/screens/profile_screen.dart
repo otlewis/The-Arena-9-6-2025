@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../services/appwrite_service.dart';
 import '../models/user_profile.dart';
 import '../widgets/user_avatar.dart';
@@ -6,6 +7,7 @@ import 'edit_profile_screen.dart';
 import 'club_details_screen.dart';
 import 'language_settings_screen.dart';
 import 'package:appwrite/models.dart' as models;
+import 'package:appwrite/appwrite.dart';
 import '../core/logging/app_logger.dart';
 import '../services/theme_service.dart';
 import '../widgets/gift_bell.dart';
@@ -13,6 +15,7 @@ import '../services/revenue_cat_service.dart';
 import 'package:get_it/get_it.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../constants/appwrite.dart';
 class ProfileScreen extends StatefulWidget {
   final VoidCallback? onLogout;
   
@@ -34,18 +37,122 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _followingCount = 0;
   CustomerInfo? _customerInfo;
   bool? _cachedPremiumStatus;
+  RealtimeSubscription? _membershipSubscription;
 
-  // Colors matching home screen
+  // Moderator/Judge status
+  bool _isModerator = false;
+  bool _isJudge = false;
+  double _moderatorRating = 0.0;
+  double _judgeRating = 0.0;
+
+  // Colors matching landing page theme
   static const Color scarletRed = Color(0xFFFF2400);
   static const Color lightScarlet = Color(0xFFFFF1F0);
   static const Color accentPurple = Color(0xFF8B5CF6);
   static const Color deepPurple = Color(0xFF6B46C1);
+
+  // Landing page brand purple theme
+  static const Color brandPurple = Color(0xFF5B2D90);  // Main brand color
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
     _loadSubscriptionInfo();
+  }
+
+  @override
+  void dispose() {
+    _membershipSubscription?.close();
+    super.dispose();
+  }
+
+  /// Subscribe to real-time membership updates
+  void _subscribeToMembershipUpdates() {
+    if (_currentUser == null) return;
+
+    _membershipSubscription?.close();
+    _membershipSubscription = _appwrite.realtimeInstance.subscribe([
+      'databases.arena_db.collections.club_memberships.documents',
+    ]);
+
+    _membershipSubscription!.stream.listen((event) {
+      // Check if this update is for the current user
+      final data = event.payload;
+      if (data['userId'] == _currentUser!.$id) {
+        AppLogger().info('📋 Membership updated for current user, refreshing...');
+        _refreshMemberships();
+      }
+    }, onError: (error) {
+      AppLogger().error('Error in membership subscription: $error');
+    });
+  }
+
+  /// Refresh only memberships without full reload
+  Future<void> _refreshMemberships() async {
+    if (_currentUser == null) return;
+
+    try {
+      final memberships = await _appwrite.getUserMemberships(_currentUser!.$id);
+      final enhancedMemberships = await _loadMembershipsWithClubNames(memberships);
+
+      if (mounted) {
+        setState(() {
+          _memberships = enhancedMemberships;
+        });
+      }
+    } catch (e) {
+      AppLogger().error('Error refreshing memberships: $e');
+    }
+  }
+
+  /// Check if user is a registered moderator or judge
+  Future<void> _loadModeratorJudgeStatus() async {
+    if (_currentUser == null) return;
+
+    try {
+      // Check moderator status
+      final moderatorResponse = await _appwrite.databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.moderatorsCollection,
+        queries: [
+          Query.equal('userId', _currentUser!.$id),
+          Query.limit(1),
+        ],
+      );
+
+      if (moderatorResponse.documents.isNotEmpty) {
+        final modDoc = moderatorResponse.documents.first.data;
+        if (mounted) {
+          setState(() {
+            _isModerator = true;
+            _moderatorRating = (modDoc['rating'] as num?)?.toDouble() ?? 5.0;
+          });
+        }
+      }
+
+      // Check judge status
+      final judgeResponse = await _appwrite.databases.listDocuments(
+        databaseId: AppwriteConstants.databaseId,
+        collectionId: AppwriteConstants.judgesCollection,
+        queries: [
+          Query.equal('userId', _currentUser!.$id),
+          Query.limit(1),
+        ],
+      );
+
+      if (judgeResponse.documents.isNotEmpty) {
+        final judgeDoc = judgeResponse.documents.first.data;
+        if (mounted) {
+          setState(() {
+            _isJudge = true;
+            _judgeRating = (judgeDoc['rating'] as num?)?.toDouble() ?? 5.0;
+          });
+        }
+      }
+    } catch (e) {
+      AppLogger().error('Error loading moderator/judge status: $e');
+    }
   }
 
   Future<void> _loadUserData() async {
@@ -95,6 +202,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           AppLogger().error('Error loading follow counts', e);
         }
 
+        // Subscribe to real-time membership updates
+        _subscribeToMembershipUpdates();
+
+        // Load moderator/judge status
+        await _loadModeratorJudgeStatus();
 
         setState(() => _isLoading = false);
       } else {
@@ -247,68 +359,94 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _themeService.isDarkMode 
-          ? const Color(0xFF2D2D2D)
-          : const Color(0xFFE8E8E8),
-      appBar: AppBar(
-        title: Text(
-          'Profile',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: _themeService.isDarkMode ? Colors.white : deepPurple,
+      body: Container(
+        color: _themeService.isDarkMode
+            ? const Color(0xFF1A1A1A)  // Dark background
+            : const Color(0xFFE8E4F3),  // Light purple background
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Custom AppBar
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    if (Navigator.of(context).canPop())
+                      IconButton(
+                        icon: Icon(
+                          Icons.arrow_back,
+                          color: _themeService.isDarkMode
+                              ? const Color(0xFFE0E0E0)
+                              : const Color(0xFF4A4458),
+                          size: 24,
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    if (Navigator.of(context).canPop())
+                      const SizedBox(width: 12),
+                    Text(
+                      'Profile',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: _themeService.isDarkMode
+                            ? const Color(0xFFE0E0E0)
+                            : const Color(0xFF4A4458),
+                      ),
+                    ),
+                    const Spacer(),
+                    if (_currentUser != null) ...[
+                      GiftBell(
+                        iconColor: const Color(0xFF8B5CF6),
+                        iconSize: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      _buildNeumorphicIcon(
+                        icon: Icons.edit,
+                        onTap: _editProfile,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              // Body content
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF8B5CF6)))
+                    : RefreshIndicator(
+                        onRefresh: _loadUserData,
+                        child: ListView(
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            _buildProfileHeader(),
+                            const SizedBox(height: 24),
+                            _buildStatsCard(),
+                            const SizedBox(height: 24),
+                            if (_userProfile?.bio != null && _userProfile!.bio!.isNotEmpty)
+                              _buildBioCard(),
+                            if (_userProfile?.interests.isNotEmpty == true)
+                              _buildInterestsCard(),
+                            if (_userProfile != null && _hasAnyLinks())
+                              _buildSocialLinksCard(),
+                            if (_currentUser != null) ...[
+                              const SizedBox(height: 24),
+                              const SizedBox(height: 24),
+                              _buildCommunityRolesCard(),
+                              _buildMyClubsSection(),
+                              const SizedBox(height: 24),
+                            ],
+                            _buildActionButtons(context),
+                            const SizedBox(height: 16),
+                          ],
+                        ),
+                      ),
+              ),
+            ],
           ),
         ),
-        backgroundColor: _themeService.isDarkMode 
-            ? const Color(0xFF2D2D2D)
-            : const Color(0xFFE8E8E8),
-        elevation: 0,
-        iconTheme: IconThemeData(
-          color: _themeService.isDarkMode ? Colors.white70 : scarletRed,
-        ),
-        actions: [
-          if (_currentUser != null) ...[
-            GiftBell(
-              iconColor: _themeService.isDarkMode ? Colors.white70 : const Color(0xFF8B5CF6),
-              iconSize: 20,
-            ),
-            const SizedBox(width: 12),
-            _buildNeumorphicIcon(
-              icon: Icons.edit,
-              onTap: _editProfile,
-            ),
-          ],
-          const SizedBox(width: 12),
-        ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadUserData,
-              child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                  _buildProfileHeader(),
-                  const SizedBox(height: 24),
-                  _buildStatsCard(),
-                  const SizedBox(height: 24),
-                  if (_userProfile?.bio != null && _userProfile!.bio!.isNotEmpty)
-                    _buildBioCard(),
-                  if (_userProfile?.interests.isNotEmpty == true)
-                    _buildInterestsCard(),
-                  if (_userProfile != null && _hasAnyLinks())
-                    _buildSocialLinksCard(),
-                  if (_currentUser != null) ...[
-                    const SizedBox(height: 24),
-                    const SizedBox(height: 24),
-                    _buildCommunityRolesCard(),
-                    _buildMyClubsSection(),
-                    const SizedBox(height: 24),
-                  ],
-                  _buildActionButtons(context),
-                  const SizedBox(height: 16),
-                ],
-              ),
-            ),
     );
   }
 
@@ -317,32 +455,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final isGuest = _currentUser == null;
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: _themeService.isDarkMode 
-            ? const Color(0xFF3A3A3A)
-            : const Color(0xFFF0F0F3),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: scarletRed.withOpacity(0.2),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.white.withOpacity(0.03)
-                : Colors.white.withOpacity(0.8),
-            offset: const Offset(-8, -8),
-            blurRadius: 16,
-          ),
-          BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.black.withOpacity(0.5)
-                : const Color(0xFFA3B1C6).withOpacity(0.5),
-            offset: const Offset(8, 8),
-            blurRadius: 16,
-          ),
-        ],
+        color: _themeService.isDarkMode
+            ? const Color(0xFF2D2D2D)  // Dark card
+            : const Color(0xFFE8E4F3),  // Light purple
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: _themeService.isDarkMode
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  offset: const Offset(-8, -8),
+                  blurRadius: 16,
+                ),
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  offset: const Offset(8, 8),
+                  blurRadius: 16,
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  offset: const Offset(-8, -8),
+                  blurRadius: 16,
+                ),
+                BoxShadow(
+                  color: const Color(0xFFC8C0DC).withValues(alpha: 0.5),
+                  offset: const Offset(8, 8),
+                  blurRadius: 16,
+                ),
+              ],
       ),
       child: Column(
         children: [
@@ -352,24 +495,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 width: 120,
                 height: 120,
                 decoration: BoxDecoration(
-                  color: _themeService.isDarkMode 
-                      ? const Color(0xFF2D2D2D)
-                      : const Color(0xFFE8E8E8),
+                  color: Colors.white.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: _themeService.isDarkMode 
-                          ? Colors.black.withOpacity(0.6)
-                          : const Color(0xFFA3B1C6).withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.1),
                       offset: const Offset(4, 4),
-                      blurRadius: 8,
-                      spreadRadius: -2,
-                    ),
-                    BoxShadow(
-                      color: _themeService.isDarkMode 
-                          ? Colors.white.withOpacity(0.02)
-                          : Colors.white.withOpacity(0.8),
-                      offset: const Offset(-4, -4),
                       blurRadius: 8,
                       spreadRadius: -2,
                     ),
@@ -399,12 +530,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         end: Alignment.bottomRight,
                       ),
                       shape: BoxShape.circle,
-                      border: Border.all(
-                        color: _themeService.isDarkMode 
-                            ? const Color(0xFF2D2D2D)
-                            : const Color(0xFFE8E8E8),
-                        width: 3,
-                      ),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.orange.withOpacity(0.4),
@@ -431,7 +556,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 style: TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
-                  color: _themeService.isDarkMode ? Colors.white : deepPurple,
+                  color: _themeService.isDarkMode
+                      ? const Color(0xFFE0E0E0)  // Light text in dark mode
+                      : const Color(0xFF4A4458),  // Dark purple in light mode
                 ),
               ),
               if (!isGuest && _hasPremiumSubscription) ...[
@@ -506,10 +633,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ? const Color(0xFF2D2D2D)
                     : lightScarlet,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: scarletRed.withOpacity(0.3),
-                  width: 1,
-                ),
               ),
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
@@ -530,9 +653,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
           if (isGuest) ...[
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Sign in to access all features',
-              style: TextStyle(color: scarletRed),
+              style: TextStyle(
+                color: _themeService.isDarkMode
+                    ? const Color(0xFFB0B0B0)
+                    : const Color(0xFF6B5F7A),
+              ),
             ),
           ],
         ],
@@ -542,34 +669,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildStatsCard() {
     final profile = _userProfile;
-    
+
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: _themeService.isDarkMode 
-            ? const Color(0xFF3A3A3A)
-            : const Color(0xFFF0F0F3),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: scarletRed.withOpacity(0.2),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.white.withOpacity(0.03)
-                : Colors.white.withOpacity(0.8),
-            offset: const Offset(-8, -8),
-            blurRadius: 16,
-          ),
-          BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.black.withOpacity(0.5)
-                : const Color(0xFFA3B1C6).withOpacity(0.5),
-            offset: const Offset(8, 8),
-            blurRadius: 16,
-          ),
-        ],
+        color: _themeService.isDarkMode
+            ? const Color(0xFF2D2D2D)  // Dark card
+            : const Color(0xFFE8E4F3),  // Light purple
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: _themeService.isDarkMode
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  offset: const Offset(-8, -8),
+                  blurRadius: 16,
+                ),
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  offset: const Offset(8, 8),
+                  blurRadius: 16,
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  offset: const Offset(-8, -8),
+                  blurRadius: 16,
+                ),
+                BoxShadow(
+                  color: const Color(0xFFC8C0DC).withValues(alpha: 0.5),
+                  offset: const Offset(8, 8),
+                  blurRadius: 16,
+                ),
+              ],
       ),
       child: Column(
         children: [
@@ -650,26 +782,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       decoration: BoxDecoration(
-        color: _themeService.isDarkMode 
+        color: _themeService.isDarkMode
             ? const Color(0xFF2D2D2D)
-            : const Color(0xFFE8E8E8),
+            : const Color(0xFFE8E4F3),
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.black.withOpacity(0.6)
-                : const Color(0xFFA3B1C6).withOpacity(0.3),
-            offset: const Offset(3, 3),
-            blurRadius: 6,
-            spreadRadius: -2,
+            color: Colors.white.withValues(alpha: 0.7),
+            offset: const Offset(-4, -4),
+            blurRadius: 8,
           ),
           BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.white.withOpacity(0.02)
-                : Colors.white.withOpacity(0.8),
-            offset: const Offset(-3, -3),
-            blurRadius: 6,
-            spreadRadius: -2,
+            color: const Color(0xFFC8C0DC).withValues(alpha: 0.4),
+            offset: const Offset(4, 4),
+            blurRadius: 8,
           ),
         ],
       ),
@@ -678,7 +804,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (icon != null) ...[
             Icon(
               icon,
-              color: color ?? (_themeService.isDarkMode ? Colors.white70 : deepPurple),
+              color: color ?? const Color(0xFF8B5CF6),
               size: 20,
             ),
             const SizedBox(height: 4),
@@ -688,13 +814,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: color ?? (_themeService.isDarkMode ? Colors.white : deepPurple),
+              color: color ?? const Color(0xFF4A4458),
             ),
           ),
           Text(
             label,
             style: TextStyle(
-              color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[600],
+              color: _themeService.isDarkMode
+                  ? const Color(0xFFB0B0B0)
+                  : const Color(0xFF6B5F7A),
               fontSize: 12,
             ),
           ),
@@ -707,26 +835,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _themeService.isDarkMode 
-            ? const Color(0xFF3A3A3A)
-            : const Color(0xFFF0F0F3),
+        color: _themeService.isDarkMode
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E4F3),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: scarletRed.withOpacity(0.2),
-          width: 1.5,
-        ),
         boxShadow: [
           BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.white.withOpacity(0.03)
-                : Colors.white.withOpacity(0.8),
+            color: Colors.white.withValues(alpha: 0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.black.withOpacity(0.5)
-                : const Color(0xFFA3B1C6).withOpacity(0.5),
+            color: const Color(0xFFC8C0DC).withValues(alpha: 0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
@@ -740,16 +860,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: _themeService.isDarkMode ? Colors.white : deepPurple,
+              color: _themeService.isDarkMode
+                  ? const Color(0xFFE0E0E0)
+                  : const Color(0xFF4A4458),
             ),
           ),
           const SizedBox(height: 8),
           Text(
             _userProfile!.bio!,
             style: TextStyle(
-              fontSize: 14, 
+              fontSize: 14,
               height: 1.4,
-              color: _themeService.isDarkMode ? Colors.white70 : Colors.black87,
+              color: _themeService.isDarkMode
+                  ? const Color(0xFFB0B0B0)
+                  : const Color(0xFF6B5F7A),
             ),
           ),
         ],
@@ -761,72 +885,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _themeService.isDarkMode 
-            ? const Color(0xFF3A3A3A)
-            : const Color(0xFFF0F0F3),
+        color: _themeService.isDarkMode
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E4F3),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: scarletRed.withOpacity(0.2),
-          width: 1.5,
-        ),
         boxShadow: [
           BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.white.withOpacity(0.03)
-                : Colors.white.withOpacity(0.8),
+            color: Colors.white.withValues(alpha: 0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.black.withOpacity(0.5)
-                : const Color(0xFFA3B1C6).withOpacity(0.5),
+            color: const Color(0xFFC8C0DC).withValues(alpha: 0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Interests',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: _themeService.isDarkMode ? Colors.white : deepPurple,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _userProfile!.interests.map((interest) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: _themeService.isDarkMode 
-                      ? const Color(0xFF2D2D2D)
-                      : lightScarlet,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: scarletRed.withOpacity(0.3),
-                    width: 1,
-                  ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Interests',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: _themeService.isDarkMode
+                  ? const Color(0xFFE0E0E0)
+                  : const Color(0xFF4A4458),
                 ),
-                child: Text(
-                  interest,
-                  style: const TextStyle(
-                    color: scarletRed,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              );
-            }).toList(),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _userProfile!.interests.map((interest) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: _themeService.isDarkMode
+                          ? const Color(0xFF8B5CF6).withValues(alpha: 0.3)
+                          : const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      interest,
+                      style: TextStyle(
+                        color: _themeService.isDarkMode
+                            ? const Color(0xFFE0E0E0)
+                            : const Color(0xFF8B5CF6),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -842,30 +958,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildSocialLinksCard() {
     final profile = _userProfile!;
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _themeService.isDarkMode 
-            ? const Color(0xFF3A3A3A)
-            : const Color(0xFFF0F0F3),
+        color: _themeService.isDarkMode
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E4F3),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: scarletRed.withOpacity(0.2),
-          width: 1.5,
-        ),
         boxShadow: [
           BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.white.withOpacity(0.03)
-                : Colors.white.withOpacity(0.8),
+            color: Colors.white.withValues(alpha: 0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.black.withOpacity(0.5)
-                : const Color(0xFFA3B1C6).withOpacity(0.5),
+            color: const Color(0xFFC8C0DC).withValues(alpha: 0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
@@ -879,24 +987,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: _themeService.isDarkMode ? Colors.white : deepPurple,
+              color: _themeService.isDarkMode
+                  ? const Color(0xFFE0E0E0)
+                  : const Color(0xFF4A4458),
             ),
           ),
-          const SizedBox(height: 12),
-          if (profile.website?.isNotEmpty == true)
-            _buildLinkTile(Icons.language, 'Website', profile.website!),
-          if (profile.xHandle?.isNotEmpty == true)
-            _buildLinkTile(Icons.alternate_email, 'X', '@${profile.xHandle!}'),
-          if (profile.linkedinHandle?.isNotEmpty == true)
-            _buildLinkTile(Icons.business, 'LinkedIn', profile.linkedinHandle!),
-          if (profile.youtubeHandle?.isNotEmpty == true)
-            _buildLinkTile(Icons.play_circle, 'YouTube', profile.youtubeHandle!),
-          if (profile.facebookHandle?.isNotEmpty == true)
-            _buildLinkTile(Icons.facebook, 'Facebook', profile.facebookHandle!),
-          if (profile.instagramHandle?.isNotEmpty == true)
-            _buildLinkTile(Icons.camera_alt, 'Instagram', profile.instagramHandle!),
-        ],
-      ),
+              const SizedBox(height: 12),
+              if (profile.website?.isNotEmpty == true)
+                _buildLinkTile(Icons.language, 'Website', profile.website!),
+              if (profile.xHandle?.isNotEmpty == true)
+                _buildLinkTile(Icons.alternate_email, 'X', '@${profile.xHandle!}'),
+              if (profile.linkedinHandle?.isNotEmpty == true)
+                _buildLinkTile(Icons.business, 'LinkedIn', profile.linkedinHandle!),
+              if (profile.youtubeHandle?.isNotEmpty == true)
+                _buildLinkTile(Icons.play_circle, 'YouTube', profile.youtubeHandle!),
+              if (profile.facebookHandle?.isNotEmpty == true)
+                _buildLinkTile(Icons.facebook, 'Facebook', profile.facebookHandle!),
+              if (profile.instagramHandle?.isNotEmpty == true)
+                _buildLinkTile(Icons.camera_alt, 'Instagram', profile.instagramHandle!),
+            ],
+          ),
     );
   }
 
@@ -906,23 +1016,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Row(
         children: [
           Icon(
-            icon, 
-            size: 16, 
-            color: _themeService.isDarkMode ? Colors.white70 : scarletRed,
+            icon,
+            size: 16,
+            color: const Color(0xFF8B5CF6),
           ),
           const SizedBox(width: 8),
           Text(
             '$label: ',
             style: TextStyle(
               fontWeight: FontWeight.w500,
-              color: _themeService.isDarkMode ? Colors.white : Colors.black87,
+              color: _themeService.isDarkMode
+                  ? const Color(0xFFE0E0E0)
+                  : const Color(0xFF4A4458),
             ),
           ),
           Expanded(
             child: Text(
               value,
               style: TextStyle(
-                color: _themeService.isDarkMode ? Colors.white70 : Colors.grey[700],
+                color: _themeService.isDarkMode
+                  ? const Color(0xFFB0B0B0)
+                  : const Color(0xFF6B5F7A),
               ),
             ),
           ),
@@ -935,108 +1049,96 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-                  Text(
-                    'My Clubs',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: _themeService.isDarkMode ? Colors.white : deepPurple,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (_memberships.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: _themeService.isDarkMode 
-                            ? const Color(0xFF3A3A3A)
-                            : const Color(0xFFF0F0F3),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: scarletRed.withOpacity(0.2),
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _themeService.isDarkMode 
-                                ? Colors.white.withOpacity(0.03)
-                                : Colors.white.withOpacity(0.8),
-                            offset: const Offset(-6, -6),
-                            blurRadius: 12,
-                          ),
-                          BoxShadow(
-                            color: _themeService.isDarkMode 
-                                ? Colors.black.withOpacity(0.5)
-                                : const Color(0xFFA3B1C6).withOpacity(0.5),
-                            offset: const Offset(6, 6),
-                            blurRadius: 12,
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        'You haven\'t joined any clubs yet. Join a club to start debating!',
-                        style: TextStyle(
-                          color: _themeService.isDarkMode ? Colors.white54 : Colors.grey,
-                        ),
-                      ),
-                    )
-                  else
+        Text(
+          'My Clubs',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: _themeService.isDarkMode
+                ? const Color(0xFFE0E0E0)
+                : const Color(0xFF4A4458),
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (_memberships.isEmpty)
           Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: _themeService.isDarkMode 
-                            ? const Color(0xFF3A3A3A)
-                            : const Color(0xFFF0F0F3),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: scarletRed.withOpacity(0.2),
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _themeService.isDarkMode 
-                                ? Colors.white.withOpacity(0.03)
-                                : Colors.white.withOpacity(0.8),
-                            offset: const Offset(-6, -6),
-                            blurRadius: 12,
-                          ),
-                          BoxShadow(
-                            color: _themeService.isDarkMode 
-                                ? Colors.black.withOpacity(0.5)
-                                : const Color(0xFFA3B1C6).withOpacity(0.5),
-                            offset: const Offset(6, 6),
-                            blurRadius: 12,
-                          ),
-                        ],
-                      ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                  if (_memberships.length <= 3)
-                    // Show clubs in a simple list if 3 or fewer
-                    ...(_memberships.map((membership) => _buildClubChip(membership)))
-                  else
-                    // Show in a horizontal scrollable list if more than 3
-                    Column(
-                      children: [
-                        SizedBox(
-                          height: 40,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _memberships.length,
-                            itemBuilder: (context, index) {
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: _buildClubChip(_memberships[index]),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                ],
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _themeService.isDarkMode
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E4F3),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  offset: const Offset(-6, -6),
+                  blurRadius: 12,
+                ),
+                BoxShadow(
+                  color: const Color(0xFFC8C0DC).withValues(alpha: 0.5),
+                  offset: const Offset(6, 6),
+                  blurRadius: 12,
+                ),
+              ],
+            ),
+            child: Text(
+              'You haven\'t joined any clubs yet. Join a club to start debating!',
+              style: TextStyle(
+                color: _themeService.isDarkMode
+                  ? const Color(0xFFB0B0B0)
+                  : const Color(0xFF6B5F7A),
               ),
             ),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _themeService.isDarkMode
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E4F3),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  offset: const Offset(-6, -6),
+                  blurRadius: 12,
+                ),
+                BoxShadow(
+                  color: const Color(0xFFC8C0DC).withValues(alpha: 0.5),
+                  offset: const Offset(6, 6),
+                  blurRadius: 12,
+                ),
+              ],
+            ),
+            child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_memberships.length <= 3)
+                      // Show clubs in a simple list if 3 or fewer
+                      ...(_memberships.map((membership) => _buildClubChip(membership)))
+                    else
+                      // Show in a horizontal scrollable list if more than 3
+                      Column(
+                        children: [
+                          SizedBox(
+                            height: 40,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: _memberships.length,
+                              itemBuilder: (context, index) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: _buildClubChip(_memberships[index]),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+          ),
       ],
     );
   }
@@ -1064,9 +1166,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         decoration: BoxDecoration(
           color: isPresident ? Colors.orange.withOpacity(0.1) : accentPurple.withOpacity(0.1),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isPresident ? Colors.orange.withOpacity(0.3) : accentPurple.withOpacity(0.3),
-          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1100,32 +1199,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _themeService.isDarkMode 
-            ? const Color(0xFF3A3A3A)
-            : const Color(0xFFF0F0F3),
+        color: _themeService.isDarkMode
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E4F3),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: scarletRed.withOpacity(0.2),
-          width: 1.5,
-        ),
         boxShadow: [
           BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.white.withOpacity(0.03)
-                : Colors.white.withOpacity(0.8),
+            color: Colors.white.withValues(alpha: 0.8),
             offset: const Offset(-6, -6),
             blurRadius: 12,
           ),
           BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.black.withOpacity(0.5)
-                : const Color(0xFFA3B1C6).withOpacity(0.5),
+            color: const Color(0xFFC8C0DC).withValues(alpha: 0.5),
             offset: const Offset(6, 6),
             blurRadius: 12,
           ),
         ],
       ),
-      child: Column(
+          child: Column(
         children: [
           if (_currentUser != null) ...[
             _buildNeumorphicListTile(
@@ -1230,7 +1321,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (_currentUser?.email != null && _currentUser!.email.contains('admin')) ...[
           ],
         ],
-      ),
+          ),
     );
   }
 
@@ -1244,26 +1335,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: _themeService.isDarkMode 
-              ? const Color(0xFF2D2D2D)
-              : const Color(0xFFE8E8E8),
+          color: _themeService.isDarkMode
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E4F3),
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: _themeService.isDarkMode 
-                  ? Colors.black.withOpacity(0.6)
-                  : const Color(0xFFA3B1C6).withOpacity(0.3),
-              offset: const Offset(3, 3),
-              blurRadius: 6,
-              spreadRadius: -2,
+              color: Colors.white.withValues(alpha: 0.7),
+              offset: const Offset(-4, -4),
+              blurRadius: 8,
             ),
             BoxShadow(
-              color: _themeService.isDarkMode 
-                  ? Colors.white.withOpacity(0.02)
-                  : Colors.white.withOpacity(0.8),
-              offset: const Offset(-3, -3),
-              blurRadius: 6,
-              spreadRadius: -2,
+              color: const Color(0xFFC8C0DC).withValues(alpha: 0.4),
+              offset: const Offset(4, 4),
+              blurRadius: 8,
             ),
           ],
         ),
@@ -1271,7 +1356,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Icon(
               icon,
-              color: _themeService.isDarkMode ? Colors.white70 : scarletRed,
+              color: const Color(0xFF8B5CF6),
               size: 20,
             ),
             const SizedBox(width: 16),
@@ -1280,7 +1365,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
-                color: _themeService.isDarkMode ? Colors.white : deepPurple,
+                color: _themeService.isDarkMode
+                  ? const Color(0xFFE0E0E0)
+                  : const Color(0xFF4A4458),
               ),
             ),
           ],
@@ -1291,42 +1378,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
 
   Widget _buildCommunityRolesCard() {
+    final hasAnyRole = _isModerator || _isJudge;
+
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: _themeService.isDarkMode 
-            ? const Color(0xFF3A3A3A)
-            : const Color(0xFFF0F0F3),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: accentPurple.withOpacity(0.2),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.white.withOpacity(0.03)
-                : Colors.white.withOpacity(0.8),
-            offset: const Offset(-6, -6),
-            blurRadius: 12,
-          ),
-          BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.black.withOpacity(0.5)
-                : const Color(0xFFA3B1C6).withOpacity(0.5),
-            offset: const Offset(6, 6),
-            blurRadius: 12,
-          ),
-        ],
+        color: _themeService.isDarkMode
+            ? const Color(0xFF2D2D2D)  // Dark card
+            : const Color(0xFFE8E4F3),  // Light purple
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: _themeService.isDarkMode
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  offset: const Offset(-8, -8),
+                  blurRadius: 16,
+                ),
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  offset: const Offset(8, 8),
+                  blurRadius: 16,
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  offset: const Offset(-8, -8),
+                  blurRadius: 16,
+                ),
+                BoxShadow(
+                  color: const Color(0xFFC8C0DC).withValues(alpha: 0.5),
+                  offset: const Offset(8, 8),
+                  blurRadius: 16,
+                ),
+              ],
       ),
-      child: Column(
+          child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.workspace_premium,
-                color: _themeService.isDarkMode ? Colors.white70 : accentPurple,
+                color: Color(0xFF8B5CF6),
                 size: 20,
               ),
               const SizedBox(width: 8),
@@ -1335,48 +1429,158 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: _themeService.isDarkMode ? Colors.white : deepPurple,
+                  color: _themeService.isDarkMode
+                  ? const Color(0xFFE0E0E0)
+                  : const Color(0xFF4A4458),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Join the Arena community as a certified moderator or judge',
-            style: TextStyle(
-              color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[600],
-              fontSize: 12,
-            ),
-          ),
           const SizedBox(height: 16),
 
-          // Navigation to Home for signup
-          Center(
-            child: ElevatedButton.icon(
-              onPressed: () {
-                // Show a simple message since navigation to specific tabs
-                // requires a different approach in this context
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please go to the Home tab to sign up as Moderator or Judge'),
-                    duration: Duration(seconds: 3),
+          if (hasAnyRole) ...[
+            // Show user's roles with ratings
+            if (_isModerator)
+              _buildRoleItem(
+                icon: Icons.shield,
+                title: 'Moderator',
+                rating: _moderatorRating,
+                color: Colors.blue,
+              ),
+            if (_isModerator && _isJudge)
+              const SizedBox(height: 12),
+            if (_isJudge)
+              _buildRoleItem(
+                icon: Icons.gavel,
+                title: 'Judge',
+                rating: _judgeRating,
+                color: Colors.orange,
+              ),
+          ] else ...[
+            // Show signup prompt for users without roles
+            Text(
+              'Join the Arena community as a certified moderator or judge',
+              style: TextStyle(
+                color: _themeService.isDarkMode
+                  ? const Color(0xFFB0B0B0)
+                  : const Color(0xFF6B5F7A),
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please go to the Home tab to sign up as Moderator or Judge'),
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.home, size: 18),
+                label: const Text('Go to Home to Sign Up'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: accentPurple,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                );
-              },
-              icon: const Icon(Icons.home, size: 18),
-              label: const Text('Go to Home to Sign Up'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: accentPurple,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
             ),
+          ],
+        ],
+          ),
+    );
+  }
+
+  Widget _buildRoleItem({
+    required IconData icon,
+    required String title,
+    required double rating,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode
+            ? const Color(0xFF2D2D2D)
+            : const Color(0xFFE8E4F3),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.white.withValues(alpha: 0.7),
+            offset: const Offset(-4, -4),
+            blurRadius: 8,
+          ),
+          BoxShadow(
+            color: const Color(0xFFC8C0DC).withValues(alpha: 0.4),
+            offset: const Offset(4, 4),
+            blurRadius: 8,
           ),
         ],
       ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: _themeService.isDarkMode
+                  ? const Color(0xFFE0E0E0)
+                  : const Color(0xFF4A4458),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.star,
+                          size: 14,
+                          color: Colors.amber,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${rating.toStringAsFixed(1)} / 5.0 Rating',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _themeService.isDarkMode
+                  ? const Color(0xFFB0B0B0)
+                  : const Color(0xFF6B5F7A),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.verified,
+                color: color,
+                size: 20,
+              ),
+            ],
+          ),
     );
   }
 

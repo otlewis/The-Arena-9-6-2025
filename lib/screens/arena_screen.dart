@@ -48,8 +48,12 @@ import '../services/simple_audio_recording_service.dart';
 import '../services/super_moderator_service.dart';
 import '../services/user_timeout_service.dart';
 import '../widgets/all_votes_in_modal.dart';
+import '../utils/subscription_manager.dart';
 import '../widgets/simple_gift_bottom_sheet.dart';
 import '../widgets/timeout_countdown_widget.dart';
+import '../services/gemini_live_service.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:flutter_tts/flutter_tts.dart';
 
 // Static helper methods for avatar system - accessible by all classes
 Widget buildAvatarText(UserProfile participant, double fontSize) {
@@ -566,6 +570,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   final RoomRealtimeManager _realtimeManager = RoomRealtimeManager();
   RoomSubscription? _roomSubscription;
 
+  // Central subscription manager for leak prevention
+  final SubscriptionManager _subscriptions = SubscriptionManager('ArenaScreen');
+
   // Separate subscription stream listeners
   StreamSubscription? _participantStreamListener;
   StreamSubscription? _roomStatusStreamListener;
@@ -579,7 +586,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   StreamSubscription? _sourceAddedSubscription; // Material source additions
   StreamSubscription? _materialUpdatesSubscription; // Material updates
   RealtimeSubscription? _reactionsSubscription; // Room reactions and gifts subscription
+  StreamSubscription? _reactionsStreamListener; // Stream listener for reactions
   RealtimeSubscription? _participantsSubscription; // Participant role changes subscription
+  StreamSubscription? _participantsStreamListener; // Stream listener for participants
   int _roomStatusCheckerIterations = 0; // Track iterations to prevent infinite loops
   int _reconnectAttempts = 0; // Track reconnection attempts
   static const int _maxReconnectAttempts = 5; // Maximum reconnection attempts
@@ -630,6 +639,18 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   bool _isCurrentUserTimedOut = false;
   Timer? _timeoutCheckTimer;
   StreamSubscription<RealtimeMessage>? _timeoutSubscription;
+
+  // Gemini AI Assistant
+  // ignore: unused_field
+  GeminiLiveService? _geminiService; // For future Live API with voice
+  bool _isGeminiConnected = false;
+  bool _isGeminiProcessing = false;
+  // ignore: unused_field
+  String? _lastAIResponse; // For future TTS/history features
+
+  // Speech recognition and TTS
+  stt.SpeechToText? _speechToText;
+  FlutterTts? _flutterTts;
   
   // Connection stability thresholds
   int _consecutiveUnhealthyChecks = 0;
@@ -838,6 +859,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         },
         cancelOnError: false, // Keep subscription alive on errors
       );
+      // Track role events subscription
+      trackSubscription('role_events_stream', _roleEventsSubscription!);
 
       AppLogger().info('✅ Role events subscription active');
     } catch (e) {
@@ -977,10 +1000,14 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     _sharedLinkSubscription = null;
 
     // Dispose reactions subscription
+    _reactionsStreamListener?.cancel();
+    _reactionsStreamListener = null;
     _reactionsSubscription?.close();
     _reactionsSubscription = null;
 
     // Dispose participants subscription
+    _participantsStreamListener?.cancel();
+    _participantsStreamListener = null;
     _participantsSubscription?.close();
     _participantsSubscription = null;
 
@@ -1078,6 +1105,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     AppLogger().debug('🛑 DISPOSE: Cleaning up tracked resources...');
     // Clean up all tracked disposable resources
     disposeTrackedResources();
+
+    // CRITICAL: Dispose all centrally-managed subscriptions as safety net
+    AppLogger().debug('🛑 DISPOSE: Disposing central subscription manager...');
+    _subscriptions.disposeSync();
 
     // Restart notification service to ensure user can receive new invites
     // Note: NotificationService singleton continues running - no restart needed
@@ -1744,6 +1775,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         };
 
         // Add listener for LiveKit service changes (including mute state changes)
+        // Remove existing listener first to prevent duplicates on reconnection
+        _liveKitService.removeListener(_onLiveKitStateChanged);
         _liveKitService.addListener(_onLiveKitStateChanged);
 
         // Set up speaking detection callback to trigger UI updates
@@ -1798,7 +1831,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         'databases.arena_db.collections.room_reactions.documents'
       ]);
 
-      _reactionsSubscription!.stream.listen((response) {
+      _reactionsStreamListener = _reactionsSubscription!.stream.listen((response) {
         if (!mounted) return;
 
         try {
@@ -1908,6 +1941,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         }
       });
 
+      // Track reactions stream listener
+      trackSubscription('reactions_stream', _reactionsStreamListener!);
+
       AppLogger().info('🎁 Arena reactions sync initialized');
     } catch (e) {
       AppLogger().error('❌ Failed to initialize reactions sync: $e');
@@ -1928,7 +1964,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
       AppLogger().info('✅ REALTIME: Subscribed to arena_participants (Appwrite)');
 
-      _participantsSubscription!.stream.listen((response) async {
+      _participantsStreamListener = _participantsSubscription!.stream.listen((response) async {
         if (!mounted || _isExiting) return;
 
         try {
@@ -2003,6 +2039,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           AppLogger().error('Error processing participant realtime event: $e');
         }
       });
+
+      // Track participants stream listener
+      trackSubscription('participants_sync_stream', _participantsStreamListener!);
 
     } catch (e) {
       AppLogger().error('❌ Failed to initialize participants sync: $e');
@@ -2817,6 +2856,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           await _checkTimeoutStatus();
         }
       });
+
+      // Track timeout subscription
+      trackSubscription('timeout_stream', _timeoutSubscription!);
 
       AppLogger().debug('⏰ Timeout realtime subscription set up');
     } catch (e) {
@@ -5513,6 +5555,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                               isScrollControlled: true,
                               builder: (context) => UserProfileBottomSheet(
                                 user: participant,
+                                roomId: widget.roomId, // Pass room ID for ping followers
+                                roomType: 'arena', // Arena room type
                                 onFollow: () async {
                                   if (_currentUser == null) return;
 
@@ -5898,6 +5942,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           isScrollControlled: true,
           builder: (context) => UserProfileBottomSheet(
             user: participant,
+            roomId: widget.roomId, // Pass room ID for ping followers
+            roomType: 'arena', // Arena room type
             onFollow: () async {
               if (_currentUser == null) return;
 
@@ -6364,6 +6410,18 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   color: Colors.blue,
                 ),
               ),
+
+              // Ask AI button removed - will be added later
+              // if (_isModerator)
+              //   Padding(
+              //     padding: const EdgeInsets.symmetric(horizontal: 6),
+              //     child: _buildControlButton(
+              //       icon: _isGeminiProcessing ? Icons.hourglass_top : Icons.auto_awesome,
+              //       label: _isGeminiProcessing ? 'AI Thinking...' : 'Ask AI',
+              //       onPressed: _isGeminiProcessing ? null : _showAskAIDialog,
+              //       color: _isGeminiConnected ? Colors.green : Colors.purple,
+              //     ),
+              //   ),
 
               // Hand-raise button removed - feature was causing issues
 
@@ -8291,7 +8349,451 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     );
   }
 
-  
+  /// Show AI assistant dialog - voice-first experience
+  /// AI speaks first, then listens for your response
+  Future<void> _showAskAIDialog() async {
+    // Initialize TTS and Speech Recognition
+    if (_flutterTts == null) {
+      _flutterTts = FlutterTts();
+      await _flutterTts!.setLanguage("en-US");
+      await _flutterTts!.setSpeechRate(0.5);
+      await _flutterTts!.setVolume(1.0);
+      await _flutterTts!.setPitch(1.0);
+
+      // iOS specific settings
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        await _flutterTts!.setSharedInstance(true);
+        await _flutterTts!.setIosAudioCategory(
+          IosTextToSpeechAudioCategory.playback,
+          [
+            IosTextToSpeechAudioCategoryOptions.allowBluetooth,
+            IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
+            IosTextToSpeechAudioCategoryOptions.mixWithOthers,
+            IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
+          ],
+          IosTextToSpeechAudioMode.voicePrompt,
+        );
+      }
+    }
+
+    if (_speechToText == null) {
+      _speechToText = stt.SpeechToText();
+    }
+
+    final queryController = TextEditingController();
+    bool isListeningLocal = false;
+    bool isSpeakingLocal = false;
+    bool hasStartedVoice = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Prevent dismiss during voice interaction
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          // Auto-start: AI speaks greeting, then listens
+          if (!hasStartedVoice) {
+            hasStartedVoice = true;
+            Future.delayed(const Duration(milliseconds: 300), () async {
+              if (!mounted) return;
+
+              setDialogState(() {
+                isSpeakingLocal = true;
+              });
+
+              AppLogger().info('🗣️ Starting AI speech...');
+
+              // AI speaks first
+              var result = await _flutterTts!.speak("Hello! What would you like me to fact-check or research for this debate?");
+
+              AppLogger().info('🗣️ Speech result: $result');
+
+              // Fallback: use awaitSpeakCompletion for better reliability
+              await _flutterTts!.awaitSpeakCompletion(true);
+
+              if (!mounted) return;
+
+              AppLogger().info('🗣️ Speech completed, starting listening...');
+
+              setDialogState(() {
+                isSpeakingLocal = false;
+              });
+
+              // Auto-start listening after AI finishes speaking
+              await Future.delayed(const Duration(milliseconds: 500));
+
+              bool available = await _speechToText!.initialize(
+                onError: (error) {
+                  AppLogger().error('Speech recognition error: $error');
+                  if (mounted) {
+                    setDialogState(() {
+                      isListeningLocal = false;
+                    });
+                  }
+                },
+                onStatus: (status) {
+                  AppLogger().debug('Speech status: $status');
+                  if (status == 'done' || status == 'notListening') {
+                    if (mounted) {
+                      setDialogState(() {
+                        isListeningLocal = false;
+                      });
+                    }
+                  }
+                },
+              );
+
+              if (available && mounted) {
+                setDialogState(() {
+                  isListeningLocal = true;
+                });
+
+                await _speechToText!.listen(
+                  onResult: (result) {
+                    if (mounted) {
+                      setDialogState(() {
+                        queryController.text = result.recognizedWords;
+                      });
+                    }
+                  },
+                  listenMode: stt.ListenMode.confirmation,
+                  listenFor: const Duration(seconds: 30),
+                );
+              }
+            });
+          }
+
+          return AlertDialog(
+            backgroundColor: Colors.grey[900],
+            title: Row(
+              children: [
+                Icon(Icons.auto_awesome, color: Colors.purple[300]),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isSpeakingLocal
+                        ? 'AI is speaking...'
+                        : isListeningLocal
+                            ? 'Listening to you...'
+                            : 'Ask AI Fact-Checker',
+                    style: const TextStyle(color: Colors.white, fontSize: 18),
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Visual indicator
+                  if (isSpeakingLocal)
+                    Column(
+                      children: [
+                        Icon(Icons.record_voice_over, color: Colors.purple[300], size: 64),
+                        const SizedBox(height: 16),
+                        Text(
+                          'AI is asking you what to research...',
+                          style: TextStyle(color: Colors.purple[300], fontSize: 14),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    )
+                  else if (isListeningLocal)
+                    Column(
+                      children: [
+                        Icon(Icons.mic, color: Colors.red, size: 64),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Listening... Speak your question',
+                          style: TextStyle(color: Colors.red[300], fontSize: 14),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Say "Fact-check..." or "Tell me about..."',
+                          style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    )
+                  else
+                    Icon(Icons.auto_awesome, color: Colors.purple[300], size: 64),
+
+                  const SizedBox(height: 24),
+
+                  // Text field showing transcription
+                  TextField(
+                    controller: queryController,
+                    maxLines: 3,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: isSpeakingLocal
+                          ? 'AI is speaking...'
+                          : isListeningLocal
+                              ? 'Your words will appear here...'
+                              : 'Voice transcription',
+                      hintStyle: TextStyle(color: Colors.grey[600]),
+                      filled: true,
+                      fillColor: isListeningLocal
+                          ? Colors.green.withOpacity(0.1)
+                          : isSpeakingLocal
+                              ? Colors.purple.withOpacity(0.1)
+                              : Colors.grey[800],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: isListeningLocal
+                              ? Colors.green
+                              : isSpeakingLocal
+                                  ? Colors.purple
+                                  : Colors.transparent,
+                          width: 2,
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: isListeningLocal
+                              ? Colors.green
+                              : isSpeakingLocal
+                                  ? Colors.purple
+                                  : Colors.transparent,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Manual mic toggle button
+                  if (!isSpeakingLocal)
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        if (isListeningLocal) {
+                          await _speechToText!.stop();
+                          setDialogState(() {
+                            isListeningLocal = false;
+                          });
+                        } else {
+                          bool available = await _speechToText!.initialize();
+                          if (available) {
+                            setDialogState(() {
+                              isListeningLocal = true;
+                            });
+                            await _speechToText!.listen(
+                              onResult: (result) {
+                                setDialogState(() {
+                                  queryController.text = result.recognizedWords;
+                                });
+                              },
+                              listenMode: stt.ListenMode.confirmation,
+                            );
+                          }
+                        }
+                      },
+                      icon: Icon(isListeningLocal ? Icons.stop : Icons.mic),
+                      label: Text(isListeningLocal ? 'Stop Listening' : 'Start Listening'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isListeningLocal ? Colors.red : Colors.purple,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  if (isListeningLocal) {
+                    _speechToText!.stop();
+                  }
+                  if (isSpeakingLocal) {
+                    _flutterTts!.stop();
+                  }
+                  Navigator.pop(context);
+                },
+                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              ),
+              ElevatedButton.icon(
+                onPressed: queryController.text.trim().isEmpty || isSpeakingLocal
+                    ? null
+                    : () {
+                        if (isListeningLocal) {
+                          _speechToText!.stop();
+                        }
+                        Navigator.pop(context);
+                        _sendAIQuery(queryController.text.trim());
+                      },
+                icon: const Icon(Icons.send),
+                label: const Text('Ask AI'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.purple,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+
+  /// Send query to Gemini AI
+  Future<void> _sendAIQuery(String query) async {
+    if (!mounted) return;
+
+    setState(() {
+      _isGeminiProcessing = true;
+    });
+
+    try {
+      AppLogger().info('🤖 Sending AI query: $query');
+
+      // Use REST API (more stable than WebSocket Live API which is in preview)
+      final restService = GeminiRestService();
+      final topic = _roomData?['topic'] ?? 'General Debate';
+
+      final result = await restService.generateWithSearch(
+        prompt: query,
+        debateTopic: topic,
+      );
+
+      if (result != null && mounted) {
+        // Check if it's an error response
+        if (result['error'] == true) {
+          setState(() {
+            _isGeminiProcessing = false;
+          });
+          final errorMsg = result['message'] ?? 'Unknown error';
+          final statusCode = result['statusCode'];
+          AppLogger().error('❌ AI Error: $statusCode - $errorMsg');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('AI Error: ${statusCode != null ? "HTTP $statusCode" : errorMsg.toString().substring(0, errorMsg.toString().length > 100 ? 100 : errorMsg.toString().length)}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+          return;
+        }
+
+        setState(() {
+          _lastAIResponse = result['text'] as String?;
+          _isGeminiProcessing = false;
+          _isGeminiConnected = true;
+        });
+
+        // Show sources if available
+        final sources = result['sources'] as List<Map<String, dynamic>>?;
+        if (sources != null && sources.isNotEmpty) {
+          AppLogger().info('🔍 AI sources: ${sources.map((s) => s['title']).join(', ')}');
+        }
+
+        _showAIResponseToRoom(result['text'] as String, sources: sources);
+      } else if (mounted) {
+        setState(() {
+          _isGeminiProcessing = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI service unavailable. Check API key configuration.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+
+    } catch (e) {
+      AppLogger().error('Error sending AI query: $e');
+      if (mounted) {
+        setState(() {
+          _isGeminiProcessing = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Display AI response to all room participants
+  void _showAIResponseToRoom(String response, {List<Map<String, dynamic>>? sources}) {
+    // Show as a prominent notification/overlay
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: Row(
+          children: [
+            Icon(Icons.auto_awesome, color: Colors.purple[300]),
+            const SizedBox(width: 8),
+            const Text(
+              'AI Fact-Checker',
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.purple.withOpacity(0.3)),
+                ),
+                child: Text(
+                  response,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                ),
+              ),
+              if (sources != null && sources.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Sources:',
+                  style: TextStyle(color: Colors.grey[400], fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                ...sources.take(3).map((source) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    '• ${source['title']}',
+                    style: TextStyle(color: Colors.blue[300], fontSize: 11),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                )),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                'Powered by Google Gemini with Search Grounding',
+                style: TextStyle(color: Colors.grey[600], fontSize: 10),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+
+    // TODO: Broadcast to LiveKit room for audio playback to all participants
+    // This will require TTS conversion and LiveKit audio track publishing
+    AppLogger().info('🤖 AI Response displayed to moderator. TODO: Broadcast audio to room.');
+  }
+
   /// Check if current user is a debater (includes 2v2 roles)
   bool get _isDebater {
     return _userRole == 'affirmative' ||

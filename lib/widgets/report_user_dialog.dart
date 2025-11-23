@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/content_moderation_service.dart';
 import '../services/theme_service.dart';
+import '../services/safety_reporting_service.dart';
+import '../services/appwrite_service.dart';
 import '../models/user_profile.dart';
 import '../core/logging/app_logger.dart';
 
@@ -24,9 +26,11 @@ class ReportUserDialog extends StatefulWidget {
 
 class _ReportUserDialogState extends State<ReportUserDialog> {
   final ContentModerationService _moderationService = ContentModerationService();
+  final SafetyReportingService _safetyReporting = SafetyReportingService();
+  final AppwriteService _appwrite = AppwriteService();
   final ThemeService _themeService = ThemeService();
   final TextEditingController _descriptionController = TextEditingController();
-  
+
   String _selectedReportType = 'harassment';
   bool _isSubmitting = false;
 
@@ -502,27 +506,81 @@ class _ReportUserDialogState extends State<ReportUserDialog> {
   Future<void> _submitReport() async {
     if (_isSubmitting) return;
 
+    // Validate description if provided
+    final description = _descriptionController.text.trim();
+    if (description.isNotEmpty && description.length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please provide at least 10 characters for the description, or leave it empty.'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
 
     try {
+      // Get current user email for reporter
+      String? reporterEmail;
+      try {
+        final currentUser = await _appwrite.getCurrentUser();
+        if (currentUser != null) {
+          final profile = await _appwrite.getUserProfile(currentUser.$id);
+          reporterEmail = profile?.email;
+        }
+      } catch (e) {
+        AppLogger().debug('Could not get reporter email: $e');
+      }
+
+      // Map report type to CRM safety report types
+      String crmReportType = _selectedReportType;
+      if (_selectedReportType == 'inappropriate') {
+        crmReportType = 'inappropriate_content';
+      } else if (_selectedReportType == 'threat') {
+        crmReportType = 'safety_concern';
+      } else if (_selectedReportType == 'doxxing') {
+        crmReportType = 'safety_concern';
+      }
+
+      // Submit to existing content moderation system
       await _moderationService.reportUser(
         reporterId: widget.reporterId,
         reportedUserId: widget.reportedUser.id,
         roomId: widget.roomId,
         reportType: _selectedReportType,
-        description: _descriptionController.text.trim().isEmpty 
-            ? 'No additional details provided' 
-            : _descriptionController.text.trim(),
+        description: description.isEmpty
+            ? 'No additional details provided'
+            : description,
         messageId: widget.messageId,
+      );
+
+      // ALSO log to Odoo CRM (available to ALL users for safety)
+      await _safetyReporting.logSafetyReport(
+        reportType: crmReportType,
+        reportedUserEmail: widget.reportedUser.email,
+        reporterEmail: reporterEmail,
+        description: description.isEmpty
+            ? 'Report type: ${_reportTypes[_selectedReportType]}'
+            : description,
+        metadata: {
+          'roomId': widget.roomId,
+          'reportedUserId': widget.reportedUser.id,
+          'reporterId': widget.reporterId,
+          if (widget.messageId != null) 'messageId': widget.messageId!,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
       );
 
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Report submitted successfully'),
+            content: Text('Report submitted successfully. Our safety team will review it.'),
             backgroundColor: accentPurple,
             behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 3),
           ),
         );
       }

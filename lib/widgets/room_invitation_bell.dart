@@ -6,6 +6,7 @@ import '../services/follower_invitation_service.dart';
 import '../services/sound_service.dart';
 import '../core/logging/app_logger.dart';
 import '../screens/debates_discussions_screen.dart';
+import '../screens/arena_screen.dart';
 
 /// Bell widget that shows pending room invitations with badge count
 class RoomInvitationBell extends StatefulWidget {
@@ -310,26 +311,71 @@ class _RoomInvitationBellState extends State<RoomInvitationBell> with SingleTick
       final invitationId = invitation['\$id'];
       final roomId = invitation['roomId'];
       final roomName = invitation['roomName'];
+      final roomType = invitation['roomType'] ?? 'discussion';
       final inviterName = invitation['inviterName'];
 
       // Mark as accepted
       await _invitationService.acceptInvitation(invitationId);
 
-      // Navigate to room
+      // Navigate to room based on room type
       if (mounted) {
         Navigator.pop(context); // Close bottom sheet
 
-        // Navigate to debates & discussions screen
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => DebatesDiscussionsScreen(
-              roomId: roomId,
-              roomName: roomName,
-              moderatorName: inviterName,
+        if (roomType.toLowerCase() == 'arena') {
+          // Fetch Arena room details
+          try {
+            final arenaRoom = await _appwrite.databases.getDocument(
+              databaseId: 'arena_db',
+              collectionId: 'arena_rooms',
+              documentId: roomId,
+            );
+
+            final challengeId = arenaRoom.data['challengeId'] ?? '';
+            final topic = arenaRoom.data['topic'] ?? roomName;
+            final description = arenaRoom.data['description'];
+            final category = arenaRoom.data['category'];
+            final challengerId = arenaRoom.data['challengerId'];
+            final challengedId = arenaRoom.data['challengedId'];
+
+            // Navigate to Arena screen
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ArenaScreen(
+                  roomId: roomId,
+                  challengeId: challengeId,
+                  topic: topic,
+                  description: description,
+                  category: category,
+                  challengerId: challengerId,
+                  challengedId: challengedId,
+                ),
+              ),
+            );
+          } catch (e) {
+            AppLogger().error('Failed to fetch Arena room details: $e');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Failed to load arena details: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
+        } else {
+          // Navigate to debates & discussions screen
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DebatesDiscussionsScreen(
+                roomId: roomId,
+                roomName: roomName,
+                moderatorName: inviterName,
+              ),
             ),
-          ),
-        );
+          );
+        }
       }
 
       // Reload invitations

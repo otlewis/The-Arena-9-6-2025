@@ -15,25 +15,56 @@ class ArenaPlaybacksScreen extends ConsumerStatefulWidget {
 class _ArenaPlaybacksScreenState extends ConsumerState<ArenaPlaybacksScreen>
     with SingleTickerProviderStateMixin {
   final AppwriteService _appwriteService = GetIt.instance<AppwriteService>();
+  final ScrollController _allPlaybacksScrollController = ScrollController();
+  final ScrollController _myPlaybacksScrollController = ScrollController();
 
   late TabController _tabController;
   List<Map<String, dynamic>> _allPlaybacks = [];
   List<Map<String, dynamic>> _myPlaybacks = [];
   bool _isLoading = true;
+  bool _isLoadingMoreAll = false;
+  bool _isLoadingMoreMy = false;
+  bool _hasMoreAll = true;
+  bool _hasMoreMy = true;
   bool _hasError = false;
   String? _errorMessage;
   String _searchQuery = '';
+
+  // Pagination constants
+  static const int _pageSize = 20;
+  int _allPlaybacksOffset = 0;
+  int _myPlaybacksOffset = 0;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadPlaybacks();
+    _allPlaybacksScrollController.addListener(_onAllPlaybacksScroll);
+    _myPlaybacksScrollController.addListener(_onMyPlaybacksScroll);
+  }
+
+  void _onAllPlaybacksScroll() {
+    if (_allPlaybacksScrollController.position.pixels >=
+        _allPlaybacksScrollController.position.maxScrollExtent - 200) {
+      _loadMoreAllPlaybacks();
+    }
+  }
+
+  void _onMyPlaybacksScroll() {
+    if (_myPlaybacksScrollController.position.pixels >=
+        _myPlaybacksScrollController.position.maxScrollExtent - 200) {
+      _loadMoreMyPlaybacks();
+    }
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _allPlaybacksScrollController.removeListener(_onAllPlaybacksScroll);
+    _allPlaybacksScrollController.dispose();
+    _myPlaybacksScrollController.removeListener(_onMyPlaybacksScroll);
+    _myPlaybacksScrollController.dispose();
     super.dispose();
   }
 
@@ -42,31 +73,104 @@ class _ArenaPlaybacksScreenState extends ConsumerState<ArenaPlaybacksScreen>
       setState(() {
         _isLoading = true;
         _hasError = false;
+        _allPlaybacksOffset = 0;
+        _myPlaybacksOffset = 0;
+        _hasMoreAll = true;
+        _hasMoreMy = true;
       });
 
       final currentUser = await _appwriteService.getCurrentUser();
       final currentUserId = currentUser?.$id;
 
       final [allPlaybacks, myPlaybacks] = await Future.wait([
-        _appwriteService.getAvailablePlaybacks(limit: 50),
+        _appwriteService.getAvailablePlaybacks(limit: _pageSize, offset: 0),
         if (currentUserId != null)
-          _appwriteService.getAvailablePlaybacks(userId: currentUserId, limit: 50)
+          _appwriteService.getAvailablePlaybacks(userId: currentUserId, limit: _pageSize, offset: 0)
         else
           Future.value(<Map<String, dynamic>>[]),
       ]);
 
+      if (!mounted) return;
+
       setState(() {
         _allPlaybacks = allPlaybacks;
         _myPlaybacks = myPlaybacks;
+        _hasMoreAll = allPlaybacks.length == _pageSize;
+        _hasMoreMy = myPlaybacks.length == _pageSize;
+        _allPlaybacksOffset = _pageSize;
+        _myPlaybacksOffset = _pageSize;
         _isLoading = false;
       });
     } catch (e) {
       AppLogger().error('Error loading playbacks: $e');
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _errorMessage = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadMoreAllPlaybacks() async {
+    if (_searchQuery.isNotEmpty || _isLoadingMoreAll || !_hasMoreAll) return;
+
+    try {
+      setState(() => _isLoadingMoreAll = true);
+
+      final morePlaybacks = await _appwriteService.getAvailablePlaybacks(
+        limit: _pageSize,
+        offset: _allPlaybacksOffset,
+      );
+
+      if (!mounted) return;
+
       setState(() {
-        _hasError = true;
-        _errorMessage = e.toString();
-        _isLoading = false;
+        _allPlaybacks.addAll(morePlaybacks);
+        _hasMoreAll = morePlaybacks.length == _pageSize;
+        _allPlaybacksOffset += _pageSize;
+        _isLoadingMoreAll = false;
       });
+    } catch (e) {
+      AppLogger().error('Error loading more playbacks: $e');
+      if (mounted) {
+        setState(() => _isLoadingMoreAll = false);
+      }
+    }
+  }
+
+  Future<void> _loadMoreMyPlaybacks() async {
+    if (_searchQuery.isNotEmpty || _isLoadingMoreMy || !_hasMoreMy) return;
+
+    try {
+      setState(() => _isLoadingMoreMy = true);
+
+      final currentUser = await _appwriteService.getCurrentUser();
+      if (currentUser == null) {
+        setState(() => _isLoadingMoreMy = false);
+        return;
+      }
+
+      final morePlaybacks = await _appwriteService.getAvailablePlaybacks(
+        userId: currentUser.$id,
+        limit: _pageSize,
+        offset: _myPlaybacksOffset,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _myPlaybacks.addAll(morePlaybacks);
+        _hasMoreMy = morePlaybacks.length == _pageSize;
+        _myPlaybacksOffset += _pageSize;
+        _isLoadingMoreMy = false;
+      });
+    } catch (e) {
+      AppLogger().error('Error loading more my playbacks: $e');
+      if (mounted) {
+        setState(() => _isLoadingMoreMy = false);
+      }
     }
   }
 
@@ -294,8 +398,10 @@ class _ArenaPlaybacksScreenState extends ConsumerState<ArenaPlaybacksScreen>
     );
   }
 
-  Widget _buildPlaybacksList(List<Map<String, dynamic>> playbacks) {
+  Widget _buildPlaybacksList(List<Map<String, dynamic>> playbacks, {required bool isAllTab}) {
     final filteredPlaybacks = _getFilteredPlaybacks(playbacks);
+    final isLoadingMore = isAllTab ? _isLoadingMoreAll : _isLoadingMoreMy;
+    final scrollController = isAllTab ? _allPlaybacksScrollController : _myPlaybacksScrollController;
 
     if (filteredPlaybacks.isEmpty) {
       return Center(
@@ -333,8 +439,18 @@ class _ArenaPlaybacksScreenState extends ConsumerState<ArenaPlaybacksScreen>
     return RefreshIndicator(
       onRefresh: _loadPlaybacks,
       child: ListView.builder(
-        itemCount: filteredPlaybacks.length,
+        controller: scrollController,
+        itemCount: filteredPlaybacks.length + (isLoadingMore ? 1 : 0),
         itemBuilder: (context, index) {
+          if (index == filteredPlaybacks.length) {
+            // Loading indicator at the bottom
+            return const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Center(
+                child: CircularProgressIndicator(),
+              ),
+            );
+          }
           return _buildPlaybackCard(filteredPlaybacks[index]);
         },
       ),
@@ -425,8 +541,8 @@ class _ArenaPlaybacksScreenState extends ConsumerState<ArenaPlaybacksScreen>
                       child: TabBarView(
                         controller: _tabController,
                         children: [
-                          _buildPlaybacksList(_allPlaybacks),
-                          _buildPlaybacksList(_myPlaybacks),
+                          _buildPlaybacksList(_allPlaybacks, isAllTab: true),
+                          _buildPlaybacksList(_myPlaybacks, isAllTab: false),
                         ],
                       ),
                     ),

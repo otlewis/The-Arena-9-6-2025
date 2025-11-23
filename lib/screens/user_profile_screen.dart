@@ -7,6 +7,7 @@ import '../widgets/report_user_dialog.dart';
 import '../widgets/block_user_dialog.dart';
 import '../widgets/report_user_icon.dart';
 import '../services/gift_service.dart';
+import '../services/theme_service.dart';
 import '../features/user/providers/user_profile_provider.dart';
 import '../core/logging/app_logger.dart';
 
@@ -20,6 +21,8 @@ class UserProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
+  // Theme service
+  final ThemeService _themeService = ThemeService();
 
   // Colors matching app theme
   static const Color scarletRed = Color(0xFFFF2400);
@@ -390,54 +393,77 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     final profileState = ref.watch(userProfileProvider(widget.userId));
     final userProfile = profileState.userProfile;
     final isLoading = profileState.isLoading;
-    
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(userProfile?.name ?? 'User Profile'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: scarletRed),
-        titleTextStyle: const TextStyle(
-          color: deepPurple,
-          fontSize: 20,
-          fontWeight: FontWeight.w600,
-        ),
-        actions: [
-          ReportUserIcon(
-            userId: widget.userId,
-            userName: userProfile?.name,
+
+    return Container(
+      color: _themeService.isDarkMode
+          ? Colors.black
+          : const Color(0xFFE8E4F3),  // Light purple background
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: Text(
+            userProfile?.name ?? 'User Profile',
+            style: TextStyle(
+              color: _themeService.isDarkMode
+                  ? Colors.white
+                  : const Color(0xFF4A4458),  // Dark purple text
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          const SizedBox(width: 8),
-          _buildProfileMenuButton(),
-          const SizedBox(width: 16),
-        ],
-      ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : userProfile == null
-              ? const Center(
-                  child: Text(
-                    'User profile not found',
-                    style: TextStyle(fontSize: 16),
-                  ),
-                )
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    _buildProfileHeader(),
-                    const SizedBox(height: 24),
-                    _buildStatsCard(userProfile),
-                    const SizedBox(height: 24),
-                    _buildGiftsSection(userProfile),
-                    const SizedBox(height: 24),
-                    if (userProfile.bio?.isNotEmpty == true)
-                      _buildBioCard(userProfile),
-                    if (userProfile.interests.isNotEmpty)
-                      _buildInterestsCard(userProfile),
-                    if (_hasAnyLinks(userProfile))
-                      _buildSocialLinksCard(userProfile),
-                  ],
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          iconTheme: IconThemeData(
+            color: _themeService.isDarkMode
+                ? Colors.white
+                : scarletRed,
+          ),
+          actions: [
+            ReportUserIcon(
+              userId: widget.userId,
+              userName: userProfile?.name,
+            ),
+            const SizedBox(width: 8),
+            _buildProfileMenuButton(),
+            const SizedBox(width: 16),
+          ],
+        ),
+        body: isLoading
+            ? Center(
+                child: CircularProgressIndicator(
+                  color: _themeService.isDarkMode ? Colors.white : accentPurple,
                 ),
+              )
+            : userProfile == null
+                ? Center(
+                    child: Text(
+                      'User profile not found',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: _themeService.isDarkMode
+                            ? Colors.white70
+                            : Colors.black,
+                      ),
+                    ),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      _buildProfileHeader(),
+                      const SizedBox(height: 24),
+                      _buildStatsCard(userProfile),
+                      const SizedBox(height: 24),
+                      _buildGiftsSection(userProfile),
+                      const SizedBox(height: 24),
+                      if (userProfile.bio?.isNotEmpty == true)
+                        _buildBioCard(userProfile),
+                      if (userProfile.interests.isNotEmpty)
+                        _buildInterestsCard(userProfile),
+                      if (_hasAnyLinks(userProfile))
+                        _buildSocialLinksCard(userProfile),
+                    ],
+                  ),
+      ),
     );
   }
 
@@ -491,10 +517,12 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
         const SizedBox(height: 16),
         Text(
           userProfile.displayName,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 26,
             fontWeight: FontWeight.bold,
-            color: deepPurple,
+            color: _themeService.isDarkMode
+                ? Colors.white
+                : deepPurple,
           ),
         ),
         if (userProfile.location?.isNotEmpty == true) ...[
@@ -502,13 +530,21 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.location_on, size: 16, color: Colors.grey),
+              Icon(
+                Icons.location_on,
+                size: 16,
+                color: _themeService.isDarkMode
+                    ? Colors.white54
+                    : Colors.grey,
+              ),
               const SizedBox(width: 4),
               Text(
                 userProfile.location!,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
-                  color: Colors.grey,
+                  color: _themeService.isDarkMode
+                      ? Colors.white54
+                      : Colors.grey,
                 ),
               ),
             ],
@@ -575,10 +611,12 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       children: [
         Text(
           count.toString(),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: deepPurple,
+            color: _themeService.isDarkMode
+                ? Colors.white
+                : deepPurple,
           ),
         ),
         const SizedBox(height: 4),
@@ -586,7 +624,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
           label,
           style: TextStyle(
             fontSize: 14,
-            color: Colors.grey[600],
+            color: _themeService.isDarkMode
+                ? Colors.white60
+                : Colors.grey[600],
           ),
         ),
       ],
@@ -596,21 +636,30 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   Widget _buildStatsCard(UserProfile userProfile) {
     return Card(
       elevation: 0,
+      color: _themeService.isDarkMode
+          ? const Color(0xFF2D2D2D)
+          : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withOpacity(0.1)),
+        side: BorderSide(
+          color: _themeService.isDarkMode
+              ? const Color(0xFF404040)
+              : scarletRed.withOpacity(0.1),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Stats',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: deepPurple,
+                color: _themeService.isDarkMode
+                    ? Colors.white
+                    : deepPurple,
               ),
             ),
             const SizedBox(height: 16),
@@ -651,7 +700,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.grey[600],
+            color: _themeService.isDarkMode
+                ? Colors.white60
+                : Colors.grey[600],
           ),
         ),
       ],
@@ -661,28 +712,43 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   Widget _buildBioCard(UserProfile userProfile) {
     return Card(
       elevation: 0,
+      color: _themeService.isDarkMode
+          ? const Color(0xFF2D2D2D)
+          : Colors.white,
       margin: const EdgeInsets.only(bottom: 24),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withOpacity(0.1)),
+        side: BorderSide(
+          color: _themeService.isDarkMode
+              ? const Color(0xFF404040)
+              : scarletRed.withOpacity(0.1),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'About',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: deepPurple,
+                color: _themeService.isDarkMode
+                    ? Colors.white
+                    : deepPurple,
               ),
             ),
             const SizedBox(height: 12),
             Text(
               userProfile.bio!,
-              style: const TextStyle(fontSize: 16, height: 1.5),
+              style: TextStyle(
+                fontSize: 16,
+                height: 1.5,
+                color: _themeService.isDarkMode
+                    ? Colors.white70
+                    : Colors.black,
+              ),
             ),
           ],
         ),
@@ -693,22 +759,31 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   Widget _buildInterestsCard(UserProfile userProfile) {
     return Card(
       elevation: 0,
+      color: _themeService.isDarkMode
+          ? const Color(0xFF2D2D2D)
+          : Colors.white,
       margin: const EdgeInsets.only(bottom: 24),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withOpacity(0.1)),
+        side: BorderSide(
+          color: _themeService.isDarkMode
+              ? const Color(0xFF404040)
+              : scarletRed.withOpacity(0.1),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Interests',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: deepPurple,
+                color: _themeService.isDarkMode
+                    ? Colors.white
+                    : deepPurple,
               ),
             ),
             const SizedBox(height: 12),
@@ -718,9 +793,16 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
               children: userProfile.interests.map((interest) => Chip(
                 label: Text(
                   interest,
-                  style: const TextStyle(fontSize: 12),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _themeService.isDarkMode
+                        ? Colors.white
+                        : Colors.black,
+                  ),
                 ),
-                backgroundColor: accentPurple.withOpacity(0.1),
+                backgroundColor: _themeService.isDarkMode
+                    ? accentPurple.withOpacity(0.3)
+                    : accentPurple.withOpacity(0.1),
                 side: BorderSide.none,
               )).toList(),
             ),
@@ -733,22 +815,31 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   Widget _buildSocialLinksCard(UserProfile userProfile) {
     return Card(
       elevation: 0,
+      color: _themeService.isDarkMode
+          ? const Color(0xFF2D2D2D)
+          : Colors.white,
       margin: const EdgeInsets.only(bottom: 24),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withOpacity(0.1)),
+        side: BorderSide(
+          color: _themeService.isDarkMode
+              ? const Color(0xFF404040)
+              : scarletRed.withOpacity(0.1),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Social Links',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: deepPurple,
+                color: _themeService.isDarkMode
+                    ? Colors.white
+                    : deepPurple,
               ),
             ),
             const SizedBox(height: 12),
@@ -775,22 +866,34 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: accentPurple),
+          Icon(
+            icon,
+            size: 20,
+            color: _themeService.isDarkMode
+                ? accentPurple.withOpacity(0.8)
+                : accentPurple,
+          ),
           const SizedBox(width: 12),
           Text(
             platform,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w500,
-              color: deepPurple,
+              color: _themeService.isDarkMode
+                  ? Colors.white
+                  : deepPurple,
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              (platform == 'X (Twitter)' || platform == 'Instagram') 
-                  ? '@$handle' 
+              (platform == 'X (Twitter)' || platform == 'Instagram')
+                  ? '@$handle'
                   : handle,
-              style: TextStyle(color: Colors.grey[600]),
+              style: TextStyle(
+                color: _themeService.isDarkMode
+                    ? Colors.white60
+                    : Colors.grey[600],
+              ),
             ),
           ),
         ],
@@ -810,10 +913,17 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   Widget _buildGiftsSection(UserProfile userProfile) {
     return Card(
       elevation: 0,
+      color: _themeService.isDarkMode
+          ? const Color(0xFF2D2D2D)
+          : Colors.white,
       margin: const EdgeInsets.only(bottom: 24),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scarletRed.withOpacity(0.1)),
+        side: BorderSide(
+          color: _themeService.isDarkMode
+              ? const Color(0xFF404040)
+              : scarletRed.withOpacity(0.1),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -822,14 +932,22 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.card_giftcard, size: 20, color: accentPurple),
+                Icon(
+                  Icons.card_giftcard,
+                  size: 20,
+                  color: _themeService.isDarkMode
+                      ? accentPurple.withOpacity(0.8)
+                      : accentPurple,
+                ),
                 const SizedBox(width: 8),
-                const Text(
+                Text(
                   'Gifts Received',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: deepPurple,
+                    color: _themeService.isDarkMode
+                        ? Colors.white
+                        : deepPurple,
                   ),
                 ),
                 const Spacer(),
@@ -895,12 +1013,14 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                   
                   if (_topGifts.isNotEmpty) ...[
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Most Received Gifts',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: deepPurple,
+                        color: _themeService.isDarkMode
+                            ? Colors.white
+                            : deepPurple,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -921,16 +1041,24 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.grey.withOpacity(0.05),
+        color: _themeService.isDarkMode
+            ? Colors.white.withOpacity(0.05)
+            : Colors.grey.withOpacity(0.05),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+        border: Border.all(
+          color: _themeService.isDarkMode
+              ? Colors.white.withOpacity(0.1)
+              : Colors.grey.withOpacity(0.2),
+        ),
       ),
       child: Column(
         children: [
           Icon(
             Icons.card_giftcard_outlined,
             size: 40,
-            color: Colors.grey[400],
+            color: _themeService.isDarkMode
+                ? Colors.white30
+                : Colors.grey[400],
           ),
           const SizedBox(height: 8),
           Text(
@@ -938,7 +1066,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w500,
-              color: Colors.grey[600],
+              color: _themeService.isDarkMode
+                  ? Colors.white60
+                  : Colors.grey[600],
             ),
           ),
           const SizedBox(height: 4),
@@ -946,7 +1076,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
             'Gifts from other users will appear here',
             style: TextStyle(
               fontSize: 12,
-              color: Colors.grey[500],
+              color: _themeService.isDarkMode
+                  ? Colors.white38
+                  : Colors.grey[500],
             ),
             textAlign: TextAlign.center,
           ),
@@ -979,7 +1111,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
             label,
             style: TextStyle(
               fontSize: 10,
-              color: Colors.grey[600],
+              color: _themeService.isDarkMode
+                  ? Colors.white60
+                  : Colors.grey[600],
             ),
             textAlign: TextAlign.center,
           ),
@@ -1009,9 +1143,12 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
         const SizedBox(height: 4),
         Text(
           gift.name,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.w500,
+            color: _themeService.isDarkMode
+                ? Colors.white
+                : Colors.black,
           ),
           textAlign: TextAlign.center,
           maxLines: 1,
@@ -1021,7 +1158,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
           '×$count',
           style: TextStyle(
             fontSize: 10,
-            color: Colors.grey[600],
+            color: _themeService.isDarkMode
+                ? Colors.white60
+                : Colors.grey[600],
           ),
         ),
       ],

@@ -916,26 +916,23 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
   Widget _buildBottomNavigationBar() {
     final navState = ref.watch(navigationProvider);
     final themeService = ThemeService();
-    
+
     return Container(
       decoration: BoxDecoration(
-        color: themeService.isDarkMode 
-            ? const Color(0xFF2D2D2D)
-            : const Color(0xFFE8E8E8),
+        color: themeService.isDarkMode
+            ? const Color(0xFF1A1A1A)  // Dark background
+            : const Color(0xFFE8E4F3),  // Light purple background matching home screen
+        border: Border(
+          top: BorderSide(
+            color: const Color(0xFF8B5CF6),  // Purple top border
+            width: 2,
+          ),
+        ),
         boxShadow: [
           BoxShadow(
-            color: themeService.isDarkMode 
-                ? Colors.white.withOpacity(0.03)
-                : Colors.white.withOpacity(0.8),
-            offset: const Offset(0, -4),
-            blurRadius: 12,
-          ),
-          BoxShadow(
-            color: themeService.isDarkMode 
-                ? Colors.black.withOpacity(0.6)
-                : const Color(0xFFA3B1C6).withOpacity(0.5),
-            offset: const Offset(0, 4),
-            blurRadius: 12,
+            color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),  // Purple glow
+            offset: const Offset(0, -2),
+            blurRadius: 15,
           ),
         ],
       ),
@@ -945,10 +942,8 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
           ref.read(navigationProvider.notifier).setCurrentIndex(index);
         },
         backgroundColor: Colors.transparent,
-        selectedItemColor: const Color(0xFF8B5CF6),
-        unselectedItemColor: themeService.isDarkMode 
-            ? Colors.white54
-            : Colors.grey[600],
+        selectedItemColor: const Color(0xFF8B5CF6),  // Purple when selected
+        unselectedItemColor: Colors.grey[600],
         elevation: 0,
         type: BottomNavigationBarType.fixed,
         items: [
@@ -1000,43 +995,24 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
       width: 48,
       height: 48,
       decoration: BoxDecoration(
-        color: themeService.isDarkMode 
-            ? const Color(0xFF3A3A3A)
-            : const Color(0xFFF0F0F3),
+        color: isSelected ? const Color(0xFF8B5CF6) : Colors.transparent,
         shape: BoxShape.circle,
+        border: isSelected ? Border.all(
+          color: const Color(0xFFFF2400),
+          width: 2,
+        ) : null,
         boxShadow: isSelected ? [
           BoxShadow(
-            color: themeService.isDarkMode 
-                ? Colors.white.withOpacity(0.05)
-                : Colors.white.withOpacity(0.9),
-            offset: const Offset(-3, -3),
-            blurRadius: 6,
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
           BoxShadow(
-            color: themeService.isDarkMode 
-                ? Colors.black.withOpacity(0.6)
-                : const Color(0xFFA3B1C6).withOpacity(0.4),
-            offset: const Offset(3, 3),
-            blurRadius: 6,
+            color: const Color(0xFF8B5CF6).withValues(alpha: 0.4),
+            blurRadius: 15,
+            offset: const Offset(0, 0),
           ),
-        ] : [
-          BoxShadow(
-            color: themeService.isDarkMode 
-                ? Colors.black.withOpacity(0.4)
-                : const Color(0xFFA3B1C6).withOpacity(0.3),
-            offset: const Offset(2, 2),
-            blurRadius: 4,
-            spreadRadius: -1,
-          ),
-          BoxShadow(
-            color: themeService.isDarkMode 
-                ? Colors.white.withOpacity(0.02)
-                : Colors.white.withOpacity(0.7),
-            offset: const Offset(-2, -2),
-            blurRadius: 4,
-            spreadRadius: -1,
-          ),
-        ],
+        ] : null,
       ),
       child: Stack(
         alignment: Alignment.center,
@@ -1044,9 +1020,9 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> with WidgetsBindi
           Icon(
             iconData,
             size: 24,
-            color: isSelected 
-                ? const Color(0xFF8B5CF6)
-                : (themeService.isDarkMode ? Colors.white54 : Colors.grey[600]),
+            color: isSelected
+                ? Colors.white
+                : Colors.grey[600],
           ),
           if (badgeCount != null && badgeCount > 0)
             Positioned(

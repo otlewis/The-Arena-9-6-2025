@@ -84,6 +84,10 @@ class _PingNotificationModalState extends State<PingNotificationModal>
 
   void _startCountdown() {
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       if (_timeLeft > 0) {
         setState(() {
           _timeLeft--;
@@ -104,10 +108,12 @@ class _PingNotificationModalState extends State<PingNotificationModal>
 
   Future<void> _respondToPing(String response, String? message) async {
     if (_isResponding) return;
-    
-    setState(() {
-      _isResponding = true;
-    });
+
+    if (mounted) {
+      setState(() {
+        _isResponding = true;
+      });
+    }
 
     try {
       // Update ping request status

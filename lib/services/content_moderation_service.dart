@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:appwrite/appwrite.dart';
+import 'package:appwrite/enums.dart';
 import '../core/logging/app_logger.dart';
 import 'appwrite_service.dart';
 
@@ -13,9 +14,12 @@ class ContentModerationService {
 
   final AppwriteService _appwrite = AppwriteService();
   final AppLogger _logger = AppLogger();
-  
+
   // Database configuration
   static const String _databaseId = 'arena_db';
+
+  // Appwrite Function IDs
+  static const String _moderateContentFunctionId = 'moderate-content';
   
   // OpenAI Moderation API configuration (free tier available)
   static const String _openaiModerationUrl = 'https://api.openai.com/v1/moderations';
@@ -24,6 +28,70 @@ class ContentModerationService {
   // Google Perspective API configuration (fallback)
   static const String _perspectiveApiUrl = 'https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze';
   static const String _perspectiveApiKey = 'YOUR_PERSPECTIVE_API_KEY'; // Replace with actual key
+
+  /// Moderate content using Appwrite Function (logs to Odoo CRM automatically)
+  /// Returns true if content should be blocked, false if approved
+  Future<Map<String, dynamic>> moderateContentViaFunction({
+    required String content,
+    required String userId,
+    required String userEmail,
+    String contentType = 'message',
+    String? contentId,
+  }) async {
+    try {
+      _logger.debug('🛡️ Moderating content via Appwrite Function');
+      _logger.debug('🛡️ User: $userEmail, Type: $contentType');
+
+      // Call the moderate-content Appwrite Function
+      final execution = await _appwrite.functions.createExecution(
+        functionId: _moderateContentFunctionId,
+        body: jsonEncode({
+          'userId': userId,
+          'userEmail': userEmail,
+          'contentType': contentType,
+          'content': content,
+          if (contentId != null) 'contentId': contentId,
+        }),
+      );
+
+      _logger.debug('🛡️ Function execution status: ${execution.status}');
+
+      // Check if execution failed
+      if (execution.status == ExecutionStatus.failed) {
+        _logger.error('Moderation function failed: ${execution.errors}');
+        // On failure, allow content but log error
+        return {
+          'flagged': false,
+          'blocked': false,
+          'message': 'Content approved (moderation unavailable)',
+          'error': true,
+        };
+      }
+
+      // Parse response
+      final responseData = jsonDecode(execution.responseBody) as Map<String, dynamic>;
+
+      if (responseData['flagged'] == true) {
+        _logger.warning('🚨 Content flagged: ${responseData['reason']} (${responseData['severity']})');
+      } else {
+        _logger.debug('✅ Content approved');
+      }
+
+      return responseData;
+
+    } catch (e) {
+      _logger.error('Error moderating content: $e');
+      // On error, flag for manual review - fail-safe approach
+      // Don't auto-approve potentially harmful content
+      return {
+        'flagged': true,
+        'blocked': false,
+        'requiresReview': true,
+        'message': 'Content flagged for manual review (moderation service unavailable)',
+        'error': true,
+      };
+    }
+  }
 
   /// Report a user for inappropriate behavior
   Future<String> reportUser({
@@ -99,7 +167,18 @@ class ContentModerationService {
       return _mockContentAnalysis(content);
     } catch (e) {
       _logger.error('Content analysis failed: $e');
-      return _mockContentAnalysis(content); // Fallback to mock
+      // Return moderate scores to trigger review rather than auto-approve
+      // This is a fail-safe approach for when analysis APIs are unavailable
+      return {
+        'toxicity': 0.5,
+        'severe_toxicity': 0.3,
+        'identity_attack': 0.3,
+        'insult': 0.3,
+        'profanity': 0.3,
+        'threat': 0.3,
+        'sexual_explicit': 0.3,
+        'error': 1.0, // Flag that this is a fallback result
+      };
     }
   }
 

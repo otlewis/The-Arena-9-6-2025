@@ -1,7 +1,7 @@
 name: arena
 description: "A debate and discussion app with live streaming capabilities using Flutter."
 publish_to: 'none'
-version: 1.0.61+61
+version: 1.0.63+63
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -73,12 +73,15 @@ dependencies:
   volume_controller: ^2.0.7
   flutter_stripe: ^11.5.0
   pay: ^3.2.1
+  google_generative_ai: ^0.4.7
+  speech_to_text: ^7.0.0
+  flutter_tts: ^4.2.3
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  integration_test:
-    sdk: flutter
+  # integration_test:  # Temporarily disabled for release build
+  #   sdk: flutter
   flutter_lints: ^6.0.0
   riverpod_generator: ^2.4.0
   build_runner: ^2.4.13

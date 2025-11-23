@@ -2215,19 +2215,92 @@ class AppwriteService {
           Query.orderDesc('\$createdAt'),
         ],
       );
-      
-      // For each room, get participant count and moderator profile
+
+      if (response.documents.isEmpty) {
+        return [];
+      }
+
+      // Collect all room IDs and moderator IDs for batch fetching
+      final roomIds = response.documents.map((doc) => doc.$id).toList();
+      final moderatorIds = response.documents
+          .map((doc) => doc.data['createdBy'] as String?)
+          .where((id) => id != null && id.isNotEmpty)
+          .cast<String>()
+          .toSet()
+          .toList();
+
+      // Batch fetch all participants for all rooms (instead of N+1)
+      Map<String, List<String>> roomParticipantsMap = {};
+      try {
+        // Fetch participants in batches of 25 room IDs
+        for (var i = 0; i < roomIds.length; i += 25) {
+          final batchRoomIds = roomIds.skip(i).take(25).toList();
+          final participantsResponse = await databases.listDocuments(
+            databaseId: AppwriteConstants.databaseId,
+            collectionId: AppwriteConstants.roomParticipantsCollection,
+            queries: [
+              Query.equal('roomId', batchRoomIds),
+              Query.equal('status', 'joined'),
+              Query.limit(500), // Allow up to 500 participants across all rooms in batch
+            ],
+          );
+
+          // Group participants by room ID
+          for (var participantDoc in participantsResponse.documents) {
+            final roomId = participantDoc.data['roomId'] as String;
+            final userId = participantDoc.data['userId'] as String?;
+            if (!roomParticipantsMap.containsKey(roomId)) {
+              roomParticipantsMap[roomId] = [];
+            }
+            if (userId != null) {
+              roomParticipantsMap[roomId]!.add(userId);
+            }
+          }
+        }
+      } catch (e) {
+        AppLogger().warning('Error batch fetching participants: $e');
+        // Will fall back to empty lists for participant counts
+      }
+
+      // Batch fetch all moderator profiles (instead of N+1)
+      Map<String, UserProfile> moderatorProfilesMap = {};
+      if (moderatorIds.isNotEmpty) {
+        try {
+          // Fetch moderators in batches of 25
+          for (var i = 0; i < moderatorIds.length; i += 25) {
+            final batchIds = moderatorIds.skip(i).take(25).toList();
+            final usersResponse = await databases.listDocuments(
+              databaseId: AppwriteConstants.databaseId,
+              collectionId: 'users',
+              queries: [
+                Query.equal('\$id', batchIds),
+                Query.limit(25),
+              ],
+            );
+
+            for (var userDoc in usersResponse.documents) {
+              final profile = UserProfile.fromMap(userDoc.data);
+              moderatorProfilesMap[userDoc.$id] = profile;
+            }
+          }
+        } catch (e) {
+          AppLogger().warning('Error batch fetching moderator profiles: $e');
+          // Will fall back to individual fetches if needed
+        }
+      }
+
+      // Build room list with cached data
       List<Map<String, dynamic>> roomsWithDetails = [];
       for (var doc in response.documents) {
         final roomData = Map<String, dynamic>.from(doc.data);
         roomData['id'] = doc.$id;
         roomData['createdAt'] = doc.$createdAt;
-        
+
         // Map 'name' field to 'title' for consistency with frontend expectations
         if (roomData.containsKey('name') && !roomData.containsKey('title')) {
           roomData['title'] = roomData['name'];
         }
-        
+
         // Parse settings JSON
         if (roomData['settings'] is String) {
           try {
@@ -2236,32 +2309,33 @@ class AppwriteService {
             roomData['settings'] = {};
           }
         }
-        
-        // Get participant count
-        final participantsResponse = await databases.listDocuments(
-          databaseId: AppwriteConstants.databaseId,
-          collectionId: AppwriteConstants.roomParticipantsCollection,
-          queries: [
-            Query.equal('roomId', doc.$id),
-            Query.equal('status', 'joined'),
-          ],
-        );
-        
-        roomData['participantCount'] = participantsResponse.documents.length;
-        
-        // Add participants array for compatibility with frontend
-        roomData['participants'] = participantsResponse.documents.map((p) => p.data['userId']).toList();
-        
+
+        // Get participant count from cached data
+        final participants = roomParticipantsMap[doc.$id] ?? [];
+        roomData['participantCount'] = participants.length;
+        roomData['participants'] = participants;
+
         // Map category to tags array for frontend compatibility
         if (roomData.containsKey('category') && !roomData.containsKey('tags')) {
           roomData['tags'] = [roomData['category']];
         } else if (!roomData.containsKey('tags')) {
           roomData['tags'] = [];
         }
-        
-        // Get moderator profile
-        try {
-          final moderatorProfile = await getUserProfile(roomData['createdBy']);
+
+        // Get moderator profile from cached data
+        final moderatorId = roomData['createdBy'] as String?;
+        if (moderatorId != null) {
+          UserProfile? moderatorProfile = moderatorProfilesMap[moderatorId];
+
+          // Fallback to individual fetch if not in cache
+          if (moderatorProfile == null && !moderatorProfilesMap.containsKey(moderatorId)) {
+            try {
+              moderatorProfile = await getUserProfile(moderatorId);
+            } catch (e) {
+              AppLogger().debug('Error getting moderator profile for room ${doc.$id}: $e');
+            }
+          }
+
           if (moderatorProfile != null) {
             roomData['moderatorProfile'] = {
               'name': moderatorProfile.name,
@@ -2269,13 +2343,11 @@ class AppwriteService {
               'email': moderatorProfile.email,
             };
           }
-        } catch (e) {
-          AppLogger().debug('Error getting moderator profile for room ${doc.$id}: $e');
         }
-        
+
         roomsWithDetails.add(roomData);
       }
-      
+
       return roomsWithDetails;
     } catch (e) {
       AppLogger().error('Error getting debate discussion rooms: $e');
@@ -3424,18 +3496,66 @@ class AppwriteService {
         queries: [
           Query.equal('roomId', roomId),
           Query.equal('isActive', true),
+          Query.limit(50), // Limit to prevent excessive fetching
         ],
       );
 
+      if (response.documents.isEmpty) {
+        return [];
+      }
+
+      // Collect all user IDs first
+      final userIds = response.documents
+          .map((doc) => doc.data['userId'] as String?)
+          .where((id) => id != null && id.isNotEmpty)
+          .cast<String>()
+          .toSet()
+          .toList();
+
+      // Batch fetch all user profiles in one query (instead of N+1)
+      Map<String, UserProfile> userProfilesMap = {};
+      if (userIds.isNotEmpty) {
+        try {
+          // Fetch users in batches of 25 (Appwrite limit for Query.equal with array)
+          for (var i = 0; i < userIds.length; i += 25) {
+            final batchIds = userIds.skip(i).take(25).toList();
+            final usersResponse = await databases.listDocuments(
+              databaseId: 'arena_db',
+              collectionId: 'users',
+              queries: [
+                Query.equal('\$id', batchIds),
+                Query.limit(25),
+              ],
+            );
+
+            for (var userDoc in usersResponse.documents) {
+              final profile = UserProfile.fromMap(userDoc.data);
+              userProfilesMap[userDoc.$id] = profile;
+            }
+          }
+        } catch (e) {
+          AppLogger().warning('Error batch fetching user profiles: $e');
+          // Fall back to individual fetches if batch fails
+        }
+      }
+
+      // Build participant list with cached profiles
       List<Map<String, dynamic>> participants = [];
       for (var doc in response.documents) {
         final participantData = Map<String, dynamic>.from(doc.data);
         participantData['id'] = doc.$id;
 
-        // Get user profile for each participant
-        final userProfile = await getUserProfile(participantData['userId']);
-        if (userProfile != null) {
-          participantData['userProfile'] = userProfile.toMap();
+        final userId = participantData['userId'] as String?;
+        if (userId != null) {
+          // Use cached profile or fetch individually as fallback
+          UserProfile? userProfile = userProfilesMap[userId];
+          if (userProfile == null && !userProfilesMap.containsKey(userId)) {
+            userProfile = await getUserProfile(userId);
+          }
+
+          if (userProfile != null) {
+            participantData['userProfile'] = userProfile.toMap();
+          }
         }
 
         participants.add(participantData);
@@ -4299,6 +4419,41 @@ class AppwriteService {
     } catch (e) {
       AppLogger().error('Error getting all users: $e');
       return [];
+    }
+  }
+
+  /// Paginated version of getAllUsers for infinite scroll
+  Future<({List<UserProfile> users, bool hasMore})> getAllUsersPaginated({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final response = await databases.listDocuments(
+        databaseId: 'arena_db',
+        collectionId: 'users',
+        queries: [
+          Query.equal('isPublicProfile', true),
+          Query.limit(limit),
+          Query.offset(offset),
+          Query.orderDesc('reputation'),
+        ],
+      );
+
+      final users = response.documents.map((doc) {
+        final userData = Map<String, dynamic>.from(doc.data);
+        userData['id'] = doc.$id;
+        userData['createdAt'] = doc.$createdAt;
+        userData['updatedAt'] = doc.$updatedAt;
+        return UserProfile.fromMap(userData);
+      }).toList();
+
+      // Check if there are more users to load
+      final hasMore = response.documents.length == limit;
+
+      return (users: users, hasMore: hasMore);
+    } catch (e) {
+      AppLogger().error('Error getting paginated users: $e');
+      return (users: <UserProfile>[], hasMore: false);
     }
   }
 

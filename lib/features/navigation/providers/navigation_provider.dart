@@ -6,6 +6,7 @@ import '../../../services/sound_service.dart';
 import '../../../services/audio_initialization_service.dart';
 import '../../../services/gift_service.dart';
 import '../../../core/logging/app_logger.dart';
+import '../../../core/notifications/push_notification_service.dart';
 import 'package:get_it/get_it.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../screens/home_screen.dart';
@@ -135,6 +136,16 @@ class NavigationNotifier extends StateNotifier<NavigationState> {
         _logger.warning('Failed to initialize audio service: $e');
         // Don't block authentication for audio issues
       }
+
+      // Initialize push notification service for authenticated user
+      try {
+        final pushNotificationService = GetIt.instance<PushNotificationService>();
+        await pushNotificationService.initialize(user.$id);
+        _logger.debug('🔔 PushNotificationService initialized successfully');
+      } catch (e) {
+        _logger.warning('Failed to initialize push notification service: $e');
+        // Don't block authentication for push notification issues
+      }
     } else {
       _logger.debug('🔍 User not authenticated - staying on Account tab (LoginScreen)');
     }
@@ -152,6 +163,14 @@ class NavigationNotifier extends StateNotifier<NavigationState> {
       await audioInitService.dispose();
     } catch (e) {
       _logger.warning('Failed to dispose audio service: $e');
+    }
+
+    // Clean up push notification service
+    try {
+      final pushNotificationService = GetIt.instance<PushNotificationService>();
+      pushNotificationService.dispose();
+    } catch (e) {
+      _logger.warning('Failed to dispose push notification service: $e');
     }
 
     // Update local state - navigate to login tab

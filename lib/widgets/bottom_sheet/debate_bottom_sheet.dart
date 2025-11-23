@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'slides_tab.dart';
@@ -30,19 +31,23 @@ class DebateBottomSheet extends StatefulWidget {
   State<DebateBottomSheet> createState() => _DebateBottomSheetState();
 }
 
-class _DebateBottomSheetState extends State<DebateBottomSheet> 
+class _DebateBottomSheetState extends State<DebateBottomSheet>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  
+
   // Sheet snap points - start higher to avoid overflow
   static const double _peekHeight = 0.6; // Increased for keyboard support
-  static const double _halfHeight = 0.8;   
+  static const double _halfHeight = 0.8;
   static const double _fullHeight = 0.95;
-  
+
   // Shared sources and slides
   final List<DebateSource> _sources = [];
   SlideData? _currentSlideData;
   static final _logger = AppLogger();
+
+  // Stream subscriptions for cleanup
+  StreamSubscription? _sourceAddedSubscription;
+  StreamSubscription? _slideChangesSubscription;
   
   @override
   void initState() {
@@ -53,30 +58,22 @@ class _DebateBottomSheetState extends State<DebateBottomSheet>
   }
   
   void _initializeSyncListeners() {
-    widget.syncService.sourceAdded.listen((source) {
-      if (mounted) {
-        setState(() {
-          _sources.add(source);
-        });
-      }
-    });
-    
-    widget.syncService.slideChanges.listen((slideData) {
-      if (mounted) {
-        setState(() {
-          _currentSlideData = slideData;
-        });
-      }
-    });
-    
     // Listen for newly added sources from the material sync service
-    widget.syncService.sourceAdded.listen((source) {
+    _sourceAddedSubscription = widget.syncService.sourceAdded.listen((source) {
       if (mounted) {
         setState(() {
           // Add to the beginning of the list (most recent first)
           _sources.insert(0, source);
         });
         _logger.info('📋 Added new source to materials panel: ${source.title}');
+      }
+    });
+
+    _slideChangesSubscription = widget.syncService.slideChanges.listen((slideData) {
+      if (mounted) {
+        setState(() {
+          _currentSlideData = slideData;
+        });
       }
     });
   }
@@ -135,6 +132,8 @@ class _DebateBottomSheetState extends State<DebateBottomSheet>
   
   @override
   void dispose() {
+    _sourceAddedSubscription?.cancel();
+    _slideChangesSubscription?.cancel();
     _tabController.dispose();
     super.dispose();
   }

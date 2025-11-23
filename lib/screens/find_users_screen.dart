@@ -1,5 +1,6 @@
 import '../core/logging/app_logger.dart';
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import '../services/appwrite_service.dart';
 import '../services/theme_service.dart';
 import '../services/challenge_messaging_service.dart';
@@ -10,6 +11,8 @@ import '../widgets/challenge_bell.dart';
 import '../widgets/report_user_dialog.dart';
 import '../widgets/block_user_dialog.dart';
 import '../screens/user_profile_screen.dart';
+import '../services/tutorial_service.dart';
+import '../config/tutorial_definitions.dart';
 
 class FindUsersScreen extends StatefulWidget {
   const FindUsersScreen({super.key});
@@ -22,12 +25,22 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
   final AppwriteService _appwrite = AppwriteService();
   final ThemeService _themeService = ThemeService();
   final TextEditingController _searchController = TextEditingController();
-  
+  final ScrollController _scrollController = ScrollController();
+
   List<UserProfile> _allUsers = [];
   List<UserProfile> _filteredUsers = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMoreUsers = true;
   bool _currentUserIsPremium = false;
   String? _currentUserId;
+
+  // Pagination constants
+  static const int _pageSize = 20;
+  int _currentOffset = 0;
+
+  // GlobalKey for tutorial highlighting
+  final GlobalKey _searchBarKey = GlobalKey();
 
   // Colors
   static const Color scarletRed = Color(0xFFFF2400);
@@ -40,11 +53,33 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
     _loadCurrentUser();
     _checkCurrentUserPremiumStatus();
     _loadUsers();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      _loadMoreUsers();
+    }
+  }
+
+  Future<void> _showTutorial() async {
+    final tutorialService = TutorialService();
+    await tutorialService.maybeShowTutorial(
+      context: context,
+      tutorialKey: tutorialService.findUsersKey,
+      highlights: TutorialDefinitions.findUsers(
+        searchKey: _searchBarKey,
+        filterKey: null, // No filters in this screen currently
+      ),
+    );
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -91,18 +126,68 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
 
   Future<void> _loadUsers() async {
     try {
-      setState(() => _isLoading = true);
-      
-      final users = await _appwrite.getAllUsers();
-      
       setState(() {
-        _allUsers = users.where((user) => user.id != _currentUserId).toList();
-        _filteredUsers = _allUsers;
+        _isLoading = true;
+        _currentOffset = 0;
+        _hasMoreUsers = true;
+      });
+
+      final result = await _appwrite.getAllUsersPaginated(
+        limit: _pageSize,
+        offset: 0,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _allUsers = result.users.where((user) => user.id != _currentUserId).toList();
+        _filteredUsers = _searchController.text.isEmpty
+            ? _allUsers
+            : _allUsers.where((user) {
+                return user.name.toLowerCase().contains(_searchController.text.toLowerCase()) ||
+                       user.email.toLowerCase().contains(_searchController.text.toLowerCase());
+              }).toList();
+        _hasMoreUsers = result.hasMore;
+        _currentOffset = _pageSize;
         _isLoading = false;
       });
     } catch (e) {
       AppLogger().debug('❌ Error loading users: $e');
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadMoreUsers() async {
+    // Don't load more if we're searching, already loading, or no more data
+    if (_searchController.text.isNotEmpty || _isLoadingMore || !_hasMoreUsers) {
+      return;
+    }
+
+    try {
+      setState(() => _isLoadingMore = true);
+
+      final result = await _appwrite.getAllUsersPaginated(
+        limit: _pageSize,
+        offset: _currentOffset,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        final newUsers = result.users.where((user) => user.id != _currentUserId).toList();
+        _allUsers.addAll(newUsers);
+        _filteredUsers = _allUsers;
+        _hasMoreUsers = result.hasMore;
+        _currentOffset += _pageSize;
+        _isLoadingMore = false;
+      });
+    } catch (e) {
+      AppLogger().debug('❌ Error loading more users: $e');
+      if (mounted) {
+        setState(() => _isLoadingMore = false);
+      }
     }
   }
 
@@ -121,33 +206,41 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _themeService.isDarkMode 
-          ? const Color(0xFF2D2D2D)
-          : const Color(0xFFE8E8E8),
-      appBar: AppBar(
-        title: Text(
-          'Find Users',
-          style: TextStyle(
-            color: _themeService.isDarkMode ? Colors.white : deepPurple,
-            fontWeight: FontWeight.bold,
+    return Container(
+      color: _themeService.isDarkMode
+          ? Colors.black
+          : const Color(0xFFE8E4F3),  // Light purple background
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: Text(
+            'Find Users',
+            style: TextStyle(
+              color: _themeService.isDarkMode
+                  ? Colors.white
+                  : const Color(0xFF4A4458),  // Dark purple text
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
-        backgroundColor: _themeService.isDarkMode 
-            ? const Color(0xFF2D2D2D)
-            : const Color(0xFFE8E8E8),
-        elevation: 0,
-        iconTheme: IconThemeData(
-          color: _themeService.isDarkMode ? Colors.white : scarletRed,
-        ),
-        actions: [
-          _buildNeumorphicAppBarIcon(
-            const ChallengeBell(iconColor: Color(0xFF6B46C1)),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          iconTheme: IconThemeData(
+            color: _themeService.isDarkMode
+                ? Colors.white
+                : const Color(0xFF4A4458),  // Dark purple
           ),
-          const SizedBox(width: 16),
-        ],
-      ),
-      body: Column(
+          actions: [
+            _buildNeumorphicAppBarIcon(
+              ChallengeBell(
+                iconColor: _themeService.isDarkMode
+                    ? Colors.white
+                    : const Color(0xFF8B5CF6),  // Purple icon
+              ),
+            ),
+            const SizedBox(width: 16),
+          ],
+        ),
+        body: Column(
         children: [
           // Search bar
           Container(
@@ -169,15 +262,28 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                         onRefresh: _loadUsers,
                         color: accentPurple,
                         child: ListView.builder(
+                          controller: _scrollController,
                           padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: _filteredUsers.length,
+                          itemCount: _filteredUsers.length + (_isLoadingMore ? 1 : 0),
                           itemBuilder: (context, index) {
+                            if (index == _filteredUsers.length) {
+                              // Loading indicator at the bottom
+                              return const Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    color: accentPurple,
+                                  ),
+                                ),
+                              );
+                            }
                             return _buildUserCard(_filteredUsers[index]);
                           },
                         ),
                       ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -283,48 +389,69 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
   }
 
   Widget _buildNeumorphicSearchBar() {
-    return Container(
-      decoration: BoxDecoration(
-        color: _themeService.isDarkMode 
-            ? const Color(0xFF3A3A3A)
-            : const Color(0xFFF0F0F3),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.black.withOpacity(0.6)
-                : const Color(0xFFA3B1C6).withOpacity(0.3),
-            offset: const Offset(4, 4),
-            blurRadius: 8,
-            spreadRadius: -2,
+    return ClipRRect(
+      key: _searchBarKey,
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: Container(
+          decoration: BoxDecoration(
+            color: _themeService.isDarkMode
+                ? const Color(0xFF2D2D2D)  // Dark background
+                : const Color(0xFFE8E4F3),  // Light mode: light purple
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: _themeService.isDarkMode
+                  ? const Color(0xFF404040)  // Dark mode: subtle border
+                  : Colors.transparent,  // Light mode: no border (neumorphic)
+              width: 2,
+            ),
+            boxShadow: _themeService.isDarkMode
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: Colors.white.withValues(alpha: 0.8),
+                      offset: const Offset(-6, -6),
+                      blurRadius: 12,
+                    ),
+                    BoxShadow(
+                      color: const Color(0xFFC8C0DC).withValues(alpha: 0.5),
+                      offset: const Offset(6, 6),
+                      blurRadius: 12,
+                    ),
+                  ],
           ),
-          BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.white.withOpacity(0.02)
-                : Colors.white.withOpacity(0.8),
-            offset: const Offset(-4, -4),
-            blurRadius: 8,
-            spreadRadius: -2,
+          child: TextField(
+            controller: _searchController,
+            onChanged: _filterUsers,
+            style: TextStyle(
+              color: _themeService.isDarkMode
+                  ? Colors.white
+                  : const Color(0xFF4A4458),  // Dark purple
+            ),
+            decoration: InputDecoration(
+              hintText: 'Search users by name or email...',
+              hintStyle: TextStyle(
+                color: _themeService.isDarkMode
+                    ? Colors.white.withValues(alpha: 0.6)
+                    : const Color(0xFF6B5F7A).withValues(alpha: 0.6),  // Medium purple
+              ),
+              prefixIcon: Icon(
+                Icons.search,
+                color: _themeService.isDarkMode
+                    ? Colors.white
+                    : const Color(0xFF8B5CF6),  // Purple
+              ),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            ),
           ),
-        ],
-      ),
-      child: TextField(
-        controller: _searchController,
-        onChanged: _filterUsers,
-        style: TextStyle(
-          color: _themeService.isDarkMode ? Colors.white : Colors.black87,
-        ),
-        decoration: InputDecoration(
-          hintText: 'Search users by name or email...',
-          hintStyle: TextStyle(
-            color: _themeService.isDarkMode ? Colors.white54 : Colors.grey[500],
-          ),
-          prefixIcon: const Icon(
-            Icons.search, 
-            color: accentPurple,
-          ),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
       ),
     );
@@ -332,34 +459,49 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
 
   Widget _buildUserCard(UserProfile user) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: _themeService.isDarkMode 
-            ? const Color(0xFF3A3A3A)
-            : const Color(0xFFF0F0F3),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.white.withOpacity(0.03)
-                : Colors.white.withOpacity(0.8),
-            offset: const Offset(-6, -6),
-            blurRadius: 12,
-          ),
-          BoxShadow(
-            color: _themeService.isDarkMode 
-                ? Colors.black.withOpacity(0.5)
-                : const Color(0xFFA3B1C6).withOpacity(0.5),
-            offset: const Offset(6, 6),
-            blurRadius: 12,
-          ),
-        ],
-      ),
-      child: Material(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            decoration: BoxDecoration(
+              color: _themeService.isDarkMode
+                  ? const Color(0xFF2D2D2D)  // Dark background
+                  : const Color(0xFFE8E4F3),  // Light mode: light purple
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: _themeService.isDarkMode
+                    ? const Color(0xFF404040)  // Dark mode: subtle border
+                    : Colors.transparent,  // Light mode: no border (neumorphic)
+                width: 2,
+              ),
+              boxShadow: _themeService.isDarkMode
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ]
+                  : [
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        offset: const Offset(-6, -6),
+                        blurRadius: 12,
+                      ),
+                      BoxShadow(
+                        color: const Color(0xFFC8C0DC).withValues(alpha: 0.5),
+                        offset: const Offset(6, 6),
+                        blurRadius: 12,
+                      ),
+                    ],
+            ),
+            child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: () => _navigateToUserProfile(user),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
@@ -572,6 +714,9 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
           ),
         ),
       ),

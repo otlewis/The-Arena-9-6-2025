@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
@@ -369,17 +370,33 @@ class PushNotificationService {
       //   },
       // );
       
-      // Send via Firebase Admin SDK (would need server-side implementation)
-      // For now, log the notification details
-      AppLogger().debug('🔔 📱 Push notification prepared for: $targetUserId');
-      AppLogger().debug('🔔 📱 Title: $title');
-      AppLogger().debug('🔔 📱 Body: $body');
-      AppLogger().debug('🔔 📱 Type: ${type.value}');
-      AppLogger().debug('🔔 📱 Priority: ${priority.value}');
-      
-      // TODO: Implement actual sending via server-side Firebase Admin SDK
-      // This would typically be done through your backend API
-      
+      // Send via Appwrite function that uses Firebase Admin SDK
+      AppLogger().debug('🔔 📱 Calling send-push-notification function...');
+
+      try {
+        final result = await _appwriteService.functions.createExecution(
+          functionId: 'send-push-notification',
+          body: jsonEncode({
+            'targetUserId': targetUserId,
+            'title': title,
+            'body': body,
+            'type': type.value,
+            'priority': priority == NotificationPriority.urgent || priority == NotificationPriority.high ? 'high' : 'normal',
+            'data': notificationData,
+            'imageUrl': imageUrl,
+          }),
+        );
+
+        if (result.responseStatusCode == 200) {
+          AppLogger().debug('🔔 📱 Push notification sent successfully');
+        } else {
+          AppLogger().warning('🔔 📱 Push notification failed: ${result.responseBody}');
+        }
+      } catch (e) {
+        AppLogger().warning('🔔 📱 Failed to call push notification function: $e');
+        // Don't rethrow - push notifications failing shouldn't break the app
+      }
+
     } catch (e) {
       AppLogger().error('Error sending push notification: $e');
       rethrow;

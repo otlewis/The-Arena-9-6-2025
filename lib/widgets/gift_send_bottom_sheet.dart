@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:appwrite/appwrite.dart';
 import '../models/gift.dart';
 import '../models/user_profile.dart';
 import '../services/gift_service.dart';
@@ -30,12 +32,14 @@ class _GiftSendBottomSheetState extends State<GiftSendBottomSheet> with TickerPr
   final GiftService _giftService = GiftService();
   final CoinService _coinService = CoinService();
   final AppwriteService _appwriteService = AppwriteService();
-  
+
   int _userCoinBalance = 0;
   bool _sending = false;
   Gift? _selectedGift;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
+  RealtimeSubscription? _balanceSubscription;
+  StreamSubscription? _balanceStreamSubscription;
 
   final TextEditingController _messageController = TextEditingController();
 
@@ -81,11 +85,11 @@ class _GiftSendBottomSheetState extends State<GiftSendBottomSheet> with TickerPr
   void _subscribeToBalanceUpdates(String userId) {
     try {
       // Subscribe to updates on the user's document
-      final subscription = _appwriteService.realtime.subscribe([
+      _balanceSubscription = _appwriteService.realtime.subscribe([
         'databases.arena_db.collections.users.documents.$userId'
       ]);
-      
-      subscription.stream.listen((event) {
+
+      _balanceStreamSubscription = _balanceSubscription!.stream.listen((event) {
         if (event.events.contains('databases.arena_db.collections.users.documents.$userId.update')) {
           // Balance was updated, reload it
           _reloadBalance(userId);
@@ -564,6 +568,8 @@ class _GiftSendBottomSheetState extends State<GiftSendBottomSheet> with TickerPr
 
   @override
   void dispose() {
+    _balanceStreamSubscription?.cancel();
+    _balanceSubscription?.close();
     _messageController.dispose();
     _pulseController.dispose();
     super.dispose();

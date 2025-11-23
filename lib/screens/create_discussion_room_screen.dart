@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/appwrite_service.dart';
+import '../services/theme_service.dart';
 import '../widgets/challenge_bell.dart';
 import '../core/logging/app_logger.dart';
 import 'debates_discussions_screen.dart';
@@ -15,7 +16,8 @@ class CreateDiscussionRoomScreen extends StatefulWidget {
 
 class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen> {
   final AppwriteService _appwriteService = AppwriteService();
-  
+  final ThemeService _themeService = ThemeService();
+
   // Form controllers
   final TextEditingController _roomNameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
@@ -234,13 +236,19 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: lightPurple,
+      backgroundColor: _themeService.isDarkMode
+          ? const Color(0xFF1A1A1A)
+          : lightPurple,
       appBar: AppBar(
-        title: Text(widget.preSelectedFormat != null 
-            ? 'Create ${widget.preSelectedFormat} Room' 
+        title: Text(widget.preSelectedFormat != null
+            ? 'Create ${widget.preSelectedFormat} Room'
             : 'Create Discussion Room'),
-        backgroundColor: Colors.white,
-        foregroundColor: darkGray,
+        backgroundColor: _themeService.isDarkMode
+            ? const Color(0xFF2D2D2D)
+            : Colors.white,
+        foregroundColor: _themeService.isDarkMode
+            ? Colors.white
+            : darkGray,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.close),
@@ -336,7 +344,9 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
                               _getFormatDescription(widget.preSelectedFormat!),
                               style: TextStyle(
                                 fontSize: 14,
-                                color: Colors.grey[600],
+                                color: _themeService.isDarkMode
+                                    ? const Color(0xFF808080)
+                                    : Colors.grey[600],
                               ),
                             ),
                           ],
@@ -368,9 +378,17 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: isSelected ? primaryPurple.withOpacity(0.1) : Colors.transparent,
+                            color: isSelected
+                                ? primaryPurple.withOpacity(0.1)
+                                : (_themeService.isDarkMode
+                                    ? const Color(0xFF1A1A1A)
+                                    : Colors.transparent),
                             border: Border.all(
-                              color: isSelected ? primaryPurple : lightBorder,
+                              color: isSelected
+                                  ? primaryPurple
+                                  : (_themeService.isDarkMode
+                                      ? const Color(0xFF404040)
+                                      : lightBorder),
                               width: 2,
                             ),
                             borderRadius: BorderRadius.circular(8),
@@ -402,7 +420,11 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
-                                      color: isSelected ? primaryPurple : darkGray,
+                                      color: isSelected
+                                          ? primaryPurple
+                                          : (_themeService.isDarkMode
+                                              ? const Color(0xFFE0E0E0)
+                                              : darkGray),
                                     ),
                                   ),
                                   const SizedBox(height: 4),
@@ -410,7 +432,9 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
                                     style['description']!,
                                     style: TextStyle(
                                       fontSize: 14,
-                                      color: Colors.grey[600],
+                                      color: _themeService.isDarkMode
+                                          ? const Color(0xFF808080)
+                                          : Colors.grey[600],
                                     ),
                                   ),
                                 ],
@@ -447,16 +471,28 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
-                            color: isSelected ? primaryPurple : Colors.white,
+                            color: isSelected
+                                ? primaryPurple
+                                : (_themeService.isDarkMode
+                                    ? const Color(0xFF2D2D2D)
+                                    : Colors.white),
                             border: Border.all(
-                              color: isSelected ? primaryPurple : lightBorder,
+                              color: isSelected
+                                  ? primaryPurple
+                                  : (_themeService.isDarkMode
+                                      ? const Color(0xFF404040)
+                                      : lightBorder),
                             ),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             category,
                             style: TextStyle(
-                              color: isSelected ? Colors.white : mediumGray,
+                              color: isSelected
+                                  ? Colors.white
+                                  : (_themeService.isDarkMode
+                                      ? const Color(0xFFB0B0B0)
+                                      : mediumGray),
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -524,25 +560,35 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: lightPurple,
+                          color: _themeService.isDarkMode
+                              ? const Color(0xFF1A1A1A)
+                              : lightPurple,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: lightBorder),
+                          border: Border.all(
+                            color: _themeService.isDarkMode
+                                ? const Color(0xFF404040)
+                                : lightBorder,
+                          ),
                         ),
                         child: Text(
                           '${_scheduledDate.day}/${_scheduledDate.month}/${_scheduledDate.year} at ${_scheduledDate.hour.toString().padLeft(2, '0')}:${_scheduledDate.minute.toString().padLeft(2, '0')}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
-                            color: darkGray,
+                            color: _themeService.isDarkMode
+                                ? const Color(0xFFE0E0E0)
+                                : darkGray,
                           ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       'Tap to change date and time',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey,
+                        color: _themeService.isDarkMode
+                            ? const Color(0xFF808080)
+                            : Colors.grey,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -561,7 +607,9 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _themeService.isDarkMode
+            ? const Color(0xFF2D2D2D)
+            : Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -576,10 +624,12 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: darkGray,
+              color: _themeService.isDarkMode
+                  ? const Color(0xFFE0E0E0)
+                  : darkGray,
             ),
           ),
           const SizedBox(height: 16),
@@ -594,10 +644,12 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w500,
-          color: mediumGray,
+          color: _themeService.isDarkMode
+              ? const Color(0xFFB0B0B0)
+              : mediumGray,
         ),
       ),
     );
@@ -615,15 +667,30 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
       maxLines: maxLines,
       decoration: InputDecoration(
         hintText: placeholder,
+        hintStyle: TextStyle(
+          color: _themeService.isDarkMode
+              ? const Color(0xFF808080)
+              : Colors.grey[600],
+        ),
         filled: true,
-        fillColor: lightPurple,
+        fillColor: _themeService.isDarkMode
+            ? const Color(0xFF1A1A1A)
+            : lightPurple,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: lightBorder),
+          borderSide: BorderSide(
+            color: _themeService.isDarkMode
+                ? const Color(0xFF404040)
+                : lightBorder,
+          ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: lightBorder),
+          borderSide: BorderSide(
+            color: _themeService.isDarkMode
+                ? const Color(0xFF404040)
+                : lightBorder,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -632,7 +699,12 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         counterText: '',
       ),
-      style: const TextStyle(fontSize: 16),
+      style: TextStyle(
+        fontSize: 16,
+        color: _themeService.isDarkMode
+            ? const Color(0xFFE0E0E0)
+            : Colors.black,
+      ),
       onChanged: (_) => setState(() {
         // Update UI as user types in text field
       }),
@@ -654,18 +726,22 @@ class _CreateDiscussionRoomScreenState extends State<CreateDiscussionRoomScreen>
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: darkGray,
+                  color: _themeService.isDarkMode
+                      ? const Color(0xFFE0E0E0)
+                      : darkGray,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 description,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
-                  color: mediumGray,
+                  color: _themeService.isDarkMode
+                      ? const Color(0xFF808080)
+                      : mediumGray,
                 ),
               ),
             ],

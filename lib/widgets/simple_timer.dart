@@ -42,17 +42,22 @@ class _SimpleTimerState extends State<SimpleTimer> {
     });
     
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
       if (_seconds > 0) {
         setState(() {
           _seconds--;
         });
-        
+
         // Play 30-second warning sound
         if (_seconds == 30 && !_playedWarning) {
           _playedWarning = true;
           _playSound('30sec.mp3');
         }
-        
+
         // Play zero sound when timer expires
         if (_seconds == 0) {
           _playSound('arenazero.mp3');
@@ -168,14 +173,18 @@ class _SimpleTimerState extends State<SimpleTimer> {
                           final seconds = int.tryParse(secondsController.text) ?? 0;
                           final totalSeconds = (minutes * 60) + seconds;
                           if (totalSeconds > 0) {
-                            setState(() {
-                              _totalSeconds = totalSeconds;
-                              _seconds = totalSeconds;
-                              _isVisible = true;
-                              _isRunning = false;
-                              _playedWarning = false;
-                            });
-                            Navigator.pop(context);
+                            if (mounted) {
+                              setState(() {
+                                _totalSeconds = totalSeconds;
+                                _seconds = totalSeconds;
+                                _isVisible = true;
+                                _isRunning = false;
+                                _playedWarning = false;
+                              });
+                            }
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                            }
                           }
                         },
                         child: const Text('Set'),
@@ -218,14 +227,18 @@ class _SimpleTimerState extends State<SimpleTimer> {
   Widget _buildTimeButton(String label, int seconds) {
     return ElevatedButton(
       onPressed: () {
-        setState(() {
-          _totalSeconds = seconds;
-          _seconds = seconds;
-          _isVisible = true;
-          _isRunning = false;
-          _playedWarning = false;
-        });
-        Navigator.pop(context);
+        if (mounted) {
+          setState(() {
+            _totalSeconds = seconds;
+            _seconds = seconds;
+            _isVisible = true;
+            _isRunning = false;
+            _playedWarning = false;
+          });
+        }
+        if (context.mounted) {
+          Navigator.pop(context);
+        }
       },
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.blue,
@@ -312,22 +325,34 @@ class _SimpleTimerState extends State<SimpleTimer> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 380;
+
     if (!_isVisible) {
       return GestureDetector(
         onTap: _showTimerSetup,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: EdgeInsets.symmetric(
+            horizontal: isSmallScreen ? 6 : 12,
+            vertical: isSmallScreen ? 3 : 6,
+          ),
           decoration: BoxDecoration(
             color: Colors.blue.withOpacity(0.2),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.blue, width: 1),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.timer, color: Colors.white, size: 16),
-              SizedBox(width: 4),
-              Text('Timer', style: TextStyle(color: Colors.white, fontSize: 14)),
+              Icon(Icons.timer, color: Colors.white, size: isSmallScreen ? 12 : 16),
+              SizedBox(width: isSmallScreen ? 2 : 4),
+              Text(
+                'Timer',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: isSmallScreen ? 11 : 14,
+                ),
+              ),
             ],
           ),
         ),
@@ -337,7 +362,10 @@ class _SimpleTimerState extends State<SimpleTimer> {
     return GestureDetector(
       onTap: _showTimerControls,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: EdgeInsets.symmetric(
+          horizontal: isSmallScreen ? 6 : 12,
+          vertical: isSmallScreen ? 3 : 6,
+        ),
         decoration: BoxDecoration(
           color: Colors.black.withOpacity(0.7),
           borderRadius: BorderRadius.circular(16),
@@ -352,14 +380,14 @@ class _SimpleTimerState extends State<SimpleTimer> {
             Icon(
               _isRunning ? Icons.timer : Icons.pause,
               color: _isRunning ? Colors.green : (_seconds <= 30 ? Colors.red : Colors.white),
-              size: 16,
+              size: isSmallScreen ? 12 : 16,
             ),
-            const SizedBox(width: 4),
+            SizedBox(width: isSmallScreen ? 2 : 4),
             Text(
               _formatTime(_seconds),
               style: TextStyle(
                 color: _isRunning ? Colors.green : (_seconds <= 30 ? Colors.red : Colors.white),
-                fontSize: 14,
+                fontSize: isSmallScreen ? 11 : 14,
                 fontWeight: FontWeight.bold,
               ),
             ),

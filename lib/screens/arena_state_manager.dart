@@ -39,6 +39,7 @@ class ArenaStateManager {
   
   // Real-time subscriptions
   RealtimeSubscription? _realtimeSubscription;
+  StreamSubscription? _realtimeStreamSubscription;
   Timer? _roomStatusChecker;
   Timer? _roomCompletionTimer;
   
@@ -221,14 +222,14 @@ class ArenaStateManager {
         'databases.arena_db.collections.room_participants.documents',
         'databases.arena_db.collections.debate_rooms.documents.$roomId',
       ]);
-      
-      _realtimeSubscription?.stream.listen((response) {
+
+      _realtimeStreamSubscription = _realtimeSubscription?.stream.listen((response) {
         if (response.events.isNotEmpty) {
           AppLogger().debug('Realtime update received: ${response.events.first}');
           _handleRealtimeUpdate(response, roomId);
         }
       });
-      
+
       AppLogger().info('Real-time subscription established');
     } catch (e) {
       AppLogger().error('Error setting up real-time subscription: $e');
@@ -252,6 +253,7 @@ class ArenaStateManager {
   
   // Start room status checker
   void _startRoomStatusChecker(String roomId) {
+    _roomStatusChecker?.cancel();
     _roomStatusChecker = Timer.periodic(const Duration(seconds: 10), (timer) async {
       try {
         final roomStatus = await _appwrite.databases.getDocument(
@@ -551,6 +553,7 @@ class ArenaStateManager {
   
   // Cleanup
   void dispose() {
+    _realtimeStreamSubscription?.cancel();
     _realtimeSubscription?.close();
     _roomStatusChecker?.cancel();
     _roomCompletionTimer?.cancel();

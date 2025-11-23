@@ -1659,6 +1659,7 @@ class CreateArenaDialog extends StatefulWidget {
 }
 
 class _CreateArenaDialogState extends State<CreateArenaDialog> {
+  final ThemeService _themeService = ThemeService();
   final _formKey = GlobalKey<FormState>();
   final _debateTitleController = TextEditingController();
   final _affirmativeNameController = TextEditingController();
@@ -1752,7 +1753,9 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
           maxHeight: MediaQuery.of(context).size.height * 0.85, // Limit height to 85% of screen
         ),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: _themeService.isDarkMode
+              ? const Color(0xFF2D2D2D)
+              : Colors.white,
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
@@ -1829,21 +1832,50 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Debate Title
-            const Text(
+            Text(
               'Debate Title *',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: deepPurple,
+                color: _themeService.isDarkMode
+                    ? const Color(0xFFE0E0E0)
+                    : deepPurple,
               ),
             ),
             const SizedBox(height: 8),
             TextFormField(
               controller: _debateTitleController,
+              style: TextStyle(
+                color: _themeService.isDarkMode
+                    ? const Color(0xFFE0E0E0)
+                    : Colors.black,
+              ),
               decoration: InputDecoration(
                 hintText: 'Enter debate title (e.g., "Should AI replace human teachers?")',
+                hintStyle: TextStyle(
+                  color: _themeService.isDarkMode
+                      ? const Color(0xFF808080)
+                      : Colors.grey,
+                ),
+                filled: true,
+                fillColor: _themeService.isDarkMode
+                    ? const Color(0xFF1A1A1A)
+                    : Colors.white,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: _themeService.isDarkMode
+                        ? const Color(0xFF404040)
+                        : Colors.grey,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: _themeService.isDarkMode
+                        ? const Color(0xFF404040)
+                        : Colors.grey,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -1872,21 +1904,50 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
             const SizedBox(height: 8),
             
             // Affirmative Side
-            const Text(
+            Text(
               'Affirmative Side (Pro)',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: Colors.green,
+                color: _themeService.isDarkMode
+                    ? Colors.green[300]
+                    : Colors.green,
               ),
             ),
             const SizedBox(height: 4),
             TextFormField(
               controller: _affirmativeNameController,
+              style: TextStyle(
+                color: _themeService.isDarkMode
+                    ? const Color(0xFFE0E0E0)
+                    : Colors.black,
+              ),
               decoration: InputDecoration(
                 hintText: 'Affirmative debater name',
+                hintStyle: TextStyle(
+                  color: _themeService.isDarkMode
+                      ? const Color(0xFF808080)
+                      : Colors.grey,
+                ),
+                filled: true,
+                fillColor: _themeService.isDarkMode
+                    ? const Color(0xFF1A1A1A)
+                    : Colors.white,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: _themeService.isDarkMode
+                        ? const Color(0xFF404040)
+                        : Colors.grey,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: _themeService.isDarkMode
+                        ? const Color(0xFF404040)
+                        : Colors.grey,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -1906,10 +1967,37 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
               const SizedBox(height: 8),
               TextFormField(
                 controller: _affirmativeTeam2Controller,
+                style: TextStyle(
+                  color: _themeService.isDarkMode
+                      ? const Color(0xFFE0E0E0)
+                      : Colors.black,
+                ),
                 decoration: InputDecoration(
                   hintText: 'Second affirmative debater name',
+                  hintStyle: TextStyle(
+                    color: _themeService.isDarkMode
+                        ? const Color(0xFF808080)
+                        : Colors.grey,
+                  ),
+                  filled: true,
+                  fillColor: _themeService.isDarkMode
+                      ? const Color(0xFF1A1A1A)
+                      : Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: _themeService.isDarkMode
+                          ? const Color(0xFF404040)
+                          : Colors.grey,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: _themeService.isDarkMode
+                          ? const Color(0xFF404040)
+                          : Colors.grey,
+                    ),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -1929,21 +2017,50 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
             const SizedBox(height: 12),
             
             // Negative Side
-            const Text(
+            Text(
               'Negative Side (Con)',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: Colors.red,
+                color: _themeService.isDarkMode
+                    ? Colors.red[300]
+                    : Colors.red,
               ),
             ),
             const SizedBox(height: 4),
             TextFormField(
               controller: _negativeNameController,
+              style: TextStyle(
+                color: _themeService.isDarkMode
+                    ? const Color(0xFFE0E0E0)
+                    : Colors.black,
+              ),
               decoration: InputDecoration(
                 hintText: 'Negative debater name',
+                hintStyle: TextStyle(
+                  color: _themeService.isDarkMode
+                      ? const Color(0xFF808080)
+                      : Colors.grey,
+                ),
+                filled: true,
+                fillColor: _themeService.isDarkMode
+                    ? const Color(0xFF1A1A1A)
+                    : Colors.white,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: _themeService.isDarkMode
+                        ? const Color(0xFF404040)
+                        : Colors.grey,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: _themeService.isDarkMode
+                        ? const Color(0xFF404040)
+                        : Colors.grey,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -1963,10 +2080,37 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
               const SizedBox(height: 8),
               TextFormField(
                 controller: _negativeTeam2Controller,
+                style: TextStyle(
+                  color: _themeService.isDarkMode
+                      ? const Color(0xFFE0E0E0)
+                      : Colors.black,
+                ),
                 decoration: InputDecoration(
                   hintText: 'Second negative debater name',
+                  hintStyle: TextStyle(
+                    color: _themeService.isDarkMode
+                        ? const Color(0xFF808080)
+                        : Colors.grey,
+                  ),
+                  filled: true,
+                  fillColor: _themeService.isDarkMode
+                      ? const Color(0xFF1A1A1A)
+                      : Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: _themeService.isDarkMode
+                          ? const Color(0xFF404040)
+                          : Colors.grey,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: _themeService.isDarkMode
+                          ? const Color(0xFF404040)
+                          : Colors.grey,
+                    ),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -1985,12 +2129,14 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
             const SizedBox(height: 16),
 
             // Team Size Selection
-            const Text(
+            Text(
               'Format',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: deepPurple,
+                color: _themeService.isDarkMode
+                    ? const Color(0xFFE0E0E0)
+                    : deepPurple,
               ),
             ),
             const SizedBox(height: 8),
@@ -2010,16 +2156,39 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
             // Scheduling and Privacy Options
             Card(
               elevation: 0,
-              color: Colors.grey[50],
+              color: _themeService.isDarkMode
+                  ? const Color(0xFF1A1A1A)
+                  : Colors.grey[50],
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   children: [
                     CheckboxListTile(
-                      title: const Text('Schedule for later'),
-                      subtitle: _scheduledTime != null 
-                        ? Text('Scheduled for: ${_scheduledTime!.day}/${_scheduledTime!.month}/${_scheduledTime!.year} at ${_scheduledTime!.hour}:${_scheduledTime!.minute.toString().padLeft(2, '0')}')
-                        : const Text('Start immediately or schedule for a specific time'),
+                      title: Text(
+                        'Schedule for later',
+                        style: TextStyle(
+                          color: _themeService.isDarkMode
+                              ? const Color(0xFFE0E0E0)
+                              : Colors.black,
+                        ),
+                      ),
+                      subtitle: _scheduledTime != null
+                        ? Text(
+                            'Scheduled for: ${_scheduledTime!.day}/${_scheduledTime!.month}/${_scheduledTime!.year} at ${_scheduledTime!.hour}:${_scheduledTime!.minute.toString().padLeft(2, '0')}',
+                            style: TextStyle(
+                              color: _themeService.isDarkMode
+                                  ? const Color(0xFF808080)
+                                  : Colors.black54,
+                            ),
+                          )
+                        : Text(
+                            'Start immediately or schedule for a specific time',
+                            style: TextStyle(
+                              color: _themeService.isDarkMode
+                                  ? const Color(0xFF808080)
+                                  : Colors.black54,
+                            ),
+                          ),
                       value: _isScheduled,
                       onChanged: (value) {
                         setState(() {
@@ -2034,8 +2203,22 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
                       activeColor: accentPurple,
                     ),
                     CheckboxListTile(
-                      title: const Text('Private Room'),
-                      subtitle: const Text('Requires password to join'),
+                      title: Text(
+                        'Private Room',
+                        style: TextStyle(
+                          color: _themeService.isDarkMode
+                              ? const Color(0xFFE0E0E0)
+                              : Colors.black,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Requires password to join',
+                        style: TextStyle(
+                          color: _themeService.isDarkMode
+                              ? const Color(0xFF808080)
+                              : Colors.black54,
+                        ),
+                      ),
                       value: _isPrivate,
                       onChanged: (value) {
                         setState(() {
@@ -2049,11 +2232,43 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _passwordController,
+                        style: TextStyle(
+                          color: _themeService.isDarkMode
+                              ? const Color(0xFFE0E0E0)
+                              : Colors.black,
+                        ),
                         decoration: InputDecoration(
                           labelText: 'Room Password *',
+                          labelStyle: TextStyle(
+                            color: _themeService.isDarkMode
+                                ? const Color(0xFFB0B0B0)
+                                : Colors.grey[700],
+                          ),
                           hintText: 'Enter password for private room',
+                          hintStyle: TextStyle(
+                            color: _themeService.isDarkMode
+                                ? const Color(0xFF808080)
+                                : Colors.grey,
+                          ),
+                          filled: true,
+                          fillColor: _themeService.isDarkMode
+                              ? const Color(0xFF1A1A1A)
+                              : Colors.white,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: _themeService.isDarkMode
+                                  ? const Color(0xFF404040)
+                                  : Colors.grey,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: _themeService.isDarkMode
+                                  ? const Color(0xFF404040)
+                                  : Colors.grey,
+                            ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -2076,21 +2291,55 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
             const SizedBox(height: 20),
 
             // Category Selection
-            const Text(
+            Text(
               'Category *',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: deepPurple,
+                color: _themeService.isDarkMode
+                    ? const Color(0xFFE0E0E0)
+                    : deepPurple,
               ),
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               initialValue: _selectedCategory,
-              hint: const Text('Select a category'),
+              hint: Text(
+                'Select a category',
+                style: TextStyle(
+                  color: _themeService.isDarkMode
+                      ? const Color(0xFF808080)
+                      : Colors.grey,
+                ),
+              ),
+              style: TextStyle(
+                color: _themeService.isDarkMode
+                    ? const Color(0xFFE0E0E0)
+                    : Colors.black,
+              ),
+              dropdownColor: _themeService.isDarkMode
+                  ? const Color(0xFF2D2D2D)
+                  : Colors.white,
               decoration: InputDecoration(
+                filled: true,
+                fillColor: _themeService.isDarkMode
+                    ? const Color(0xFF1A1A1A)
+                    : Colors.white,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: _themeService.isDarkMode
+                        ? const Color(0xFF404040)
+                        : Colors.grey,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: _themeService.isDarkMode
+                        ? const Color(0xFF404040)
+                        : Colors.grey,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -2126,10 +2375,37 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _customCategoryController,
+                style: TextStyle(
+                  color: _themeService.isDarkMode
+                      ? const Color(0xFFE0E0E0)
+                      : Colors.black,
+                ),
                 decoration: InputDecoration(
                   hintText: 'Enter custom category',
+                  hintStyle: TextStyle(
+                    color: _themeService.isDarkMode
+                        ? const Color(0xFF808080)
+                        : Colors.grey,
+                  ),
+                  filled: true,
+                  fillColor: _themeService.isDarkMode
+                      ? const Color(0xFF1A1A1A)
+                      : Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: _themeService.isDarkMode
+                          ? const Color(0xFF404040)
+                          : Colors.grey,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: _themeService.isDarkMode
+                          ? const Color(0xFF404040)
+                          : Colors.grey,
+                    ),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -2162,10 +2438,12 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 10),
               ),
-              child: const Text(
+              child: Text(
                 'Cancel',
                 style: TextStyle(
-                  color: Colors.grey,
+                  color: _themeService.isDarkMode
+                      ? Colors.grey[400]
+                      : Colors.grey,
                   fontSize: 16,
                 ),
               ),
@@ -2211,9 +2489,17 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? accentPurple.withOpacity(0.1) : Colors.grey[50],
+          color: isSelected
+              ? accentPurple.withOpacity(0.1)
+              : (_themeService.isDarkMode
+                  ? const Color(0xFF1A1A1A)
+                  : Colors.grey[50]),
           border: Border.all(
-            color: isSelected ? accentPurple : Colors.grey[300]!,
+            color: isSelected
+                ? accentPurple
+                : (_themeService.isDarkMode
+                    ? const Color(0xFF404040)
+                    : Colors.grey[300]!),
             width: isSelected ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(12),
@@ -2222,7 +2508,11 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
           children: [
             Icon(
               value == '1v1' ? Icons.person : Icons.people,
-              color: isSelected ? accentPurple : Colors.grey[600],
+              color: isSelected
+                  ? accentPurple
+                  : (_themeService.isDarkMode
+                      ? const Color(0xFF808080)
+                      : Colors.grey[600]),
               size: 24,
             ),
             const SizedBox(height: 8),
@@ -2231,7 +2521,11 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: isSelected ? accentPurple : Colors.grey[700],
+                color: isSelected
+                    ? accentPurple
+                    : (_themeService.isDarkMode
+                        ? const Color(0xFFE0E0E0)
+                        : Colors.grey[700]),
               ),
             ),
             const SizedBox(height: 4),
@@ -2240,7 +2534,11 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 11,
-                color: isSelected ? accentPurple : Colors.grey[600],
+                color: isSelected
+                    ? accentPurple
+                    : (_themeService.isDarkMode
+                        ? const Color(0xFF808080)
+                        : Colors.grey[600]),
               ),
             ),
           ],

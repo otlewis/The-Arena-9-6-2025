@@ -21,7 +21,10 @@ class NetworkResilienceService {
   
   // Circuit breaker state
   final Map<String, CircuitBreakerState> _circuitBreakers = {};
-  
+
+  // Timer for periodic quality monitoring
+  Timer? _qualityMonitoringTimer;
+
   // Streams
   final StreamController<bool> _connectionController = StreamController.broadcast();
   final StreamController<NetworkQuality> _qualityController = StreamController.broadcast();
@@ -126,7 +129,8 @@ class NetworkResilienceService {
   
   /// Start periodic network quality monitoring
   void _startNetworkQualityMonitoring() {
-    Timer.periodic(const Duration(seconds: 30), (_) {
+    _qualityMonitoringTimer?.cancel();
+    _qualityMonitoringTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (_isOnline) _checkNetworkQuality();
     });
   }
@@ -282,6 +286,7 @@ class NetworkResilienceService {
   /// Dispose resources
   void dispose() {
     _connectivitySubscription?.cancel();
+    _qualityMonitoringTimer?.cancel();
     _connectionController.close();
     _qualityController.close();
   }

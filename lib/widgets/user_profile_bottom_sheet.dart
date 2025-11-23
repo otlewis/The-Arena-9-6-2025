@@ -1905,6 +1905,7 @@ Join Arena DTD to connect with debaters and participate in live discussions!
   }
 
   /// Show mute user dialog
+  // ignore: unused_element
   void _showMuteUserDialog() {
     showDialog(
       context: context,
@@ -1986,6 +1987,7 @@ Join Arena DTD to connect with debaters and participate in live discussions!
   }
 
   /// Show timeout dialog (moderator only)
+  // ignore: unused_element
   void _showTimeoutDialog() {
     AppLogger().info('⏰ _showTimeoutDialog called - showing dialog');
     AppLogger().info('⏰ Widget mounted: $mounted');

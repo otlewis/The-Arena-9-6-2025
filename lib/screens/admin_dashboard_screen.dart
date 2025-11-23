@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../services/admin_analytics_service.dart';
 import '../core/logging/app_logger.dart';
 import 'admin_user_management_screen.dart';
@@ -121,6 +123,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     _buildSectionHeader('Economy'),
                     const SizedBox(height: 12),
                     _buildEconomyStats(isSmallScreen),
+                    const SizedBox(height: 24),
+
+                    // Beta Tester Feedback Section
+                    _buildSectionHeader('Beta Tester Feedback'),
+                    const SizedBox(height: 12),
+                    _buildBetaFeedbackCard(isSmallScreen),
                     const SizedBox(height: 24),
 
                     // Top Debaters Section
@@ -407,5 +415,245 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         },
       ),
     );
+  }
+
+  Widget _buildBetaFeedbackCard(bool isSmallScreen) {
+    return GestureDetector(
+      onTap: () => _showBetaFeedbackDialog(),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.orange.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.feedback,
+              color: Colors.orange,
+              size: isSmallScreen ? 32 : 40,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Submit Beta Feedback',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Help us improve The Arena by sharing your feedback',
+                    style: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.grey[600],
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showBetaFeedbackDialog() {
+    final subjectController = TextEditingController();
+    final feedbackController = TextEditingController();
+    final emailController = TextEditingController();
+    int rating = 3;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Text(
+            'Beta Tester Feedback',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: subjectController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Subject',
+                    labelStyle: TextStyle(color: Colors.grey[400]),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.grey[700]!),
+                    ),
+                    focusedBorder: const OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.orange),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: feedbackController,
+                  style: const TextStyle(color: Colors.white),
+                  maxLines: 5,
+                  decoration: InputDecoration(
+                    labelText: 'Feedback',
+                    labelStyle: TextStyle(color: Colors.grey[400]),
+                    hintText: 'Tell us what you think...',
+                    hintStyle: TextStyle(color: Colors.grey[600]),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.grey[700]!),
+                    ),
+                    focusedBorder: const OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.orange),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: emailController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Email (optional)',
+                    labelStyle: TextStyle(color: Colors.grey[400]),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.grey[700]!),
+                    ),
+                    focusedBorder: const OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.orange),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Rating: $rating/5',
+                  style: const TextStyle(color: Colors.white),
+                ),
+                Slider(
+                  value: rating.toDouble(),
+                  min: 1,
+                  max: 5,
+                  divisions: 4,
+                  activeColor: Colors.orange,
+                  inactiveColor: Colors.grey[700],
+                  onChanged: (value) {
+                    setState(() {
+                      rating = value.toInt();
+                    });
+                  },
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: List.generate(
+                    5,
+                    (index) => Icon(
+                      index < rating ? Icons.star : Icons.star_border,
+                      color: Colors.orange,
+                      size: 24,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey[400]),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (subjectController.text.isEmpty ||
+                    feedbackController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please fill in subject and feedback'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                Navigator.pop(context);
+                await _submitBetaFeedback(
+                  subject: subjectController.text,
+                  feedback: feedbackController.text,
+                  email: emailController.text,
+                  rating: rating,
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+              ),
+              child: const Text('Submit'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submitBetaFeedback({
+    required String subject,
+    required String feedback,
+    required String email,
+    required int rating,
+  }) async {
+    try {
+      final userName = 'Admin User'; // Get from auth service if available
+
+      final response = await http.post(
+        Uri.parse('https://n8n.dialecticlabs.com/webhook/arena-beta-feedback'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'subject': subject,
+          'feedback': feedback,
+          'email': email.isEmpty ? null : email,
+          'userName': userName,
+          'rating': rating,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Thank you for your feedback!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        throw Exception('Failed to submit feedback');
+      }
+    } catch (e) {
+      AppLogger().error('❌ Failed to submit beta feedback: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to submit feedback. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

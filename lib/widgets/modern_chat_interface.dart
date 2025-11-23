@@ -50,7 +50,8 @@ class _ModernChatInterfaceState extends State<ModernChatInterface>
   bool _isOpeningOtherChat = false;
   Timer? _notificationTimer;
   StreamSubscription? _conversationsSubscription;
-  
+  StreamSubscription? _messagesSubscription;
+
   // Track previous unread counts to detect actual new messages
   final Map<String, int> _previousUnreadCounts = {};
   
@@ -119,7 +120,7 @@ class _ModernChatInterfaceState extends State<ModernChatInterface>
       
       // Load conversation history with minimal logging
       final messagesStream = _messagingService.getMessagesStream(_conversationId!);
-      messagesStream.listen((messages) {
+      _messagesSubscription = messagesStream.listen((messages) {
         if (mounted) {
           setState(() {
             _messages = messages;
@@ -925,7 +926,8 @@ class _ModernChatInterfaceState extends State<ModernChatInterface>
     _messageFocusNode.dispose();
     _notificationTimer?.cancel();
     _conversationsSubscription?.cancel();
-    
+    _messagesSubscription?.cancel();
+
     // Cancel all message stream subscriptions
     for (final subscription in _messageStreamSubscriptions.values) {
       subscription.cancel();

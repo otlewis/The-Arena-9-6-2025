@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:appwrite/appwrite.dart';
 import '../../../services/appwrite_service.dart';
+import '../../../services/theme_service.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../models/moderator_judge.dart';
 import '../../../constants/appwrite.dart';
@@ -23,6 +24,7 @@ class CreateArenaRoom extends ConsumerStatefulWidget {
 
 class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
   final AppwriteService _appwrite = AppwriteService();
+  final ThemeService _themeService = ThemeService();
   final _formKey = GlobalKey<FormState>();
   final _topicController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -358,7 +360,9 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
           maxHeight: 600,
         ),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: _themeService.isDarkMode
+              ? const Color(0xFF2D2D2D)
+              : Colors.white,
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
@@ -431,12 +435,14 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Topic Input
-            const Text(
+            Text(
               'Debate Topic',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: deepPurple,
+                color: _themeService.isDarkMode
+                    ? const Color(0xFFE0E0E0)
+                    : deepPurple,
               ),
             ),
             const SizedBox(height: 8),
@@ -444,10 +450,37 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
               controller: _topicController,
               maxLines: 2,
               enabled: !_isCreating,
+              style: TextStyle(
+                color: _themeService.isDarkMode
+                    ? const Color(0xFFE0E0E0)
+                    : Colors.black,
+              ),
               decoration: InputDecoration(
                 hintText: 'Enter the debate topic (e.g., "Should AI replace human teachers?")',
+                hintStyle: TextStyle(
+                  color: _themeService.isDarkMode
+                      ? const Color(0xFF808080)
+                      : Colors.grey,
+                ),
+                filled: true,
+                fillColor: _themeService.isDarkMode
+                    ? const Color(0xFF1A1A1A)
+                    : Colors.white,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: _themeService.isDarkMode
+                        ? const Color(0xFF404040)
+                        : Colors.grey,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: _themeService.isDarkMode
+                        ? const Color(0xFF404040)
+                        : Colors.grey,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -473,12 +506,14 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
             const SizedBox(height: 20),
             
             // Description Input
-            const Text(
+            Text(
               'Description (Optional)',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: deepPurple,
+                color: _themeService.isDarkMode
+                    ? const Color(0xFFE0E0E0)
+                    : deepPurple,
               ),
             ),
             const SizedBox(height: 8),
@@ -486,10 +521,37 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
               controller: _descriptionController,
               maxLines: 3,
               enabled: !_isCreating,
+              style: TextStyle(
+                color: _themeService.isDarkMode
+                    ? const Color(0xFFE0E0E0)
+                    : Colors.black,
+              ),
               decoration: InputDecoration(
                 hintText: 'Add more context, rules, or background information...',
+                hintStyle: TextStyle(
+                  color: _themeService.isDarkMode
+                      ? const Color(0xFF808080)
+                      : Colors.grey,
+                ),
+                filled: true,
+                fillColor: _themeService.isDarkMode
+                    ? const Color(0xFF1A1A1A)
+                    : Colors.white,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: _themeService.isDarkMode
+                        ? const Color(0xFF404040)
+                        : Colors.grey,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: _themeService.isDarkMode
+                        ? const Color(0xFF404040)
+                        : Colors.grey,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -521,24 +583,26 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: accentPurple.withOpacity(0.3)),
               ),
-              child: const Column(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.info, color: accentPurple, size: 20),
-                      SizedBox(width: 8),
+                      const Icon(Icons.info, color: accentPurple, size: 20),
+                      const SizedBox(width: 8),
                       Text(
                         'How Your Arena Works:',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: deepPurple,
+                          color: _themeService.isDarkMode
+                              ? const Color(0xFFE0E0E0)
+                              : deepPurple,
                           fontSize: 14,
                         ),
                       ),
                     ],
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
                     '• You will be the moderator with timer controls\n'
                     '• Others can join as audience members\n'
@@ -547,7 +611,9 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
                     '• All participants see real-time updates',
                     style: TextStyle(
                       fontSize: 12,
-                      color: deepPurple,
+                      color: _themeService.isDarkMode
+                          ? const Color(0xFFB0B0B0)
+                          : deepPurple,
                       height: 1.4,
                     ),
                   ),
@@ -571,10 +637,12 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
-              child: const Text(
+              child: Text(
                 'Cancel',
                 style: TextStyle(
-                  color: Colors.grey,
+                  color: _themeService.isDarkMode
+                      ? Colors.grey[400]
+                      : Colors.grey,
                   fontSize: 16,
                 ),
               ),
@@ -632,23 +700,31 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: _themeService.isDarkMode
+            ? const Color(0xFF1A1A1A)
+            : Colors.grey[50],
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(
+          color: _themeService.isDarkMode
+              ? const Color(0xFF404040)
+              : Colors.grey[200]!,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.notifications_active, color: accentPurple, size: 18),
-              SizedBox(width: 8),
+              const Icon(Icons.notifications_active, color: accentPurple, size: 18),
+              const SizedBox(width: 8),
               Text(
                 'Ping Moderators & Judges',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: deepPurple,
+                  color: _themeService.isDarkMode
+                      ? const Color(0xFFE0E0E0)
+                      : deepPurple,
                 ),
               ),
             ],
@@ -657,7 +733,9 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
           Text(
             'Request experienced moderators and judges for your debate',
             style: TextStyle(
-              color: Colors.grey[600],
+              color: _themeService.isDarkMode
+                  ? const Color(0xFF808080)
+                  : Colors.grey[600],
               fontSize: 12,
             ),
           ),
@@ -670,12 +748,14 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
           
           // Moderators
           if (_availableModerators.isNotEmpty) ...[
-            const Text(
+            Text(
               'Moderators',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: deepPurple,
+                color: _themeService.isDarkMode
+                    ? const Color(0xFFE0E0E0)
+                    : deepPurple,
               ),
             ),
             const SizedBox(height: 6),
@@ -695,12 +775,14 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
           
           // Judges
           if (_availableJudges.isNotEmpty) ...[
-            const Text(
+            Text(
               'Judges',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: deepPurple,
+                color: _themeService.isDarkMode
+                    ? const Color(0xFFE0E0E0)
+                    : deepPurple,
               ),
             ),
             const SizedBox(height: 6),
@@ -753,10 +835,16 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
               selectedColor: accentPurple.withOpacity(0.2),
               checkmarkColor: accentPurple,
               labelStyle: TextStyle(
-                color: isSelected ? accentPurple : Colors.grey[700],
+                color: isSelected
+                    ? accentPurple
+                    : (_themeService.isDarkMode
+                        ? const Color(0xFFB0B0B0)
+                        : Colors.grey[700]),
                 fontSize: 10,
               ),
-              backgroundColor: Colors.white,
+              backgroundColor: _themeService.isDarkMode
+                  ? const Color(0xFF2D2D2D)
+                  : Colors.white,
               side: BorderSide(
                 color: isSelected ? accentPurple : Colors.grey[300]!,
               ),
@@ -775,9 +863,15 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
       margin: const EdgeInsets.only(right: 8),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _themeService.isDarkMode
+            ? const Color(0xFF2D2D2D)
+            : Colors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(
+          color: _themeService.isDarkMode
+              ? const Color(0xFF404040)
+              : Colors.grey[200]!,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -808,9 +902,12 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
                   children: [
                     Text(
                       moderator.displayName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
+                        color: _themeService.isDarkMode
+                            ? const Color(0xFFE0E0E0)
+                            : Colors.black,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -857,9 +954,15 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
       margin: const EdgeInsets.only(right: 8),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _themeService.isDarkMode
+            ? const Color(0xFF2D2D2D)
+            : Colors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(
+          color: _themeService.isDarkMode
+              ? const Color(0xFF404040)
+              : Colors.grey[200]!,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -890,9 +993,12 @@ class _CreateArenaRoomState extends ConsumerState<CreateArenaRoom> {
                   children: [
                     Text(
                       judge.displayName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
+                        color: _themeService.isDarkMode
+                            ? const Color(0xFFE0E0E0)
+                            : Colors.black,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

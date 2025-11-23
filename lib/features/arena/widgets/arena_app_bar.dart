@@ -5,6 +5,8 @@ import '../../../screens/arena_modals.dart';
 import '../../../widgets/challenge_bell.dart';
 import '../../../widgets/network_quality_indicator.dart';
 import '../../../widgets/simple_timer.dart';
+import '../../../widgets/help_modal.dart';
+import '../../../config/help_content.dart';
 // import '../../../services/livekit_service.dart'; // Removed unused import
 
 /// Arena App Bar - DO NOT MODIFY LAYOUT
@@ -52,12 +54,41 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       backgroundColor: Colors.black,
       toolbarHeight: 56,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.white),
-        onPressed: () {
-          AppLogger().info('🚪 EXIT: Back button clicked in ArenaAppBar');
-          onExitArena();
-        },
+      leading: SizedBox(
+        width: 56,
+        child: InkWell(
+          onTap: () {
+            AppLogger().info('🚪 EXIT: Exit button clicked in ArenaAppBar');
+            onExitArena();
+          },
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.logout,
+                  color: Colors.red,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                'Leave',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
       title: LayoutBuilder(
         builder: (context, constraints) {
@@ -138,25 +169,25 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // Vote indicator bars (3 bars that turn green when votes come in)
-                      // Always show 3 bars for arena debates
+                      // Always show 3 bars for arena debates - more compact on small screens
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: List.generate(3, (index) {
                           final hasVoted = index < votedCount;
                           return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                            padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 1.0 : 1.5),
                             child: Container(
-                              width: 3,
-                              height: 16,
+                              width: isSmallScreen ? 2.5 : 3,
+                              height: isSmallScreen ? 14 : 16,
                               decoration: BoxDecoration(
                                 color: hasVoted ? Colors.green : Colors.red,
-                                borderRadius: BorderRadius.circular(1.5),
+                                borderRadius: BorderRadius.circular(isSmallScreen ? 1.25 : 1.5),
                               ),
                             ),
                           );
                         }),
                       ),
-                      const SizedBox(width: 6),
+                      SizedBox(width: isSmallScreen ? 4 : 6),
                       // Timer
                       const SimpleTimer(),
                     ],
@@ -168,26 +199,27 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
         },
       ),
       actions: [
-        // Network quality indicator - ultra compact on small screens
-        SizedBox(
-          width: isSmallScreen ? 18 : 28,
-          child: const Center(
-            child: CompactNetworkIndicator(),
+        // Network quality indicator - hide on very small screens
+        if (!isSmallScreen)
+          SizedBox(
+            width: 28,
+            child: const Center(
+              child: CompactNetworkIndicator(),
+            ),
           ),
-        ),
         // Challenge notification bell - ultra compact on small screens
         SizedBox(
-          width: isSmallScreen ? 20 : 32,
+          width: isSmallScreen ? 16 : 32,
           child: Center(
             child: ChallengeBell(
               iconColor: Colors.white,
-              iconSize: isSmallScreen ? 12 : 18,
+              iconSize: isSmallScreen ? 10 : 18,
             ),
           ),
         ),
         // Info/Rules button for everyone
         SizedBox(
-          width: isSmallScreen ? 20 : 32,
+          width: isSmallScreen ? 16 : 32,
           child: IconButton(
             padding: EdgeInsets.zero,
             onPressed: () {
@@ -199,23 +231,30 @@ class ArenaAppBar extends StatelessWidget implements PreferredSizeWidget {
             },
             icon: Icon(Icons.info,
                      color: Colors.white,
-                     size: isSmallScreen ? 12 : 18),
+                     size: isSmallScreen ? 10 : 18),
             tooltip: 'Debate Rules & Guidelines',
           ),
         ),
-        // Leave button - ultra compact on small screens
+        // Help button - Arena controls guide
         SizedBox(
-          width: isSmallScreen ? 20 : 32,
+          width: isSmallScreen ? 16 : 32,
           child: IconButton(
             padding: EdgeInsets.zero,
             onPressed: () {
-              AppLogger().info('🚪 EXIT: Exit button clicked in ArenaAppBar');
-              onExitArena();
+              AppLogger().debug('❓ Opening arena controls help');
+              showDialog(
+                context: context,
+                builder: (context) => HelpModal(
+                  title: 'Arena Controls Guide',
+                  items: HelpContent.arenaControls(),
+                  accentColor: const Color(0xFF8B5CF6),
+                ),
+              );
             },
-            icon: Icon(Icons.exit_to_app,
-                     color: Colors.white,
-                     size: isSmallScreen ? 12 : 18),
-            tooltip: 'Leave Arena',
+            icon: Icon(Icons.help_outline,
+                     color: const Color(0xFF8B5CF6),
+                     size: isSmallScreen ? 10 : 18),
+            tooltip: 'Arena Controls Help',
           ),
         ),
       ],

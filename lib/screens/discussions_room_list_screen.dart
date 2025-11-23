@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import '../widgets/challenge_bell.dart';
@@ -26,6 +27,7 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
   List<Map<String, dynamic>> _rooms = [];
   bool _isLoading = true;
   RealtimeSubscription? _roomsSubscription;
+  StreamSubscription? _roomsStreamSubscription;
 
   @override
   void initState() {
@@ -36,6 +38,7 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
 
   @override
   void dispose() {
+    _roomsStreamSubscription?.cancel();
     _roomsSubscription?.close();
     super.dispose();
   }
@@ -91,10 +94,10 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
         'databases.${AppwriteConstants.databaseId}.collections.${AppwriteConstants.debateDiscussionRoomsCollection}.documents'
       ]);
 
-      _roomsSubscription?.stream.listen(
+      _roomsStreamSubscription = _roomsSubscription?.stream.listen(
         (response) {
           AppLogger().debug('Real-time room update: ${response.events}');
-          
+
           if (response.events.any((event) => event.contains('debate_discussion_rooms.documents'))) {
             // Reload rooms when there are changes
             _loadRooms();

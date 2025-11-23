@@ -63,7 +63,15 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
   bool _isSending = false;
   bool _showScrollToBottom = false;
   String? _errorMessage;
-  
+
+  // Scroll listener callback for removal in dispose
+  void _onScrollChanged() {
+    final showButton = _scrollController.offset > 200;
+    if (showButton != _showScrollToBottom) {
+      setState(() => _showScrollToBottom = showButton);
+    }
+  }
+
   // Colors to match Arena theme
   static const Color _chatBackground = Color(0xFF1A1A1A);
   static const Color _messageBackground = Color(0xFF2A2A2A);
@@ -113,12 +121,7 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
   }
 
   void _setupScrollListener() {
-    _scrollController.addListener(() {
-      final showButton = _scrollController.offset > 200;
-      if (showButton != _showScrollToBottom) {
-        setState(() => _showScrollToBottom = showButton);
-      }
-    });
+    _scrollController.addListener(_onScrollChanged);
   }
 
   Future<void> _initializeChat() async {
@@ -763,17 +766,18 @@ class _LiveChatWidgetState extends State<LiveChatWidget>
     _messagesSubscription?.cancel();
     _presenceSubscription?.cancel();
     _messageController.dispose();
+    _scrollController.removeListener(_onScrollChanged);
     _scrollController.dispose();
     _messageFocusNode.dispose();
     _fadeAnimationController.dispose();
     _slideAnimationController.dispose();
-    
+
     // Leave chat room - stub implementation
     // _chatService.leaveChatRoom(
     //   chatRoomId: widget.chatRoomId,
     //   userId: widget.currentUser.id,
     // );
-    
+
     super.dispose();
   }
 }
