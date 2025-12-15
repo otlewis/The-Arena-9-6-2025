@@ -726,6 +726,7 @@ class PerformanceOptimizedSpeakersPanel extends StatefulWidget {
 
 class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimizedSpeakersPanel> {
   List<Widget> _cachedSpeakerWidgets = [];
+  List<Map<String, dynamic>> _cachedSpeakerData = [];
   
   @override
   void initState() {
@@ -845,7 +846,10 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
         speakersWithPlaceholders.add({'isEmpty': true, 'slotNumber': slotNumber});
       }
     }
-    
+
+    // Store raw speaker data for round avatar rendering
+    _cachedSpeakerData = speakersWithPlaceholders;
+
     _cachedSpeakerWidgets = speakersWithPlaceholders.map((speaker) =>
       _VideoTile(
         key: ValueKey(speaker['userId'] ?? speaker['isEmpty'] ?? DateTime.now().millisecondsSinceEpoch),
@@ -859,7 +863,149 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
       )
     ).toList();
   }
-  
+
+  /// Build a round avatar slot for Debate layout with label header
+  Widget _buildDebateRoundSlot({
+    Map<String, dynamic>? speaker,
+    required String label,
+    required Color color,
+    required double avatarSize,
+    Function(String userId)? onTap,
+  }) {
+    final isEmpty = speaker == null || speaker['isEmpty'] == true;
+    final userId = speaker?['userId'] ?? '';
+    final name = speaker?['name'] ?? speaker?['userName'] ?? label;
+    final avatarUrl = speaker?['avatarUrl'] ?? speaker?['avatar'] ?? '';
+    final isSpeaking = speaker?['isSpeaking'] ?? false;
+    final isWinner = speaker?['isWinner'] ?? false;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Label header bar with full border
+        Container(
+          width: avatarSize + 40,
+          height: 28,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color, width: 2),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+
+        // Connector line (matches border width)
+        Container(
+          width: 3,
+          height: 10,
+          color: color,
+        ),
+
+        // Round avatar
+        GestureDetector(
+          onTap: isEmpty ? null : () => onTap?.call(userId),
+          child: Container(
+            width: avatarSize,
+            height: avatarSize,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isEmpty ? const Color(0xFF2D2D2D) : color,
+              border: Border.all(
+                color: isSpeaking ? Colors.white : color,
+                width: isSpeaking ? 4 : 3,
+              ),
+              boxShadow: isSpeaking
+                  ? [
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.4),
+                        blurRadius: 12,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                  : [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        spreadRadius: 0,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+            ),
+            child: ClipOval(
+              child: isEmpty
+                  ? Center(
+                      child: Icon(
+                        Icons.gavel,
+                        color: color,
+                        size: 40,
+                      ),
+                    )
+                  : (avatarUrl.isNotEmpty
+                      ? Image.network(
+                          avatarUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _buildInitials(name, color),
+                        )
+                      : _buildInitials(name, color)),
+            ),
+          ),
+        ),
+
+        // Name label (only show when slot is filled, not for empty slots)
+        if (!isEmpty) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            width: avatarSize + 20,
+            child: Text(
+              name,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+
+        // Crown indicator for winner or role indicator
+        if (!isEmpty && isWinner == true) ...[
+          const SizedBox(height: 4),
+          const Text('👑', style: TextStyle(fontSize: 16)),
+        ],
+      ],
+    );
+  }
+
+  /// Build initials avatar for Debate layout
+  Widget _buildInitials(String name, Color bgColor) {
+    final initials = name.split(' ').map((n) => n.isNotEmpty ? n[0] : '').take(2).join().toUpperCase();
+    return Container(
+      color: bgColor,
+      child: Center(
+        child: Text(
+          initials.isEmpty ? '?' : initials,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 32,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDebateLayout = widget.debateStyle == 'Debate';
@@ -897,75 +1043,25 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
         mainAxisSize: MainAxisSize.min,
         children: [
           if (isDebateLayout)
-            // Debate layout: 2 large slots for Affirmative and Negative with tabs
-            Column(
-              mainAxisSize: MainAxisSize.min,
+            // Debate layout: 2 round avatar slots for Affirmative and Negative with label headers
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                // Tabs row
-                SizedBox(
-                  height: 32,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      for (int i = 0; i < 2; i++) ...[
-                        if (i > 0) const SizedBox(width: tileSpacing),
-                        Container(
-                          width: tileWidth,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: i == 0 
-                                ? const Color(0xFF4CAF50).withOpacity(0.15)  // Green for Affirmative
-                                : const Color(0xFFF44336).withOpacity(0.15), // Red for Negative  
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(8),
-                              topRight: Radius.circular(8),
-                            ),
-                            border: Border(
-                              top: BorderSide(
-                                color: i == 0 ? const Color(0xFF4CAF50) : const Color(0xFFF44336),
-                                width: 2,
-                              ),
-                              left: BorderSide(
-                                color: i == 0 ? const Color(0xFF4CAF50) : const Color(0xFFF44336),
-                                width: 2,
-                              ),
-                              right: BorderSide(
-                                color: i == 0 ? const Color(0xFF4CAF50) : const Color(0xFFF44336),
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                          child: Center(
-                            child: Text(
-                              i == 0 ? 'AFFIRMATIVE' : 'NEGATIVE',
-                              style: TextStyle(
-                                color: i == 0 ? const Color(0xFF4CAF50) : const Color(0xFFF44336),
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+                // Affirmative side
+                _buildDebateRoundSlot(
+                  speaker: _cachedSpeakerData.isNotEmpty ? _cachedSpeakerData[0] : null,
+                  label: 'AFFIRMATIVE',
+                  color: const Color(0xFF4CAF50), // Green
+                  avatarSize: 100.0,
+                  onTap: widget.onSpeakerTap,
                 ),
-                // Speaker slots row
-                SizedBox(
-                  height: tileHeight,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      for (int i = 0; i < 2; i++) ...[
-                        if (i > 0) const SizedBox(width: tileSpacing),
-                        SizedBox(
-                          width: tileWidth,
-                          height: tileHeight,
-                          child: _cachedSpeakerWidgets[i],
-                        ),
-                      ],
-                    ],
-                  ),
+                // Negative side
+                _buildDebateRoundSlot(
+                  speaker: _cachedSpeakerData.length > 1 ? _cachedSpeakerData[1] : null,
+                  label: 'NEGATIVE',
+                  color: const Color(0xFFF44336), // Red
+                  avatarSize: 100.0,
+                  onTap: widget.onSpeakerTap,
                 ),
               ],
             )
@@ -1033,112 +1129,166 @@ class _PerformanceOptimizedSpeakersPanelState extends State<PerformanceOptimized
 
           // Moderator at the bottom (always shown)
           if (widget.moderator != null)
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Moderator tab (purple for Debate, scarlet for Take/Discussion)
-                // Show tab for all debate styles (Debate, Take, and Discussion)
-                Container(
-                  width: isDebateLayout || isTakeLayout ? tileWidth * 0.8 : tileWidth,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: isDebateLayout
-                        ? const Color(0xFF8B5CF6).withOpacity(0.15)  // Purple for Debate
-                        : const Color(0xFFDC143C).withOpacity(0.15),  // Scarlet for Take/Discussion
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(8),
-                      topRight: Radius.circular(8),
-                    ),
-                    border: Border(
-                      top: BorderSide(
-                        color: isDebateLayout
-                            ? const Color(0xFF8B5CF6)  // Purple for Debate
-                            : const Color(0xFFDC143C),  // Scarlet for Take/Discussion
-                        width: 2,
-                      ),
-                      left: BorderSide(
-                        color: isDebateLayout
-                            ? const Color(0xFF8B5CF6)  // Purple for Debate
-                            : const Color(0xFFDC143C),  // Scarlet for Take/Discussion
-                        width: 2,
-                      ),
-                      right: BorderSide(
-                        color: isDebateLayout
-                            ? const Color(0xFF8B5CF6)  // Purple for Debate
-                            : const Color(0xFFDC143C),  // Scarlet for Take/Discussion
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      'MODERATOR',
-                      style: TextStyle(
-                        color: isDebateLayout
-                            ? const Color(0xFF8B5CF6)  // Purple for Debate
-                            : const Color(0xFFDC143C),  // Scarlet for Take/Discussion
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                // Moderator slot
-                SizedBox(
-                  width: isDebateLayout || isTakeLayout ? tileWidth * 0.8 : tileWidth,
-                  height: isDebateLayout || isTakeLayout ? tileHeight * 0.8 : tileHeight,
-                  child: _VideoTile(
+            isDebateLayout
+                // Debate layout: Round avatar moderator slot
+                ? _buildDebateRoundSlot(
                     speaker: {
                       ...widget.moderator!,
                       'role': 'moderator',
                     },
+                    label: 'MODERATOR',
+                    color: const Color(0xFF8B5CF6), // Purple
+                    avatarSize: 90.0,
                     onTap: widget.onSpeakerTap,
-                    isModerator: true,
-                    isDebateLayout: isDebateLayout || isTakeLayout,
-                    debateStyle: widget.debateStyle,
-                    activeReactions: widget.activeReactions,
-                    avatarEmojiOverlays: widget.avatarEmojiOverlays,
+                  )
+                // Other layouts: Rectangular moderator slot
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Moderator tab (scarlet for Take/Discussion)
+                      Container(
+                        width: isTakeLayout ? tileWidth * 0.8 : tileWidth,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDC143C).withValues(alpha: 0.15),  // Scarlet for Take/Discussion
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(8),
+                            topRight: Radius.circular(8),
+                          ),
+                          border: const Border(
+                            top: BorderSide(
+                              color: Color(0xFFDC143C),  // Scarlet for Take/Discussion
+                              width: 2,
+                            ),
+                            left: BorderSide(
+                              color: Color(0xFFDC143C),  // Scarlet for Take/Discussion
+                              width: 2,
+                            ),
+                            right: BorderSide(
+                              color: Color(0xFFDC143C),  // Scarlet for Take/Discussion
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'MODERATOR',
+                            style: TextStyle(
+                              color: Color(0xFFDC143C),  // Scarlet for Take/Discussion
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Moderator slot
+                      SizedBox(
+                        width: isTakeLayout ? tileWidth * 0.8 : tileWidth,
+                        height: isTakeLayout ? tileHeight * 0.8 : tileHeight,
+                        child: _VideoTile(
+                          speaker: {
+                            ...widget.moderator!,
+                            'role': 'moderator',
+                          },
+                          onTap: widget.onSpeakerTap,
+                          isModerator: true,
+                          isDebateLayout: isTakeLayout,
+                          debateStyle: widget.debateStyle,
+                          activeReactions: widget.activeReactions,
+                          avatarEmojiOverlays: widget.avatarEmojiOverlays,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           
-          // Speaker requests section (only for moderator)
+          // Speaker requests section (only for moderator) - Hand Raises style
           if (widget.isCurrentUserModerator && widget.speakerRequests != null && widget.speakerRequests!.isNotEmpty) ...[
             const SizedBox(height: 16),
-            
             Container(
-              padding: const EdgeInsets.all(8),
-              margin: const EdgeInsets.symmetric(horizontal: 8),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.withOpacity(0.3)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              height: 1,
+              color: Colors.white.withValues(alpha: 0.1),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
                 children: [
-                  const Text(
-                    'Speaker Requests:',
-                    style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold),
+                  const Icon(
+                    Icons.pan_tool,
+                    size: 16,
+                    color: Colors.amber,
                   ),
-                  const SizedBox(height: 4),
-                  ...(widget.speakerRequests!.map((request) => 
-                    Row(
-                      children: [
-                        Text(
-                          request['name'] ?? 'Unknown',
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                        ),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () => widget.onSpeakerRequestApprove?.call(request['userId'] ?? ''),
-                          child: const Text('Approve', style: TextStyle(color: Colors.green, fontSize: 10)),
-                        ),
-                      ],
+                  const SizedBox(width: 8),
+                  Text(
+                    'Hand Raises (${widget.speakerRequests!.length})',
+                    style: const TextStyle(
+                      color: Colors.amber,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
-                  )),
+                  ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: widget.speakerRequests!.map((request) {
+                  final avatarUrl = request['avatarUrl'] ?? request['avatar'];
+                  final hasAvatar = avatarUrl != null && avatarUrl.toString().isNotEmpty;
+                  final name = request['name'] ?? 'Unknown';
+                  final initials = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : 'U';
+
+                  return GestureDetector(
+                    onTap: () => widget.onSpeakerRequestApprove?.call(request['userId'] ?? ''),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundColor: const Color(0xFF8B5CF6),
+                            backgroundImage: hasAvatar ? NetworkImage(avatarUrl) : null,
+                            child: !hasAvatar
+                                ? Text(
+                                    initials,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(
+                            Icons.check_circle,
+                            size: 18,
+                            color: Colors.green,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
             ),
           ],

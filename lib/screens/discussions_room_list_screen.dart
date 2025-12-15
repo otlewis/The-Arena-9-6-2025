@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:appwrite/appwrite.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/challenge_bell.dart';
 import 'create_discussion_room_screen.dart';
 import 'debates_discussions_screen.dart';
-import '../services/appwrite_service.dart';
+import '../services/supabase_service.dart';
 import '../services/theme_service.dart';
 import '../core/logging/app_logger.dart';
-import '../constants/appwrite.dart';
 
 class DiscussionsRoomListScreen extends StatefulWidget {
   final String? preSelectedFormat;
@@ -22,12 +21,11 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
   // Purple theme colors
   static const Color primaryPurple = Color(0xFF8B5CF6);
 
-  final AppwriteService _appwrite = AppwriteService();
+  final SupabaseService _supabase = SupabaseService();
   final ThemeService _themeService = ThemeService();
   List<Map<String, dynamic>> _rooms = [];
   bool _isLoading = true;
-  RealtimeSubscription? _roomsSubscription;
-  StreamSubscription? _roomsStreamSubscription;
+  RealtimeChannel? _roomsSubscription;
 
   @override
   void initState() {
@@ -38,25 +36,25 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
 
   @override
   void dispose() {
-    _roomsStreamSubscription?.cancel();
-    _roomsSubscription?.close();
+    _roomsSubscription?.unsubscribe();
+    _roomsSubscription = null;
     super.dispose();
   }
 
   Future<void> _loadRooms() async {
     try {
       AppLogger().debug('Loading discussion rooms...');
-      final allRooms = await _appwrite.getDebateDiscussionRooms();
+      final allRooms = await _supabase.getDebateDiscussionRooms();
       AppLogger().debug('🔍 Raw rooms data: ${allRooms.toString()}');
       
       // Filter rooms by preSelectedFormat if provided
       List<Map<String, dynamic>> filteredRooms = allRooms;
       if (widget.preSelectedFormat != null) {
         filteredRooms = allRooms.where((room) {
-          final roomDebateStyle = room['debateStyle'] as String?;
-          return roomDebateStyle == widget.preSelectedFormat;
+          final roomType = room['room_type'] as String?;
+          return roomType == widget.preSelectedFormat;
         }).toList();
-        
+
         AppLogger().debug('🔍 Filtered ${filteredRooms.length} rooms for format: ${widget.preSelectedFormat}');
       }
       
@@ -90,23 +88,19 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
 
   void _setupRealTimeUpdates() {
     try {
-      _roomsSubscription = _appwrite.realtimeInstance.subscribe([
-        'databases.${AppwriteConstants.databaseId}.collections.${AppwriteConstants.debateDiscussionRoomsCollection}.documents'
-      ]);
-
-      _roomsStreamSubscription = _roomsSubscription?.stream.listen(
-        (response) {
-          AppLogger().debug('Real-time room update: ${response.events}');
-
-          if (response.events.any((event) => event.contains('debate_discussion_rooms.documents'))) {
-            // Reload rooms when there are changes
+      _roomsSubscription = _supabase.client
+        .channel('debate_discussion_rooms')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'debate_discussion_rooms',
+          callback: (payload) {
+            // Reload rooms on any change
             _loadRooms();
-          }
-        },
-        onError: (error) {
-          AppLogger().error('Real-time subscription error: $error');
-        },
-      );
+          },
+        );
+
+      _roomsSubscription?.subscribe();
     } catch (e) {
       AppLogger().error('Error setting up real-time updates: $e');
     }
@@ -132,7 +126,7 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
     AppLogger().debug('🏁 Room Name: ${roomData['name']}');
     
     // Get current user
-    final currentUser = await _appwrite.getCurrentUser();
+    final currentUser = await _supabase.getCurrentUser();
     if (currentUser == null) {
       _showSnackBar('Please log in to join rooms');
       return;
@@ -143,12 +137,12 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
     final isLive = roomData['isLive'] as bool? ?? false;
     final scheduledDate = roomData['scheduledDate'];
     final moderatorId = roomData['moderatorId'] as String? ?? roomData['createdBy'] as String?;
-    final isCurrentUserModerator = currentUser.$id == moderatorId;
-    
+    final isCurrentUserModerator = currentUser.id == moderatorId;
+
     AppLogger().debug('🏁 Is room scheduled: $isScheduled');
     AppLogger().debug('🏁 Is room live: $isLive');
     AppLogger().debug('🏁 Scheduled date: $scheduledDate');
-    AppLogger().debug('🏁 Current user ID: ${currentUser.$id}');
+    AppLogger().debug('🏁 Current user ID: ${currentUser.id}');
     AppLogger().debug('🏁 Moderator ID: $moderatorId');
     AppLogger().debug('🏁 Created by: ${roomData['createdBy']}');
     AppLogger().debug('🏁 Is current user moderator: $isCurrentUserModerator');
@@ -228,9 +222,9 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
       AppLogger().debug('🔐 Validating password for room: ${roomData['id']}');
       AppLogger().debug('🔐 Entered password: ${enteredPassword.trim()}');
       
-      final isValid = await _appwrite.validateDebateDiscussionRoomPassword(
+      final isValid = await _supabase.validateDebateDiscussionRoomPassword(
         roomId: roomData['id'] ?? '',
-        enteredPassword: enteredPassword.trim(),
+        password: enteredPassword.trim(),
       );
 
       AppLogger().debug('🔐 Password validation result: $isValid');
@@ -842,6 +836,11 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                // Debaters section for Debate rooms
+                if (roomData['room_type'] == 'Debate') ...[
+                  const SizedBox(height: 8),
+                  _buildDebatersRow(roomData),
+                ],
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -916,35 +915,166 @@ class _DiscussionsRoomListScreenState extends State<DiscussionsRoomListScreen> {
     );
   }
 
+  /// Build debaters row showing "Affirmative vs Negative" with avatars
+  Widget _buildDebatersRow(Map<String, dynamic> roomData) {
+    final affirmative = roomData['affirmativeDebater'] as Map<String, dynamic>?;
+    final negative = roomData['negativeDebater'] as Map<String, dynamic>?;
+
+    final affirmativeName = affirmative?['name'] ?? 'TBD';
+    final negativeName = negative?['name'] ?? 'TBD';
+    final affirmativeAvatar = (affirmative?['avatar'] ?? affirmative?['avatar_url']) as String?;
+    final negativeAvatar = (negative?['avatar'] ?? negative?['avatar_url']) as String?;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode ? Colors.grey[800] : Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _themeService.isDarkMode ? Colors.grey[700]! : Colors.grey[200]!,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Affirmative debater
+          _buildDebaterAvatar(
+            name: affirmativeName,
+            avatarUrl: affirmativeAvatar,
+            color: const Color(0xFF4CAF50), // Green
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              affirmativeName,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF4CAF50),
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+
+          // VS separator
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              'vs',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: _themeService.isDarkMode ? Colors.grey[400] : Colors.grey[500],
+              ),
+            ),
+          ),
+
+          // Negative debater
+          Flexible(
+            child: Text(
+              negativeName,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFF44336),
+              ),
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+            ),
+          ),
+          const SizedBox(width: 8),
+          _buildDebaterAvatar(
+            name: negativeName,
+            avatarUrl: negativeAvatar,
+            color: const Color(0xFFF44336), // Red
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build a small debater avatar
+  Widget _buildDebaterAvatar({
+    required String name,
+    String? avatarUrl,
+    required Color color,
+  }) {
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color.withValues(alpha: 0.2),
+        border: Border.all(color: color, width: 2),
+      ),
+      child: ClipOval(
+        child: avatarUrl != null && avatarUrl.isNotEmpty
+            ? Image.network(
+                avatarUrl,
+                width: 28,
+                height: 28,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Center(
+                    child: Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : '?',
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  );
+                },
+              )
+            : Center(
+                child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : '?',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+
   Map<String, dynamic> _adaptRoomData(Map<String, dynamic> roomData) {
     // Extract moderator info
     final moderatorProfile = roomData['moderatorProfile'] as Map<String, dynamic>?;
     final moderatorName = moderatorProfile?['name'] ?? 'Unknown Moderator';
-    final moderatorAvatar = moderatorProfile?['avatar'];
+    final moderatorAvatar = moderatorProfile?['avatar'] ?? moderatorProfile?['avatar_url'];
 
     // Debug room data to see what we're getting
     AppLogger().debug('🏗️ Adapting room data: ${roomData.toString()}');
     AppLogger().debug('🏗️ isScheduled: ${roomData['isScheduled']}');
     AppLogger().debug('🏗️ scheduledDate: ${roomData['scheduledDate']}');
-    AppLogger().debug('🏗️ moderatorId: ${roomData['moderatorId']}');
-    AppLogger().debug('🏗️ createdBy: ${roomData['createdBy']}');
+    AppLogger().debug('🏗️ moderator_id: ${roomData['moderator_id']}');
+    AppLogger().debug('🏗️ title: ${roomData['title']}');
+    AppLogger().debug('🏗️ room_type: ${roomData['room_type']}');
 
     return {
       'id': roomData['id'],
-      'name': roomData['name'] ?? 'Untitled Room',
-      'description': roomData['description'] ?? '',
+      'name': roomData['title'] ?? 'Untitled Room',
+      'title': roomData['title'] ?? 'Untitled Room',
+      'description': roomData['description'] ?? roomData['topic'] ?? '',
       'category': roomData['category'] ?? 'General',
-      'debateStyle': roomData['debateStyle'] ?? 'Discussion',
+      'debateStyle': roomData['room_type'] ?? 'Discussion',
+      'room_type': roomData['room_type'] ?? 'Discussion',
       'moderator': moderatorName,
       'moderatorAvatar': moderatorAvatar,
+      'affirmativeDebater': roomData['affirmativeDebater'],
+      'negativeDebater': roomData['negativeDebater'],
       'participantCount': roomData['participantCount'] ?? 0,
       'isLive': roomData['status'] == 'active',
-      'isPrivate': roomData['isPrivate'] ?? false,
+      'isPrivate': roomData['is_private'] ?? false,
       'isScheduled': roomData['isScheduled'] ?? false,
       'scheduledDate': roomData['scheduledDate'],
-      'moderatorId': roomData['moderatorId'],
-      'createdBy': roomData['createdBy'],
-      'createdAt': roomData['createdAt'],
+      'moderatorId': roomData['moderator_id'],
+      'createdBy': roomData['moderator_id'],
+      'createdAt': roomData['created_at'] ?? roomData['createdAt'],
     };
   }
 }
