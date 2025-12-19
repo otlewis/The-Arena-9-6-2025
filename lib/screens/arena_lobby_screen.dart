@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:appwrite/appwrite.dart';
-import '../services/appwrite_service.dart';
+import '../services/supabase_service.dart';
 import '../services/theme_service.dart';
 import '../features/arena/providers/arena_lobby_provider.dart';
 import '../widgets/challenge_bell.dart';
@@ -21,7 +20,7 @@ class ArenaLobbyScreen extends ConsumerStatefulWidget {
 }
 
 class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with WidgetsBindingObserver {
-  final AppwriteService _appwrite = AppwriteService();
+  final SupabaseService _supabase = SupabaseService();
   final ThemeService _themeService = ThemeService();
   String? _currentUserId;
 
@@ -59,9 +58,9 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
 
 
   Future<void> _loadCurrentUser() async {
-    final user = await _appwrite.getCurrentUser();
+    final user = await _supabase.getCurrentUser();
     if (user != null) {
-      _currentUserId = user.$id;
+      _currentUserId = user.id;
     }
   }
 
@@ -75,27 +74,16 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
 
     try {
       // First, check if the room is scheduled and user is not the moderator
-      final roomDoc = await _appwrite.databases.getDocument(
-        databaseId: 'arena_db',
-        collectionId: 'arena_rooms',
-        documentId: roomId,
-      );
+      final roomDoc = await _supabase.client.from('arena_rooms').select().eq('id', roomId,
+      ).single();
       
-      final roomStatus = roomDoc.data['status'] as String?;
+      final roomStatus = roomDoc['status'] as String?;
       
       if (roomStatus == 'scheduled') {
         // Check if user is the moderator/creator of this room
-        final participants = await _appwrite.databases.listDocuments(
-          databaseId: 'arena_db',
-          collectionId: 'arena_participants',
-          queries: [
-            Query.equal('roomId', roomId),
-            Query.equal('userId', _currentUserId!),
-            Query.equal('role', 'moderator'),
-          ],
-        );
+        final participants = await _supabase.client.from('arena_participants').select();
         
-        if (participants.documents.isEmpty) {
+        if ((participants as List).isEmpty) {
           // User is not the moderator, show warning
           if (mounted) {
             // Extract scheduled time from metadata in description
@@ -134,7 +122,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
       }
       
       // Check if room is private and requires password
-      final description = roomDoc.data['description'] as String? ?? '';
+      final description = roomDoc['description'] as String? ?? '';
       if (description.contains('[METADATA]')) {
         // Extract metadata from description
         final metadataStart = description.indexOf('[METADATA]');
@@ -143,17 +131,9 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
         // Check if room is private by looking for isPrivate: true in metadata
         if (metadataStr.contains('isPrivate: true')) {
           // Check if user is the moderator (moderators don't need password)
-          final participants = await _appwrite.databases.listDocuments(
-            databaseId: 'arena_db',
-            collectionId: 'arena_participants',
-            queries: [
-              Query.equal('roomId', roomId),
-              Query.equal('userId', _currentUserId!),
-              Query.equal('role', 'moderator'),
-            ],
-          );
+          final participants = await _supabase.client.from('arena_participants').select();
           
-          if (participants.documents.isEmpty) {
+          if ((participants as List).isEmpty) {
             // User is not moderator, validate password
             final passwordValid = await _validateRoomPassword(metadataStr);
             if (!passwordValid) {
@@ -167,13 +147,14 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
       final isManualRoom = roomId.startsWith('manual_arena_') || roomId.startsWith('scheduled_');
       
       if (isManualRoom) {
-        await _appwrite.joinArenaRoom(
+        await _supabase.joinArenaRoom(
           roomId: roomId,
           userId: _currentUserId!,
+          role: 'audience',
         );
       } else {
         // Assign user as audience member for challenge-based rooms
-        await _appwrite.assignArenaRole(
+        await _supabase.assignArenaRole(
           roomId: roomId,
           userId: _currentUserId!,
           role: 'audience',
@@ -212,17 +193,9 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
     
     try {
       // Check if user is the moderator/creator of this room
-      final participants = await _appwrite.databases.listDocuments(
-        databaseId: 'arena_db',
-        collectionId: 'arena_participants',
-        queries: [
-          Query.equal('roomId', roomId),
-          Query.equal('userId', _currentUserId!),
-          Query.equal('role', 'moderator'),
-        ],
-      );
+      final participants = await _supabase.client.from('arena_participants').select();
       
-      if (participants.documents.isNotEmpty) {
+      if ((participants as List).isNotEmpty) {
         // User is the moderator, show options to start room or enter
         if (mounted) {
           final result = await showDialog<String>(
@@ -252,7 +225,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
           
           if (result == 'start') {
             // Change room status from 'scheduled' to 'waiting'
-            await _appwrite.updateArenaRoomStatus(roomId, 'waiting');
+            await _supabase.updateArenaRoomStatus(roomId, 'waiting');
             
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -288,7 +261,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
     try {
       // Navigate to playback screen
       // First check if a playback record exists for this room
-      final appwriteService = GetIt.instance<AppwriteService>();
+      final appwriteService = GetIt.instance<SupabaseService>();
       final playbacks = await appwriteService.getPlaybacksByRoomId(roomId);
 
       if (playbacks.isNotEmpty) {
@@ -355,25 +328,13 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
     if (dialogResult != null) {
       try {
         final topic = dialogResult['topic'] as String;
-        final affirmativeName = dialogResult['affirmativeName'] as String;
-        final negativeName = dialogResult['negativeName'] as String;
-        final affirmativeTeam2 = dialogResult['affirmativeTeam2'] as String?;
-        final negativeTeam2 = dialogResult['negativeTeam2'] as String?;
         final category = dialogResult['category'] as String;
         final teamSize = dialogResult['teamSize'] as String;
         final isScheduled = dialogResult['isScheduled'] as bool? ?? false;
         final scheduledTime = dialogResult['scheduledTime'] as DateTime?;
         final isPrivate = dialogResult['isPrivate'] as bool? ?? false;
         final password = dialogResult['password'] as String?;
-        final enablePlayback = dialogResult['enablePlayback'] as bool? ?? false;
-        
-        // Build debaters description with additional metadata
-        String debatersNames;
-        if (teamSize == '2v2') {
-          debatersNames = '$affirmativeName & $affirmativeTeam2 vs $negativeName & $negativeTeam2';
-        } else {
-          debatersNames = '$affirmativeName vs $negativeName';
-        }
+        final _ = dialogResult['enablePlayback'] as bool? ?? false;
         
         // Add metadata to description for features not supported by current schema
         final metadata = {
@@ -381,21 +342,19 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
           'category': category,
           'isPrivate': isPrivate,
           'password': password,
-          'affirmativeName': affirmativeName,
-          'negativeName': negativeName,
-          'affirmativeTeam2': affirmativeTeam2,
-          'negativeTeam2': negativeTeam2,
         };
-        final fullDescription = '$debatersNames\n[METADATA]${metadata.toString()}';
+        final fullDescription = '[METADATA]${metadata.toString()}';
         
         // For scheduled rooms, create them but don't start immediately
         if (isScheduled && scheduledTime != null) {
           // Create scheduled arena room
-          final roomId = await _appwrite.createScheduledArenaRoom(
-            creatorId: _currentUserId!,
+          final roomId = await _supabase.createScheduledArenaRoom(
+            title: topic,
             topic: topic,
-            description: fullDescription,
+            challengerId: _currentUserId!,
+            challengedId: '', // Will be set when opponent accepts
             scheduledTime: scheduledTime,
+            description: fullDescription,
           );
           
           AppLogger().info('Scheduled arena created: $roomId');
@@ -413,11 +372,11 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
           // Don't navigate to the room - it's scheduled for later
         } else {
           // Create and start room immediately
-          final roomId = await _appwrite.createManualArenaRoom(
-            creatorId: _currentUserId!,
+          final roomId = await _supabase.createManualArenaRoom(
+            title: topic,
             topic: topic,
+            challengerId: _currentUserId!,
             description: fullDescription,
-            enablePlayback: enablePlayback,
           );
 
           // Navigate to the created arena
@@ -477,16 +436,16 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
 
     try {
       // Create a demo arena room
-      final roomId = await _appwrite.createArenaRoom(
-        challengeId: 'demo_${DateTime.now().millisecondsSinceEpoch}',
+      final roomId = await _supabase.createArenaRoom(
+        title: 'Demo Arena',
+        topic: 'Should AI replace human judges in debates?',
         challengerId: _currentUserId!,
         challengedId: 'demo_opponent',
-        topic: 'Should AI replace human judges in debates?',
-        description: 'Demo Arena - Experience The Arena interface',
+        challengeId: 'demo_${DateTime.now().millisecondsSinceEpoch}',
       );
 
       // Assign current user as audience
-      await _appwrite.assignArenaRole(
+      await _supabase.assignArenaRole(
         roomId: roomId,
         userId: _currentUserId!,
         role: 'audience',
@@ -756,14 +715,20 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
           arena.moderatorId,
           arena.moderatorProfile,
           arena.enablePlayback,
+          arena.affirmativeDebater,
+          arena.negativeDebater,
+          arena.affirmative2Debater,
+          arena.negative2Debater,
+          arena.judge1Profile,
+          arena.judge2Profile,
+          arena.judge3Profile,
         )),
       ],
     );
   }
 
-  Widget _buildArenaCard(String roomId, String topic, String status, String challengeId, String description, int currentParticipants, bool isManual, String category, int teamSize, String? moderatorId, Map<String, dynamic>? moderatorProfile, bool enablePlayback) {
-    const maxParticipants = 1000; // Allow unlimited participants
-    
+  Widget _buildArenaCard(String roomId, String topic, String status, String challengeId, String description, int currentParticipants, bool isManual, String category, int teamSize, String? moderatorId, Map<String, dynamic>? moderatorProfile, bool enablePlayback, Map<String, dynamic>? affirmativeDebater, Map<String, dynamic>? negativeDebater, Map<String, dynamic>? affirmative2Debater, Map<String, dynamic>? negative2Debater, Map<String, dynamic>? judge1Profile, Map<String, dynamic>? judge2Profile, Map<String, dynamic>? judge3Profile) {
+
     // Check if room is private by looking in the description metadata
     final isPrivate = description.contains('[METADATA]') && description.contains('isPrivate: true');
 
@@ -946,7 +911,7 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '$currentParticipants/$maxParticipants',
+                      '$currentParticipants',
                       style: TextStyle(
                         color: _themeService.isDarkMode ? Colors.white60 : Colors.grey[600],
                         fontSize: 12,
@@ -985,7 +950,11 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                     ],
                   ),
                 ],
-                if (description.isNotEmpty) ...[
+                // Only show description if it has meaningful content (not just metadata or "vs")
+                if (description.isNotEmpty &&
+                    !description.startsWith('[METADATA]') &&
+                    description.trim() != 'vs' &&
+                    !description.contains('[METADATA]')) ...[
                   const SizedBox(height: 6),
                   Text(
                     description,
@@ -997,6 +966,11 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
+
+                // Debaters row - show affirmative vs negative with avatars
+                const SizedBox(height: 12),
+                _buildDebatersRow(affirmativeDebater, negativeDebater, affirmative2Debater, negative2Debater, teamSize),
+
                 const SizedBox(height: 8),
                 // Moderator info - always show for arena rooms
                 Row(
@@ -1068,12 +1042,19 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
                     ),
                   ],
                 ),
+
+                // Judges row - show up to 3 judge avatars
+                if (judge1Profile != null || judge2Profile != null || judge3Profile != null) ...[
+                  const SizedBox(height: 8),
+                  _buildJudgesRow(judge1Profile, judge2Profile, judge3Profile),
+                ],
+
                 const SizedBox(height: 8),
                 Row(
                   children: [
                     Icon(
-                      isManual ? Icons.person_add : Icons.visibility, 
-                      size: 16, 
+                      isManual ? Icons.person_add : Icons.visibility,
+                      size: 16,
                       color: accentPurple
                     ),
                     const SizedBox(width: 4),
@@ -1648,6 +1629,270 @@ class _ArenaLobbyScreenState extends ConsumerState<ArenaLobbyScreen> with Widget
       ),
     );
   }
+
+  /// Build the debaters row showing affirmative vs negative with avatars
+  Widget _buildDebatersRow(
+    Map<String, dynamic>? affirmativeDebater,
+    Map<String, dynamic>? negativeDebater,
+    Map<String, dynamic>? affirmative2Debater,
+    Map<String, dynamic>? negative2Debater,
+    int teamSize,
+  ) {
+    final affirmativeName = affirmativeDebater?['name'] ?? 'TBD';
+    final negativeName = negativeDebater?['name'] ?? 'TBD';
+    final affirmativeAvatar = affirmativeDebater?['avatar'] as String?;
+    final negativeAvatar = negativeDebater?['avatar'] as String?;
+
+    // For 2v2, also get second debaters
+    final affirmative2Name = affirmative2Debater?['name'] ?? 'TBD';
+    final negative2Name = negative2Debater?['name'] ?? 'TBD';
+    final affirmative2Avatar = affirmative2Debater?['avatar'] as String?;
+    final negative2Avatar = negative2Debater?['avatar'] as String?;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: _themeService.isDarkMode
+            ? Colors.grey[800]!.withValues(alpha: 0.5)
+            : Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _themeService.isDarkMode
+              ? Colors.grey[700]!
+              : Colors.grey[200]!,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Affirmative side
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                // For 2v2, show both team members
+                if (teamSize > 1) ...[
+                  _buildDebaterAvatar(
+                    name: affirmative2Name,
+                    avatarUrl: affirmative2Avatar,
+                    color: const Color(0xFF4CAF50),
+                    size: 24,
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                _buildDebaterAvatar(
+                  name: affirmativeName,
+                  avatarUrl: affirmativeAvatar,
+                  color: const Color(0xFF4CAF50),
+                  size: 28,
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    teamSize > 1 ? 'Team' : affirmativeName,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _themeService.isDarkMode
+                          ? const Color(0xFF81C784)
+                          : const Color(0xFF4CAF50),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // VS separator
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              'vs',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: _themeService.isDarkMode
+                    ? Colors.grey[400]
+                    : Colors.grey[500],
+              ),
+            ),
+          ),
+
+          // Negative side
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                Flexible(
+                  child: Text(
+                    teamSize > 1 ? 'Team' : negativeName,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _themeService.isDarkMode
+                          ? const Color(0xFFE57373)
+                          : const Color(0xFFF44336),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _buildDebaterAvatar(
+                  name: negativeName,
+                  avatarUrl: negativeAvatar,
+                  color: const Color(0xFFF44336),
+                  size: 28,
+                ),
+                // For 2v2, show both team members
+                if (teamSize > 1) ...[
+                  const SizedBox(width: 4),
+                  _buildDebaterAvatar(
+                    name: negative2Name,
+                    avatarUrl: negative2Avatar,
+                    color: const Color(0xFFF44336),
+                    size: 24,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build a small debater avatar
+  Widget _buildDebaterAvatar({
+    required String name,
+    String? avatarUrl,
+    required Color color,
+    double size = 28,
+  }) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color.withValues(alpha: 0.2),
+        border: Border.all(color: color, width: 2),
+      ),
+      child: ClipOval(
+        child: avatarUrl != null && avatarUrl.isNotEmpty
+            ? Image.network(
+                avatarUrl,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Center(
+                    child: Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : '?',
+                      style: TextStyle(
+                        color: color,
+                        fontSize: size * 0.4,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  );
+                },
+              )
+            : Center(
+                child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : '?',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: size * 0.4,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+
+  /// Build the judges row showing up to 3 judge avatars
+  Widget _buildJudgesRow(
+    Map<String, dynamic>? judge1,
+    Map<String, dynamic>? judge2,
+    Map<String, dynamic>? judge3,
+  ) {
+    final judges = [judge1, judge2, judge3].where((j) => j != null).toList();
+
+    if (judges.isEmpty) return const SizedBox.shrink();
+
+    return Row(
+      children: [
+        Icon(
+          Icons.gavel,
+          size: 16,
+          color: _themeService.isDarkMode ? Colors.amber[300] : Colors.amber[700],
+        ),
+        const SizedBox(width: 6),
+        Text(
+          'Judges:',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: _themeService.isDarkMode ? Colors.white70 : Colors.grey[600],
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Display judge avatars
+        ...judges.map((judge) {
+          final avatar = judge?['avatar'] as String?;
+          final name = judge?['name'] as String? ?? '?';
+          return Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: (_themeService.isDarkMode ? Colors.amber[700] : Colors.amber)!.withValues(alpha: 0.2),
+                border: Border.all(
+                  color: _themeService.isDarkMode ? Colors.amber[300]! : Colors.amber[700]!,
+                  width: 1.5,
+                ),
+              ),
+              child: ClipOval(
+                child: avatar != null && avatar.isNotEmpty
+                    ? Image.network(
+                        avatar,
+                        width: 22,
+                        height: 22,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Center(
+                            child: Text(
+                              name.isNotEmpty ? name[0].toUpperCase() : '?',
+                              style: TextStyle(
+                                color: _themeService.isDarkMode ? Colors.amber[300] : Colors.amber[700],
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          );
+                        },
+                      )
+                    : Center(
+                        child: Text(
+                          name.isNotEmpty ? name[0].toUpperCase() : '?',
+                          style: TextStyle(
+                            color: _themeService.isDarkMode ? Colors.amber[300] : Colors.amber[700],
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
 }
 
 // Create Arena Dialog Widget
@@ -1890,242 +2135,6 @@ class _CreateArenaDialogState extends State<CreateArenaDialog> {
                 return null;
               },
             ),
-            const SizedBox(height: 16),
-
-            // Debaters Names
-            const Text(
-              'Debater Names *',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: deepPurple,
-              ),
-            ),
-            const SizedBox(height: 8),
-            
-            // Affirmative Side
-            Text(
-              'Affirmative Side (Pro)',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: _themeService.isDarkMode
-                    ? Colors.green[300]
-                    : Colors.green,
-              ),
-            ),
-            const SizedBox(height: 4),
-            TextFormField(
-              controller: _affirmativeNameController,
-              style: TextStyle(
-                color: _themeService.isDarkMode
-                    ? const Color(0xFFE0E0E0)
-                    : Colors.black,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Affirmative debater name',
-                hintStyle: TextStyle(
-                  color: _themeService.isDarkMode
-                      ? const Color(0xFF808080)
-                      : Colors.grey,
-                ),
-                filled: true,
-                fillColor: _themeService.isDarkMode
-                    ? const Color(0xFF1A1A1A)
-                    : Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: _themeService.isDarkMode
-                        ? const Color(0xFF404040)
-                        : Colors.grey,
-                  ),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: _themeService.isDarkMode
-                        ? const Color(0xFF404040)
-                        : Colors.grey,
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: accentPurple, width: 2),
-                ),
-                contentPadding: const EdgeInsets.all(12),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter affirmative debater name';
-                }
-                return null;
-              },
-            ),
-            
-            if (_teamSize == '2v2') ...[
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _affirmativeTeam2Controller,
-                style: TextStyle(
-                  color: _themeService.isDarkMode
-                      ? const Color(0xFFE0E0E0)
-                      : Colors.black,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Second affirmative debater name',
-                  hintStyle: TextStyle(
-                    color: _themeService.isDarkMode
-                        ? const Color(0xFF808080)
-                        : Colors.grey,
-                  ),
-                  filled: true,
-                  fillColor: _themeService.isDarkMode
-                      ? const Color(0xFF1A1A1A)
-                      : Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: _themeService.isDarkMode
-                          ? const Color(0xFF404040)
-                          : Colors.grey,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: _themeService.isDarkMode
-                          ? const Color(0xFF404040)
-                          : Colors.grey,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: accentPurple, width: 2),
-                  ),
-                  contentPadding: const EdgeInsets.all(12),
-                ),
-                validator: (value) {
-                  if (_teamSize == '2v2' && (value == null || value.trim().isEmpty)) {
-                    return 'Please enter second affirmative debater name';
-                  }
-                  return null;
-                },
-              ),
-            ],
-            
-            const SizedBox(height: 12),
-            
-            // Negative Side
-            Text(
-              'Negative Side (Con)',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: _themeService.isDarkMode
-                    ? Colors.red[300]
-                    : Colors.red,
-              ),
-            ),
-            const SizedBox(height: 4),
-            TextFormField(
-              controller: _negativeNameController,
-              style: TextStyle(
-                color: _themeService.isDarkMode
-                    ? const Color(0xFFE0E0E0)
-                    : Colors.black,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Negative debater name',
-                hintStyle: TextStyle(
-                  color: _themeService.isDarkMode
-                      ? const Color(0xFF808080)
-                      : Colors.grey,
-                ),
-                filled: true,
-                fillColor: _themeService.isDarkMode
-                    ? const Color(0xFF1A1A1A)
-                    : Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: _themeService.isDarkMode
-                        ? const Color(0xFF404040)
-                        : Colors.grey,
-                  ),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: _themeService.isDarkMode
-                        ? const Color(0xFF404040)
-                        : Colors.grey,
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: accentPurple, width: 2),
-                ),
-                contentPadding: const EdgeInsets.all(12),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter negative debater name';
-                }
-                return null;
-              },
-            ),
-            
-            if (_teamSize == '2v2') ...[
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _negativeTeam2Controller,
-                style: TextStyle(
-                  color: _themeService.isDarkMode
-                      ? const Color(0xFFE0E0E0)
-                      : Colors.black,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Second negative debater name',
-                  hintStyle: TextStyle(
-                    color: _themeService.isDarkMode
-                        ? const Color(0xFF808080)
-                        : Colors.grey,
-                  ),
-                  filled: true,
-                  fillColor: _themeService.isDarkMode
-                      ? const Color(0xFF1A1A1A)
-                      : Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: _themeService.isDarkMode
-                          ? const Color(0xFF404040)
-                          : Colors.grey,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: _themeService.isDarkMode
-                          ? const Color(0xFF404040)
-                          : Colors.grey,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: accentPurple, width: 2),
-                  ),
-                  contentPadding: const EdgeInsets.all(12),
-                ),
-                validator: (value) {
-                  if (_teamSize == '2v2' && (value == null || value.trim().isEmpty)) {
-                    return 'Please enter second negative debater name';
-                  }
-                  return null;
-                },
-              ),
-            ],
             const SizedBox(height: 16),
 
             // Team Size Selection

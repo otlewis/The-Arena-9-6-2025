@@ -1,9 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:realtime_client/realtime_client.dart';
 import 'dart:async';
-import '../../../services/appwrite_service.dart';
+import '../../../services/supabase_service.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/providers/app_providers.dart';
-import 'package:appwrite/appwrite.dart';
 
 /// Arena room data model
 class ArenaRoom {
@@ -19,6 +19,13 @@ class ArenaRoom {
   final bool isManual;
   final String? moderatorId;
   final Map<String, dynamic>? moderatorProfile;
+  final Map<String, dynamic>? affirmativeDebater;
+  final Map<String, dynamic>? negativeDebater;
+  final Map<String, dynamic>? affirmative2Debater;
+  final Map<String, dynamic>? negative2Debater;
+  final Map<String, dynamic>? judge1Profile;
+  final Map<String, dynamic>? judge2Profile;
+  final Map<String, dynamic>? judge3Profile;
   final bool enablePlayback;
 
   const ArenaRoom({
@@ -34,6 +41,13 @@ class ArenaRoom {
     required this.isManual,
     this.moderatorId,
     this.moderatorProfile,
+    this.affirmativeDebater,
+    this.negativeDebater,
+    this.affirmative2Debater,
+    this.negative2Debater,
+    this.judge1Profile,
+    this.judge2Profile,
+    this.judge3Profile,
     this.enablePlayback = false,
   });
 
@@ -42,15 +56,22 @@ class ArenaRoom {
       id: map['id'] ?? '',
       topic: map['topic'] ?? 'Debate Topic',
       status: map['status'] ?? 'waiting',
-      challengeId: map['challengeId'],
+      challengeId: map['challenge_id'],
       description: map['description'],
       category: map['category'],
-      teamSize: map['teamSize'] ?? 1, // Default to 1v1 for backwards compatibility
-      createdAt: DateTime.parse(map['\$createdAt'] ?? DateTime.now().toIso8601String()),
-      currentParticipants: map['currentParticipants'] ?? 0,
-      isManual: (map['challengeId'] ?? '').isEmpty,
-      moderatorId: map['moderatorId'],
+      teamSize: map['team_size'] ?? 1, // Default to 1v1 for backwards compatibility
+      createdAt: DateTime.parse(map['created_at'] ?? DateTime.now().toIso8601String()),
+      currentParticipants: map['current_participants'] ?? 0,
+      isManual: (map['challenge_id'] ?? '').isEmpty,
+      moderatorId: map['moderator_id'],
       moderatorProfile: map['moderatorProfile'] as Map<String, dynamic>?,
+      affirmativeDebater: map['affirmativeDebater'] as Map<String, dynamic>?,
+      negativeDebater: map['negativeDebater'] as Map<String, dynamic>?,
+      affirmative2Debater: map['affirmative2Debater'] as Map<String, dynamic>?,
+      negative2Debater: map['negative2Debater'] as Map<String, dynamic>?,
+      judge1Profile: map['judge1Profile'] as Map<String, dynamic>?,
+      judge2Profile: map['judge2Profile'] as Map<String, dynamic>?,
+      judge3Profile: map['judge3Profile'] as Map<String, dynamic>?,
       enablePlayback: map['enablePlayback'] ?? false,
     );
   }
@@ -68,6 +89,13 @@ class ArenaRoom {
     bool? isManual,
     String? moderatorId,
     Map<String, dynamic>? moderatorProfile,
+    Map<String, dynamic>? affirmativeDebater,
+    Map<String, dynamic>? negativeDebater,
+    Map<String, dynamic>? affirmative2Debater,
+    Map<String, dynamic>? negative2Debater,
+    Map<String, dynamic>? judge1Profile,
+    Map<String, dynamic>? judge2Profile,
+    Map<String, dynamic>? judge3Profile,
     bool? enablePlayback,
   }) {
     return ArenaRoom(
@@ -83,6 +111,13 @@ class ArenaRoom {
       isManual: isManual ?? this.isManual,
       moderatorId: moderatorId ?? this.moderatorId,
       moderatorProfile: moderatorProfile ?? this.moderatorProfile,
+      affirmativeDebater: affirmativeDebater ?? this.affirmativeDebater,
+      negativeDebater: negativeDebater ?? this.negativeDebater,
+      affirmative2Debater: affirmative2Debater ?? this.affirmative2Debater,
+      negative2Debater: negative2Debater ?? this.negative2Debater,
+      judge1Profile: judge1Profile ?? this.judge1Profile,
+      judge2Profile: judge2Profile ?? this.judge2Profile,
+      judge3Profile: judge3Profile ?? this.judge3Profile,
       enablePlayback: enablePlayback ?? this.enablePlayback,
     );
   }
@@ -123,20 +158,22 @@ class ArenaLobbyState {
 
 /// Arena lobby state notifier
 class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
-  ArenaLobbyNotifier(this._appwrite, this._logger) : super(const ArenaLobbyState()) {
+  ArenaLobbyNotifier(this._supabase, this._logger) : super(const ArenaLobbyState()) {
     _startPeriodicRefresh();
     _startRealtimeSubscription();
   }
 
-  final AppwriteService _appwrite;
+  final SupabaseService _supabase;
   final AppLogger _logger;
   Timer? _refreshTimer;
-  StreamSubscription<RealtimeMessage>? _roomSubscription;
+  RealtimeChannel? _roomSubscription;
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
-    _roomSubscription?.cancel();
+    if (_roomSubscription != null) {
+      _supabase.client.removeChannel(_roomSubscription!);
+    }
     super.dispose();
   }
 
@@ -156,36 +193,42 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
     try {
       _logger.info('🔔 Starting real-time arena lobby subscription');
 
-      _roomSubscription = _appwrite.realtime.subscribe([
-        'databases.arena_db.collections.arena_rooms.documents'
-      ]).stream.listen((response) {
-        if (!mounted) return;
+      // Clean up existing subscription
+      if (_roomSubscription != null) {
+        _supabase.client.removeChannel(_roomSubscription!);
+      }
 
-        try {
-          final eventType = response.events.isNotEmpty ? response.events.first : 'unknown';
-          _logger.debug('🔔 Arena lobby real-time event: $eventType');
+      _roomSubscription = _supabase.client
+          .channel('arena_lobby_rooms')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'arena_rooms',
+            callback: (payload) {
+              if (!mounted) return;
 
-          // Refresh lobby for any arena room changes
-          if (eventType.contains('arena_rooms')) {
-            _logger.debug('🔄 Arena room changed - refreshing lobby');
-            loadActiveArenas(isBackgroundRefresh: true);
-          }
-        } catch (e) {
-          _logger.warning('⚠️ Error processing real-time event: $e');
-        }
-      }, onError: (error) {
-        _logger.warning('⚠️ Arena lobby real-time subscription error: $error');
-        // Try to reconnect after a delay
-        Timer(const Duration(seconds: 10), () {
-          if (mounted) {
-            _startRealtimeSubscription();
-          }
-        });
-      });
+              try {
+                _logger.debug('🔔 Arena lobby real-time event: ${payload.eventType}');
+
+                // Refresh lobby for any arena room changes
+                _logger.debug('🔄 Arena room changed - refreshing lobby');
+                loadActiveArenas(isBackgroundRefresh: true);
+              } catch (e) {
+                _logger.warning('⚠️ Error processing real-time event: $e');
+              }
+            },
+          )
+          .subscribe();
 
       _logger.info('✅ Arena lobby real-time subscription established');
     } catch (e) {
       _logger.error('❌ Failed to start arena lobby real-time subscription: $e');
+      // Try to reconnect after a delay
+      Timer(const Duration(seconds: 10), () {
+        if (mounted) {
+          _startRealtimeSubscription();
+        }
+      });
     }
   }
 
@@ -198,8 +241,8 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
       }
 
       // Get all arena rooms that are active or waiting (both challenge-based and manual)
-      final challengeArenas = await _appwrite.getActiveArenaRooms();
-      final manualArenas = await _appwrite.getJoinableArenaRooms();
+      final challengeArenas = await _supabase.getActiveArenaRooms();
+      final manualArenas = await _supabase.getJoinableArenaRooms();
 
       // Ensure proper typing for web compatibility (fix JSArray issues)
       final List<Map<String, dynamic>> typedChallengeArenas = 
@@ -215,7 +258,7 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
         final id = arena['id'] ?? 'no-id';
         final topic = arena['topic'] ?? 'no-topic';
         final status = arena['status'] ?? 'no-status';
-        final challengeId = arena['challengeId'] ?? '';
+        final challengeId = arena['challenge_id'] ?? '';
         _logger.debug('   📋 $id: "$topic" [$status] ${challengeId.isEmpty ? "MANUAL" : "CHALLENGE"}');
       }
       
@@ -224,7 +267,7 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
         final id = arena['id'] ?? 'no-id';
         final topic = arena['topic'] ?? 'no-topic';
         final status = arena['status'] ?? 'no-status';
-        final challengeId = arena['challengeId'] ?? '';
+        final challengeId = arena['challenge_id'] ?? '';
         _logger.debug('   📋 $id: "$topic" [$status] ${challengeId.isEmpty ? "MANUAL" : "CHALLENGE"}');
       }
 
@@ -246,7 +289,7 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
       // Pre-filter rooms at the database level to reduce processing
       final preFilteredArenas = uniqueArenas.where((arena) {
         final status = arena['status'] ?? 'waiting';
-        final roomAge = DateTime.now().difference(DateTime.parse(arena['\$createdAt']));
+        final roomAge = DateTime.now().difference(DateTime.parse(arena['created_at'] ?? DateTime.now().toIso8601String()));
         final id = arena['id'] ?? 'no-id';
         final topic = arena['topic'] ?? 'no-topic';
 
@@ -309,14 +352,14 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
     // Batch participant queries and moderator profile queries to reduce individual requests
     for (final arena in rooms) {
       final roomId = arena['id'] ?? '';
-      final moderatorId = arena['moderatorId'] ?? arena['createdBy'];
+      final moderatorId = arena['moderator_id'] ?? arena['created_by'];
       if (roomId.isNotEmpty) {
         roomIds.add(roomId);
-        participantFutures.add(_appwrite.getArenaParticipants(roomId));
+        participantFutures.add(_supabase.getArenaParticipants(roomId));
         
         // Fetch moderator profile if we have a moderator ID
         if (moderatorId != null && moderatorId.toString().isNotEmpty) {
-          moderatorFutures.add(_appwrite.getUserProfile(moderatorId.toString()));
+          moderatorFutures.add(_supabase.getUserProfile(moderatorId.toString()));
         } else {
           moderatorFutures.add(Future.value(null));
         }
@@ -347,19 +390,23 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
       final status = arena['status'] ?? 'waiting';
 
       try {
-        final activeParticipants = participants.where((p) => p['isActive'] == true).length;
+        // Count participants - check for is_active being true or truthy (handles bool and string)
+        final activeParticipants = participants.where((p) {
+          final isActive = p['is_active'];
+          return isActive == true || isActive == 'true' || isActive == 1;
+        }).length;
         final totalParticipants = participants.length;
-        final roomAge = DateTime.now().difference(DateTime.parse(arena['\$createdAt']));
+        final roomAge = DateTime.now().difference(DateTime.parse(arena['created_at'] ?? DateTime.now().toIso8601String()));
 
         _logger.debug('👥 PARTICIPANTS DEBUG: Room $roomId has $totalParticipants total, $activeParticipants active');
-        
+
         // Debug participant details
         for (final p in participants) {
-          _logger.debug('👥   - User ${p['userId']}: role=${p['role']}, isActive=${p['isActive']}');
+          _logger.debug('👥   - User ${p['user_id']}: role=${p['role']}, is_active=${p['is_active']}');
         }
 
-        // Update the participant count
-        arena['currentParticipants'] = activeParticipants;
+        // Update the participant count - use total if active count is 0 (is_active might not be set)
+        arena['current_participants'] = activeParticipants > 0 ? activeParticipants : totalParticipants;
         
         // Add moderator profile data
         if (moderatorProfile != null) {
@@ -371,6 +418,49 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
           _logger.debug('👤 MODERATOR: Added profile for ${moderatorProfile.name} to room $roomId');
         } else {
           _logger.debug('👤 MODERATOR: No profile found for room $roomId');
+        }
+
+        // Extract debater profiles from participants
+        for (final p in participants) {
+          final role = p['role'] as String?;
+          final userProfile = p['userProfile'] as Map<String, dynamic>?;
+
+          if (userProfile != null) {
+            final profileData = {
+              'name': userProfile['name'] ?? userProfile['username'] ?? 'Unknown',
+              'avatar': userProfile['avatar'],
+              'id': p['user_id'],
+            };
+
+            if (role == 'affirmative') {
+              arena['affirmativeDebater'] = profileData;
+              _logger.debug('🎯 DEBATER: Added affirmative ${profileData['name']} to room $roomId');
+            } else if (role == 'negative') {
+              arena['negativeDebater'] = profileData;
+              _logger.debug('🎯 DEBATER: Added negative ${profileData['name']} to room $roomId');
+            } else if (role == 'affirmative2') {
+              arena['affirmative2Debater'] = profileData;
+              _logger.debug('🎯 DEBATER: Added affirmative2 ${profileData['name']} to room $roomId');
+            } else if (role == 'negative2') {
+              arena['negative2Debater'] = profileData;
+              _logger.debug('🎯 DEBATER: Added negative2 ${profileData['name']} to room $roomId');
+            } else if (role == 'judge1') {
+              arena['judge1Profile'] = profileData;
+              _logger.debug('⚖️ JUDGE: Added judge1 ${profileData['name']} to room $roomId');
+            } else if (role == 'judge2') {
+              arena['judge2Profile'] = profileData;
+              _logger.debug('⚖️ JUDGE: Added judge2 ${profileData['name']} to room $roomId');
+            } else if (role == 'judge3') {
+              arena['judge3Profile'] = profileData;
+              _logger.debug('⚖️ JUDGE: Added judge3 ${profileData['name']} to room $roomId');
+            } else if (role == 'moderator') {
+              // If moderator profile wasn't fetched via getUserProfile, use participant data
+              if (arena['moderatorProfile'] == null) {
+                arena['moderatorProfile'] = profileData;
+                _logger.debug('👤 MODERATOR: Added moderator ${profileData['name']} from participants to room $roomId');
+              }
+            }
+          }
         }
 
         // More permissive filtering logic - include most rooms to prevent users getting kicked
@@ -439,18 +529,15 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
       _logger.debug('🧹 Starting arena room cleanup...');
       
       // Get all arena rooms (including inactive ones)
-      final allRooms = await _appwrite.databases.listDocuments(
-        databaseId: 'arena_db',
-        collectionId: 'arena_rooms',
-      );
+      final allRooms = await _supabase.client.from('arena_rooms').select();
       
       int cleanedCount = 0;
       
-      for (final room in allRooms.documents) {
-        final roomId = room.$id;
-        final status = room.data['status'] ?? 'waiting';
-        final moderatorId = room.data['moderatorId'];
-        final createdAt = DateTime.parse(room.$createdAt);
+      for (final room in (allRooms as List)) {
+        final roomId = room['id'];
+        final status = room['status'] ?? 'waiting';
+        final moderatorId = room['moderator_id'];
+        final createdAt = DateTime.parse(room['created_at']);
         final roomAge = DateTime.now().difference(createdAt);
         
         bool shouldCleanup = false;
@@ -471,8 +558,8 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
         // Check for rooms without participants for more than 2 hours
         else if (status == 'waiting' && roomAge.inHours > 2) {
           try {
-            final participants = await _appwrite.getArenaParticipants(roomId);
-            final activeParticipants = participants.where((p) => p['isActive'] == true).length;
+            final participants = await _supabase.getArenaParticipants(roomId);
+            final activeParticipants = participants.where((p) => p['is_active'] == true).length;
             
             if (activeParticipants == 0) {
               shouldCleanup = true;
@@ -489,7 +576,7 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
         }
         // Check for completed or already closed rooms (but preserve playback-enabled ones)
         else if (['completed', 'abandoned', 'force_closed', 'force_cleaned'].contains(status)) {
-          final hasPlayback = room.data['enablePlayback'] ?? false;
+          final hasPlayback = room['enablePlayback'] ?? false;
           if (!hasPlayback) {
             shouldCleanup = true;
             reason = 'Room already closed (status: $status, no playback)';
@@ -499,23 +586,16 @@ class ArenaLobbyNotifier extends StateNotifier<ArenaLobbyState> {
         if (shouldCleanup) {
           try {
             // Update room status to cleaned (only using existing schema fields)
-            await _appwrite.databases.updateDocument(
-              databaseId: 'arena_db',
-              collectionId: 'arena_rooms',
-              documentId: roomId,
-              data: {
+            await _supabase.client.from('arena_rooms').update({
                 'status': 'force_cleaned',
               },
             );
             
             // Remove all participants
-            final participants = await _appwrite.getArenaParticipants(roomId);
+            final participants = await _supabase.getArenaParticipants(roomId);
             for (final participant in participants) {
               try {
-                await _appwrite.databases.deleteDocument(
-                  databaseId: 'arena_db',
-                  collectionId: 'arena_participants',
-                  documentId: participant['id'],
+                await _supabase.client.from('arena_participants').delete().eq('id', participant['id'],
                 );
               } catch (e) {
                 _logger.warning('Error removing participant ${participant['id']}: $e');

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
-import 'package:appwrite/appwrite.dart';
-import '../services/appwrite_service.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../services/supabase_service.dart';
 import '../services/challenge_messaging_service.dart';
 import '../services/sound_service.dart';
 import '../services/role_assignment_service.dart';
@@ -54,6 +54,7 @@ import '../widgets/timeout_countdown_widget.dart';
 import '../services/gemini_live_service.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // Static helper methods for avatar system - accessible by all classes
 Widget buildAvatarText(UserProfile participant, double fontSize) {
@@ -114,6 +115,12 @@ Widget buildAvatarWithGiftOverlay({
   final senderEmoji = avatarEmojiOverlays[participant.id];
   final transformEmoji = senderAvatarTransformations?[participant.id];
 
+  // DEBUG: Track avatar state for debugging - minimal logging to avoid spam
+  // Only log warnings for missing avatars
+  if (participant.avatar == null || participant.avatar!.isEmpty) {
+    AppLogger().warning('🖼️ AVATAR MISSING: ${participant.name} (${participant.id.substring(0, 8)}) in $role');
+  }
+
   return Stack(
     clipBehavior: Clip.none,
     children: [
@@ -139,12 +146,24 @@ Widget buildAvatarWithGiftOverlay({
             : CircleAvatar(
                 radius: radius,
                 backgroundColor: getAvatarColorForRole(role),
-                backgroundImage: participant.avatar != null && participant.avatar!.isNotEmpty
-                    ? NetworkImage(participant.avatar!)
-                    : null,
-                child: participant.avatar == null || participant.avatar!.isEmpty
-                    ? buildAvatarText(participant, fontSize ?? 14)
-                    : null,
+                child: participant.avatar != null && participant.avatar!.isNotEmpty
+                    ? ClipOval(
+                        child: CachedNetworkImage(
+                          key: ValueKey('avatar_${participant.id}'), // Stable key to preserve widget state
+                          imageUrl: participant.avatar!,
+                          width: radius * 2,
+                          height: radius * 2,
+                          fit: BoxFit.cover,
+                          memCacheWidth: (radius * 4).toInt(), // Optimize memory cache
+                          memCacheHeight: (radius * 4).toInt(),
+                          placeholder: (context, url) => buildAvatarText(participant, fontSize ?? 14),
+                          errorWidget: (context, url, error) {
+                            AppLogger().warning('🖼️ AVATAR LOAD ERROR for ${participant.name}: $error');
+                            return buildAvatarText(participant, fontSize ?? 14);
+                          },
+                        ),
+                      )
+                    : buildAvatarText(participant, fontSize ?? 14),
               ),
       ),
       // Gift indicator badge (gift icon in top-right corner) - ONLY for senders
@@ -197,6 +216,23 @@ Widget buildTransformedAvatar(String emoji, double radius) {
       );
     },
   );
+}
+
+/// Extract clean UUID from a potentially timestamped identity.
+/// LiveKit identities may be formatted as "uuid_timestamp" for uniqueness.
+/// This helper extracts just the UUID portion for database lookups.
+/// Example: "2a6e4420-4f1c-481f-b2f8-5e4ac0d2631b_1766094374121" -> "2a6e4420-4f1c-481f-b2f8-5e4ac0d2631b"
+String extractCleanUserId(String identity) {
+  // Standard UUID format is 36 characters (8-4-4-4-12 with hyphens)
+  // If identity is longer and contains underscore after position 36, it's timestamped
+  if (identity.length > 36 && identity.contains('_')) {
+    final underscoreIndex = identity.indexOf('_');
+    // Only extract if underscore is at position 36 (right after UUID)
+    if (underscoreIndex == 36) {
+      return identity.substring(0, 36);
+    }
+  }
+  return identity;
 }
 
 // Helper method to get avatar background color based on role
@@ -537,7 +573,7 @@ class ArenaScreen extends StatefulWidget {
 }
 
 class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin, AutomaticKeepAliveClientMixin, DisposalTrackingMixin {
-  final AppwriteService _appwrite = AppwriteService();
+  final SupabaseService _supabase = SupabaseService();
   late final SoundService _soundService;
   late final SpeakingDetectionService _speakingService;
   late final RecordingService _recordingService;
@@ -585,9 +621,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   StreamSubscription? _sharedLinkSubscription; // Shared link notifications
   StreamSubscription? _sourceAddedSubscription; // Material source additions
   StreamSubscription? _materialUpdatesSubscription; // Material updates
-  RealtimeSubscription? _reactionsSubscription; // Room reactions and gifts subscription
+  RealtimeChannel? _reactionsSubscription; // Room reactions and gifts subscription
   StreamSubscription? _reactionsStreamListener; // Stream listener for reactions
-  RealtimeSubscription? _participantsSubscription; // Participant role changes subscription
+  RealtimeChannel? _participantsSubscription; // Participant role changes subscription
   StreamSubscription? _participantsStreamListener; // Stream listener for participants
   int _roomStatusCheckerIterations = 0; // Track iterations to prevent infinite loops
   int _reconnectAttempts = 0; // Track reconnection attempts
@@ -638,13 +674,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   // Timeout tracking
   bool _isCurrentUserTimedOut = false;
   Timer? _timeoutCheckTimer;
-  StreamSubscription<RealtimeMessage>? _timeoutSubscription;
+  RealtimeChannel? _timeoutSubscription;
+  RealtimeChannel? _handRaisesSubscription;
 
   // Gemini AI Assistant
   // ignore: unused_field
   GeminiLiveService? _geminiService; // For future Live API with voice
-  bool _isGeminiConnected = false;
-  bool _isGeminiProcessing = false;
   // ignore: unused_field
   String? _lastAIResponse; // For future TTS/history features
 
@@ -692,7 +727,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
            _participants['judge3'] != null;
   }
 
-  // Realtime role change tracking (race condition prevention + deduplication)
+  // // Realtime type removed - role change tracking (race condition prevention + deduplication)
   final Map<String, DateTime> _lastRoleChangeTimestamps = {}; // userId -> timestamp
   final Map<String, String> _lastProcessedRoleChanges = {}; // userId -> "${role}_${timestamp}"
   static const Duration _roleChangeIdempotencyWindow = Duration(seconds: 2); // Ignore duplicate changes within 2 seconds
@@ -715,7 +750,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   bool _bothDebatersPresent = false;
   final bool _invitationModalShown = false;
   final bool _invitationsInProgress = false;
-  
+
+  // Gemini AI state - fields still referenced in code
+  // ignore: unused_field
+  bool _isGeminiConnected = false;
+  // ignore: unused_field
+  bool _isGeminiProcessing = false;
+
   // Chat state
   // StreamSubscription? _chatSubscription; // Removed with old chat system
   final TextEditingController _chatController = TextEditingController();
@@ -901,7 +942,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     // Step 4: CHALLENGE FIX - Verify both debaters are present if this is a challenge room
     if (widget.challengeId.isNotEmpty && widget.challengerId != null && widget.challengedId != null) {
       AppLogger().info('🔍 CHALLENGE FIX: Verifying debaters before loading participants (iOS)');
-      await _appwrite.verifyAndRepairChallengeDebaters(
+      await _supabase.verifyAndRepairChallengeDebaters(
         roomId: widget.roomId,
         challengerId: widget.challengerId!,
         challengedId: widget.challengedId!,
@@ -947,7 +988,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     // Step 5: CHALLENGE FIX - Verify both debaters are present if this is a challenge room
     if (widget.challengeId.isNotEmpty && widget.challengerId != null && widget.challengedId != null) {
       AppLogger().info('🔍 CHALLENGE FIX: Verifying debaters before loading participants');
-      await _appwrite.verifyAndRepairChallengeDebaters(
+      await _supabase.verifyAndRepairChallengeDebaters(
         roomId: widget.roomId,
         challengerId: widget.challengerId!,
         challengedId: widget.challengedId!,
@@ -1002,13 +1043,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     // Dispose reactions subscription
     _reactionsStreamListener?.cancel();
     _reactionsStreamListener = null;
-    _reactionsSubscription?.close();
+    _reactionsSubscription?.unsubscribe();
     _reactionsSubscription = null;
 
     // Dispose participants subscription
     _participantsStreamListener?.cancel();
     _participantsStreamListener = null;
-    _participantsSubscription?.close();
+    _participantsSubscription?.unsubscribe();
     _participantsSubscription = null;
 
     AppLogger().debug('🛑 DISPOSE: Cancelling room status checker...');
@@ -1061,8 +1102,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     AppLogger().debug('🛑 DISPOSE: Cancelling timeout monitoring...');
     _timeoutCheckTimer?.cancel();
     _timeoutCheckTimer = null;
-    _timeoutSubscription?.cancel();
+    _timeoutSubscription?.unsubscribe();
     _timeoutSubscription = null;
+
+    // Clean up hand raises subscription
+    _handRaisesSubscription?.unsubscribe();
+    _handRaisesSubscription = null;
 
     AppLogger().debug('🛑 DISPOSE: Cleaning up consolidated subscriptions...');
     _realtimeManager.unsubscribeFromRoom(widget.roomId);
@@ -1171,105 +1216,23 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               _reconnectAttempts = 0;
               AppLogger().info('Arena realtime connection restored');
             }
-            
+
             // Update realtime health status
             if (!_isRealtimeHealthy && mounted) {
               setState(() {
                 _isRealtimeHealthy = true;
               });
             }
-            
-            AppLogger().info('Real-time arena update: ${response.events}');
-            
-            // Check for participant deletion events
-            final isDeleteEvent = response.events.any((event) => event.contains('.delete'));
-            final isParticipantUpdate = response.events.any((event) => event.contains('arena_participants'));
 
-            if (isDeleteEvent && isParticipantUpdate) {
-              AppLogger().debug('🗑️ PARTICIPANT DELETION EVENT detected: ${response.events}');
-              // For deletion events, immediately refresh participants since payload might be incomplete
+            // DEBOUNCE: Prevent rapid participant rebuilds that cause UI blinking
+            // Cancel any pending debounced update and schedule a new one
+            _participantUpdateDebouncer?.cancel();
+            _participantUpdateDebouncer = Timer(const Duration(milliseconds: 500), () async {
               if (mounted && !_hasNavigated) {
-                AppLogger().info('🔄 Refreshing participants due to deletion event');
+                AppLogger().debug('🔄 DEBOUNCED: Loading participants after realtime update');
                 await _loadParticipants();
-                return; // Skip further processing for delete events
               }
-            }
-
-            // Check for participant_removed broadcast events from function
-            final isParticipantRemovedEvent = response.events.any((event) =>
-              event.contains('arena_events') && event.contains('.create'));
-
-            if (isParticipantRemovedEvent) {
-              try {
-                final eventPayload = Map<String, dynamic>.from(response.payload);
-                if (eventPayload['type'] == 'participant_removed' &&
-                    eventPayload['roomId'] == widget.roomId) {
-                  AppLogger().info('📢 BROADCAST: Participant removed event received - refreshing');
-                  if (mounted && !_hasNavigated) {
-                    await _loadParticipants();
-                    return;
-                  }
-                }
-              } catch (e) {
-                AppLogger().debug('Error processing participant_removed event: $e');
-              }
-            }
-
-            // Note: response.payload is guaranteed to be non-null by the API
-
-            // Ensure payload is a valid Map with enhanced safety
-            Map<String, dynamic> payload;
-            try {
-              payload = Map<String, dynamic>.from(response.payload);
-
-              // Additional null safety check
-              if (payload.isEmpty) {
-                AppLogger().warning('Received empty payload - skipping');
-                return;
-              }
-            } catch (e) {
-              AppLogger().warning('Error converting payload to Map: $e - skipping');
-              return;
-            }
-
-          // Check if this update is for our room
-            final isRoomUpdate = response.events.any((event) => event.contains('arena_rooms'));
-
-            if (isParticipantUpdate && payload.containsKey('roomId') &&
-                payload['roomId'] == widget.roomId) {
-              if (mounted && !_hasNavigated) {
-                await _handleArenaParticipantUpdate(response);
-              }
-            }
-            
-            if (isRoomUpdate) {
-              // Check if this is our room by various possible ID formats
-              final payloadId = payload['\$id'];
-              final roomId = payload['id'];
-              
-              AppLogger().debug('🔍 Room update received - PayloadId: $payloadId, RoomId: $roomId, TargetRoomId: ${widget.roomId}');
-              
-              // Log the judging state in the payload
-              if (payload.containsKey('judgingEnabled')) {
-                AppLogger().info('🎯 REALTIME: judgingEnabled field in payload: ${payload['judgingEnabled']}');
-              }
-              
-              if (payloadId == widget.roomId || roomId == widget.roomId ||
-                  payloadId == 'arena_${widget.challengeId}' || roomId == 'arena_${widget.challengeId}') {
-                AppLogger().info('🔄 REALTIME: Room update is for OUR room - refreshing data');
-                AppLogger().info('  - Current _judgingEnabled: $_judgingEnabled');
-                if (payload.containsKey('judgingEnabled')) {
-                  AppLogger().info('  - New judgingEnabled from payload: ${payload['judgingEnabled']}');
-                }
-                
-                // CRITICAL: Only process if we haven't started navigation
-                if (mounted && !_hasNavigated) {
-                  _loadRoomData();
-                } else {
-                  AppLogger().debug('🔍 Skipping room data refresh - navigation already in progress');
-                }
-              }
-            }
+            });
           } catch (e) {
             AppLogger().error('Error processing arena update: $e');
             // Don't rethrow to prevent stream from breaking
@@ -1315,27 +1278,59 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       // Track participant stream subscription
       trackSubscription('participant_stream', _participantStreamListener!);
 
-      // Listen to room status updates
-      _roomStatusStreamListener = _roomSubscription!.roomStatus.listen(
-        (response) {
-          AppLogger().info('Room status update: ${response.events}');
-          // Handle room updates (closure, status changes, etc.)
-          // Check both 'roomId' and '$id' fields since realtime messages use '$id'
-          final roomId = response.payload['roomId'] ?? response.payload['\$id'];
-          if (roomId == widget.roomId) {
-            final roomData = response.payload;
+      // Listen to arena room updates (status, winner, etc.) via Supabase realtime
+      final arenaRoomStream = _supabase.subscribeToArenaRoom(widget.roomId);
+      _roomStatusStreamListener = arenaRoomStream.listen(
+        (roomData) async {
+          if (roomData == null || !mounted || _hasNavigated) return;
 
-            // Reload room data to get ALL updated fields (including showResults)
-            AppLogger().info('🔄 Room update detected - reloading room data to capture all changes');
-            _loadRoomData();
+          try {
+            final status = roomData['status'];
+            final showResults = roomData['show_results'] as bool? ?? false;
+            final winner = roomData['winner'] as String?;
 
-            // Also check for room closure
-            if (roomData['status'] == 'ended' || roomData['status'] == 'closed') {
-              AppLogger().info('🔴 Room ended/closed detected via realtime');
-              if (mounted && !_hasNavigated) {
-                _forceNavigationHomeSync();
+            AppLogger().info('🔔 ARENA ROOM UPDATE RECEIVED:');
+            AppLogger().info('  - status: $status');
+            AppLogger().info('  - show_results: $showResults');
+            AppLogger().info('  - winner: $winner');
+            AppLogger().info('  - winner_id: ${roomData['winner_id']}');
+
+            // Check if results should be displayed to ALL users
+            if (showResults && !_resultsModalShown) {
+              AppLogger().info('📢 BROADCAST: show_results=true detected - displaying results modal');
+
+              // Update local state
+              if (mounted) {
+                setState(() {
+                  _winner = winner ?? _winner;
+                  _judgingComplete = true;
+                  _judgingEnabled = false;
+                  _showResults = true;
+                });
               }
+
+              // Show results modal for ALL users (audience, debaters, judges)
+              _resultsModalShown = true;
+              Future.delayed(const Duration(milliseconds: 300), () {
+                if (mounted && !_hasNavigated) {
+                  AppLogger().info('🎉 Showing results modal to user: $_currentUserId');
+                  _showResultsModal();
+                }
+              });
             }
+
+            // Reload room data for other updates
+            await _loadRoomData();
+
+            // Handle room closure (only 'ended' or 'closed', NOT 'completed')
+            // Show modal to ALL users before navigating home
+            if ((status == 'ended' || status == 'closed') && !_roomClosingModalShown && !_hasNavigated) {
+              AppLogger().info('🚪 Room closed/ended - showing closing modal to all users');
+              _roomClosingModalShown = true;
+              _showRoomClosingModal(5); // 5 second countdown before navigation
+            }
+          } catch (e) {
+            AppLogger().error('Error processing arena room update: $e');
           }
         },
         onError: (error) {
@@ -1348,24 +1343,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       // Listen to judgment updates for voting
       _judgmentStreamListener = _roomSubscription!.materials.listen(
         (response) {
-          AppLogger().info('📨 Materials stream event received: ${response.events}');
-
-          // Check if this is a judgment event
-          if (response.events.any((e) => e.contains('arena_judgments'))) {
-            AppLogger().info('⚖️ Judgment update received - Events: ${response.events}');
-
-            // Check if this is a new judge vote (create event)
-            final isCreateEvent = response.events.any((e) => e.contains('.create'));
-            AppLogger().info('  - Is create event: $isCreateEvent');
-            AppLogger().info('  - Current user role: $_userRole');
-            AppLogger().info('  - Is moderator: $_isModerator');
-            AppLogger().info('  - Mounted: $mounted');
-
-            // Update vote indicators for ALL users (not just moderator)
-            if (isCreateEvent && mounted) {
+          try {
+            // TODO: Implement proper Supabase judgment updates
+            // For now, just refresh voting status
+            if (mounted && !_hasNavigated) {
               _checkJudgeVoteProgress().then((voteCount) {
-                AppLogger().info('  - Vote count: $voteCount');
-                // Update vote indicators in app bar for everyone
                 if (mounted) {
                   setState(() {
                     _judgeVotedCount = voteCount['voted'] ?? 0;
@@ -1374,57 +1356,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 }
               });
             }
-
-            if (isCreateEvent && _isModerator && mounted) {
-              AppLogger().info('🔔 Processing judge vote notification...');
-              // Extract judge information from the payload
-              try {
-                final payload = response.payload;
-                final judgeId = payload['judgeId'];
-                AppLogger().info('  - Judge ID from payload: $judgeId');
-
-                // Determine which judge voted based on their role
-                String judgeLabel = 'A judge';
-                if (judgeId != null) {
-                  // Find the judge's role by checking participants
-                  _participants.forEach((role, user) {
-                    if (user?.id == judgeId) {
-                      switch (role) {
-                        case 'judge1':
-                          judgeLabel = 'Judge 1';
-                          break;
-                        case 'judge2':
-                          judgeLabel = 'Judge 2';
-                          break;
-                        case 'judge3':
-                          judgeLabel = 'Judge 3';
-                          break;
-                      }
-                    }
-                  });
-                }
-                AppLogger().info('  - Judge label: $judgeLabel');
-
-                // Count how many judges have voted
-                _checkJudgeVoteProgress().then((voteCount) {
-                  AppLogger().info('  - Vote count: $voteCount');
-                  // Show persistent notification for moderator
-                  _showJudgeVoteNotification(judgeLabel, voteCount);
-                });
-              } catch (e) {
-                AppLogger().error('Error processing judge vote notification: $e');
-              }
-            } else {
-              AppLogger().info('⚠️ Skipping notification - Conditions not met');
-            }
-
-            // Refresh judgments when new votes come in
-            if (mounted && !_hasNavigated) {
-              // Force UI refresh to show updated voting status
-              setState(() {
-                // This will trigger a rebuild and update voting display
-              });
-            }
+          } catch (e) {
+            AppLogger().error('Error processing judgment update: $e');
           }
         },
       );
@@ -1489,9 +1422,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     if (_currentUserId == null || _isExiting || _hasNavigated) return;
 
     try {
-      await _appwrite.updateArenaParticipantPresence(
+      await _supabase.updateArenaParticipantPresence(
         roomId: widget.roomId,
         userId: _currentUserId!,
+        isPresent: true,  // Mark user as present in the room
       );
     } catch (e) {
       AppLogger().debug('Failed to update presence: $e');
@@ -1825,32 +1759,36 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
     try {
       // Subscribe to reactions for this room
-      final realtime = _appwrite.realtime;
+      _reactionsSubscription = _supabase.client
+          .channel('room_reactions:${widget.roomId}')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.insert,
+            schema: 'public',
+            table: 'room_reactions',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'room_id', // Fixed: Use snake_case for Supabase
+              value: widget.roomId,
+            ),
+            callback: (payload) {
+              if (!mounted) return;
 
-      _reactionsSubscription = realtime.subscribe([
-        'databases.arena_db.collections.room_reactions.documents'
-      ]);
-
-      _reactionsStreamListener = _reactionsSubscription!.stream.listen((response) {
-        if (!mounted) return;
-
-        try {
-          final payload = response.payload;
+              try {
+                final data = payload.newRecord;
 
           // Validate payload is a Map (runtime check for safety)
           // ignore: unnecessary_type_check
-          if (payload is! Map<String, dynamic>) {
-            AppLogger().warning('Invalid reaction payload type: ${payload.runtimeType}');
+          if (data is! Map<String, dynamic>) {
+            AppLogger().warning('Invalid reaction payload type: ${data.runtimeType}');
             return;
           }
 
-          // Only process create events
-          if (response.events.any((event) => event.contains('.create'))) {
-            final roomId = payload['roomId'];
+          // Only process create events (TODO: check event type)
+          final roomId = data['room_id']; // Fixed: Use snake_case
 
-            // Only process reactions for this room
-            if (roomId == widget.roomId) {
-              final reaction = ReactionData.fromMap(payload, payload['\$id']);
+          // Only process reactions for this room
+          if (roomId == widget.roomId) {
+              final reaction = ReactionData.fromMap(data, data['\$id']);
 
               // Add to active reactions
               setState(() {
@@ -1935,14 +1873,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 }
               }
             }
-          }
-        } catch (e) {
-          AppLogger().error('❌ Error processing reaction: $e');
-        }
-      });
-
-      // Track reactions stream listener
-      trackSubscription('reactions_stream', _reactionsStreamListener!);
+              } catch (e) {
+                AppLogger().error('❌ Error processing reaction: $e');
+              }
+            },
+          )
+          .subscribe();
 
       AppLogger().info('🎁 Arena reactions sync initialized');
     } catch (e) {
@@ -1950,99 +1886,122 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
   }
 
-  /// Initialize real-time participant role changes sync (Appwrite)
+  /// Initialize real-time participant role changes sync (Supabase)
   Future<void> _initializeParticipantsSync() async {
     if (!mounted) return;
 
     try {
       // Subscribe to participant changes for this room
-      final realtime = _appwrite.realtime;
+      _participantsSubscription = _supabase.client
+          .channel('arena_participants:${widget.roomId}')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'arena_participants',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'room_id', // Fixed: Use snake_case for Supabase
+              value: widget.roomId,
+            ),
+            callback: (payload) async {
+              AppLogger().debug('🔔 REALTIME EVENT RECEIVED: ${payload.eventType}');
 
-      _participantsSubscription = realtime.subscribe([
-        'databases.arena_db.collections.arena_participants.documents'
-      ]);
+              if (!mounted || _isExiting) {
+                AppLogger().debug('⚠️ REALTIME: Ignoring - mounted=$mounted, exiting=$_isExiting');
+                return;
+              }
 
-      AppLogger().info('✅ REALTIME: Subscribed to arena_participants (Appwrite)');
+              try {
+                // Handle DELETE events specially - user left the room
+                if (payload.eventType == PostgresChangeEvent.delete) {
+                  final oldData = payload.oldRecord;
+                  AppLogger().info('🚪 REALTIME DELETE: User left room - oldData: $oldData');
 
-      _participantsStreamListener = _participantsSubscription!.stream.listen((response) async {
-        if (!mounted || _isExiting) return;
+                  final deletedUserId = oldData['user_id'];
+                  final deletedRole = oldData['role'] as String?;
 
-        try {
-          final payload = response.payload;
-          final roomId = payload['roomId'];
+                  if (deletedUserId != null && deletedRole != null && mounted) {
+                    // IMMEDIATE SLOT CLEARING: Remove user from slot instantly
+                    AppLogger().info('⚡ IMMEDIATE CLEAR: Removing $deletedUserId from $deletedRole slot');
 
-          // Only process events for this room
-          if (roomId != widget.roomId) {
-            return;
-          }
+                    setState(() {
+                      // Clear the participant slot immediately
+                      if (_participants.containsKey(deletedRole) &&
+                          _participants[deletedRole]?.id == deletedUserId) {
+                        _participants[deletedRole] = null;
+                        AppLogger().info('✅ Cleared $deletedRole slot immediately');
+                      }
 
-          // Process update events (role changes)
-          if (response.events.any((event) => event.contains('.update'))) {
-            final userId = payload['userId'];
-            final newRole = payload['role'];
-            final updatedAt = payload['\$updatedAt'];
+                      // Also remove from audience if present
+                      _audience.removeWhere((u) => u.id == deletedUserId);
+                    });
 
-            if (userId != null && newRole != null) {
-              AppLogger().info('📡 APPWRITE: Participant role update - User $userId → $newRole');
-
-              // Parse timestamp from Appwrite
-              DateTime? timestamp;
-              if (updatedAt != null) {
-                try {
-                  timestamp = DateTime.parse(updatedAt);
-                } catch (e) {
-                  AppLogger().warning('Failed to parse timestamp: $updatedAt');
+                    // Still do a full refresh to ensure consistency, but with shorter delay
+                    _participantUpdateDebouncer?.cancel();
+                    _participantUpdateDebouncer = Timer(const Duration(milliseconds: 100), () {
+                      if (mounted && !_isExiting) {
+                        _loadParticipants();
+                      }
+                    });
+                  }
+                  return;
                 }
+
+                // Handle INSERT and UPDATE events
+                final data = payload.newRecord;
+                AppLogger().debug('📦 REALTIME DATA: $data');
+
+                final roomId = data['room_id']; // Fixed: Use snake_case
+                AppLogger().debug('🏠 REALTIME: Event room=$roomId, current room=${widget.roomId}');
+
+                // Only process events for this room
+                if (roomId != widget.roomId) {
+                  AppLogger().debug('⚠️ REALTIME: Ignoring - different room');
+                  return;
+                }
+
+                final userId = data['user_id']; // Fixed: Use snake_case
+                final newRole = data['role'];
+
+                if (userId != null) {
+                  AppLogger().info('📡 Participant update - User $userId, role: $newRole');
+
+                  // IMMEDIATE UPDATE: If this is the current user, update their role instantly
+                  // BUT RESPECT THE CHALLENGE ARENA LOCK for debaters
+                  if (userId == _currentUserId && newRole != null && mounted) {
+                    final oldRole = _userRole;
+                    if (oldRole != newRole) {
+                      // CHALLENGE ARENA LOCK: For challenge-based arenas, debater roles are locked
+                      final isChallengeBased = widget.challengeId.isNotEmpty;
+                      final isDebaterRole = ['affirmative', 'negative', 'affirmative2', 'negative2'].contains(oldRole);
+                      final wouldChangeDebaterRole = isDebaterRole && oldRole != newRole;
+
+                      if (isChallengeBased && wouldChangeDebaterRole) {
+                        AppLogger().warning('🔒 ROLE LOCK (REALTIME): Blocking role change from $oldRole to $newRole in challenge arena');
+                      } else {
+                        setState(() {
+                          _userRole = newRole;
+                        });
+                        AppLogger().info('⚡ INSTANT ROLE UPDATE: Current user role changed from $oldRole to $newRole');
+                      }
+                    }
+                  }
+
+                  AppLogger().debug('🔄 REALTIME: Calling _debouncedLoadParticipants()');
+
+                  // Refresh participants to get latest state (includes updating UI slots)
+                  if (mounted && !_isExiting) {
+                    _debouncedLoadParticipants();
+                  }
+                }
+              } catch (e) {
+                AppLogger().error('Error processing participant realtime event: $e');
               }
+            },
+          )
+          .subscribe();
 
-              // Handle role change via unified handler
-              _handleParticipantRoleChange(
-                userId: userId,
-                newRole: newRole,
-                timestamp: timestamp,
-                source: 'appwrite',
-              );
-            }
-          }
-
-          // Process create events (new participants joining)
-          if (response.events.any((event) => event.contains('.create'))) {
-            final userId = payload['userId'];
-            final newRole = payload['role'];
-
-            if (userId != null && newRole != null) {
-              AppLogger().info('📡 APPWRITE: New participant joined - User $userId as $newRole');
-              AppLogger().info('🎯 2v2 FIX: New ${newRole} joined - triggering debounced participant refresh');
-
-              // CRITICAL FIX FOR 2v2: When new participants join (especially affirmative2/negative2),
-              // existing users need to see them immediately without leaving/rejoining
-              // Use debounced reload to prevent rapid flickering
-              if (mounted && !_isExiting) {
-                _debouncedLoadParticipants();
-              }
-            }
-          }
-
-          // Process delete events (participants leaving)
-          if (response.events.any((event) => event.contains('.delete'))) {
-            final userId = payload['userId'];
-
-            if (userId != null) {
-              AppLogger().info('📡 APPWRITE: Participant left - User $userId');
-
-              // Refresh participant list for departures (debounced to prevent rapid flickering)
-              _debouncedLoadParticipants();
-            }
-          }
-
-        } catch (e) {
-          AppLogger().error('Error processing participant realtime event: $e');
-        }
-      });
-
-      // Track participants stream listener
-      trackSubscription('participants_sync_stream', _participantsStreamListener!);
-
+      AppLogger().info('✅ REALTIME: Subscribed to arena_participants (Supabase)');
     } catch (e) {
       AppLogger().error('❌ Failed to initialize participants sync: $e');
     }
@@ -2075,14 +2034,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     if (_currentUser == null) {
       AppLogger().debug('🚀 INSTANT: Fetching current user...');
       // Try to get current user quickly
-      final user = await _appwrite.getCurrentUser();
+      final user = await _supabase.getCurrentUser();
       if (user != null) {
         // Convert User to UserProfile
         _currentUser = UserProfile(
-          id: user.$id,
-          name: user.name.isEmpty ? 'Unknown User' : user.name,
-          email: user.email,
-          avatar: user.prefs.data['profileImage'],
+          id: user.id,
+          name: user.email ?? 'Unknown User',  // Use email as fallback for name
+          email: user.email ?? '',  // Provide empty string if null
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );
@@ -2114,9 +2072,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
       // CRITICAL: Re-check current user role from database before WebRTC connection
       try {
-        final currentParticipants = await _appwrite.getArenaParticipants(widget.roomId);
+        final currentParticipants = await _supabase.getArenaParticipants(widget.roomId);
         final currentUserParticipant = currentParticipants.firstWhere(
-          (p) => p['userId'] == _currentUser?.id,
+          (p) => p['user_id'] == _currentUser?.id,
           orElse: () => <String, dynamic>{},
         );
         
@@ -2133,16 +2091,29 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       } catch (e) {
         AppLogger().error('❌ Failed to double-check role from database: $e');
       }
-      
+
       // Check if current user is room creator (auto-moderator)
-      if (_roomData != null && _currentUser?.id != null && _roomData!['createdBy'] == _currentUser!.id) {
+      // BUT NOT for challenge-based arenas - there, creator is a debater, not moderator
+      // Check both snake_case (from Supabase) and camelCase (legacy)
+      final creatorId = _roomData?['created_by'] ?? _roomData?['createdBy'];
+      final challengeId = _roomData?['challenge_id'] ?? _roomData?['challengeId'];
+      final isChallengeBased = challengeId != null && challengeId.toString().isNotEmpty;
+
+      if (_roomData != null && _currentUser?.id != null && creatorId == _currentUser!.id && !isChallengeBased) {
+        // Only auto-assign moderator for NON-challenge rooms (regular room creation)
         webrtcRole = 'moderator';
-        AppLogger().debug('🎭 Room creator detected - using moderator role for WebRTC');
-        
+        AppLogger().debug('🎭 Room creator detected (non-challenge) - using moderator role for WebRTC');
+
         // ROBUST AUDIO SYSTEM: Ensure local role state matches creator status
         if (_userRole != 'moderator') {
           AppLogger().warning('🚨 ROLE OVERRIDE: Room creator should be moderator - updating local role from $_userRole to moderator');
           _userRole = 'moderator';
+        }
+      } else if (isChallengeBased && creatorId == _currentUser?.id) {
+        // For challenge-based arenas, creator is a DEBATER - use their assigned role
+        AppLogger().debug('🎭 Challenge-based arena - creator uses assigned debater role: $_userRole');
+        if (['affirmative', 'negative', 'affirmative2', 'negative2'].contains(_userRole)) {
+          webrtcRole = _userRole!;
         }
       } else if (['affirmative', 'negative', 'affirmative2', 'negative2', 'moderator'].contains(_userRole)) {
         webrtcRole = _userRole!;
@@ -2167,7 +2138,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           // Keep _userRole as 'audience' so they stay in audience slot visually
         }
         // If user is a room creator, force moderator role everywhere
-        else if (_roomData != null && _currentUser?.id != null && _roomData!['createdBy'] == _currentUser!.id) {
+        // BUT NOT for challenge-based arenas where creator is a debater
+        // Check both snake_case (from Supabase) and camelCase (legacy)
+        else if (_roomData != null && _currentUser?.id != null &&
+                 (_roomData!['created_by'] == _currentUser!.id || _roomData!['createdBy'] == _currentUser!.id) &&
+                 !isChallengeBased) {
           AppLogger().warning('🚨 ARENA: Room creator detected as audience - forcing moderator role');
           webrtcRole = 'moderator';
           _userRole = 'moderator';
@@ -2272,7 +2247,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         // Initialize material sync service for slides and sources
         if (_liveKitService.room != null) {
           _materialSyncService = LiveKitMaterialSyncService(
-            appwrite: _appwrite,
+            appwrite: _supabase,
             room: _liveKitService.room,
             roomId: widget.roomId,
             userId: currentUserId,
@@ -2282,7 +2257,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           
           // Initialize pinned link service
           _pinnedLinkService = PinnedLinkService(
-            appwrite: _appwrite,
+            appwrite: _supabase,
             roomId: widget.roomId,
             userId: currentUserId,
           );
@@ -2839,26 +2814,30 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     if (_currentUser == null) return;
 
     try {
-      final realtime = _appwrite.realtime;
-
       // Subscribe to user_timeouts collection
-      _timeoutSubscription = realtime.subscribe([
-        'databases.arena_db.collections.user_timeouts.documents',
-      ]).stream.listen((response) async {
-        AppLogger().debug('⏰ Timeout subscription event: ${response.events}');
+      _timeoutSubscription = _supabase.client
+          .channel('user_timeouts:${_currentUser!.id}')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.insert,
+            schema: 'public',
+            table: 'user_timeouts',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'user_id', // Fixed: Use snake_case for Supabase
+              value: _currentUser!.id,
+            ),
+            callback: (payload) async {
+              // Check if this timeout event is for the current user in this room
+              final data = payload.newRecord;
+              if (data['user_id'] == _currentUser!.id && data['room_id'] == widget.roomId) {
+                AppLogger().info('⏰ REAL-TIME: Timeout event for current user');
 
-        // Check if this timeout event is for the current user in this room
-        final payload = response.payload;
-        if (payload['userId'] == _currentUser!.id && payload['roomId'] == widget.roomId) {
-          AppLogger().info('⏰ REAL-TIME: Timeout event for current user');
-
-          // Immediately check timeout status
-          await _checkTimeoutStatus();
-        }
-      });
-
-      // Track timeout subscription
-      trackSubscription('timeout_stream', _timeoutSubscription!);
+                // Immediately check timeout status
+                await _checkTimeoutStatus();
+              }
+            },
+          )
+          .subscribe();
 
       AppLogger().debug('⏰ Timeout realtime subscription set up');
     } catch (e) {
@@ -2955,34 +2934,36 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   Future<void> _loadRoomData() async {
     try {
-      final user = await _appwrite.getCurrentUser();
+      final user = await _supabase.getCurrentUser();
       if (user == null) return;
       
-      _currentUserId = user.$id;
-      _currentUser = await _appwrite.getUserProfile(user.$id);
+      _currentUserId = user.id;
+      _currentUser = await _supabase.getUserProfile(user.id);
       
       // Try to get existing Arena room
-      Map<String, dynamic>? roomData = await _appwrite.getArenaRoom(widget.roomId);
+      Map<String, dynamic>? roomData = await _supabase.getArenaRoom(widget.roomId);
       
       if (roomData == null) {
         AppLogger().warning('Arena room not found: ${widget.roomId}');
         // Room doesn't exist, this shouldn't happen if called from challenge modal
         // but we can still try to handle it gracefully
       } else {
-        // Check if room has been closed or completed
+        // Check if room has been closed (but NOT completed - completed means results ready)
         final roomStatus = roomData['status'];
-        
-        if (roomStatus == 'completed' || roomStatus == 'abandoned' || roomStatus == 'force_cleaned' || roomStatus == 'force_closed') {
+
+        // 'completed' status means voting finished and results are ready - DON'T navigate away
+        // Users should stay to view results. Only navigate on actual room closure statuses.
+        if (roomStatus == 'abandoned' || roomStatus == 'force_cleaned' || roomStatus == 'force_closed') {
           AppLogger().debug('🚪 Room has been closed (status: $roomStatus), navigating back to arena lobby');
-          
+
           // CRITICAL: Check if navigation already in progress
           if (_hasNavigated) {
             AppLogger().debug('🔍 Navigation already in progress, skipping duplicate navigation');
             return;
           }
-          
+
           _hasNavigated = true; // Set navigation flag immediately
-          
+
           if (mounted) {
             // Show message and navigate back
             ScaffoldMessenger.of(context).showSnackBar(
@@ -2992,7 +2973,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                 duration: Duration(seconds: 2),
               ),
             );
-            
+
             // Navigate back to arena lobby after a short delay
             Future.delayed(const Duration(seconds: 1), () {
               if (mounted && !_isExiting) {
@@ -3033,19 +3014,28 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         }
         
         // Extract winner and judging status from room data
-        // DEBUG: Log raw room data to see what fields are actually present
-        AppLogger().debug('🔍 RAW ROOM DATA KEYS: ${roomData.keys.toList()}');
-        AppLogger().debug('🔍 showResults IN DATA: ${roomData.containsKey('showResults')}');
-        if (roomData.containsKey('showResults')) {
-          AppLogger().debug('🔍 showResults RAW VALUE: ${roomData['showResults']}');
-          AppLogger().debug('🔍 showResults TYPE: ${roomData['showResults'].runtimeType}');
+        // Supabase uses snake_case columns, derive judging state from status field
+        AppLogger().debug('🔍 RAW ROOM DATA: status=${roomData['status']}, winner_id=${roomData['winner_id']}');
+
+        final winnerId = roomData['winner_id'];
+        final challengerId = roomData['challenger_id'];
+        final challengedId = roomData['challenged_id'];
+
+        // Determine winner side (affirmative = challenger, negative = challenged)
+        String? newWinner;
+        if (winnerId != null) {
+          if (winnerId == challengerId) {
+            newWinner = 'affirmative';
+          } else if (winnerId == challengedId) {
+            newWinner = 'negative';
+          }
         }
 
-        final newWinner = roomData['winner'];
-        final newJudgingComplete = roomData['judgingComplete'] ?? false;
-        final newJudgingEnabled = roomData['judgingEnabled'] ?? true;
-        final newTeamSize = roomData['teamSize'] ?? 1; // Default to 1v1 if not specified
-        final newShowResults = roomData['showResults'] ?? false;
+        // Derive judging states from room status
+        final newJudgingComplete = roomStatus == 'completed' || winnerId != null;
+        final newJudgingEnabled = roomStatus == 'judging';
+        final newTeamSize = roomData['team_size'] ?? 1; // Default to 1v1 if not specified
+        final newShowResults = roomStatus == 'completed' || winnerId != null;
 
         // Update state with setState to trigger UI rebuild
         if (mounted) {
@@ -3095,20 +3085,17 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           }
         }
         
-        // Check if current user has already submitted judgment
+        // Check if current user has already submitted judgment FOR THIS ROOM
         if (_currentUserId != null) {
           AppLogger().debug('🔍 VOTE CHECK: Checking votes for user $_currentUserId in room ${widget.roomId}');
-          final existingJudgments = await _appwrite.databases.listDocuments(
-            databaseId: 'arena_db',
-            collectionId: 'arena_judgments',
-            queries: [
-              Query.equal('roomId', widget.roomId),
-              Query.equal('judgeId', _currentUserId!),
-            ],
-          );
-          
-          _hasCurrentUserSubmittedVote = existingJudgments.documents.isNotEmpty;
-          AppLogger().debug('🔍 VOTE STATUS: Found ${existingJudgments.documents.length} existing votes for user $_currentUserId');
+          final existingJudgments = await _supabase.client
+              .from('arena_judgments')
+              .select()
+              .eq('room_id', widget.roomId)
+              .eq('judge_id', _currentUserId!);
+
+          _hasCurrentUserSubmittedVote = (existingJudgments as List).isNotEmpty;
+          AppLogger().debug('🔍 VOTE STATUS: Found ${(existingJudgments as List).length} existing votes for user $_currentUserId in room ${widget.roomId}');
           AppLogger().debug('🔍 VOTE STATUS: Current user has submitted vote: $_hasCurrentUserSubmittedVote');
         }
         
@@ -3116,29 +3103,131 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         AppLogger().debug('🎯 ROLE DEBUG: Current user role: $_userRole, _isJudge: $_isJudge, _isModerator: $_isModerator');
       }
       
+      // Check if current user is the room creator FIRST (before any async calls)
+      final isRoomCreator = roomData?['created_by'] == _currentUserId;
+      // Check if this is a challenge-based arena (creator is debater, not moderator)
+      final roomChallengeId = roomData?['challenge_id'] ?? roomData?['challengeId'];
+      final isRoomChallengeBased = roomChallengeId != null && roomChallengeId.toString().isNotEmpty;
+
+      // CRITICAL FIX: Set _userRole IMMEDIATELY for room creator to prevent flickering
+      // This ensures the UI never shows the creator in audience, even during async operations
+      if (isRoomCreator && !isRoomChallengeBased) {
+        _userRole = 'moderator';
+        AppLogger().info('🎭 IMMEDIATE: Room creator role set to moderator (UI will show correctly)');
+      }
+
+      // CRITICAL FIX: Set _userRole IMMEDIATELY for challenge debaters to prevent flickering
+      // Challenger = affirmative, Challenged = negative
+      // IMPORTANT: Only apply this for GENUINE challenge arenas with valid challenger IDs
+      final hasValidChallengerIds = (widget.challengerId?.isNotEmpty ?? false) && (widget.challengedId?.isNotEmpty ?? false);
+      if (isRoomChallengeBased && hasValidChallengerIds) {
+        if (widget.challengerId == _currentUserId) {
+          _userRole = 'affirmative';
+          AppLogger().info('🎭 IMMEDIATE: Challenger role set to affirmative (UI will show correctly)');
+        } else if (widget.challengedId == _currentUserId) {
+          _userRole = 'negative';
+          AppLogger().info('🎭 IMMEDIATE: Challenged user role set to negative (UI will show correctly)');
+        }
+      } else if (isRoomChallengeBased && !hasValidChallengerIds) {
+        AppLogger().warning('⚠️ Challenge-based arena but missing valid challenger IDs - will use database role');
+      }
+
       // Ensure current user has a role in the Arena
-      final existingParticipants = await _appwrite.getArenaParticipants(widget.roomId);
-      final hasRole = existingParticipants.any((p) => p['userId'] == _currentUserId);
-      
-      AppLogger().debug('🔍 Checking arena participation: hasRole=$hasRole, currentUserId=$_currentUserId');
-      
-      if (!hasRole) {
-        // Check if current user is one of the debaters
-        final isDebater = (widget.challengerId == _currentUserId || widget.challengedId == _currentUserId);
-        
-        AppLogger().debug('🔍 User role check: isDebater=$isDebater');
-        
-        if (!isDebater) {
+      // Note: Supabase returns snake_case field names (user_id, not userId)
+      final existingParticipants = await _supabase.getArenaParticipants(widget.roomId);
+      final hasRole = existingParticipants.any((p) => p['user_id'] == _currentUserId);
+
+      AppLogger().debug('🔍 Checking arena participation: hasRole=$hasRole, isRoomCreator=$isRoomCreator, isChallengeBased=$isRoomChallengeBased, currentUserId=$_currentUserId');
+
+      // IMPORTANT: Room creator should ALWAYS be moderator - EXCEPT for challenge-based arenas
+      // In challenge arenas, the creator is one of the debaters, not the moderator
+      if (isRoomCreator && !isRoomChallengeBased) {
+        final existingRole = existingParticipants
+            .where((p) => p['user_id'] == _currentUserId)
+            .map((p) => p['role'])
+            .firstOrNull;
+
+        if (existingRole != 'moderator') {
+          AppLogger().info('🎭 ROOM CREATOR FIX: Ensuring room creator is moderator in database (was: $existingRole)');
+          await _supabase.assignArenaRole(
+            roomId: widget.roomId,
+            userId: _currentUserId!,
+            role: 'moderator',
+          );
+          AppLogger().info('✅ Room creator assigned as moderator in database');
+        } else {
+          AppLogger().debug('🎭 Room creator already has moderator role in database');
+        }
+        // _userRole already set above, no need to set again
+      } else if (isRoomCreator && isRoomChallengeBased) {
+        // For challenge-based arenas, creator uses their assigned debater role
+        final existingRole = existingParticipants
+            .where((p) => p['user_id'] == _currentUserId)
+            .map((p) => p['role'])
+            .firstOrNull;
+        if (existingRole != null) {
+          _userRole = existingRole;
+          AppLogger().debug('🎭 Challenge-based arena: creator using assigned role: $existingRole');
+        } else {
+          // CRITICAL FIX: Creator has no role in challenge arena - assign as debater
+          AppLogger().warning('⚠️ Challenge arena creator has no role - assigning as debater');
+          String debaterRole = 'affirmative'; // Default to affirmative for creator
+          if (widget.challengerId == _currentUserId) {
+            debaterRole = 'affirmative';
+          } else if (widget.challengedId == _currentUserId) {
+            debaterRole = 'negative';
+          }
+          await _supabase.assignArenaRole(
+            roomId: widget.roomId,
+            userId: _currentUserId!,
+            role: debaterRole,
+          );
+          _userRole = debaterRole;
+          AppLogger().info('✅ Challenge arena creator assigned as $debaterRole');
+        }
+      } else if (!hasRole) {
+        // Check if current user is one of the debaters (only valid for challenge-based arenas)
+        // IMPORTANT: Must have valid challenger IDs to be considered a debater
+        final isDebater = isRoomChallengeBased &&
+                          hasValidChallengerIds &&
+                          (widget.challengerId == _currentUserId || widget.challengedId == _currentUserId);
+
+        AppLogger().debug('🔍 User role check: isDebater=$isDebater, isChallengeBased=$isRoomChallengeBased, hasValidIds=$hasValidChallengerIds');
+
+        if (isDebater) {
+          // CRITICAL FIX: Debaters should go directly to their slots
+          // Challenger = affirmative, Challenged = negative
+          String debaterRole;
+          if (widget.challengerId == _currentUserId) {
+            debaterRole = 'affirmative';
+          } else {
+            debaterRole = 'negative';
+          }
+
+          // Set _userRole IMMEDIATELY to prevent flickering
+          _userRole = debaterRole;
+          AppLogger().info('🎭 IMMEDIATE: Debater role set to $debaterRole (UI will show correctly)');
+
+          // Ensure database has correct role
+          await _supabase.assignArenaRole(
+            roomId: widget.roomId,
+            userId: _currentUserId!,
+            role: debaterRole,
+          );
+          AppLogger().info('✅ Debater assigned as $debaterRole in database');
+        } else {
+          // Not a debater - assign as audience or check for judge slots
           // First, populate _participants to check available judge slots
           for (final participant in existingParticipants) {
             final role = participant['role'];
             if (['judge1', 'judge2', 'judge3'].contains(role)) {
-              final userId = participant['userId'];
+              final userId = participant['user_id'];
               try {
-                final userProfile = await _appwrite.getUserProfile(userId);
+                final userProfile = await _supabase.getUserProfile(userId);
                 if (userProfile != null) {
                   _participants[role] = userProfile;
-                  AppLogger().debug('🔍 Pre-loaded $role: ${userProfile.name}');
+                  // TODO: User.name doesn't exist - use UserProfile
+                  // AppLogger().debug('🔍 Pre-loaded $role: ${userProfile.name}');
                 }
               } catch (e) {
                 AppLogger().debug('🔍 Failed to load profile for $role: $e');
@@ -3163,7 +3252,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             }
             
             AppLogger().debug('🔍 Assigning current user to $judgeRole...');
-            await _appwrite.assignArenaRole(
+            await _supabase.assignArenaRole(
               roomId: widget.roomId,
               userId: _currentUserId!,
               role: judgeRole,
@@ -3182,7 +3271,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           } else {
             AppLogger().debug('🔍 Assigning current user to audience...');
             // Assign current user to audience by default
-            await _appwrite.assignArenaRole(
+            await _supabase.assignArenaRole(
               roomId: widget.roomId,
               userId: _currentUserId!,
               role: 'audience',
@@ -3211,17 +3300,26 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       } else {
         // User already has a role - check if it's an important role before potentially overriding
         final existingParticipant = existingParticipants.firstWhere(
-          (p) => p['userId'] == _currentUserId,
+          (p) => p['user_id'] == _currentUserId,
           orElse: () => <String, dynamic>{},
         );
-        
-        final existingRole = existingParticipant['role'];
+
+        final existingRole = existingParticipant['role'] as String?;
         final importantRoles = ['affirmative', 'negative', 'affirmative2', 'negative2', 'moderator', 'judge1', 'judge2', 'judge3'];
-        
+
         if (importantRoles.contains(existingRole)) {
           AppLogger().info('User already has important role: $existingRole - preserving it');
+          // CRITICAL FIX: Actually set _userRole to the existing role from database
+          // This was missing before, causing judges to not see the voting button
+          _userRole = existingRole;
+          AppLogger().debug('🔍 Set _userRole to existing role: $_userRole');
         } else {
           AppLogger().debug('🔍 User has non-important role: $existingRole - allowing potential reassignment');
+          // Still set the role even if non-important, so we have accurate state
+          if (existingRole != null) {
+            _userRole = existingRole;
+            AppLogger().debug('🔍 Set _userRole to non-important role: $_userRole');
+          }
         }
       }
       
@@ -3243,12 +3341,23 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         
         if (!currentUserInParticipants && !currentUserInAudience) {
           AppLogger().warning('🚨 Current user not found in participants or audience! Attempting to add to audience...');
-          
-          // Try to get current user profile and add to audience manually as a fallback
+
+          // CRITICAL FIX: Add user to database as audience member (not just local state)
+          // This ensures user persists across refreshes and appears to other users
           try {
+            AppLogger().info('📝 Adding current user to arena_participants database as audience');
+            await _supabase.assignArenaRole(
+              roomId: widget.roomId,
+              userId: _currentUserId!,
+              role: 'audience',
+            );
+            _userRole = 'audience';
+            AppLogger().info('✅ Current user added to database as audience');
+
+            // Also add to local audience list for immediate UI update
             if (_currentUser != null) {
               _audience.add(_currentUser!);
-              AppLogger().info('✅ Added current user to audience as fallback');
+              AppLogger().info('✅ Added current user to local audience list');
               if (mounted) {
                 setState(() {
                   // Update UI after adding current user to audience
@@ -3256,7 +3365,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
               }
             }
           } catch (e) {
-            AppLogger().error('Failed to add current user to audience as fallback: $e');
+            AppLogger().error('Failed to add current user to audience: $e');
+            // Still try to add to local list as last resort
+            if (_currentUser != null) {
+              _audience.add(_currentUser!);
+              AppLogger().info('⚠️ Added current user to local audience only (database failed)');
+            }
           }
         } else {
           AppLogger().debug('✅ Current user found - in participants: $currentUserInParticipants, in audience: $currentUserInAudience');
@@ -3295,12 +3409,26 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   Future<void> _loadParticipants() async {
     AppLogger().debug('🎭 DEBUG: _loadParticipants() called for room ${widget.roomId}');
     try {
-      final participants = await _appwrite.getArenaParticipants(widget.roomId);
-      
+      final participants = await _supabase.getArenaParticipants(widget.roomId);
+
       AppLogger().info('Loading ${participants.length} participants for Arena');
-      
-      // Reset participants
-      _participants = {
+
+      // For challenge arenas, preserve existing debater slot assignments to prevent fluttering
+      final isChallengeBased = widget.challengeId.isNotEmpty;
+      final preservedDebaters = <String, UserProfile?>{};
+
+      if (isChallengeBased) {
+        // Save current debater assignments before reset
+        for (final debaterRole in ['affirmative', 'negative', 'affirmative2', 'negative2']) {
+          if (_participants[debaterRole] != null) {
+            preservedDebaters[debaterRole] = _participants[debaterRole];
+            AppLogger().debug('🔒 PRESERVING SLOT: $debaterRole -> ${_participants[debaterRole]?.name}');
+          }
+        }
+      }
+
+      // Build new participant state WITHOUT clearing first (differential update)
+      final newParticipants = <String, UserProfile?>{
         'affirmative': null,
         'negative': null,
         'affirmative2': null,
@@ -3310,64 +3438,175 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         'judge2': null,
         'judge3': null,
       };
-      _audience.clear();
-      
-      // Assign participants to roles
+      final newAudience = <UserProfile>[];
+
+      // Note: We no longer blindly restore preserved debaters here.
+      // Instead, we preserve slot assignment but UPDATE profile data (including avatar) from fresh database data.
+      // This fixes the avatar loss bug where preserved slots kept stale placeholder profiles without avatars.
+
+      // Assign participants to roles (arena2-style: simpler, relies on service for good data)
       for (var participant in participants) {
         final role = participant['role'];
         final userProfileData = participant['userProfile'];
-        
+
         AppLogger().debug('👤 Assigning participant to role: $role');
-        AppLogger().debug('🎭 DEBUG: Participant data: $participant');
-        
+
         // Check for completion status in the database
-        final completedSelection = participant['completedSelection'] == true;
-        final metadata = participant['metadata'];
-        final selections = metadata != null && metadata['selections'] != null 
-            ? Map<String, String?>.from(metadata['selections']) 
-            : <String, String?>{};
-        
-        AppLogger().debug('🎭 DEBUG: Role $role - completedSelection: $completedSelection, selections: $selections');
-        
-        // Sync completion status and selections from database
-        if (role == 'affirmative' && completedSelection) {
-          AppLogger().debug('🎭 SYNC: Set affirmative completion = true, selections = $selections');
-        } else if (role == 'affirmative2' && completedSelection) {
-          AppLogger().debug('🎭 SYNC: Set affirmative2 completion = true, selections = $selections');
-        } else if (role == 'negative' && completedSelection) {
-          AppLogger().debug('🎭 SYNC: Set negative completion = true, selections = $selections');
-        } else if (role == 'negative2' && completedSelection) {
-          AppLogger().debug('🎭 SYNC: Set negative2 completion = true, selections = $selections');
+        final completedSelection = participant['completedSelection'] == true || participant['completed_selection'] == true;
+
+        if (completedSelection) {
+          AppLogger().debug('🎭 SYNC: Role $role has completedSelection = true');
         }
-        
-        if (userProfileData != null) {
-          final userProfile = UserProfile.fromMap(userProfileData);
-          
-          if (['affirmative', 'affirmative2', 'negative', 'negative2', 'moderator', 'judge1', 'judge2', 'judge3'].contains(role)) {
-            _participants[role] = userProfile;
-            AppLogger().info('Assigned ${userProfile.name} to $role');
-          } else if (role == 'audience') {
-            _audience.add(userProfile);
-            AppLogger().info('✅ Added ${userProfile.name} to audience (Total audience: ${_audience.length})');
-            AppLogger().debug('👥 Current audience members: ${_audience.map((u) => u.name).join(', ')}');
+
+        // Create user profile from data (service already provides reliable data)
+        UserProfile? userProfile;
+        if (userProfileData != null && userProfileData is Map<String, dynamic>) {
+          userProfile = UserProfile.fromMap(userProfileData);
+          // DEBUG: Log avatar status when creating profile
+          if (userProfile.avatar != null && userProfile.avatar!.isNotEmpty) {
+            AppLogger().debug('✅ Created profile for $role: ${userProfile.name} WITH avatar');
           } else {
-            AppLogger().warning('🔍 User ${userProfile.name} has unknown role: $role - not assigned to audience');
+            AppLogger().warning('⚠️ Created profile for $role: ${userProfile.name} WITHOUT avatar - check userProfileData');
+          }
+        } else {
+          AppLogger().warning('⚠️ No userProfile data for role $role - this should not happen');
+        }
+
+        if (userProfile != null) {
+          // For challenge arenas, preserve slot assignment but ALWAYS update profile data
+          // This fixes avatar loss: preserved slots now get fresh profile data (including avatars)
+          final slotWasPreserved = isChallengeBased && preservedDebaters.containsKey(role);
+          final preservedUser = preservedDebaters[role];
+
+          if (slotWasPreserved && preservedUser != null) {
+            // SLOT PRESERVATION with DATA UPDATE:
+            // Keep the same user in this slot, but use fresh profile data from database
+            if (preservedUser.id == userProfile.id) {
+              // Same user - use fresh data (has avatar from database)
+              newParticipants[role] = userProfile;
+              AppLogger().info('🔒 PRESERVED SLOT with FRESH DATA: $role -> ${userProfile.name} (avatar=${userProfile.avatar != null})');
+            } else {
+              // Different user trying to take this slot - block reassignment (slot is locked)
+              newParticipants[role] = preservedUser;
+              AppLogger().warning('🔒 BLOCKED REASSIGN: $role slot locked to ${preservedUser.name}, rejecting ${userProfile.name}');
+            }
+          } else if (['affirmative', 'affirmative2', 'negative', 'negative2', 'moderator', 'judge1', 'judge2', 'judge3'].contains(role)) {
+            newParticipants[role] = userProfile;
+          } else if (role == 'audience') {
+            newAudience.add(userProfile);
+            AppLogger().debug('👥 Current audience members: ${newAudience.map((u) => u.name).join(', ')}');
           }
         } else {
           AppLogger().warning('No user profile data for participant with role: $role');
         }
       }
+
+      // DEDUPLICATION FIX: Remove current user from audience if they have a role in participants
+      // This prevents the same user from appearing in both a slot AND the audience
+      if (_currentUserId != null) {
+        // Check if current user is in any participant slot
+        bool userInSlot = false;
+        for (final role in newParticipants.keys) {
+          if (newParticipants[role]?.id == _currentUserId) {
+            userInSlot = true;
+            break;
+          }
+        }
+
+        // If user is in a slot, remove from audience to prevent duplicate
+        if (userInSlot) {
+          final removedCount = newAudience.where((u) => u.id == _currentUserId).length;
+          if (removedCount > 0) {
+            newAudience.removeWhere((u) => u.id == _currentUserId);
+            AppLogger().debug('🔧 DEDUP: Removed current user from audience (already in slot)');
+          }
+        }
+      }
+
+      // Check if state actually changed before updating (prevents unnecessary rebuilds)
+      bool participantsChanged = false;
+      bool audienceChanged = false;
+
+      // Check participant slots for changes - include avatar comparison to catch profile updates
+      for (final role in newParticipants.keys) {
+        final oldUser = _participants[role];
+        final newUser = newParticipants[role];
+        // Compare ID AND avatar to detect profile data updates (fixes avatar loss bug)
+        if (oldUser?.id != newUser?.id || oldUser?.avatar != newUser?.avatar) {
+          participantsChanged = true;
+          if (oldUser?.id == newUser?.id && oldUser?.avatar != newUser?.avatar) {
+            AppLogger().debug('🖼️ Avatar changed for ${newUser?.name}: ${oldUser?.avatar != null} -> ${newUser?.avatar != null}');
+          }
+          break;
+        }
+      }
+
+      // Check audience for changes
+      if (_audience.length != newAudience.length) {
+        audienceChanged = true;
+      } else {
+        final oldIds = _audience.map((u) => u.id).toSet();
+        final newIds = newAudience.map((u) => u.id).toSet();
+        if (!oldIds.containsAll(newIds) || !newIds.containsAll(oldIds)) {
+          audienceChanged = true;
+        }
+      }
+
+      // Only update state if something actually changed
+      if (participantsChanged || audienceChanged) {
+        _participants = newParticipants;
+        _audience.clear();
+        _audience.addAll(newAudience);
+        AppLogger().debug('🔄 State updated: participants=$participantsChanged, audience=$audienceChanged');
+      } else {
+        AppLogger().debug('⏭️ No state change detected, skipping update');
+      }
       
       // Determine current user's role
+      // Note: Supabase returns snake_case field names (user_id, not userId)
       final currentUserParticipant = participants.firstWhere(
-        (p) => p['userId'] == _currentUserId,
+        (p) => p['user_id'] == _currentUserId,
         orElse: () => <String, dynamic>{},
       );
       
       if (currentUserParticipant.isNotEmpty) {
         final newRole = currentUserParticipant['role'];
         final oldRole = _userRole;
-        _userRole = newRole;
+
+        // ROLE LOCK SYSTEM: Prevent role flickering from race conditions
+        final isChallengeBased = widget.challengeId.isNotEmpty;
+        final isDebaterRole = ['affirmative', 'negative', 'affirmative2', 'negative2'].contains(oldRole);
+        final wouldChangeDebaterRole = isDebaterRole && oldRole != newRole;
+
+        // CRITICAL FIX: Also lock moderator role to prevent flickering
+        // If _userRole is already 'moderator', don't downgrade to 'audience' or other roles
+        final isModeratorRole = oldRole == 'moderator';
+        final wouldDowngradeFromModerator = isModeratorRole && newRole != 'moderator';
+
+        // CRITICAL FIX: Also lock judge roles to prevent judge button from disappearing
+        // If _userRole is already a judge role, don't downgrade to 'audience' or other roles
+        final isJudgeRole = oldRole?.startsWith('judge') == true;
+        final wouldDowngradeFromJudge = isJudgeRole && !(newRole?.startsWith('judge') == true);
+
+        if (isChallengeBased && wouldChangeDebaterRole) {
+          // In challenge arenas, debater roles are assigned by the challenge system
+          // and should NOT change due to realtime updates
+          AppLogger().warning('🔒 ROLE LOCK: Blocking role change from $oldRole to $newRole in challenge arena');
+          AppLogger().warning('🔒 Challenge arenas have locked debater positions');
+          // Keep the existing role
+        } else if (wouldDowngradeFromModerator) {
+          // CRITICAL: Never downgrade from moderator - this causes the flicker bug
+          AppLogger().warning('🔒 MODERATOR LOCK: Blocking downgrade from moderator to $newRole');
+          AppLogger().warning('🔒 Moderator role is locked to prevent flickering');
+          // Keep the moderator role - database may be behind or have stale data
+        } else if (wouldDowngradeFromJudge) {
+          // CRITICAL: Never downgrade from judge - this causes the judge button to disappear
+          AppLogger().warning('🔒 JUDGE LOCK: Blocking downgrade from $oldRole to $newRole');
+          AppLogger().warning('🔒 Judge role is locked to ensure judge voting button stays visible');
+          // Keep the judge role - database may be behind or have stale data
+        } else {
+          _userRole = newRole;
+        }
 
         AppLogger().info('🔄 ROLE SYNC: Current user role updated from $oldRole to $_userRole');
         AppLogger().info('👤 Current user ID: $_currentUserId');
@@ -3390,12 +3629,16 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           }
         }
 
-        // Force UI update when role changes
-        if (oldRole != newRole && mounted) {
+        // Force UI update when role ACTUALLY changes (respecting role lock)
+        // Only trigger rebuild if _userRole actually changed, not just if database has different value
+        final roleActuallyChanged = oldRole != _userRole;
+        if (roleActuallyChanged && mounted) {
           setState(() {
             // Force rebuild with new role
           });
-          AppLogger().info('🔄 FORCED UI UPDATE: Role changed from $oldRole to $newRole');
+          AppLogger().info('🔄 FORCED UI UPDATE: Role actually changed from $oldRole to $_userRole');
+        } else if (oldRole != newRole && !roleActuallyChanged) {
+          AppLogger().info('🔒 SKIPPED UI UPDATE: Role lock prevented change from $oldRole to $newRole');
         }
 
         // ADDITIONAL VERIFICATION: Check if user is in participant slots with different role
@@ -3403,7 +3646,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       } else {
         AppLogger().warning('❌ CRITICAL: Current user not found in participants list');
         AppLogger().warning('❌ Current user ID: $_currentUserId');
-        AppLogger().warning('❌ Available participants: ${participants.map((p) => '${p["userId"]}:${p["role"]}').join(", ")}');
+        AppLogger().warning('❌ Available participants: ${participants.map((p) => '${p["user_id"]}:${p["role"]}').join(", ")}');
 
         // Try to find user in participant slots
         String? slotRole;
@@ -3430,15 +3673,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       await _checkForBothDebatersAndTriggerInvitations();
       AppLogger().debug('🔍 STEP: _checkForBothDebatersAndTriggerInvitations() completed');
 
-      AppLogger().debug('🔍 STEP: About to call setState()');
-      if (mounted) {
-        setState(() {
-          // Update UI after loading arena participants
-        });
-      }
-      AppLogger().debug('🔍 STEP: setState() completed');
-      AppLogger().info('Arena participants loaded successfully');
-
       // Validate role consistency after loading participants
       await _validateRoleConsistency();
 
@@ -3447,7 +3681,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       if (_userRole != null && !_isWebRTCConnected) {
         final isDebater = ['affirmative', 'negative', 'affirmative2', 'negative2'].contains(_userRole);
         final isImportantRole = ['moderator', 'judge1', 'judge2', 'judge3'].contains(_userRole);
-        
+
         if (isDebater || isImportantRole) {
           AppLogger().debug('🎥 Initial WebRTC connection for critical role: $_userRole');
           await _connectToWebRTC();
@@ -3458,7 +3692,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       } else if (_isWebRTCConnected) {
         AppLogger().debug('🎥 WebRTC already connected, skipping reconnection');
       }
-      
+
       // Auto-connect audio for users who should have microphone access - INSTANT
       if (_userRole != null && _shouldUserPublishMedia()) {
         AppLogger().debug('🚀 INSTANT: Triggering immediate auto-connect for role: $_userRole');
@@ -3470,12 +3704,32 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
       // Update vote indicators in app bar
       final voteCount = await _checkJudgeVoteProgress();
-      if (mounted) {
+      final newVotedCount = voteCount['voted'] ?? 0;
+      final newTotalCount = voteCount['total'] ?? 0;
+
+      // CONSOLIDATED setState: Only rebuild UI once at the end if something changed
+      // This prevents multiple rebuilds that cause flickering
+      final isLockedDebater = isChallengeBased &&
+          ['affirmative', 'negative', 'affirmative2', 'negative2'].contains(_userRole);
+
+      final voteCountChanged = _judgeVotedCount != newVotedCount || _judgeTotalCount != newTotalCount;
+      final needsRebuild = (participantsChanged || audienceChanged || voteCountChanged) && !isLockedDebater;
+
+      if (mounted && needsRebuild) {
         setState(() {
-          _judgeVotedCount = voteCount['voted'] ?? 0;
-          _judgeTotalCount = voteCount['total'] ?? 0;
+          _judgeVotedCount = newVotedCount;
+          _judgeTotalCount = newTotalCount;
         });
+        AppLogger().debug('🔄 Single consolidated setState completed');
+      } else if (isLockedDebater) {
+        // Still update vote counts without full rebuild for locked debaters
+        _judgeVotedCount = newVotedCount;
+        _judgeTotalCount = newTotalCount;
+        AppLogger().info('🔒 SKIPPED FULL REBUILD: Locked debater - vote counts updated silently');
+      } else {
+        AppLogger().debug('⏭️ No UI changes needed, skipping setState');
       }
+      AppLogger().info('Arena participants loaded successfully');
     } catch (e) {
       AppLogger().error('❌ CRITICAL: Error loading participants: $e');
       AppLogger().error('❌ CRITICAL: Exception type: ${e.runtimeType}');
@@ -3484,28 +3738,40 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   /// Ensure room creator is assigned as moderator if no moderator exists
+  /// EXCEPTION: Challenge-based arenas don't need auto-moderator - creator is a debater
   Future<void> _ensureModeratorExists() async {
     try {
+      // Check if this is a challenge-based arena - if so, skip auto-moderator assignment
+      // In challenge arenas, the creator is one of the debaters, not the moderator
+      final challengeIdCheck = _roomData?['challenge_id'] ?? _roomData?['challengeId'];
+      final isChallenge = challengeIdCheck != null && challengeIdCheck.toString().isNotEmpty;
+      if (isChallenge) {
+        AppLogger().debug('🎭 Challenge-based arena - skipping auto-moderator assignment');
+        return;
+      }
+
       // Check if moderator already exists
       if (_participants['moderator'] != null) {
         AppLogger().debug('🎭 Moderator already assigned: ${_participants['moderator']?.name}');
         return;
       }
-      
+
       // Check if current user is the room creator
-      if (_roomData != null && _currentUserId != null && _roomData!['createdBy'] == _currentUserId) {
+      // Check both snake_case (from Supabase) and camelCase (legacy)
+      final creatorId = _roomData?['created_by'] ?? _roomData?['createdBy'];
+      if (_roomData != null && _currentUserId != null && creatorId == _currentUserId) {
         AppLogger().info('🎭 Room creator detected - auto-assigning as moderator');
-        
+
         // Assign current user as moderator
-        await _appwrite.assignArenaRole(
+        await _supabase.assignArenaRole(
           roomId: widget.roomId,
           userId: _currentUserId!,
           role: 'moderator',
         );
-        
+
         // Reload participants to reflect the change
         await _loadParticipants();
-        
+
         AppLogger().info('✅ Room creator successfully assigned as moderator');
       } else {
         AppLogger().debug('🎭 Current user is not room creator - moderator assignment skipped');
@@ -3528,25 +3794,30 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }) async {
     if (!mounted || _isExiting) return;
 
+    // CRITICAL FIX: Extract clean UUID from potentially timestamped LiveKit identity
+    // LiveKit identities may be formatted as "uuid_timestamp" for uniqueness,
+    // but we need the clean UUID for database lookups
+    final cleanUserId = extractCleanUserId(userId);
+
     try {
       final now = DateTime.now();
       final eventTimestamp = timestamp ?? now;
 
-      AppLogger().info('🔄 REALTIME ROLE CHANGE: User $userId → $newRole (source: ${source ?? "unknown"}, timestamp: $eventTimestamp)');
+      AppLogger().info('🔄 REALTIME ROLE CHANGE: User $cleanUserId → $newRole (source: ${source ?? "unknown"}, timestamp: $eventTimestamp, rawId: $userId)');
 
       // Step 1: Idempotency check - prevent duplicate processing
       final changeKey = '${newRole}_${eventTimestamp.millisecondsSinceEpoch}';
-      final lastProcessed = _lastProcessedRoleChanges[userId];
+      final lastProcessed = _lastProcessedRoleChanges[cleanUserId];
 
       if (lastProcessed == changeKey) {
-        AppLogger().debug('⏭️ DUPLICATE: Already processed this exact role change for $userId');
+        AppLogger().debug('⏭️ DUPLICATE: Already processed this exact role change for $cleanUserId');
         return;
       }
 
       // Step 2: Race condition prevention - only process if newer than last change
-      final lastTimestamp = _lastRoleChangeTimestamps[userId];
+      final lastTimestamp = _lastRoleChangeTimestamps[cleanUserId];
       if (lastTimestamp != null && eventTimestamp.isBefore(lastTimestamp)) {
-        AppLogger().debug('⏭️ STALE: Ignoring older role change event for $userId (last: $lastTimestamp, received: $eventTimestamp)');
+        AppLogger().debug('⏭️ STALE: Ignoring older role change event for $cleanUserId (last: $lastTimestamp, received: $eventTimestamp)');
         return;
       }
 
@@ -3558,28 +3829,38 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       }
 
       // Step 4: Record this change
-      _lastRoleChangeTimestamps[userId] = eventTimestamp;
-      _lastProcessedRoleChanges[userId] = changeKey;
+      _lastRoleChangeTimestamps[cleanUserId] = eventTimestamp;
+      _lastProcessedRoleChanges[cleanUserId] = changeKey;
 
-      AppLogger().info('✅ PROCESSING: Role change for $userId → $newRole (${source ?? "unknown"})');
+      AppLogger().info('✅ PROCESSING: Role change for $cleanUserId → $newRole (${source ?? "unknown"})');
 
       // Step 5: Optimistic UI update - "first arrival wins"
       bool needsFullRefresh = false;
 
-      if (userId == _currentUserId) {
+      if (cleanUserId == _currentUserId) {
         // Current user's role changed
         final oldRole = _userRole;
-        _userRole = newRole;
-        AppLogger().info('🎭 CURRENT USER ROLE CHANGED: $oldRole → $newRole');
-        needsFullRefresh = true; // Full refresh needed for permissions
+
+        // CHALLENGE ARENA LOCK: Debater roles are protected in challenge arenas
+        final isChallengeBased = widget.challengeId.isNotEmpty;
+        final isDebaterRole = ['affirmative', 'negative', 'affirmative2', 'negative2'].contains(oldRole);
+        final wouldChangeDebaterRole = isDebaterRole && oldRole != newRole;
+
+        if (isChallengeBased && wouldChangeDebaterRole) {
+          AppLogger().warning('🔒 ROLE LOCK (OPTIMISTIC): Blocking role change from $oldRole to $newRole in challenge arena');
+        } else {
+          _userRole = newRole;
+          AppLogger().info('🎭 CURRENT USER ROLE CHANGED: $oldRole → $newRole');
+          needsFullRefresh = true; // Full refresh needed for permissions
+        }
       } else {
         // Another participant's role changed
         // Try to update locally if we have their profile
         UserProfile? userProfile;
 
-        // Check if user is in participants
+        // Check if user is in participants (use cleanUserId for comparison)
         for (final entry in _participants.entries) {
-          if (entry.value?.id == userId) {
+          if (entry.value?.id == cleanUserId) {
             userProfile = entry.value;
             break;
           }
@@ -3587,56 +3868,85 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
         // Check if user is in audience
         if (userProfile == null) {
-          userProfile = _audience.firstWhere(
-            (u) => u.id == userId,
-            orElse: () => UserProfile(
-              id: userId,
-              name: 'Unknown',
+          final foundInAudience = _audience.where((u) => u.id == cleanUserId).firstOrNull;
+          if (foundInAudience != null) {
+            userProfile = foundInAudience;
+          }
+        }
+
+        // CRITICAL FIX: If user not found locally, fetch their profile from database
+        // This prevents "Unknown" users appearing when role change events arrive before _loadParticipants completes
+        if (userProfile == null) {
+          AppLogger().info('🔍 User $cleanUserId not found locally, fetching profile from database...');
+          try {
+            // Use cleanUserId for database lookup (not the timestamped identity)
+            final fetchedProfile = await _supabase.getUserProfile(cleanUserId);
+            if (fetchedProfile != null) {
+              userProfile = fetchedProfile;
+              AppLogger().info('✅ Fetched profile: ${fetchedProfile.name}');
+            } else {
+              // Last resort fallback - should rarely happen
+              AppLogger().warning('⚠️ Could not fetch profile for $cleanUserId, using placeholder');
+              userProfile = UserProfile(
+                id: cleanUserId,
+                name: 'User ${cleanUserId.substring(0, 8)}',
+                email: '',
+                createdAt: DateTime.now(),
+                updatedAt: DateTime.now(),
+              );
+            }
+          } catch (e) {
+            AppLogger().error('❌ Failed to fetch profile for $cleanUserId: $e');
+            userProfile = UserProfile(
+              id: cleanUserId,
+              name: 'User ${cleanUserId.substring(0, 8)}',
               email: '',
               createdAt: DateTime.now(),
               updatedAt: DateTime.now(),
-            ),
-          );
-        }
-
-        if (userProfile.name != 'Unknown') {
-          // We have the profile - update locally (optimistic)
-          if (newRole == 'audience') {
-            // Move to audience
-            _participants.forEach((role, participant) {
-              if (participant?.id == userId) {
-                _participants[role] = null;
-              }
-            });
-            if (!_audience.any((u) => u.id == userId)) {
-              _audience.add(userProfile);
-            }
-          } else {
-            // Move from audience or reassign role
-            _audience.removeWhere((u) => u.id == userId);
-            _participants.forEach((role, participant) {
-              if (participant?.id == userId) {
-                _participants[role] = null;
-              }
-            });
-            _participants[newRole] = userProfile;
+            );
           }
-
-          AppLogger().info('🎭 LOCAL UPDATE: Moved $userId to $newRole (optimistic)');
-        } else {
-          // Don't have profile - need full refresh
-          needsFullRefresh = true;
         }
+
+        // We have the profile - update locally (optimistic)
+        if (newRole == 'audience') {
+          // Move to audience
+          _participants.forEach((role, participant) {
+            if (participant?.id == cleanUserId) {
+              _participants[role] = null;
+            }
+          });
+          if (!_audience.any((u) => u.id == cleanUserId)) {
+            _audience.add(userProfile);
+          }
+        } else {
+          // Move from audience or reassign role
+          _audience.removeWhere((u) => u.id == cleanUserId);
+          _participants.forEach((role, participant) {
+            if (participant?.id == cleanUserId) {
+              _participants[role] = null;
+            }
+          });
+          _participants[newRole] = userProfile;
+        }
+
+        AppLogger().info('🎭 LOCAL UPDATE: Moved $userId to $newRole (optimistic)');
       }
 
-      // Step 6: UI update
-      if (mounted) {
+      // Step 6: UI update - but skip for locked debaters in challenge arenas
+      final isChallengeBased = widget.challengeId.isNotEmpty;
+      final isLockedDebater = isChallengeBased &&
+          ['affirmative', 'negative', 'affirmative2', 'negative2'].contains(_userRole);
+
+      if (mounted && !isLockedDebater) {
         setState(() {
           // UI will reflect the optimistic changes above
         });
+      } else if (isLockedDebater) {
+        AppLogger().info('🔒 SKIPPED REALTIME UI UPDATE: Locked debater in challenge arena');
       }
 
       // Step 7: Defensive programming - full refresh if needed or periodically
+      // Note: For locked debaters, _loadParticipants will also skip its final setState
       if (needsFullRefresh) {
         AppLogger().info('🔄 FULL REFRESH: Fetching complete participant list from database');
         await _loadParticipants();
@@ -3649,7 +3959,6 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           await _loadParticipants();
         });
       }
-
     } catch (e, stackTrace) {
       AppLogger().error('Error handling realtime role change: $e');
       AppLogger().error('Stack trace: $stackTrace');
@@ -3670,10 +3979,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       
       // Check cache first for iOS
       if (_isIOSOptimizationEnabled && _iosUserProfileCache.isNotEmpty) {
-        final user = await _appwrite.getCurrentUser();
+        final user = await _supabase.getCurrentUser();
         if (user != null) {
-          _currentUserId = user.$id;
-          final cachedProfile = _iosUserProfileCache[user.$id];
+          _currentUserId = user.id;
+          final cachedProfile = _iosUserProfileCache[user.id];
           if (cachedProfile != null) {
             _currentUser = cachedProfile;
             AppLogger().info('iOS: Used cached user profile (${stopwatch.elapsedMilliseconds}ms)');
@@ -3683,15 +3992,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       }
       
       // Load fresh data
-      final user = await _appwrite.getCurrentUser();
+      final user = await _supabase.getCurrentUser();
       if (user == null) return;
       
-      _currentUserId = user.$id;
-      _currentUser = await _appwrite.getUserProfile(user.$id);
+      _currentUserId = user.id;
+      _currentUser = await _supabase.getUserProfile(user.id);
       
       // Cache for iOS
       if (_isIOSOptimizationEnabled && _currentUser != null) {
-        _iosUserProfileCache[user.$id] = _currentUser!;
+        _iosUserProfileCache[user.id] = _currentUser!;
       }
 
       // Start timeout monitoring now that we have current user
@@ -3722,7 +4031,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       }
       
       // Load fresh room data
-      Map<String, dynamic>? roomData = await _appwrite.getArenaRoom(widget.roomId);
+      Map<String, dynamic>? roomData = await _supabase.getArenaRoom(widget.roomId);
       
       if (roomData == null) {
         AppLogger().warning('Arena room not found: ${widget.roomId}');
@@ -3730,8 +4039,9 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       }
       
       // Check room status for early exit
+      // 'completed' = voting finished, results ready - DON'T treat as closed
       final roomStatus = roomData['status'];
-      if (roomStatus == 'completed' || roomStatus == 'abandoned' || roomStatus == 'force_cleaned' || roomStatus == 'force_closed') {
+      if (roomStatus == 'abandoned' || roomStatus == 'force_cleaned' || roomStatus == 'force_closed' || roomStatus == 'closed') {
         await _handleClosedRoom(roomStatus);
         return;
       }
@@ -3767,7 +4077,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       }
       
       // Load fresh participants
-      final participants = await _appwrite.getArenaParticipants(widget.roomId);
+      final participants = await _supabase.getArenaParticipants(widget.roomId);
       
       // Process participants efficiently
       _processParticipants(participants);
@@ -3804,10 +4114,15 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     for (var participant in participants) {
       final role = participant['role'];
       final userProfileData = participant['userProfile'];
-      
+
       if (userProfileData != null) {
         final userProfile = UserProfile.fromMap(userProfileData);
-        
+
+        // DEBUG: Log avatar status during iOS optimized participant processing
+        if (userProfile.avatar == null || userProfile.avatar!.isEmpty) {
+          AppLogger().warning('⚠️ iOS PROCESS: ${userProfile.name} ($role) WITHOUT avatar');
+        }
+
         if (['affirmative', 'negative', 'affirmative2', 'negative2', 'moderator', 'judge1', 'judge2', 'judge3'].contains(role)) {
           _participants[role] = userProfile;
         } else if (role == 'audience') {
@@ -3817,11 +4132,24 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     }
     
     // Determine current user's role efficiently
+    // Note: Supabase returns snake_case field names (user_id, not userId)
     if (_currentUserId != null) {
       for (var participant in participants) {
-        if (participant['userId'] == _currentUserId) {
-          _userRole = participant['role'];
-          
+        if (participant['user_id'] == _currentUserId) {
+          final newRole = participant['role'];
+          final oldRole = _userRole;
+
+          // CHALLENGE ARENA LOCK: In challenge arenas, debater roles are protected
+          final isChallengeBased = widget.challengeId.isNotEmpty;
+          final isDebaterRole = ['affirmative', 'negative', 'affirmative2', 'negative2'].contains(oldRole);
+          final wouldChangeDebaterRole = isDebaterRole && oldRole != newRole;
+
+          if (isChallengeBased && wouldChangeDebaterRole) {
+            AppLogger().warning('🔒 ROLE LOCK (IOS CACHE): Blocking role change from $oldRole to $newRole in challenge arena');
+          } else {
+            _userRole = newRole;
+          }
+
           // Immediately connect WebRTC for debaters to enable instant audio
           final isDebater = ['affirmative', 'negative', 'affirmative2', 'negative2'].contains(_userRole);
           if (isDebater && !_isWebRTCConnected) {
@@ -3893,42 +4221,18 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   
   /// Handle closed room scenario efficiently
   Future<void> _handleClosedRoom(String roomStatus) async {
-    AppLogger().debug('🚪 Room has been closed (status: $roomStatus), navigating back to arena lobby');
-    
-    if (_hasNavigated) {
-      AppLogger().debug('🔍 Navigation already in progress, skipping duplicate navigation');
+    AppLogger().debug('🚪 Room has been closed (status: $roomStatus), showing closing modal to all users');
+
+    if (_hasNavigated || _roomClosingModalShown) {
+      AppLogger().debug('🔍 Navigation or modal already in progress, skipping');
       return;
     }
-    
-    _hasNavigated = true;
-    
+
+    _roomClosingModalShown = true;
+
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('🔒 This arena room has been closed'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
-        ),
-      );
-      
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted && !_isExiting) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && !_isExiting) {
-              try {
-                _isExiting = true; // Prevent multiple navigation attempts
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const ArenaApp()),
-                  (route) => false,
-                );
-              } catch (e) {
-                AppLogger().error('Navigation error: $e');
-                _isExiting = false; // Reset on error
-              }
-            }
-          });
-        }
-      });
+      // Show room closing modal to all users with countdown
+      _showRoomClosingModal(5); // 5 second countdown before navigation
     }
   }
 
@@ -4126,73 +4430,48 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   Future<void> _determineWinnerAndShowResults() async {
     try {
-      AppLogger().info('🎯 MODERATOR: Broadcasting arena results to all users via backend function');
+      AppLogger().info('🎯 MODERATOR: Broadcasting arena results via RPC');
       AppLogger().info('  - Room ID: ${widget.roomId}');
 
-      // Verify we have a valid user session
-      final currentUser = await _appwrite.getCurrentUser();
-      if (currentUser == null) {
-        throw Exception('No user session found');
+      // Call the RPC function that calculates winner and broadcasts to all users
+      final result = await _supabase.broadcastArenaResults(widget.roomId);
+
+      AppLogger().info('📊 Broadcast result: $result');
+
+      if (result['success'] != true) {
+        throw Exception(result['error'] ?? 'Failed to broadcast results');
       }
-      AppLogger().info('✅ User session verified: ${currentUser.name}');
 
-      // Call backend Appwrite Function to broadcast results
-      // This ensures reliable server-side winner calculation and broadcast to ALL users
-      AppLogger().info('📞 Calling broadcast-arena-results-v3 function...');
-      final result = await _appwrite.functions.createExecution(
-        functionId: 'broadcast-arena-results-v3',
-        body: jsonEncode({
-          'roomId': widget.roomId,
-        }),
-        xasync: false, // Wait for response
-      ).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw Exception('Function execution timed out');
-        },
-      );
-      AppLogger().info('✅ Function execution completed');
-      AppLogger().info('📄 Response status: ${result.responseStatusCode}');
-      AppLogger().info('📄 Response body: ${result.responseBody}');
+      // Extract winner info from response
+      final winner = result['winner'] as String? ?? 'tie';
+      final affirmativeVotes = result['affirmative_votes'] as int? ?? 0;
+      final negativeVotes = result['negative_votes'] as int? ?? 0;
+      final affirmativeScore = result['affirmative_score'];
+      final negativeScore = result['negative_score'];
 
-      // Parse response
-      final responseBody = jsonDecode(result.responseBody);
-      AppLogger().info('📄 Parsed response: $responseBody');
+      AppLogger().info('✅ Results broadcast successfully!');
+      AppLogger().info('  - Winner: $winner');
+      AppLogger().info('  - Affirmative: $affirmativeVotes votes ($affirmativeScore points)');
+      AppLogger().info('  - Negative: $negativeVotes votes ($negativeScore points)');
 
-      if (responseBody['success'] == true) {
-        final winner = responseBody['winner'];
-        final affirmativeVotes = responseBody['affirmativeVotes'];
-        final negativeVotes = responseBody['negativeVotes'];
-        final totalAffirmativeScore = responseBody['totalAffirmativeScore'];
-        final totalNegativeScore = responseBody['totalNegativeScore'];
+      // Update local state for moderator (other users will get this via realtime subscription)
+      if (mounted) {
+        setState(() {
+          _winner = winner;
+          _judgingComplete = true;
+          _judgingEnabled = false;
+          _showResults = true;
+        });
 
-        AppLogger().info('✅ Results broadcast successfully!');
-        AppLogger().info('  - Winner: $winner');
-        AppLogger().info('  - Affirmative: $affirmativeVotes votes ($totalAffirmativeScore points)');
-        AppLogger().info('  - Negative: $negativeVotes votes ($totalNegativeScore points)');
-        AppLogger().info('  - ALL users will now see trophy icon!');
-
-        // Update local state (realtime will update too, but update immediately for responsiveness)
-        if (mounted) {
-          setState(() {
-            _winner = winner;
-            _judgingComplete = true;
-            _judgingEnabled = false;
-            _showResults = true;
+        // Show results modal for moderator immediately
+        if (!_resultsModalShown) {
+          _resultsModalShown = true;
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              _showResultsModal();
+            }
           });
-
-          // Show results modal after a short delay (auto-show once for moderator)
-          if (!_resultsModalShown) {
-            _resultsModalShown = true;
-            Future.delayed(const Duration(milliseconds: 500), () {
-              if (mounted) {
-                _showResultsModal();
-              }
-            });
-          }
         }
-      } else {
-        throw Exception(responseBody['error'] ?? 'Unknown error from backend');
       }
 
     } catch (e) {
@@ -4357,12 +4636,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                       leading: CircleAvatar(
                         backgroundColor: const Color(0xFF8B5CF6),
                         child: Text(
-                          user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                          user.id.isNotEmpty ? user.id[0].toUpperCase() : '?',
                           style: const TextStyle(color: Colors.white, fontSize: 16),
                         ),
                       ),
                       title: Text(
-                        user.name,
+                        user.email,
                         style: const TextStyle(color: Colors.white),
                       ),
                       subtitle: Text(
@@ -4395,10 +4674,11 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   /// Assign moderator role to a user from the audience
   Future<void> _assignModeratorRole(UserProfile user) async {
     try {
-      AppLogger().info('👨‍⚖️ DEBATER MODERATOR: Assigning ${user.name} as moderator');
+      // TODO: User.name doesn't exist - use UserProfile
+      // AppLogger().info('👨‍⚖️ DEBATER MODERATOR: Assigning ${user.name} as moderator');
 
       // Update participant role in database
-      await _appwrite.updateArenaParticipantRole(
+      await _supabase.updateArenaParticipantRole(
         roomId: widget.roomId,
         userId: user.id,
         newRole: 'moderator',
@@ -4412,12 +4692,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         _audience.removeWhere((u) => u.id == user.id);
       });
 
-      AppLogger().info('✅ DEBATER MODERATOR: ${user.name} assigned as moderator successfully');
+      // TODO: User.name doesn't exist - use UserProfile
+      // AppLogger().info('✅ DEBATER MODERATOR: ${user.name} assigned as moderator successfully');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ ${user.name} is now the moderator'),
+            content: Text('✅ ${user.email} is now the moderator'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
@@ -4499,33 +4780,33 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           if (_currentUser == null) return;
 
           try {
-            final isFollowing = await _appwrite.isFollowing(
+            final isFollowing = await _supabase.isFollowing(
               followerId: _currentUser!.id,
               followingId: userProfile.id,
             );
 
             if (isFollowing) {
-              await _appwrite.unfollowUser(
+              await _supabase.unfollowUser(
                 followerId: _currentUser!.id,
                 followingId: userProfile.id,
               );
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Unfollowed ${userProfile.name}'),
+                    content: Text('Unfollowed ${userProfile.email}'),
                     backgroundColor: Colors.grey,
                   ),
                 );
               }
             } else {
-              await _appwrite.followUser(
+              await _supabase.followUser(
                 followerId: _currentUser!.id,
                 followingId: userProfile.id,
               );
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Now following ${userProfile.name}'),
+                    content: Text('Now following ${userProfile.email}'),
                     backgroundColor: const Color(0xFF10B981),
                   ),
                 );
@@ -4590,7 +4871,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       builder: (context) => SlideUpdatePopup(
         slideData: slideData,
         syncService: _materialSyncService!,
-        appwriteService: _appwrite,
+        appwriteService: _supabase,
         currentUserId: _currentUserId ?? '',
         roomId: widget.roomId,
         onDismiss: () {
@@ -4645,7 +4926,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   userId: _currentUserId ?? '',
                   isHost: _userRole == 'moderator' || _userRole == 'affirmative' || _userRole == 'negative',
                   syncService: _materialSyncService!,
-                  appwriteService: _appwrite,
+                  appwriteService: _supabase,
                   onClose: () {
                     setState(() {
                       _showMaterialsBottomSheet = false;
@@ -4803,13 +5084,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     try {
       // 1. First check if room exists and needs closing
       try {
-        final roomDoc = await _appwrite.databases.getDocument(
-          databaseId: 'arena_db',
-          collectionId: 'arena_rooms',
-          documentId: roomId,
-        );
+        final roomDoc = await _supabase.client.from('arena_rooms').select().eq('id', roomId,
+        ).single();
 
-        final currentStatus = roomDoc.data['status'];
+        final currentStatus = roomDoc['status'];
         if (currentStatus == 'completed' ||
             currentStatus == 'abandoned' ||
             currentStatus == 'closed') {
@@ -4826,11 +5104,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
       // 2. Update room status
       try {
-        await _appwrite.databases.updateDocument(
-          databaseId: 'arena_db',
-          collectionId: 'arena_rooms',
-          documentId: roomId,
-          data: {
+        await _supabase.client.from('arena_rooms').update({
             'status': abandoned ? 'abandoned' : 'completed',
             'endedAt': DateTime.now().toIso8601String(),
           },
@@ -4843,35 +5117,24 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
       // 3. Handle participants (set inactive instead of deleting for data integrity)
       try {
-        final participants = await _appwrite.databases.listDocuments(
-          databaseId: 'arena_db',
-          collectionId: 'arena_participants',
-          queries: [
-            Query.equal('roomId', roomId),
-            Query.equal('isActive', true),
-          ],
-        );
+        final participants = await _supabase.client.from('arena_participants').select();
 
         // Update participants in parallel for faster processing
-        final updateFutures = participants.documents.map((participant) async {
+        final updateFutures = (participants as List).map((participant) async {
           try {
-            await _appwrite.databases.updateDocument(
-              databaseId: 'arena_db',
-              collectionId: 'arena_participants',
-              documentId: participant.$id,
-              data: {
+            await _supabase.client.from('arena_participants').update({
                 'isActive': false,
                 'leftAt': DateTime.now().toIso8601String(),
               },
             );
           } catch (e) {
-            AppLogger().warning('⚠️ Failed to update participant ${participant.$id}: $e');
+            AppLogger().warning('⚠️ Failed to update participant ${participant['id']}: $e');
             // Don't fail the entire operation for one participant
           }
         });
 
         await Future.wait(updateFutures);
-        AppLogger().debug('✅ Updated ${participants.documents.length} participants');
+        AppLogger().debug('✅ Updated ${(participants as List).length} participants');
 
       } catch (e) {
         AppLogger().warning('⚠️ Error updating participants: $e');
@@ -4891,47 +5154,34 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       if (_currentUserId != null) {
         AppLogger().info('🚪 Removing user $_currentUserId from room ${widget.roomId} via function');
 
-        // Call Appwrite function for reliable participant removal with broadcasting
-        final functions = Functions(_appwrite.client);
-
-        final execution = await functions.createExecution(
-          functionId: 'remove-arena-participant',
-          body: jsonEncode({
+        // Call Supabase function for reliable participant removal with broadcasting
+        final execution = await _supabase.client.functions.invoke(
+          'remove-arena-participant',
+          body: {
             'roomId': widget.roomId,
             'userId': _currentUserId!,
-          }),
+          },
         );
 
-        if (execution.responseStatusCode == 200) {
-          final response = jsonDecode(execution.responseBody);
+        if (execution.data != null) {
+          final response = execution.data as Map<String, dynamic>;
           if (response['success'] == true) {
             AppLogger().info('✅ Participant removed successfully: ${response['removed']} document(s)');
           } else {
             AppLogger().warning('⚠️ Participant removal failed: ${response['error']}');
           }
         } else {
-          AppLogger().error('❌ Function returned non-200 status: ${execution.responseStatusCode}');
+          AppLogger().error('❌ Function returned no data: ${execution.status}');
         }
       }
     } catch (e) {
       AppLogger().warning('Error in participant removal: $e');
       // Fallback to direct deletion if function fails
       try {
-        final participants = await _appwrite.databases.listDocuments(
-          databaseId: 'arena_db',
-          collectionId: 'arena_participants',
-          queries: [
-            Query.equal('roomId', widget.roomId),
-            Query.equal('userId', _currentUserId!),
-            Query.equal('isActive', true),
-          ],
-        );
+        final participants = await _supabase.client.from('arena_participants').select();
 
-        for (final participant in participants.documents) {
-          await _appwrite.databases.deleteDocument(
-            databaseId: 'arena_db',
-            collectionId: 'arena_participants',
-            documentId: participant.$id,
+        for (final participant in (participants as List)) {
+          await _supabase.client.from('arena_participants').delete().eq('id', participant['id'],
           );
         }
         AppLogger().info('User $_currentUserId participant record deleted (fallback)');
@@ -5309,23 +5559,43 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Simple CircleAvatar
+                        // Cached CircleAvatar for better performance
                         CircleAvatar(
                           radius: 24.0,
                           backgroundColor: getAvatarColorForRole('audience'),
-                          backgroundImage: audience.avatar != null && audience.avatar!.isNotEmpty
-                              ? NetworkImage(audience.avatar!)
-                              : null,
-                          child: audience.avatar == null || audience.avatar!.isEmpty
-                              ? Text(
+                          child: audience.avatar != null && audience.avatar!.isNotEmpty
+                              ? ClipOval(
+                                  child: CachedNetworkImage(
+                                    imageUrl: audience.avatar!,
+                                    width: 48.0,
+                                    height: 48.0,
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => Text(
+                                      audience.name.isNotEmpty ? audience.name[0].toUpperCase() : 'A',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    errorWidget: (context, url, error) => Text(
+                                      audience.name.isNotEmpty ? audience.name[0].toUpperCase() : 'A',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              : Text(
                                   audience.name.isNotEmpty ? audience.name[0].toUpperCase() : 'A',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
                                   ),
-                                )
-                              : null,
+                                ),
                         ),
                         const SizedBox(height: 4),
                         // Simple name text
@@ -5359,6 +5629,14 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     final participant = _participants[role];
     final isAffirmative = role.startsWith('affirmative');
     final finalIsWinner = isWinner ?? (_judgingComplete && _winner == role);
+
+    // DEBUG: Log participant avatar state during build
+    if (participant != null) {
+      final hasAvatar = participant.avatar != null && participant.avatar!.isNotEmpty;
+      if (!hasAvatar) {
+        AppLogger().warning('🔴 BUILD: $role (${participant.name}) has NO AVATAR during widget build');
+      }
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -5522,7 +5800,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     final peerId = _userToPeerMapping[participant.id];
     final stream = peerId != null ? _remoteStreams[peerId] : null;
 
-    AppLogger().debug('🎥 Building debater tile for ${participant.name}: peerId=$peerId, stream=${stream != null}, userMapping=$_userToPeerMapping');
+    // TODO: User.name doesn't exist - use UserProfile
+    // AppLogger().debug('🎥 Building debater tile for ${participant.name}: peerId=$peerId, stream=${stream != null}, userMapping=$_userToPeerMapping');
 
     // Check if this is the local user
     final isLocalUser = participant.id == _currentUserId;
@@ -5562,14 +5841,14 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
                                   try {
                                     // Check if already following to determine action
-                                    final isFollowing = await _appwrite.isFollowing(
+                                    final isFollowing = await _supabase.isFollowing(
                                       followerId: _currentUser!.id,
                                       followingId: participant.id,
                                     );
 
                                     if (isFollowing) {
                                       // Unfollow
-                                      await _appwrite.unfollowUser(
+                                      await _supabase.unfollowUser(
                                         followerId: _currentUser!.id,
                                         followingId: participant.id,
                                       );
@@ -5583,7 +5862,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                                       }
                                     } else {
                                       // Follow
-                                      await _appwrite.followUser(
+                                      await _supabase.followUser(
                                         followerId: _currentUser!.id,
                                         followingId: participant.id,
                                       );
@@ -5672,7 +5951,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     bool hasVideo = false;
     RTCVideoRenderer? renderer;
 
-    AppLogger().debug('📹 Building video feed for ${participant.name} (isLocal: $isLocalUser, role: $role)');
+    // TODO: User.name doesn't exist - use UserProfile
+    // AppLogger().debug('📹 Building video feed for ${participant.name} (isLocal: $isLocalUser, role: $role)');
 
     if (isLocalUser && _localStream != null) {
       // Local user - show their own video if available
@@ -5949,14 +6229,14 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
               try {
                 // Check if already following to determine action
-                final isFollowing = await _appwrite.isFollowing(
+                final isFollowing = await _supabase.isFollowing(
                   followerId: _currentUser!.id,
                   followingId: participant.id,
                 );
 
                 if (isFollowing) {
                   // Unfollow
-                  await _appwrite.unfollowUser(
+                  await _supabase.unfollowUser(
                     followerId: _currentUser!.id,
                     followingId: participant.id,
                   );
@@ -5970,7 +6250,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
                   }
                 } else {
                   // Follow
-                  await _appwrite.followUser(
+                  await _supabase.followUser(
                     followerId: _currentUser!.id,
                     followingId: participant.id,
                   );
@@ -6555,10 +6835,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     try {
       if (_hasRaisedHand) {
         if (_handRaiseDocumentId != null) {
-          await _appwrite.databases.deleteDocument(
-            databaseId: 'arena_db',
-            collectionId: 'arena_hand_raises',
-            documentId: _handRaiseDocumentId!,
+          await _supabase.client.from('arena_hand_raises').delete().eq('id', _handRaiseDocumentId!,
           );
           if (mounted) {
             setState(() {
@@ -6569,11 +6846,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
           AppLogger().info('✋ Hand lowered');
         }
       } else {
-        final doc = await _appwrite.databases.createDocument(
-          databaseId: 'arena_db',
-          collectionId: 'arena_hand_raises',
-          documentId: ID.unique(),
-          data: {
+        final doc = await _supabase.client.from('arena_hand_raises').insert({
             'roomId': widget.roomId,
             'userId': _currentUser!.id,
             'userName': _currentUser!.name,
@@ -6584,7 +6857,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         if (mounted) {
           setState(() {
             _hasRaisedHand = true;
-            _handRaiseDocumentId = doc.$id;
+            _handRaiseDocumentId = doc['id'];
           });
         }
         AppLogger().info('✋ Hand raised');
@@ -6606,74 +6879,70 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
     try {
       // Check for existing hand raise
-      final existingRaises = await _appwrite.databases.listDocuments(
-        databaseId: 'arena_db',
-        collectionId: 'arena_hand_raises',
-        queries: [
-          Query.equal('roomId', widget.roomId),
-          Query.equal('userId', _currentUser!.id),
-          Query.equal('status', 'raised'),
-        ],
-      );
+      final existingRaises = await _supabase.client.from('arena_hand_raises').select();
 
-      if (existingRaises.documents.isNotEmpty && mounted) {
+      if ((existingRaises as List).isNotEmpty && mounted) {
         setState(() {
           _hasRaisedHand = true;
-          _handRaiseDocumentId = existingRaises.documents.first.$id;
+          _handRaiseDocumentId = (existingRaises as List).first['id'];
         });
       }
 
-      // Subscribe to hand raises
-      final realtime = _appwrite.realtime;
-      _handRaisesSubscription = realtime.subscribe([
-        'databases.arena_db.collections.arena_hand_raises.documents'
-      ]).stream.listen((response) {
-        if (!mounted) return;
+      // Subscribe to hand raises using Supabase realtime
+      _handRaisesSubscription = _supabase.client
+        .channel('arena_hand_raises_${widget.roomId}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'arena_hand_raises',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'room_id', // Fixed: Use snake_case for Supabase
+            value: widget.roomId,
+          ),
+          callback: (payload) {
+            if (!mounted) return;
 
-        final payload = response.payload;
-        final roomId = payload['roomId'];
+            final data = payload.newRecord;
+            final roomId = data['room_id']; // Fixed: Use snake_case
 
-        if (roomId != widget.roomId) return;
+            if (roomId != widget.roomId) return;
 
-        // Handle create events (new hand raise)
-        if (response.events.any((event) => event.contains('.create'))) {
-          final status = payload['status'];
-          AppLogger().debug('🟠 HAND RAISE EVENT: Create event received, status=$status, isModerator=$_isModerator');
-          if (status == 'raised' && _isModerator) {
-            setState(() {
-              if (!_pendingHandRaises.any((raise) => raise['userId'] == payload['userId'])) {
-                _pendingHandRaises.add(payload);
-                AppLogger().info('📢 New hand raise from ${payload['userName']} - Total: ${_pendingHandRaises.length}');
+            // Handle insert events (new hand raise)
+            if (payload.eventType == PostgresChangeEvent.insert) {
+              final status = data['status'];
+              AppLogger().debug('🟠 HAND RAISE EVENT: Create event received, status=$status, isModerator=$_isModerator');
+              if (status == 'raised' && _isModerator) {
+                setState(() {
+                  if (!_pendingHandRaises.any((raise) => raise['user_id'] == data['user_id'])) {
+                    _pendingHandRaises.add(data);
+                    AppLogger().info('📢 New hand raise from ${data['user_name']} - Total: ${_pendingHandRaises.length}');
+                  }
+                });
               }
-            });
-          }
-        }
+            }
 
-        // Handle delete events
-        if (response.events.any((event) => event.contains('.delete'))) {
-          final userId = payload['userId'];
-          if (_isModerator) {
-            setState(() {
-              _pendingHandRaises.removeWhere((raise) => raise['userId'] == userId);
-            });
-          }
-        }
-      });
+            // Handle delete events
+            if (payload.eventType == PostgresChangeEvent.delete) {
+              final oldData = payload.oldRecord;
+              final userId = oldData['user_id']; // Fixed: Use snake_case
+              if (_isModerator) {
+                setState(() {
+                  _pendingHandRaises.removeWhere((raise) => raise['user_id'] == userId);
+                });
+              }
+            }
+          },
+        );
+      _handRaisesSubscription?.subscribe();
 
       // Load existing hand raises for moderators
       if (_isModerator) {
-        final result = await _appwrite.databases.listDocuments(
-          databaseId: 'arena_db',
-          collectionId: 'arena_hand_raises',
-          queries: [
-            Query.equal('roomId', widget.roomId),
-            Query.equal('status', 'raised'),
-          ],
-        );
+        final result = await _supabase.client.from('arena_hand_raises').select();
 
         if (mounted) {
           setState(() {
-            _pendingHandRaises = result.documents.map((doc) => doc.data).toList();
+            _pendingHandRaises = (result as List).map((doc) => doc.data).toList();
           });
         }
         AppLogger().info('✅ Loaded ${_pendingHandRaises.length} pending hand raises');
@@ -7142,21 +7411,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
     try {
       // Delete the hand raise first
-      final handRaises = await _appwrite.databases.listDocuments(
-        databaseId: 'arena_db',
-        collectionId: 'arena_hand_raises',
-        queries: [
-          Query.equal('roomId', widget.roomId),
-          Query.equal('userId', userId),
-          Query.equal('status', 'raised'),
-        ],
-      );
+      final handRaises = await _supabase.client.from('arena_hand_raises').select();
 
-      for (final doc in handRaises.documents) {
-        await _appwrite.databases.deleteDocument(
-          databaseId: 'arena_db',
-          collectionId: 'arena_hand_raises',
-          documentId: doc.$id,
+      for (final doc in (handRaises as List)) {
+        await _supabase.client.from('arena_hand_raises').delete().eq('id', doc['id'],
         );
       }
 
@@ -7328,11 +7586,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       AppLogger().debug('🎁 Creating Appwrite document for gift...');
 
       // Save to Appwrite to broadcast to all users
-      await _appwrite.databases.createDocument(
-        databaseId: 'arena_db',
-        collectionId: 'room_reactions',
-        documentId: ID.unique(),
-        data: {
+      await _supabase.client.from('room_reactions').insert({
           ...giftReaction.toMap(),
           'roomId': widget.roomId,
         },
@@ -7489,27 +7743,39 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         negativeRebuttal += speaker.categoryScores[ScoringCategory.rebuttal] ?? 0;
       }
       
-      // Create document data with required affirmativeScores field
+      // Calculate total scores for each side
+      final affirmativeTotal = affirmativeArguments + affirmativePresentation + affirmativeRebuttal;
+      final negativeTotal = negativeArguments + negativePresentation + negativeRebuttal;
+
+      // Create document data with Supabase snake_case column names
+      // Note: affirmative = challenger, negative = challenged in the arena challenge system
       final documentData = {
-        'roomId': widget.roomId,
-        'challengeId': widget.challengeId,
-        'judgeId': _currentUserId ?? 'unknown_judge',
-        'winner': scorecard.winningTeam.name.toLowerCase(),
-        'submittedAt': DateTime.now().toIso8601String(),
-        'comments': scorecard.reasonForDecision,
-        // Required scores as strings (JSON format)
-        'affirmativeScores': '{"arguments": $affirmativeArguments, "presentation": $affirmativePresentation, "rebuttal": $affirmativeRebuttal}',
-        'negativeScores': '{"arguments": $negativeArguments, "presentation": $negativePresentation, "rebuttal": $negativeRebuttal}',
+        'room_id': widget.roomId,
+        'judge_id': _currentUserId ?? 'unknown_judge',
+        'challenger_score': affirmativeTotal,  // Affirmative = challenger
+        'challenged_score': negativeTotal,      // Negative = challenged
+        'category_scores': {
+          'affirmative': {
+            'arguments': affirmativeArguments,
+            'presentation': affirmativePresentation,
+            'rebuttal': affirmativeRebuttal,
+          },
+          'negative': {
+            'arguments': negativeArguments,
+            'presentation': negativePresentation,
+            'rebuttal': negativeRebuttal,
+          },
+          'winner': scorecard.winningTeam.name.toLowerCase(),
+        },
+        'reasoning': scorecard.reasonForDecision,
+        'is_final': true,
+        'submitted_at': DateTime.now().toIso8601String(),
       };
       
       // Log the data for debugging
-      AppLogger().info('📊 Document data to save: ${documentData.toString()}');
+      AppLogger().info('📊 Map<String, dynamic> data to save: ${documentData.toString()}');
       
-      await _appwrite.databases.createDocument(
-        databaseId: 'arena_db',
-        collectionId: 'arena_judgments',
-        documentId: ID.unique(),
-        data: documentData,
+      await _supabase.client.from('arena_judgments').insert(documentData,
       );
       
       AppLogger().info('📊 Scorecard saved to database successfully');
@@ -7533,15 +7799,10 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
       // Send realtime update to other participants
       try {
-        await _appwrite.databases.updateDocument(
-          databaseId: 'arena_db',
-          collectionId: 'arena_rooms',
-          documentId: widget.roomId,
-          data: {
-            'lastUpdated': DateTime.now().toIso8601String(),
-            'lastActivity': 'judge_vote_submitted',
+        await _supabase.client.from('arena_rooms').update({
+            'updated_at': DateTime.now().toIso8601String(),
           },
-        );
+        ).eq('id', widget.roomId);
       } catch (e) {
         AppLogger().warning('Failed to send realtime update: $e');
       }
@@ -7670,12 +7931,14 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   void _showRoleManager() {
     final isModerator = _userRole == 'moderator';
-    final isRoomCreator = _roomData != null && _currentUser?.id != null && _roomData!['createdBy'] == _currentUser!.id;
+    // Check both snake_case (from Supabase) and camelCase (legacy)
+    final creatorId = _roomData?['created_by'] ?? _roomData?['createdBy'];
+    final isRoomCreator = _roomData != null && _currentUser?.id != null && creatorId == _currentUser!.id;
     final hasModeratorPrivileges = isModerator || isRoomCreator || _isSuperModerator;
-    
+
     AppLogger().debug('🎭 ROLES: User role: $_userRole, isModerator: $isModerator');
     AppLogger().debug('🎭 ROLES: Current user ID: ${_currentUser?.id}');
-    AppLogger().debug('🎭 ROLES: Room creator ID: ${_roomData?['createdBy']}');
+    AppLogger().debug('🎭 ROLES: Room creator ID: $creatorId');
     AppLogger().debug('🎭 ROLES: Is room creator: $isRoomCreator');
     AppLogger().debug('🎭 ROLES: Has moderator privileges: $hasModeratorPrivileges');
     
@@ -8278,11 +8541,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         
         chatParticipants.add(ChatParticipant(
           userId: user.id,
-          username: user.name,
+          username: user.email,
           role: chatRole,
           avatar: user.avatar,
         ));
-        AppLogger().debug('💬 CHAT: Added participant from _participants: ${user.name} (role: $chatRole, userId: ${user.id})');
+        // TODO: User.name doesn't exist - use UserProfile
+        // AppLogger().debug('💬 CHAT: Added participant from _participants: ${user.name} (role: $chatRole, userId: ${user.id})');
       }
     });
     
@@ -8290,11 +8554,12 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     for (final audience in _audience) {
       chatParticipants.add(ChatParticipant(
         userId: audience.id,
-        username: audience.name,
+        username: audience.email,
         role: 'audience',
         avatar: audience.avatar,
       ));
-      AppLogger().debug('💬 CHAT: Added participant from _audience: ${audience.name} (userId: ${audience.id})');
+      // TODO: User.name doesn't exist - use UserProfile
+      // AppLogger().debug('💬 CHAT: Added participant from _audience: ${audience.name} (userId: ${audience.id})');
     }
 
     // Enhanced Debug logging
@@ -8351,6 +8616,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   /// Show AI assistant dialog - voice-first experience
   /// AI speaks first, then listens for your response
+  // ignore: unused_element
   Future<void> _showAskAIDialog() async {
     // Initialize TTS and Speech Recognition
     if (_flutterTts == null) {
@@ -8888,7 +9154,8 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       child: GestureDetector(
         onTap: () {
           final passedRole = role.isNotEmpty ? role : null;
-          AppLogger().debug('🏛️ Arena: Showing profile for ${user.name} with role: $passedRole (original: $role)');
+          // TODO: User.name doesn't exist - use UserProfile
+          // AppLogger().debug('🏛️ Arena: Showing profile for ${user.name} with role: $passedRole (original: $role)');
           _showUserProfile(user, passedRole);
         },
         child: Row(
@@ -8927,31 +9194,63 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   void _showResultsModal() async {
     AppLogger().info('🏆 _showResultsModal called - User role: $_userRole');
-    
-    // Get detailed voting results
+
+    // Get detailed voting results using Edge Function for reliable JSON parsing
     try {
-      final judgments = await _appwrite.databases.listDocuments(
-        databaseId: 'arena_db',
-        collectionId: 'arena_judgments',
-        queries: [
-          Query.equal('roomId', widget.roomId),
-        ],
+      final response = await _supabase.client.functions.invoke(
+        'get-arena-results',
+        body: {'room_id': widget.roomId},
       );
+
+      if (response.status != 200) {
+        AppLogger().error('📊 Edge function error: ${response.data}');
+        // Fall back to showing modal with stored winner
+        if (mounted) {
+          _soundService.playApplauseSound();
+          showDialog(
+            context: context,
+            barrierDismissible: true,
+            builder: (context) => ResultsModal(
+              winner: _winner ?? 'affirmative',
+              affirmativeDebater: _participants['affirmative'],
+              affirmative2Debater: _participants['affirmative2'],
+              negativeDebater: _participants['negative'],
+              negative2Debater: _participants['negative2'],
+              judgments: const [],
+              topic: widget.topic,
+              teamSize: _teamSize,
+            ),
+          );
+        }
+        return;
+      }
+
+      final data = response.data as Map<String, dynamic>;
+      final judgments = (data['judgments'] as List?) ?? [];
+      final voteCounts = data['vote_counts'] as Map<String, dynamic>?;
+      final calculatedWinner = data['calculated_winner'] as String? ?? _winner ?? 'affirmative';
+
+      final affirmativeVotes = voteCounts?['affirmative'] ?? 0;
+      final negativeVotes = voteCounts?['negative'] ?? 0;
+
+      AppLogger().info('📊 Edge function returned: ${judgments.length} judgments');
+      AppLogger().info('📊 Vote count - Affirmative: $affirmativeVotes, Negative: $negativeVotes');
+      AppLogger().info('📊 Calculated winner: $calculatedWinner');
 
       if (mounted) {
         // Play applause sound for winner celebration
         _soundService.playApplauseSound();
-        
+
         showDialog(
           context: context,
           barrierDismissible: true,
           builder: (context) => ResultsModal(
-            winner: _winner ?? '',
+            winner: calculatedWinner,
             affirmativeDebater: _participants['affirmative'],
             affirmative2Debater: _participants['affirmative2'],
             negativeDebater: _participants['negative'],
             negative2Debater: _participants['negative2'],
-            judgments: judgments.documents,
+            judgments: judgments,
             topic: widget.topic,
             teamSize: _teamSize,
           ),
@@ -8964,50 +9263,85 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
   void _showRoomClosingModal(int initialSeconds) {
     // Check if widget is still mounted before showing modal
-    if (!mounted) {
-      AppLogger().warning('Widget unmounted - cannot show room closing modal');
+    if (!mounted || _isExiting) {
+      AppLogger().warning('Widget unmounted or exiting - cannot show room closing modal');
       return;
     }
-    
+
+    // Capture navigator before async operations
+    final navigator = Navigator.of(context);
+
     showDialog(
       context: context,
       barrierDismissible: false, // Prevent dismissing
-      builder: (context) => RoomClosingModal(
+      builder: (dialogContext) => RoomClosingModal(
         initialSeconds: initialSeconds,
-        onCountdownComplete: () {
-          if (mounted) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                try {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const ArenaApp()),
-                    (route) => false,
-                  );
-                } catch (e) {
-                  AppLogger().error('Navigation error from countdown: $e');
-                }
-              }
-            });
+        onCountdownComplete: () async {
+          AppLogger().info('🚪 Arena room closing countdown complete - disconnecting audio and navigating');
+          _hasNavigated = true;
+          _isExiting = true;
+
+          // CRITICAL: Disconnect LiveKit audio FIRST to prevent audio bleeding
+          try {
+            AppLogger().info('🔇 ARENA-CLOSE: Disconnecting LiveKit audio...');
+            await _liveKitService.disconnect();
+            AppLogger().info('✅ ARENA-CLOSE: LiveKit audio disconnected');
+          } catch (e) {
+            AppLogger().error('❌ ARENA-CLOSE: Error disconnecting LiveKit: $e');
+          }
+
+          // Cancel timers
+          if (_roomStatusChecker != null) {
+            _roomStatusChecker!.cancel();
+            _roomStatusChecker = null;
+          }
+
+          // Cancel consolidated subscriptions
+          _realtimeManager.unsubscribeFromRoom(widget.roomId);
+          _participantStreamListener?.cancel();
+          _roomStatusStreamListener?.cancel();
+          _judgmentStreamListener?.cancel();
+          _timerStreamListener?.cancel();
+
+          // Use captured navigator to avoid context issues
+          try {
+            navigator.pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const ArenaApp()),
+              (route) => false,
+            );
+          } catch (e) {
+            AppLogger().error('Navigation error from countdown: $e');
           }
         },
-        onForceNavigation: () {
+        onForceNavigation: () async {
           _hasNavigated = true;
           _isExiting = true;
           AppLogger().debug('🛑 MODAL FORCE: Set exit flags');
+
+          // CRITICAL: Disconnect LiveKit audio FIRST to prevent audio bleeding
+          try {
+            AppLogger().info('🔇 ARENA-FORCE: Disconnecting LiveKit audio...');
+            await _liveKitService.disconnect();
+            AppLogger().info('✅ ARENA-FORCE: LiveKit audio disconnected');
+          } catch (e) {
+            AppLogger().error('❌ ARENA-FORCE: Error disconnecting LiveKit: $e');
+          }
+
           if (_roomStatusChecker != null) {
             _roomStatusChecker!.cancel();
             _roomStatusChecker = null;
             AppLogger().debug('🛑 MODAL FORCE: Timer cancelled and nulled');
           }
+
           // Cancel consolidated subscriptions
-      _realtimeManager.unsubscribeFromRoom(widget.roomId);
-      _participantStreamListener?.cancel();
-      _roomStatusStreamListener?.cancel();
-      _judgmentStreamListener?.cancel();
-      _timerStreamListener?.cancel();
-          
+          _realtimeManager.unsubscribeFromRoom(widget.roomId);
+          _participantStreamListener?.cancel();
+          _roomStatusStreamListener?.cancel();
+          _judgmentStreamListener?.cancel();
+          _timerStreamListener?.cancel();
+
           try {
-            Navigator.of(context).pushAndRemoveUntil(
+            navigator.pushAndRemoveUntil(
               MaterialPageRoute(builder: (_) => const ArenaApp()),
               (route) => false,
             );
@@ -9078,13 +9412,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         if (_isIOSOptimizationEnabled && _isCacheValid()) {
           roomData = _iosRoomCache[widget.roomId];
           if (roomData == null) {
-            roomData = await _appwrite.getArenaRoom(widget.roomId);
+            roomData = await _supabase.getArenaRoom(widget.roomId);
             if (roomData != null) {
               _iosRoomCache[widget.roomId] = roomData;
             }
           }
         } else {
-          roomData = await _appwrite.getArenaRoom(widget.roomId);
+          roomData = await _supabase.getArenaRoom(widget.roomId);
           if (_isIOSOptimizationEnabled && roomData != null) {
             _iosRoomCache[widget.roomId] = roomData;
           }
@@ -9123,18 +9457,19 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
             }
           }
           
-          // If room is completed, navigate immediately with FORCE
-          else if ((roomStatus == 'completed' || roomStatus == 'abandoned' || roomStatus == 'force_cleaned' || roomStatus == 'force_closed' || roomStatus == 'closed') && !_hasNavigated) {
-            AppLogger().debug('🚪 Room completed detected via ULTRA-AGGRESSIVE check - FORCE navigating back');
-            _hasNavigated = true; // Set flag FIRST before any async work
-            _isExiting = true; // Set exit flag FIRST
-            AppLogger().debug('🛑 TIMER EVENT: Set exit flags, cancelling timer');
+          // If room is actually closed (NOT completed - completed means results ready), show modal
+          // 'completed' status = voting finished, show results - DON'T navigate away
+          else if ((roomStatus == 'abandoned' || roomStatus == 'force_cleaned' || roomStatus == 'force_closed' || roomStatus == 'closed') && !_hasNavigated && !_roomClosingModalShown) {
+            AppLogger().debug('🚪 Room closed detected via status check - showing closing modal');
+            _roomClosingModalShown = true;
             timer.cancel();
             _roomStatusChecker = null;
-            AppLogger().debug('🛑 TIMER EVENT: Timer cancelled and nulled, calling sync navigation');
-            
-            // SYNCHRONOUS navigation - no async blocks
-            _forceNavigationHomeSync();
+            AppLogger().debug('🛑 TIMER EVENT: Timer cancelled, showing closing modal');
+
+            // Show modal to user before navigating
+            if (mounted) {
+              _showRoomClosingModal(5); // 5 second countdown
+            }
           }
         } else if (!_hasNavigated) {
           AppLogger().warning('Room data is null - room deleted - FORCE navigating back');
@@ -9279,7 +9614,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
         if (_roomData != null && _roomData!['status'] == 'waiting') {
           AppLogger().info('🚀 AUTO-START: Starting arena debate for room type...');
           try {
-            await _appwrite.startArenaDebate(widget.roomId);
+            await _supabase.startArenaDebate(widget.roomId);
             AppLogger().info('✅ Arena debate started successfully');
           } catch (e) {
             AppLogger().error('❌ Error auto-starting arena debate: $e');
@@ -9472,7 +9807,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       AppLogger().info('🎬 COMPLETE ROOM - Completing room: ${widget.roomId}');
 
       // Use the appwrite service to complete the room (updates status to completed)
-      await _appwrite.completeArenaRoom(widget.roomId).timeout(
+      await _supabase.completeArenaRoom(widget.roomId).timeout(
         Duration(seconds: 15),
         onTimeout: () {
           AppLogger().error('❌ COMPLETE ROOM - Room completion TIMED OUT after 15 seconds');
@@ -9531,16 +9866,13 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
         // First, check if room is already closed
         try {
-          final roomDoc = await _appwrite.databases.getDocument(
-            databaseId: 'arena_db',
-            collectionId: 'arena_rooms',
-            documentId: roomId,
-          );
+          final roomDoc = await _supabase.client.from('arena_rooms').select().eq('id', roomId,
+          ).single();
 
-          if (roomDoc.data['status'] == 'completed' ||
-              roomDoc.data['status'] == 'abandoned' ||
-              roomDoc.data['status'] == 'closed') {
-            AppLogger().info('🚨 Room already closed with status: ${roomDoc.data['status']}');
+          if (roomDoc['status'] == 'completed' ||
+              roomDoc['status'] == 'abandoned' ||
+              roomDoc['status'] == 'closed') {
+            AppLogger().info('🚨 Room already closed with status: ${roomDoc['status']}');
             return; // Room is already closed, no need to continue
           }
         } catch (e) {
@@ -9572,7 +9904,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
         // Try the close operation
         AppLogger().info('🚪 ROOM CLOSURE - Calling closeArenaRoom for: $roomId');
-        await _appwrite.closeArenaRoom(roomId);
+        await _supabase.closeArenaRoom(roomId);
         AppLogger().info('✅ ROOM CLOSURE - Room closed successfully on attempt ${retryCount + 1}');
         AppLogger().info('🎯 ROOM CLOSURE - Room should now be removed from lobby lists');
         return; // Success, exit retry loop
@@ -9817,26 +10149,19 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
 
 
   /// Handle arena participant updates using optimized approach
-  Future<void> _handleArenaParticipantUpdate(RealtimeMessage response) async {
+  // ignore: unused_element
+  Future<void> _handleArenaParticipantUpdate(Map<String, dynamic> response) async {
     try {
-      final payload = response.payload;
-      final updateType = _determineUpdateType(response.events);
+      // Extract data from response
+      // ignore: unused_local_variable
+      final data = response['newRecord'] ?? response;
+      // TODO: Implement proper event type handling for PostgresChangeEvent
+      // This code is currently orphaned from incomplete realtime migration
+      // Need to properly handle INSERT/UPDATE/DELETE events
 
-      AppLogger().debug('🔄 Processing arena participant update: $updateType');
-
-      // Arena uses role-based slots, so we handle updates differently
-      if (updateType == 'delete') {
-        await _handleArenaParticipantRemoval(payload);
-      } else if (updateType == 'create') {
-        await _handleArenaParticipantAddition(payload);
-      } else if (updateType == 'update') {
-        await _handleArenaParticipantRoleChange(payload);
-      }
-
-      AppLogger().info('✅ Arena participant update processed');
-
-      // Validate role consistency after any participant update
-      await _validateRoleConsistency();
+      // For now, just refresh participants on any change
+      AppLogger().debug('🔄 Processing arena participant update - refreshing participants');
+      await _loadParticipants();
     } catch (e) {
       AppLogger().error('Error handling arena participant update: $e');
       // Fallback to full refresh on error
@@ -9845,6 +10170,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   /// Handle participant removal in arena
+  // ignore: unused_element
   Future<void> _handleArenaParticipantRemoval(Map<String, dynamic> payload) async {
     final userId = payload['userId'] as String?;
     if (userId == null) return;
@@ -9886,6 +10212,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   /// Handle participant addition in arena
+  // ignore: unused_element
   Future<void> _handleArenaParticipantAddition(Map<String, dynamic> payload) async {
     final userId = payload['userId'] as String?;
     final role = payload['role'] as String?;
@@ -9932,6 +10259,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   /// Handle participant role change in arena
+  // ignore: unused_element
   Future<void> _handleArenaParticipantRoleChange(Map<String, dynamic> payload) async {
     final userId = payload['userId'] as String?;
     final newRole = payload['role'] as String?;
@@ -9941,14 +10269,25 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     AppLogger().info('🎭 Arena role change: $userId -> $newRole');
 
     // OPTIMISTIC UPDATE: If this is the current user, update UI IMMEDIATELY
+    // BUT RESPECT THE CHALLENGE ARENA LOCK for debaters
     final isCurrentUser = userId == _currentUserId;
     if (isCurrentUser && mounted) {
-      AppLogger().info('⚡ INSTANT: Current user role change detected - updating UI immediately');
-      setState(() {
-        final oldRole = _userRole;
-        _userRole = newRole;
-        AppLogger().info('⚡ INSTANT: Updated current user role from $oldRole to $newRole');
-      });
+      final oldRole = _userRole;
+
+      // CHALLENGE ARENA LOCK: Debater roles are protected in challenge arenas
+      final isChallengeBased = widget.challengeId.isNotEmpty;
+      final isDebaterRole = ['affirmative', 'negative', 'affirmative2', 'negative2'].contains(oldRole);
+      final wouldChangeDebaterRole = isDebaterRole && oldRole != newRole;
+
+      if (isChallengeBased && wouldChangeDebaterRole) {
+        AppLogger().warning('🔒 ROLE LOCK (ARENA HANDLER): Blocking role change from $oldRole to $newRole in challenge arena');
+      } else {
+        AppLogger().info('⚡ INSTANT: Current user role change detected - updating UI immediately');
+        setState(() {
+          _userRole = newRole;
+          AppLogger().info('⚡ INSTANT: Updated current user role from $oldRole to $newRole');
+        });
+      }
     }
 
     try {
@@ -10022,25 +10361,24 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     return null;
   }
 
-  /// Check how many judges have submitted their votes
+  /// Check how many judges have submitted their votes for THIS ROOM
   Future<Map<String, int>> _checkJudgeVoteProgress() async {
     try {
-      // Query the arena_judgments collection for this room
-      final judgments = await _appwrite.databases.listDocuments(
-        databaseId: 'arena_db',
-        collectionId: 'arena_judgments',
-        queries: [
-          Query.equal('roomId', widget.roomId),
-        ],
-      );
+      // Query the arena_judgments collection for this specific room
+      final judgments = await _supabase.client
+          .from('arena_judgments')
+          .select()
+          .eq('room_id', widget.roomId);
 
       int totalJudges = 0;
       if (_participants['judge1'] != null) totalJudges++;
       if (_participants['judge2'] != null) totalJudges++;
       if (_participants['judge3'] != null) totalJudges++;
 
+      AppLogger().debug('🔍 JUDGE PROGRESS: ${(judgments as List).length} votes submitted out of $totalJudges judges for room ${widget.roomId}');
+
       return {
-        'voted': judgments.documents.length,
+        'voted': (judgments).length,
         'total': totalJudges,
       };
     } catch (e) {
@@ -10050,6 +10388,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   /// Show persistent notification for judge vote
+  // ignore: unused_element
   void _showJudgeVoteNotification(String judgeLabel, Map<String, int> voteCount) {
     if (!mounted) return;
 
@@ -10114,6 +10453,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   }
 
   /// Determine update type from realtime events
+  // ignore: unused_element
   String _determineUpdateType(List<String> events) {
     for (final event in events) {
       if (event.contains('.create')) return 'create';
@@ -10127,7 +10467,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
   /// Fetch user profile for diff manager
   Future<UserProfile?> _fetchUserProfile(String userId) async {
     try {
-      return await _appwrite.getUserProfile(userId);
+      return await _supabase.getUserProfile(userId);
     } catch (e) {
       AppLogger().error('Error fetching user profile for diff: $e');
       return null;
@@ -10139,6 +10479,17 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
     try {
       if (_currentUserId == null || _userRole == null) return;
 
+      // CHALLENGE ARENA LOCK: In challenge arenas, debater roles are sacred
+      // and should NOT be changed by consistency checks
+      final isChallengeBased = widget.challengeId.isNotEmpty;
+      final isDebaterRole = ['affirmative', 'negative', 'affirmative2', 'negative2'].contains(_userRole);
+
+      if (isChallengeBased && isDebaterRole) {
+        AppLogger().debug('🔒 ROLE LOCK: Skipping consistency check for debater in challenge arena');
+        AppLogger().debug('🔒 Current role: $_userRole (locked)');
+        return; // Don't allow any role changes for challenge debaters
+      }
+
       // Check what role the user has in the participant slots
       String? slotRole;
       _participants.forEach((role, user) {
@@ -10148,6 +10499,7 @@ class _ArenaScreenState extends State<ArenaScreen> with TickerProviderStateMixin
       });
 
       // If user is in a slot but their _userRole doesn't match, fix it
+      // But only for non-challenge or non-debater roles
       if (slotRole != null && slotRole != _userRole) {
         AppLogger().warning('🚨 ROLE INCONSISTENCY DETECTED:');
         AppLogger().warning('   Local role: $_userRole');
@@ -10203,7 +10555,7 @@ class RoleManagerPanel extends StatefulWidget {
 }
 
 class _RoleManagerPanelState extends State<RoleManagerPanel> {
-  final AppwriteService _appwrite = AppwriteService();
+  final SupabaseService _supabase = SupabaseService();
   final RoleAssignmentService _roleAssignmentService = RoleAssignmentService();
   List<Map<String, dynamic>> _participants = [];
   bool _isLoading = true;
@@ -10231,7 +10583,7 @@ class _RoleManagerPanelState extends State<RoleManagerPanel> {
 
   Future<void> _loadParticipants() async {
     try {
-      final participants = await _appwrite.getArenaParticipants(widget.roomId);
+      final participants = await _supabase.getArenaParticipants(widget.roomId);
       setState(() {
         _participants = participants;
         _isLoading = false;
@@ -11173,7 +11525,7 @@ class ResultsModal extends StatelessWidget {
     int negativeVotes = 0;
     
     for (var judgment in judgments) {
-      final judgeWinner = judgment.data['winner'];
+      final judgeWinner = judgment['winner'];
       if (judgeWinner == 'affirmative') {
         affirmativeVotes++;
       } else if (judgeWinner == 'negative') {
@@ -11382,7 +11734,7 @@ class ResultsModal extends StatelessWidget {
                   const SizedBox(height: 3), // Reduced from 8
                   ...judgments.map((judgment) {
                     final index = judgments.indexOf(judgment);
-                    final judgeWinner = judgment.data['winner'];
+                    final judgeWinner = judgment['winner'];
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 3), // Reduced from 4
                       child: Row(
@@ -11683,7 +12035,8 @@ class RoomClosingModal extends StatefulWidget {
 
 class _RoomClosingModalState extends State<RoomClosingModal> {
   late int _secondsRemaining;
-  late Timer _timer;
+  Timer? _timer;
+  Timer? _safetyTimer;
   bool _hasNavigated = false; // Track if we've already navigated
 
   @override
@@ -11691,33 +12044,55 @@ class _RoomClosingModalState extends State<RoomClosingModal> {
     super.initState();
     _secondsRemaining = widget.initialSeconds;
     _startCountdown();
+    _startSafetyTimer();
   }
 
   @override
   void dispose() {
-    _timer.cancel();
+    _timer?.cancel();
+    _safetyTimer?.cancel();
     super.dispose();
   }
 
+  /// Safety timer that forces navigation after initialSeconds + 5 seconds
+  /// This ensures the modal never gets stuck indefinitely
+  void _startSafetyTimer() {
+    _safetyTimer = Timer(Duration(seconds: widget.initialSeconds + 5), () {
+      AppLogger().warning('⚠️ Safety timer triggered - forcing modal dismissal');
+      _forceNavigation();
+    });
+  }
+
   void _forceNavigation() {
-    if (!_hasNavigated && mounted) {
-      _hasNavigated = true;
-      AppLogger().info('Forcing navigation back to arena lobby from closing modal');
-      
-      // Call the parent's navigation callback if provided
-      if (widget.onForceNavigation != null) {
-        widget.onForceNavigation!();
-      } else {
-        // Fallback navigation
-        try {
+    if (_hasNavigated) return; // Already navigating
+    _hasNavigated = true;
+
+    // Cancel timers
+    _timer?.cancel();
+    _safetyTimer?.cancel();
+
+    AppLogger().info('Forcing navigation back to arena lobby from closing modal');
+
+    // First, try to pop this modal dialog
+    if (mounted && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+
+    // Call the parent's navigation callback if provided
+    if (widget.onForceNavigation != null) {
+      widget.onForceNavigation!();
+    } else {
+      // Fallback navigation
+      try {
+        if (mounted) {
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const ArenaApp()),
             (route) => false,
           );
           AppLogger().info('Successfully navigated from modal to Main App');
-        } catch (e) {
-          AppLogger().error('Modal navigation failed: $e');
         }
+      } catch (e) {
+        AppLogger().error('Modal navigation failed: $e');
       }
     }
   }
@@ -11728,7 +12103,7 @@ class _RoomClosingModalState extends State<RoomClosingModal> {
         setState(() {
           _secondsRemaining--;
         });
-        
+
         if (_secondsRemaining <= 0) {
           timer.cancel();
           _forceNavigation(); // Use force navigation instead of callback
@@ -11741,9 +12116,18 @@ class _RoomClosingModalState extends State<RoomClosingModal> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
+    // Show "Tap to dismiss" hint when countdown is at 0 or below
+    final showDismissHint = _secondsRemaining <= 0;
+
+    return GestureDetector(
+      onTap: () {
+        // Allow tapping anywhere to force navigation when stuck
+        AppLogger().info('👆 Modal tapped - forcing navigation');
+        _forceNavigation();
+      },
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
         constraints: const BoxConstraints(maxWidth: 320),
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -11854,7 +12238,7 @@ class _RoomClosingModalState extends State<RoomClosingModal> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    _timer.cancel();
+                    _timer?.cancel();
                     _forceNavigation(); // Use force navigation
                   },
                   style: ElevatedButton.styleFrom(
@@ -11874,9 +12258,23 @@ class _RoomClosingModalState extends State<RoomClosingModal> {
                   ),
                 ),
               ),
+
+              // Show hint when stuck at 0
+              if (showDismissHint) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'Tap anywhere to dismiss',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -11904,7 +12302,7 @@ class JudgeSelectionModal extends StatefulWidget {
 }
 
 class _JudgeSelectionModalState extends State<JudgeSelectionModal> {
-  final AppwriteService _appwrite = AppwriteService();
+  final SupabaseService _supabase = SupabaseService();
   final ChallengeMessagingService _messagingService = ChallengeMessagingService();
   
   List<Map<String, dynamic>> _availableJudges = [];
@@ -11923,17 +12321,18 @@ class _JudgeSelectionModalState extends State<JudgeSelectionModal> {
       setState(() => _isLoading = true);
       
       // Get users who have opted into judging
-      final judgeProfiles = await _appwrite.getAvailableJudges(
-        excludeArenaId: widget.arenaRoomId,
+      final judgeProfiles = await _supabase.getAvailableJudges(
         limit: 50,
       );
       
-      // Convert UserProfile list to Map format for consistency
-      final judges = judgeProfiles.map((profile) => {
-        '\$id': profile.id,
-        'name': profile.name,
-        'expertise': profile.bio, // Use bio as expertise for now
-        'avatar': profile.avatar,
+      // Convert judge profiles to Map format for consistency
+      final judges = judgeProfiles.map((profile) {
+        return <String, dynamic>{
+          '\$id': profile['id'] ?? profile['\$id'] ?? '',
+          'name': profile['name'] ?? '',
+          'expertise': profile['bio'] ?? '', // Use bio as expertise for now
+          'avatar': profile['avatar'],
+        };
       }).toList();
       
       setState(() {
@@ -12121,9 +12520,9 @@ class _JudgeSelectionModalState extends State<JudgeSelectionModal> {
                                color: Colors.grey[400], size: 48),
                           const SizedBox(height: 16),
                           Text(
-                            _searchQuery.isNotEmpty 
+                            _searchQuery.isNotEmpty
                                 ? 'No judges found matching "$_searchQuery"'
-                                : widget.category != null 
+                                : widget.category != null
                                     ? 'No judges available for ${widget.category}'
                                     : 'No judges available',
                             style: TextStyle(color: Colors.grey[400]),

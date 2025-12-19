@@ -36,6 +36,9 @@ class SupabaseService {
     AppLogger().debug('🚀 SupabaseService initialized');
   }
 
+  /// Get the current authenticated user
+  User? get currentUser => client.auth.currentUser;
+
   // ============================================================================
   // AUTHENTICATION
   // ============================================================================
@@ -730,21 +733,125 @@ class SupabaseService {
     }
   }
 
-  /// Get arena participants
+  /// Get arena participants with full user profiles (arena2-style reliable loading)
   Future<List<Map<String, dynamic>>> getArenaParticipants(String roomId) async {
     try {
       AppLogger().debug('🔍 Getting arena participants for room: $roomId');
 
-      final response = await client
+      // Step 1: Get all participants for this room
+      final participantsResponse = await client
           .from('arena_participants')
-          .select('*, userProfile:users(*)')
+          .select()
           .eq('room_id', roomId)
-          .eq('status', 'active');
+          .eq('status', 'active')
+          .order('created_at', ascending: true);
 
-      AppLogger().debug('✅ Found ${(response as List).length} arena participants');
-      return List<Map<String, dynamic>>.from(response);
+      final documents = List<Map<String, dynamic>>.from(participantsResponse);
+      if (documents.isEmpty) {
+        AppLogger().debug('ℹ️ No participants found for room: $roomId');
+        return [];
+      }
+
+      AppLogger().debug('📋 Found ${documents.length} participant records');
+
+      // Step 2: Collect all unique user IDs
+      final userIds = documents
+          .map((doc) => doc['user_id'] as String?)
+          .where((id) => id != null && id.isNotEmpty)
+          .cast<String>()
+          .toSet()
+          .toList();
+
+      AppLogger().debug('👥 Fetching profiles for ${userIds.length} users');
+
+      // Step 3: Batch fetch all user profiles
+      Map<String, UserProfile> userProfilesMap = {};
+      if (userIds.isNotEmpty) {
+        try {
+          // Supabase supports in() filter for batch queries
+          final usersResponse = await client
+              .from('users')
+              .select()
+              .inFilter('id', userIds);
+
+          for (var userDoc in usersResponse) {
+            // DEBUG: Log raw avatar data from database
+            final rawAvatarUrl = userDoc['avatar_url'];
+            final rawAvatar = userDoc['avatar'];
+            // CRITICAL FIX: Always prefer avatar_url since that's where the actual data is stored
+            final avatarValue = rawAvatarUrl ?? rawAvatar;
+
+            if (avatarValue == null || avatarValue.toString().isEmpty) {
+              AppLogger().warning('🔴 DB: ${userDoc['name']} has NO avatar! avatar_url=$rawAvatarUrl, avatar=$rawAvatar');
+            } else {
+              AppLogger().debug('🟢 DB: ${userDoc['name']} has avatar: ${avatarValue.toString().substring(0, 50)}...');
+            }
+
+            final mappedData = {
+              'id': userDoc['id'],
+              'name': userDoc['name'] ?? '',
+              'email': userDoc['email'] ?? '',
+              'avatar': avatarValue, // Always use avatar_url first (that's where real data is)
+              'bio': userDoc['bio'],
+              'reputation': userDoc['reputation'] ?? 0,
+              'reputationPercentage': userDoc['reputation_percentage'] ?? 100,
+              'totalWins': userDoc['wins'] ?? userDoc['total_wins'] ?? 0,
+              'totalLosses': userDoc['losses'] ?? userDoc['total_losses'] ?? 0,
+              'coinBalance': userDoc['coins'] ?? 100,
+              'isPremium': userDoc['is_premium'] ?? false,
+              'createdAt': userDoc['created_at'],
+              'updatedAt': userDoc['updated_at'],
+            };
+            final profile = UserProfile.fromMap(mappedData);
+            userProfilesMap[userDoc['id']] = profile;
+            AppLogger().debug('✅ Loaded profile: ${profile.name} (${profile.id}) avatar=${profile.avatar != null}');
+          }
+        } catch (e) {
+          AppLogger().warning('⚠️ Error batch fetching user profiles: $e');
+        }
+      }
+
+      // Step 4: Build participant list with attached profiles
+      List<Map<String, dynamic>> participants = [];
+      for (var doc in documents) {
+        final participantData = Map<String, dynamic>.from(doc);
+
+        final userId = participantData['user_id'] as String?;
+        if (userId != null) {
+          // Get cached profile or fetch individually as fallback
+          UserProfile? userProfile = userProfilesMap[userId];
+
+          if (userProfile == null) {
+            // Try individual fetch as last resort
+            AppLogger().warning('⚠️ Profile not in batch for $userId, fetching individually');
+            userProfile = await getUserProfile(userId);
+          }
+
+          if (userProfile != null) {
+            participantData['userProfile'] = userProfile.toMap();
+            AppLogger().debug('📌 Attached profile ${userProfile.name} to role ${participantData['role']}');
+          } else {
+            // CRITICAL FIX: Create placeholder to prevent "Unknown" users
+            AppLogger().warning('⚠️ CRITICAL: User profile missing for userId: $userId. Creating placeholder.');
+            participantData['userProfile'] = {
+              'id': userId,
+              'name': 'User ${userId.substring(0, 8)}',
+              'email': '',
+              'avatar': null,
+              'bio': '',
+              'createdAt': DateTime.now().toIso8601String(),
+              'updatedAt': DateTime.now().toIso8601String(),
+            };
+          }
+        }
+
+        participants.add(participantData);
+      }
+
+      AppLogger().debug('✅ Returning ${participants.length} arena participants with profiles');
+      return participants;
     } catch (e) {
-      AppLogger().debug('❌ Get arena participants failed: $e');
+      AppLogger().error('❌ Get arena participants failed: $e');
       return [];
     }
   }
@@ -1273,6 +1380,24 @@ class SupabaseService {
     try {
       AppLogger().debug('🚪 Joining debate discussion room: $roomId as $role');
 
+      // Check if user is banned from this room
+      final now = DateTime.now().toUtc().toIso8601String();
+      final banCheck = await client
+          .from('user_bans')
+          .select()
+          .eq('room_id', roomId)
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .or('expires_at.is.null,expires_at.gt.$now')
+          .maybeSingle();
+
+      if (banCheck != null) {
+        final expiresAt = banCheck['expires_at'];
+        final isPermanent = expiresAt == null;
+        AppLogger().warning('🔨 User $userId is banned from room $roomId (${isPermanent ? "permanent" : "expires: $expiresAt"})');
+        throw Exception('You are banned from this room${isPermanent ? " permanently" : ""}');
+      }
+
       // First, leave all other rooms to enforce single room presence
       await leaveAllOtherRooms(userId: userId, exceptRoomId: roomId);
 
@@ -1647,20 +1772,23 @@ class SupabaseService {
     required String role,
   }) async {
     try {
-      AppLogger().debug('🎭 Assigning arena role: $userId → $role in room $roomId');
+      AppLogger().info('🎭 ASSIGN_ROLE: ENTRY - roomId=$roomId, userId=$userId, role=$role');
 
-      await client.from('arena_participants').upsert({
+      final payload = {
         'room_id': roomId,
         'user_id': userId,
         'role': role,
         'status': 'active',
         'joined_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
-      }, onConflict: 'room_id,user_id');
+      };
+      AppLogger().info('🎭 ASSIGN_ROLE: Payload being sent: $payload');
 
-      AppLogger().debug('✅ Arena role assigned');
+      await client.from('arena_participants').upsert(payload, onConflict: 'room_id,user_id');
+
+      AppLogger().info('🎭 ASSIGN_ROLE: SUCCESS - $userId assigned $role in $roomId');
     } catch (e) {
-      AppLogger().debug('❌ Assign arena role failed: $e');
+      AppLogger().error('🎭 ASSIGN_ROLE: FAILED - $userId → $role in $roomId: $e');
       rethrow;
     }
   }
@@ -1968,6 +2096,48 @@ class SupabaseService {
     } catch (e) {
       AppLogger().debug('❌ Function call failed: $e');
       rethrow;
+    }
+  }
+
+  /// Close a room and notify all participants via Edge Function
+  /// This ensures all participants are properly notified even if realtime is unreliable
+  Future<Map<String, dynamic>> closeRoom({
+    required String roomId,
+    required String roomType,
+    required String moderatorId,
+  }) async {
+    try {
+      AppLogger().info('🚪 Closing room via Edge Function: $roomId');
+
+      final response = await client.functions.invoke(
+        'close-room',
+        body: {
+          'room_id': roomId,
+          'room_type': roomType,
+          'moderator_id': moderatorId,
+        },
+      );
+
+      final data = response.data as Map<String, dynamic>? ?? {};
+
+      if (data['success'] == true) {
+        AppLogger().info('✅ Room closed successfully. Participants notified: ${data['participants_notified']}');
+      } else if (data['error'] != null) {
+        AppLogger().error('❌ Room close error: ${data['error']}');
+      }
+
+      return data;
+    } catch (e) {
+      AppLogger().error('❌ Close room Edge Function failed: $e');
+      // Fallback to direct database update if Edge Function fails
+      await updateDebateDiscussionRoom(
+        roomId: roomId,
+        updates: {
+          'status': 'completed',
+          'ended_at': DateTime.now().toIso8601String(),
+        },
+      );
+      return {'success': true, 'fallback': true};
     }
   }
 
@@ -2694,6 +2864,7 @@ class SupabaseService {
         'status': 'pending',
         'room_type': 'arena',
         'duration_minutes': durationMinutes ?? 30,
+        'created_by': challengerId, // Set room creator for moderator lookup
         'created_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       }).select().single();
